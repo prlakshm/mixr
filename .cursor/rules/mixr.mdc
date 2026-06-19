@@ -1,0 +1,176 @@
+---
+description: Mixr iOS app rules
+alwaysApply: true
+---
+
+# Mixr Rules
+
+You are building a SwiftUI iPhone app called Mixr.
+
+The current goal is to recreate the attached reference image as a static high-fidelity SwiftUI prototype.
+
+Do not implement real audio, file import, backend logic, AVAudioEngine, export, or AI yet.
+
+## Stack
+
+- SwiftUI
+- iOS 18+
+- MVVM
+- Mock data only for now
+
+## Visual Source of Truth
+
+The attached Mixr screenshot is the visual specification.
+
+Do not redesign it.
+
+Do not simplify it.
+
+Do not invent a new style.
+
+Prioritize faithful recreation of:
+
+- layout
+- spacing
+- proportions
+- typography
+- glass materials
+- waveform colors
+- timeline density
+- button styling
+- drawer styling
+
+## Current Build Goal
+
+Build in this order:
+
+1. Design system
+2. Glass material system
+3. Waveform clip component
+4. Static layout
+5. Mock interactions later
+
+Do not build the whole app at once.
+
+## Design Language
+
+The UI should feel like:
+
+Apple Music meets Linear.
+
+Use:
+
+- premium dark mode
+- Apple-style glass
+- subtle blur
+- translucent panels
+- thin borders
+- soft shadows
+- restrained purple glow
+- high contrast text
+
+Avoid:
+
+- neon gamer aesthetics
+- flat black panels
+- rainbow gradients
+- excessive glow
+- generic AI-generated UI
+- skeuomorphic DJ controls
+
+## Colors
+
+Background: #050816
+Background Secondary: #080B16
+
+Surface: #111827
+Elevated Surface: #171E2E
+
+Primary Purple: #8B5CF6
+Secondary Purple: #A78BFA
+
+Text Primary: #FFFFFF
+Text Secondary: #9CA3AF
+
+Divider: #2A3142
+
+Waveform Pink: #FF5FA2
+Waveform Purple: #A855F7
+Waveform Red: #EF4444
+Waveform Yellow: #EAB308
+Waveform Blue: #0EA5E9
+
+## Typography
+
+Use Apple system fonts.
+
+SF Pro Display style for:
+
+- logo
+- section titles
+- top bar labels
+
+SF Pro Text style for:
+
+- song titles
+- artist names
+- metadata
+- buttons
+- controls
+
+Suggested scale:
+
+- App title: 24pt bold
+- Section title: 15pt semibold
+- Song title: 13pt semibold
+- Body: 12pt regular
+- Metadata: 10pt medium
+
+## Layout
+
+Landscape for iPhone only. Rotate display shows when vertical.
+
+Main screen must include:
+
+- left song sidebar
+- top playback controls
+- large waveform timeline
+- right-side solo/mute buttons
+- bottom tools drawer
+- AI Suggestions button
+- export button
+
+Everything important should remain visible.
+
+No tab bar.
+No navigation stack.
+No modal-heavy interface.
+
+## Material System
+
+Glass panels should use:
+
+- translucent dark surfaces
+- subtle blur
+- thin light border
+- soft inner depth
+- restrained shadows
+
+Do not use solid flat panels unless needed.
+
+## Cursor Behavior
+
+Before writing code:
+
+1. Explain implementation plan.
+2. List files to create or edit.
+3. Wait for approval.
+
+When coding:
+
+- Modify only relevant files.
+- Keep files small.
+- Use reusable SwiftUI components.
+- Do not rewrite unrelated code.
+- Do not add dependencies unless asked.
+- Do not implement real app functionality yet.
