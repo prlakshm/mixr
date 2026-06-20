@@ -1,0 +1,101 @@
+import SwiftUI
+
+// MARK: - Spacing
+
+enum MixrSpacing {
+    static let xxs: CGFloat = 2
+    static let xs: CGFloat = 4
+    static let sm: CGFloat = 8
+    static let md: CGFloat = 12
+    static let lg: CGFloat = 16
+    static let xl: CGFloat = 24
+}
+
+// MARK: - Corner Radius
+
+enum MixrRadius {
+    static let glass: CGFloat = 16
+    static let button: CGFloat = 12
+    static let icon: CGFloat = 20
+    static let toggle: CGFloat = 16
+    static let waveform: CGFloat = 10
+}
+
+// MARK: - Layout
+
+enum MixrLayout {
+    static let buttonPaddingH: CGFloat = 16
+    static let buttonPaddingV: CGFloat = 10
+    static let iconButtonSize: CGFloat = 40
+    static let toggleButtonWidth: CGFloat = 32
+    static let toggleButtonHeight: CGFloat = 40
+    static let glassBlurRadius: CGFloat = 24
+    static let borderWidth: CGFloat = 1
+}
+
+// MARK: - Waveform Metrics
+
+enum WaveformMetrics {
+    static let height: CGFloat = 48
+    static let cornerRadius: CGFloat = MixrRadius.waveform
+    static let innerPadding: CGFloat = MixrSpacing.sm
+    static let clipOpacity: CGFloat = 0.55
+    static let waveformOpacity: CGFloat = 1.0
+    static let fadeFraction: CGFloat = 0.15
+    static let tailWidth: CGFloat = 12
+    static let barWidth: CGFloat = 2
+    static let barSpacing: CGFloat = 1
+    static let barMinHeight: CGFloat = 2
+    static let barCornerRadius: CGFloat = 1
+}
+
+// MARK: - Shadows
+
+struct MixrShadow {
+    let x: CGFloat
+    let y: CGFloat
+    let radius: CGFloat
+    let color: Color
+
+    static let subtle = MixrShadow(x: 0, y: 1, radius: 2, color: .black.opacity(0.25))
+    static let medium = MixrShadow(x: 0, y: 4, radius: 12, color: .black.opacity(0.35))
+    static let large = MixrShadow(x: 0, y: 8, radius: 24, color: .black.opacity(0.45))
+}
+
+// MARK: - Glows
+
+struct MixrGlow {
+    let x: CGFloat
+    let y: CGFloat
+    let radius: CGFloat
+    let color: Color
+
+    static let purplePrimary = MixrGlow(
+        x: 0, y: 0, radius: 30,
+        color: MixrColors.primaryPurple.opacity(0.20)
+    )
+    static let purpleStrong = MixrGlow(
+        x: 0, y: 0, radius: 60,
+        color: MixrColors.primaryPurple.opacity(0.35)
+    )
+    static let pinkWaveform = MixrGlow(
+        x: 0, y: 0, radius: 30,
+        color: MixrColors.waveformPink.opacity(0.20)
+    )
+
+    static func forWaveform(_ waveformColor: MixrWaveformColor) -> MixrGlow {
+        MixrGlow(x: 0, y: 0, radius: 30, color: waveformColor.glowColor)
+    }
+}
+
+// MARK: - View Extensions
+
+extension View {
+    func mixrShadow(_ shadow: MixrShadow) -> some View {
+        self.shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
+    }
+
+    func mixrGlow(_ glow: MixrGlow) -> some View {
+        self.shadow(color: glow.color, radius: glow.radius, x: glow.x, y: glow.y)
+    }
+}
