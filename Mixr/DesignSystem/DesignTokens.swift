@@ -31,6 +31,7 @@ enum MixrLayout {
     static let toggleButtonHeight: CGFloat = 40
     static let glassBlurRadius: CGFloat = 24
     static let borderWidth: CGFloat = 1
+    static let glassBorderWidth: CGFloat = 0.5
 }
 
 // MARK: - Waveform Metrics
@@ -42,7 +43,7 @@ enum WaveformMetrics {
     static let clipOpacity: CGFloat = 0.55
     static let waveformOpacity: CGFloat = 1.0
     static let fadeFraction: CGFloat = 0.15
-    static let tailWidth: CGFloat = 12
+    static let tailWidth: CGFloat = 28
     static let barWidth: CGFloat = 2
     static let barSpacing: CGFloat = 1
     static let barMinHeight: CGFloat = 2
@@ -60,6 +61,10 @@ struct MixrShadow {
     static let subtle = MixrShadow(x: 0, y: 1, radius: 2, color: .black.opacity(0.25))
     static let medium = MixrShadow(x: 0, y: 4, radius: 12, color: .black.opacity(0.35))
     static let large = MixrShadow(x: 0, y: 8, radius: 24, color: .black.opacity(0.45))
+
+    // Glass elevation — soft lift, not flat rectangles
+    static let glassElevated = MixrShadow(x: 0, y: 6, radius: 20, color: .black.opacity(0.20))
+    static let glassStrong = MixrShadow(x: 0, y: 10, radius: 28, color: .black.opacity(0.26))
 }
 
 // MARK: - Glows
@@ -83,8 +88,18 @@ struct MixrGlow {
         color: MixrColors.waveformPink.opacity(0.20)
     )
 
+    // Restrained glass ambient — lit-from-above, not neon
+    static let glassAmbient = MixrGlow(
+        x: 0, y: -2, radius: 24,
+        color: MixrColors.primaryPurple.opacity(0.07)
+    )
+    static let glassAmbientStrong = MixrGlow(
+        x: 0, y: -2, radius: 32,
+        color: MixrColors.primaryPurple.opacity(0.09)
+    )
+
     static func forWaveform(_ waveformColor: MixrWaveformColor) -> MixrGlow {
-        MixrGlow(x: 0, y: 0, radius: 30, color: waveformColor.glowColor)
+        MixrGlow(x: 0, y: 0, radius: 8, color: waveformColor.glowColor)
     }
 }
 

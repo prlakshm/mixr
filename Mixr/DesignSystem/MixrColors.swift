@@ -83,9 +83,19 @@ enum MixrColors {
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
 
-    static let glassBorderDefault = Color.white.opacity(0.08)
-    static let glassBorderElevated = Color.white.opacity(0.10)
-    static let glassBorderStrong = Color.white.opacity(0.12)
+    static let glassBorderDefault = Color.white.opacity(0.06)
+    static let glassBorderElevated = Color.white.opacity(0.08)
+    static let glassBorderStrong = Color.white.opacity(0.10)
+
+    // Dark navy glass tints — reference ~#0E1322, not gray-blue
+    static let glassNavyDefault = Color(hex: "050810")
+    static let glassNavyElevated = Color(hex: "0A0F1A")
+    static let glassNavyStrong = Color(hex: "0E1322")
+    static let glassClipNavy = Color(hex: "080C14")
+
+    static let glassRimHighlight = Color.white.opacity(0.10)
+    static let glassEdgeCool = Color(hex: "8B9DC2").opacity(0.08)
+    static let glassAmbientPurple = Color(hex: "8B5CF6").opacity(0.04)
 }
 
 // MARK: - Waveform Colors
@@ -120,6 +130,17 @@ enum MixrWaveformColor: CaseIterable, Identifiable {
 
     var tintColor: Color {
         color.opacity(0.18)
+    }
+
+    /// Brighter peak color for waveform silhouette — dominant over clip tint.
+    var peakColor: Color {
+        switch self {
+        case .pink: Color(hex: "FF7FB8")
+        case .purple: Color(hex: "C084FC")
+        case .red: Color(hex: "F87171")
+        case .yellow: Color(hex: "FACC15")
+        case .blue: Color(hex: "38BDF8")
+        }
     }
 }
 
@@ -164,4 +185,42 @@ enum MixrGradients {
             endPoint: .bottom
         )
     }
+
+    // MARK: - Glass Surface Gradients
+
+    /// Subtle top-lit depth gradient for layered glass panes.
+    static func glassSurfaceDepth(highlightOpacity: Double) -> LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: Color.white.opacity(highlightOpacity), location: 0),
+                .init(color: Color.white.opacity(highlightOpacity * 0.25), location: 0.22),
+                .init(color: Color.clear, location: 0.52),
+                .init(color: Color.black.opacity(0.14), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Restrained purple ambient wash — background integration without glow.
+    static let glassAmbientWash = LinearGradient(
+        colors: [
+            MixrColors.glassAmbientPurple,
+            MixrColors.primaryPurple.opacity(0.015),
+            Color.clear,
+        ],
+        startPoint: UnitPoint(x: 0.15, y: 0),
+        endPoint: UnitPoint(x: 0.85, y: 1)
+    )
+
+    /// Top-edge rim catch-light for glass borders.
+    static let glassRimStroke = LinearGradient(
+        colors: [
+            MixrColors.glassRimHighlight,
+            MixrColors.glassEdgeCool.opacity(0.5),
+            Color.clear,
+        ],
+        startPoint: .top,
+        endPoint: UnitPoint(x: 0.5, y: 0.35)
+    )
 }

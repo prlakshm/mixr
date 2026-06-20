@@ -65,12 +65,12 @@ struct MixrToggleButtonStyle: ButtonStyle {
             .foregroundStyle(MixrColors.textPrimary)
             .frame(
                 width: MixrLayout.toggleButtonWidth,
-                height: MixrLayout.toggleButtonHeight
+                height: MixrLayout.toggleButtonWidth
             )
             .background {
-                GlassBackground(level: .default, cornerRadius: MixrRadius.toggle)
+                GlassBackground(level: .default, cornerRadius: MixrLayout.toggleButtonWidth / 2)
             }
-            .clipShape(RoundedRectangle(cornerRadius: MixrRadius.toggle, style: .continuous))
+            .clipShape(Circle())
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }

@@ -5,14 +5,28 @@ enum GlassLevel {
     case elevated
     case strong
 
-    var overlayColor: Color {
+    var tintColor: Color {
         switch self {
-        case .default:
-            MixrColors.surface.opacity(0.55)
-        case .elevated:
-            MixrColors.elevatedSurface.opacity(0.65)
-        case .strong:
-            MixrColors.elevatedSurface.opacity(0.75)
+        case .default: MixrColors.glassNavyDefault
+        case .elevated: MixrColors.glassNavyElevated
+        case .strong: MixrColors.glassNavyStrong
+        }
+    }
+
+    /// Lower opacity than spec sheet — screenshot shows deep translucency.
+    var tintOpacity: Double {
+        switch self {
+        case .default: 0.34
+        case .elevated: 0.44
+        case .strong: 0.54
+        }
+    }
+
+    var highlightOpacity: Double {
+        switch self {
+        case .default: 0.035
+        case .elevated: 0.05
+        case .strong: 0.06
         }
     }
 
@@ -38,12 +52,23 @@ struct GlassBackground: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         shape
-            .fill(.ultraThinMaterial)
-            .overlay {
-                shape.fill(level.overlayColor)
+            .fill(level.tintColor.opacity(level.tintOpacity))
+            .background {
+                shape
+                    .fill(.ultraThinMaterial)
+                    .environment(\.colorScheme, .dark)
             }
             .overlay {
-                shape.strokeBorder(level.borderColor, lineWidth: MixrLayout.borderWidth)
+                shape.fill(MixrGradients.glassSurfaceDepth(highlightOpacity: level.highlightOpacity))
+            }
+            .overlay {
+                shape.fill(MixrGradients.glassAmbientWash)
+            }
+            .overlay {
+                shape.strokeBorder(level.borderColor, lineWidth: MixrLayout.glassBorderWidth)
+            }
+            .overlay {
+                shape.strokeBorder(MixrGradients.glassRimStroke, lineWidth: MixrLayout.glassBorderWidth)
             }
     }
 }
@@ -52,12 +77,27 @@ struct GlassCardModifier: ViewModifier {
     let level: GlassLevel
     let cornerRadius: CGFloat
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let base = content
             .background {
                 GlassBackground(level: level, cornerRadius: cornerRadius)
             }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .clipShape(shape)
+
+        switch level {
+        case .default:
+            base
+        case .elevated:
+            base
+                .mixrShadow(.glassElevated)
+                .mixrGlow(.glassAmbient)
+        case .strong:
+            base
+                .mixrShadow(.glassStrong)
+                .mixrGlow(.glassAmbientStrong)
+        }
     }
 }
 
