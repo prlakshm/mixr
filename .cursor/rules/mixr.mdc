@@ -86,8 +86,7 @@ Background Secondary: #080B16
 Surface: #111827
 Elevated Surface: #171E2E
 
-Primary Purple: #8B5CF6
-Secondary Purple: #A78BFA
+Primary Purple: #7C3AED Secondary Purple: #8B5CF6
 
 Text Primary: #FFFFFF
 Text Secondary: #9CA3AF
@@ -95,7 +94,7 @@ Text Secondary: #9CA3AF
 Divider: #2A3142
 
 Waveform Pink: #FF5FA2
-Waveform Purple: #A855F7
+Waveform Purple: #8B5CF6
 Waveform Red: #EF4444
 Waveform Yellow: #EAB308
 Waveform Blue: #0EA5E9

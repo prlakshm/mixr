@@ -3,6 +3,7 @@ import SwiftUI
 struct WaveformClip: View {
     let waveformColor: MixrWaveformColor
     var amplitudes: [CGFloat]?
+    var height: CGFloat = WaveformMetrics.height
 
     var body: some View {
         GeometryReader { geometry in
@@ -30,7 +31,7 @@ struct WaveformClip: View {
                 )
             }
         }
-        .frame(height: WaveformMetrics.height)
+        .frame(height: height)
         // Tight, restrained glow — close to clip surface only
         .shadow(
             color: WaveformSilhouetteStyle.glowColor(for: waveformColor),

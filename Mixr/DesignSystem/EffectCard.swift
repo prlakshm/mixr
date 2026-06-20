@@ -7,7 +7,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
     case echo
     case bassBoost
     case pitchUp
-    case flanger
+    case warmth
     case chorus
 
     var id: String { rawValue }
@@ -18,7 +18,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .echo: "Echo"
         case .bassBoost: "Bass Boost"
         case .pitchUp: "Pitch Up"
-        case .flanger: "Flanger"
+        case .warmth: "Warmth"
         case .chorus: "Chorus"
         }
     }
@@ -29,7 +29,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .echo: MixrColors.waveformPurple
         case .bassBoost: MixrColors.waveformYellow
         case .pitchUp: MixrColors.waveformPink
-        case .flanger: MixrColors.waveformRed
+        case .warmth: MixrColors.waveformRed
         case .chorus: Color(hex: "F97316")
         }
     }
@@ -40,7 +40,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .echo: "wind"
         case .bassBoost: "bolt.fill"
         case .pitchUp: "star.fill"
-        case .flanger: "flame.fill"
+        case .warmth: "flame.fill"
         case .chorus: "drop.fill"
         }
     }
@@ -67,7 +67,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
                 topCenter: UnitPoint(x: 0.36, y: -0.10),
                 bottomCenter: UnitPoint(x: 0.62, y: 1.00)
             )
-        case .flanger:
+        case .warmth:
             EffectIconGlowLayout(
                 topCenter: UnitPoint(x: 0.22, y: -0.08),
                 bottomCenter: UnitPoint(x: 0.56, y: 1.02)
@@ -122,7 +122,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
                 dotSize: 3.7,
                 intensity: 0.78
             )
-        case .flanger:
+        case .warmth:
             EffectLightingLayout(
                 blobCenter: CGPoint(x: 0.44, y: 0.64),
                 orbCenter:  CGPoint(x: 0.58, y: 0.43),
