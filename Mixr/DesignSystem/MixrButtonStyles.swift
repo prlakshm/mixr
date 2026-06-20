@@ -9,6 +9,11 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, MixrLayout.buttonPaddingV)
             .background(MixrGradients.accentLinear)
             .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6)
+            }
+            .shadow(color: MixrColors.primaryPurple.opacity(0.35), radius: 12, x: 0, y: 4)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
@@ -24,6 +29,10 @@ struct MixrSecondaryGlassButtonStyle: ButtonStyle {
                 GlassBackground(level: .default, cornerRadius: MixrRadius.button)
             }
             .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
+            }
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
@@ -38,6 +47,7 @@ struct MixrIconButtonStyle: ButtonStyle {
             )
             .background(MixrColors.primaryPurple)
             .clipShape(Circle())
+            .shadow(color: MixrColors.primaryPurple.opacity(0.32), radius: 10, x: 0, y: 3)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
@@ -54,6 +64,11 @@ struct MixrIconGlassButtonStyle: ButtonStyle {
                 GlassBackground(level: .default, cornerRadius: MixrRadius.icon)
             }
             .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.55)
+            }
+            .shadow(color: .black.opacity(0.32), radius: 5, x: 0, y: 2)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
@@ -71,6 +86,11 @@ struct MixrToggleButtonStyle: ButtonStyle {
                 GlassBackground(level: .default, cornerRadius: MixrLayout.toggleButtonWidth / 2)
             }
             .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }

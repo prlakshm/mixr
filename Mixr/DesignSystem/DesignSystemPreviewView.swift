@@ -79,6 +79,7 @@ struct DesignSystemPreviewView: View {
         PreviewSection(title: "Glass Cards") {
             VStack(spacing: MixrSpacing.md) {
                 GlassCardSample(level: .default, label: "Default")
+                GlassCardSample(level: .selected, label: "Selected")
                 GlassCardSample(level: .elevated, label: "Elevated")
                 GlassCardSample(level: .strong, label: "Strong")
             }
@@ -90,10 +91,14 @@ struct DesignSystemPreviewView: View {
     private var buttonsSection: some View {
         PreviewSection(title: "Buttons") {
             VStack(alignment: .leading, spacing: MixrSpacing.md) {
-                Button("AI Suggestions") {}
+                Button {} label: {
+                    Label("AI Suggestions", systemImage: "sparkles")
+                }
                     .buttonStyle(.mixrPrimary)
 
-                Button("Export") {}
+                Button {} label: {
+                    Label("Export", systemImage: "square.and.arrow.down")
+                }
                     .buttonStyle(.mixrSecondaryGlass)
 
                 HStack(spacing: MixrSpacing.md) {
