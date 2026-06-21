@@ -177,7 +177,7 @@ private struct TLTransportBar: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
 
             HStack(alignment: .center, spacing: 12) {
-                HStack(alignment: .center, spacing: 14) {
+                HStack(alignment: .center, spacing: 12) {
                     Button { } label: {
                         Image(systemName: "backward.end.fill")
                             .font(.system(size: 14, weight: .medium))

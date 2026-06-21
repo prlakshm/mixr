@@ -214,7 +214,7 @@ private enum EffectSelectedGlow {
     static func multiplier(for effect: MixrEffect) -> Double {
         switch effect {
         case .echo: 1.10
-        case .reverb: 1.05
+        case .reverb: 1.08
         case .auto: 1.20
         default: 1.0
         }
