@@ -334,17 +334,18 @@ private struct TLSongColorChip: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let bright = color.peakColor
 
         ZStack {
             shape
-                .fill(color.color.opacity(0.58))
+                .fill(bright.opacity(0.76))
                 .overlay {
                     shape.fill(
                         LinearGradient(
                             colors: [
-                                color.peakColor.opacity(0.88),
-                                color.color.opacity(0.76),
-                                color.color.opacity(0.62),
+                                bright.opacity(0.94),
+                                bright.opacity(0.84),
+                                color.color.opacity(0.72),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -355,13 +356,27 @@ private struct TLSongColorChip: View {
                     shape.fill(
                         RadialGradient(
                             colors: [
-                                color.peakColor.opacity(0.52),
-                                color.color.opacity(0.34),
+                                bright.opacity(0.62),
+                                color.color.opacity(0.28),
                                 Color.clear,
                             ],
-                            center: UnitPoint(x: 0.34, y: 0.28),
+                            center: UnitPoint(x: 0.40, y: 0.36),
                             startRadius: 0,
-                            endRadius: 34
+                            endRadius: 22
+                        )
+                    )
+                }
+                .overlay {
+                    shape.fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.30),
+                                bright.opacity(0.20),
+                                Color.clear,
+                            ],
+                            center: UnitPoint(x: 0.20, y: 0.10),
+                            startRadius: 0,
+                            endRadius: 22
                         )
                     )
                 }
@@ -369,26 +384,37 @@ private struct TLSongColorChip: View {
                     shape.fill(
                         LinearGradient(
                             colors: [
+                                Color.clear,
                                 Color.black.opacity(0.06),
-                                Color.black.opacity(0.24),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                 }
-                .overlay {
-                    shape.strokeBorder(color.peakColor.opacity(0.86), lineWidth: 0.7)
-                }
                 .overlay(alignment: .topLeading) {
                     shape
-                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.55)
+                        .strokeBorder(Color.white.opacity(0.26), lineWidth: 0.6)
                         .mask {
                             LinearGradient(
                                 colors: [
                                     Color.white,
                                     Color.white.opacity(0.22),
                                     Color.clear,
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: UnitPoint(x: 0.72, y: 0.72)
+                            )
+                        }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    shape
+                        .strokeBorder(bright.opacity(0.18), lineWidth: 0.5)
+                        .mask {
+                            LinearGradient(
+                                colors: [
+                                    Color.clear,
+                                    bright.opacity(0.50),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -398,12 +424,12 @@ private struct TLSongColorChip: View {
 
             Image(systemName: "music.note")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.97))
-                .shadow(color: color.peakColor.opacity(0.76), radius: 3.5)
-                .shadow(color: .black.opacity(0.32), radius: 1, x: 0, y: 1)
+                .foregroundStyle(Color.white.opacity(0.98))
+                .shadow(color: .black.opacity(0.22), radius: 1, x: 0, y: 0.5)
         }
         .frame(width: 34, height: 34)
-        .shadow(color: color.color.opacity(0.30), radius: 4.5, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.24), radius: 3, x: 0, y: 1.5)
+        .shadow(color: bright.opacity(0.34), radius: 5, x: 0, y: 0)
     }
 }
 
