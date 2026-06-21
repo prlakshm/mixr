@@ -92,11 +92,6 @@ struct DesignSystemPreviewView: View {
         PreviewSection(title: "Buttons") {
             VStack(alignment: .leading, spacing: MixrSpacing.md) {
                 Button {} label: {
-                    Label("AI Suggestions", systemImage: "sparkles")
-                }
-                    .buttonStyle(.mixrPrimary)
-
-                Button {} label: {
                     Label("Export", systemImage: "square.and.arrow.down")
                 }
                     .buttonStyle(.mixrSecondaryGlass)

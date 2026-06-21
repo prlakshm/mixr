@@ -568,6 +568,8 @@ private struct TLSMColumn: View {
 // MARK: - Effects Panel
 
 private struct TLEffectsPanel: View {
+    @State private var selectedEffect: MixrEffect?
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
@@ -579,14 +581,9 @@ private struct TLEffectsPanel: View {
                     .padding(.top, 4)
 
                 HStack {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(MixrColors.secondaryPurple)
-                        Text("Effects")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(MixrColors.textPrimary)
-                    }
+                    Text("Effects")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(MixrColors.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.up")
                         .font(.system(size: 11, weight: .medium))
@@ -602,28 +599,19 @@ private struct TLEffectsPanel: View {
                             ForEach(MixrEffect.allCases) { effect in
                                 TLCompactEffectCard(
                                     effect: effect,
-                                    isSelected: effect == .reverb
+                                    isSelected: selectedEffect == effect
                                 )
+                                .onTapGesture {
+                                    selectedEffect = selectedEffect == effect ? nil : effect
+                                }
                             }
                         }
                         .padding(.leading, 16)
                         .padding(.trailing, 8)
-                        .padding(.top, 5)
+                        .padding(.top, 7)
+                        .padding(.bottom, 8)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 10)
-                    .clipped()
-
-                    Button { } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("AI Suggestions")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                    }
-                    .buttonStyle(MixrPrimaryButtonStyle())
-                    .padding(.trailing, 16)
-                    .padding(.top, 10)
+                    .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 20)
                 }
             }
             .frame(maxWidth: .infinity)
