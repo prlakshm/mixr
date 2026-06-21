@@ -217,7 +217,6 @@ struct EffectCard: View {
     @State private var isHovered = false
 
     private var isAuto: Bool { effect == .auto }
-    private var needsHigherActiveContrast: Bool { effect == .auto || effect == .echo }
     private var isActive: Bool { isSelected || isHovered }
 
     var body: some View {
@@ -238,8 +237,8 @@ struct EffectCard: View {
         }
         .shadow(color: .black.opacity(0.32), radius: 6, x: 0, y: 2)
         .shadow(
-            color: effect.color.opacity(isActive ? (needsHigherActiveContrast ? 0.33 : 0.264) : (isAuto ? 0.08 : 0.07)),
-            radius: isActive ? (needsHigherActiveContrast ? 13.2 : 11) : 5,
+            color: effect.color.opacity(activeShadowOpacity),
+            radius: activeShadowRadius,
             x: 0,
             y: 0
         )
@@ -251,6 +250,36 @@ struct EffectCard: View {
         .animation(.easeOut(duration: 0.16), value: isSelected)
     }
 
+    private var activeShadowOpacity: Double {
+        guard isActive else { return isAuto ? 0.08 : 0.07 }
+
+        switch effect {
+        case .auto:
+            return 0.46
+        case .echo:
+            return 0.40
+        case .reverb:
+            return 0.32
+        default:
+            return 0.264
+        }
+    }
+
+    private var activeShadowRadius: CGFloat {
+        guard isActive else { return 5 }
+
+        switch effect {
+        case .auto:
+            return 15
+        case .echo:
+            return 14
+        case .reverb:
+            return 12.5
+        default:
+            return 11
+        }
+    }
+
     private var cardBackground: some View {
         EffectCardGlassBackground(effect: effect, isSelected: isActive)
     }
@@ -258,13 +287,13 @@ struct EffectCard: View {
     @ViewBuilder
     private var cardBloom: some View {
         if isAuto {
-            AutoIridescentBloom()
+            AutoIridescentBloom(isSelected: isActive)
         } else {
             RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius, style: .continuous)
                 .fill(
                     RadialGradient(
                         colors: [
-                            effect.color.opacity(isActive ? (effect == .echo ? 0.16 : 0.10) : 0.045),
+                            effect.color.opacity(cardBloomOpacity),
                             effect.color.opacity(0),
                         ],
                         center: UnitPoint(x: 0.78, y: 0.48),
@@ -275,9 +304,22 @@ struct EffectCard: View {
         }
     }
 
+    private var cardBloomOpacity: Double {
+        guard isActive else { return 0.045 }
+
+        switch effect {
+        case .reverb:
+            return 0.12
+        case .echo:
+            return 0.19
+        default:
+            return 0.10
+        }
+    }
+
     private var foregroundContent: some View {
         HStack(alignment: .top, spacing: EffectCardMetrics.titleGap) {
-            GlassIconTile(effect: effect)
+            GlassIconTile(effect: effect, isSelected: isActive)
             VStack(alignment: .leading, spacing: 1) {
                 Text(effect.title)
                     .mixrFont(.metadata)
@@ -342,13 +384,17 @@ struct EffectCard: View {
 // MARK: - Effect Card Glass
 
 private struct AutoIridescentBloom: View {
+    var isSelected: Bool
+
+    private var selectedBoost: Double { isSelected ? 1.4 : 1.0 }
+
     var body: some View {
         RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius, style: .continuous)
             .fill(
                 RadialGradient(
                     colors: [
-                        Color(hex: "A78BFA").opacity(0.20),
-                        Color(hex: "A78BFA").opacity(0.055),
+                        Color(hex: "A78BFA").opacity(0.225 * selectedBoost),
+                        Color(hex: "A78BFA").opacity(0.062 * selectedBoost),
                         Color.clear,
                     ],
                     center: UnitPoint(x: 0.26, y: 0.24),
@@ -361,8 +407,8 @@ private struct AutoIridescentBloom: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                MixrColors.waveformPink.opacity(0.20),
-                                MixrColors.waveformPink.opacity(0.050),
+                                MixrColors.waveformPink.opacity(0.225 * selectedBoost),
+                                MixrColors.waveformPink.opacity(0.056 * selectedBoost),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.18, y: 0.96),
@@ -376,8 +422,8 @@ private struct AutoIridescentBloom: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                MixrColors.waveformYellow.opacity(0.14),
-                                MixrColors.waveformYellow.opacity(0.035),
+                                MixrColors.waveformYellow.opacity(0.16 * selectedBoost),
+                                MixrColors.waveformYellow.opacity(0.040 * selectedBoost),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.92, y: 0.92),
@@ -391,8 +437,8 @@ private struct AutoIridescentBloom: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color(hex: "38BDF8").opacity(0.17),
-                                Color(hex: "38BDF8").opacity(0.045),
+                                Color(hex: "38BDF8").opacity(0.19 * selectedBoost),
+                                Color(hex: "38BDF8").opacity(0.050 * selectedBoost),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.96, y: 0.14),
@@ -521,14 +567,27 @@ private struct EffectCardSpillGlow: View {
     let effect: MixrEffect
     var isActive: Bool
 
+    private var intensity: Double {
+        guard isActive else { return 0 }
+
+        switch effect {
+        case .auto:
+            return 1.4
+        case .reverb, .echo:
+            return 1.2
+        default:
+            return 1.0
+        }
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius + 8, style: .continuous)
                 .fill(
                     RadialGradient(
                         colors: [
-                            effect.color.opacity(isActive ? 0.154 : 0),
-                            effect.color.opacity(isActive ? 0.061 : 0),
+                            effect.color.opacity(0.154 * intensity),
+                            effect.color.opacity(0.061 * intensity),
                             Color.clear,
                         ],
                         center: UnitPoint(x: 0.52, y: 0.60),
@@ -540,7 +599,7 @@ private struct EffectCardSpillGlow: View {
                 .blur(radius: 11)
 
             RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius + 5, style: .continuous)
-                .stroke(effect.color.opacity(isActive ? 0.132 : 0), lineWidth: 0.8)
+                .stroke(effect.color.opacity(0.132 * intensity), lineWidth: 0.8)
                 .frame(width: EffectCardMetrics.width + 28, height: EffectCardMetrics.height + 10)
                 .blur(radius: 5)
         }
@@ -551,6 +610,19 @@ private struct EffectCardSpillGlow: View {
 private struct EffectCardBorderGlow: View {
     let effect: MixrEffect
     var isSelected: Bool
+
+    private var selectedBoost: Double {
+        guard isSelected else { return 1.0 }
+
+        switch effect {
+        case .auto:
+            return 1.4
+        case .reverb, .echo:
+            return 1.2
+        default:
+            return 1.0
+        }
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius, style: .continuous)
@@ -565,13 +637,13 @@ private struct EffectCardBorderGlow: View {
             if effect == .auto {
                 shape.strokeBorder(
                     LinearGradient(
-                        colors: [
-                            Color(hex: "38BDF8").opacity(isSelected ? 0.44 : 0.20),
-                            Color(hex: "A78BFA").opacity(isSelected ? 0.36 : 0.18),
-                            MixrColors.waveformPink.opacity(isSelected ? 0.46 : 0.20),
-                            MixrColors.waveformYellow.opacity(isSelected ? 0.38 : 0.15),
-                            Color.white.opacity(isSelected ? 0.20 : 0.10),
-                        ],
+	                        colors: [
+	                            Color(hex: "38BDF8").opacity(isSelected ? 0.54 : 0.23),
+	                            Color(hex: "A78BFA").opacity(isSelected ? 0.46 : 0.20),
+	                            MixrColors.waveformPink.opacity(isSelected ? 0.58 : 0.23),
+	                            MixrColors.waveformYellow.opacity(isSelected ? 0.48 : 0.17),
+	                            Color.white.opacity(isSelected ? 0.26 : 0.11),
+	                        ],
                         startPoint: .topTrailing,
                         endPoint: .bottomLeading
                     ),
@@ -580,12 +652,12 @@ private struct EffectCardBorderGlow: View {
 
                 shape.strokeBorder(
                     LinearGradient(
-                        colors: [
-                            MixrColors.waveformPink.opacity(isSelected ? 0.42 : 0.16),
-                            MixrColors.waveformYellow.opacity(isSelected ? 0.36 : 0.12),
-                            Color(hex: "38BDF8").opacity(isSelected ? 0.30 : 0.12),
-                            Color.clear,
-                        ],
+	                        colors: [
+	                            MixrColors.waveformPink.opacity(isSelected ? 0.54 : 0.18),
+	                            MixrColors.waveformYellow.opacity(isSelected ? 0.46 : 0.14),
+	                            Color(hex: "38BDF8").opacity(isSelected ? 0.38 : 0.14),
+	                            Color.clear,
+	                        ],
                         startPoint: .bottomLeading,
                         endPoint: .topTrailing
                     ),
@@ -594,11 +666,11 @@ private struct EffectCardBorderGlow: View {
 
                 shape.strokeBorder(
                     LinearGradient(
-                        colors: [
-                            Color.clear,
-                            Color(hex: "38BDF8").opacity(isSelected ? 0.32 : 0.10),
-                            MixrColors.waveformYellow.opacity(isSelected ? 0.26 : 0.08),
-                        ],
+	                        colors: [
+	                            Color.clear,
+	                            Color(hex: "38BDF8").opacity(isSelected ? 0.40 : 0.11),
+	                            MixrColors.waveformYellow.opacity(isSelected ? 0.34 : 0.09),
+	                        ],
                         startPoint: .leading,
                         endPoint: .trailing
                     ),
@@ -623,11 +695,11 @@ private struct EffectCardBorderGlow: View {
             // Uniform low-edge reflection, like a real glass shelf catching light.
             shape.strokeBorder(
                 LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Color.white.opacity(isSelected ? 0.055 : 0.04),
-                        effect.color.opacity(isSelected ? (effect == .auto ? 0.16 : 0.34) : 0.16),
-                    ],
+	                        colors: [
+	                            Color.clear,
+	                            Color.white.opacity(isSelected ? 0.055 : 0.04),
+	                            effect.color.opacity(isSelected ? (effect == .auto ? 0.20 : 0.34 * selectedBoost) : 0.16),
+	                        ],
                     startPoint: .top,
                     endPoint: .bottom
                 ),
@@ -637,12 +709,12 @@ private struct EffectCardBorderGlow: View {
             // Colored lower/side rim, like the reference cards' glowing outlines.
             shape.strokeBorder(
                 LinearGradient(
-                    colors: [
-                        effect.color.opacity(isSelected ? (effect == .auto ? 0.18 : 0.72) : 0.32),
-                        effect.color.opacity(isSelected ? (effect == .auto ? 0.14 : 0.44) : 0.16),
-                        effect.color.opacity(isSelected ? (effect == .auto ? 0.06 : 0.12) : 0.04),
-                        Color.clear,
-                    ],
+	                    colors: [
+	                        effect.color.opacity(isSelected ? (effect == .auto ? 0.24 : 0.72 * selectedBoost) : 0.32),
+	                        effect.color.opacity(isSelected ? (effect == .auto ? 0.20 : 0.44 * selectedBoost) : 0.16),
+	                        effect.color.opacity(isSelected ? (effect == .auto ? 0.09 : 0.12 * selectedBoost) : 0.04),
+	                        Color.clear,
+	                    ],
                     startPoint: .bottomLeading,
                     endPoint: .topTrailing
                 ),
@@ -650,10 +722,10 @@ private struct EffectCardBorderGlow: View {
             )
 
             // Thin full outline keeps selection legible without flattening the glass edge.
-            shape.strokeBorder(effect.color.opacity(isSelected ? (effect == .auto ? 0.12 : 0.24) : 0.10), lineWidth: isSelected ? 0.64 : 0.48)
+	            shape.strokeBorder(effect.color.opacity(isSelected ? (effect == .auto ? 0.18 : 0.24 * selectedBoost) : 0.10), lineWidth: isSelected ? 0.64 : 0.48)
 
             if isSelected, effect == .echo {
-                shape.strokeBorder(effect.color.opacity(0.28), lineWidth: 0.88)
+                shape.strokeBorder(effect.color.opacity(0.34), lineWidth: 0.92)
                     .blur(radius: 0.55)
                     .mask {
                         LinearGradient(
@@ -669,7 +741,7 @@ private struct EffectCardBorderGlow: View {
             }
 
             // Soft halo concentrated where the glass catches color most strongly.
-            shape.strokeBorder(effect.color.opacity(isSelected ? (effect == .auto ? 0.26 : 0.55) : 0.14), lineWidth: isSelected ? 1.45 : 1.05)
+	            shape.strokeBorder(effect.color.opacity(isSelected ? (effect == .auto ? 0.42 : 0.55 * selectedBoost) : 0.14), lineWidth: isSelected ? 1.45 : 1.05)
                 .blur(radius: isSelected ? 1.25 : 0.9)
                 .mask {
                     RadialGradient(
@@ -691,12 +763,15 @@ private struct EffectCardBorderGlow: View {
 
 private struct GlassIconTile: View {
     let effect: MixrEffect
+    var isSelected: Bool
 
     var body: some View {
         let r     = EffectCardMetrics.iconTileRadius
         let shape = RoundedRectangle(cornerRadius: r, style: .continuous)
         let size  = EffectCardMetrics.iconTileSize
         let glow  = effect.iconGlow
+        let glowScale = effect == .auto ? (isSelected ? 1.25 : 1.13) : 1.0
+        let autoAccentScale = effect == .auto && isSelected ? 1.16 : 1.0
 
         ZStack {
             // Clean transparent glass base: dark, glossy, not frosted.
@@ -722,9 +797,9 @@ private struct GlassIconTile: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            effect.color.opacity(0.60),
-                            effect.color.opacity(0.24),
-                            effect.color.opacity(0.055),
+                            effect.color.opacity(0.60 * glowScale),
+                            effect.color.opacity(0.24 * glowScale),
+                            effect.color.opacity(0.055 * glowScale),
                             Color.clear,
                         ],
                         center: glow.topCenter,
@@ -738,9 +813,9 @@ private struct GlassIconTile: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            effect.color.opacity(0.98),
-                            effect.color.opacity(0.42),
-                            effect.color.opacity(0.11),
+                            effect.color.opacity(min(1.0, 0.98 * glowScale)),
+                            effect.color.opacity(0.42 * glowScale),
+                            effect.color.opacity(0.11 * glowScale),
                             Color.clear,
                         ],
                         center: glow.bottomCenter,
@@ -753,11 +828,11 @@ private struct GlassIconTile: View {
                 shape
                     .fill(
                         RadialGradient(
-                            colors: [
-                                MixrColors.waveformPink.opacity(0.42),
-                                MixrColors.waveformPink.opacity(0.12),
-                                Color.clear,
-                            ],
+	                            colors: [
+	                                MixrColors.waveformPink.opacity(0.48 * autoAccentScale),
+	                                MixrColors.waveformPink.opacity(0.14 * autoAccentScale),
+	                                Color.clear,
+	                            ],
                             center: UnitPoint(x: 0.88, y: 0.92),
                             startRadius: 0,
                             endRadius: size * 0.42
@@ -767,11 +842,11 @@ private struct GlassIconTile: View {
                 shape
                     .fill(
                         RadialGradient(
-                            colors: [
-                                Color(hex: "38BDF8").opacity(0.28),
-                                Color(hex: "38BDF8").opacity(0.08),
-                                Color.clear,
-                            ],
+	                            colors: [
+	                                Color(hex: "38BDF8").opacity(0.32 * autoAccentScale),
+	                                Color(hex: "38BDF8").opacity(0.09 * autoAccentScale),
+	                                Color.clear,
+	                            ],
                             center: UnitPoint(x: 0.08, y: 0.12),
                             startRadius: 0,
                             endRadius: size * 0.54
@@ -781,11 +856,11 @@ private struct GlassIconTile: View {
                 shape
                     .fill(
                         RadialGradient(
-                            colors: [
-                                MixrColors.waveformYellow.opacity(0.22),
-                                MixrColors.waveformYellow.opacity(0.06),
-                                Color.clear,
-                            ],
+	                            colors: [
+	                                MixrColors.waveformYellow.opacity(0.25 * autoAccentScale),
+	                                MixrColors.waveformYellow.opacity(0.07 * autoAccentScale),
+	                                Color.clear,
+	                            ],
                             center: UnitPoint(x: 0.70, y: 1.02),
                             startRadius: 0,
                             endRadius: size * 0.42
@@ -818,18 +893,18 @@ private struct GlassIconTile: View {
             shape.strokeBorder(
                 LinearGradient(
                     colors: effect == .auto
-                        ? [
-                            Color.white.opacity(0.22),
-                            Color(hex: "C084FC").opacity(0.64),
-                            MixrColors.waveformPink.opacity(0.52),
-                            MixrColors.waveformYellow.opacity(0.36),
-                            Color(hex: "38BDF8").opacity(0.48),
+	                        ? [
+	                            Color.white.opacity(0.26 * autoAccentScale),
+	                            Color(hex: "C084FC").opacity(0.72 * autoAccentScale),
+	                            MixrColors.waveformPink.opacity(0.60 * autoAccentScale),
+	                            MixrColors.waveformYellow.opacity(0.41 * autoAccentScale),
+	                            Color(hex: "38BDF8").opacity(0.55 * autoAccentScale),
                         ]
-                        : [
-                            Color.white.opacity(0.12),
-                            effect.color.opacity(0.58),
-                            effect.color.opacity(0.30),
-                        ],
+	                        : [
+	                            Color.white.opacity(0.12),
+	                            effect.color.opacity(0.58),
+	                            effect.color.opacity(0.30),
+	                        ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
@@ -841,8 +916,8 @@ private struct GlassIconTile: View {
                 .font(.system(size: EffectCardMetrics.iconSize, weight: .semibold))
                 .scaleEffect(effect.iconScale)
                 .foregroundStyle(effect == .auto ? Color.white : effect.color)
-                .shadow(color: (effect == .auto ? Color(hex: "F5D0FE") : effect.color).opacity(1.0), radius: 4)
-                .shadow(color: (effect == .auto ? Color(hex: "C084FC") : effect.color).opacity(0.55), radius: 9)
+                .shadow(color: (effect == .auto ? Color(hex: "F5D0FE") : effect.color).opacity(1.0), radius: effect == .auto ? (isSelected ? 5.4 : 4.6) : 4)
+                .shadow(color: (effect == .auto ? Color(hex: "C084FC") : effect.color).opacity(effect == .auto ? (isSelected ? 0.76 : 0.64) : 0.55), radius: effect == .auto ? (isSelected ? 12 : 10) : 9)
         }
         .frame(width: size, height: size)
     }
@@ -924,12 +999,23 @@ private struct EffectLightingLayer: View {
 
     private var color: Color { effect.color }
     private var layout: EffectLightingLayout { effect.lighting }
-    private var boost: Double { (isSelected ? 1.0 : 0.82) * layout.intensity }
+    private var selectedBoost: Double {
+        guard isSelected else { return 1.0 }
+
+        switch effect {
+        case .reverb, .echo:
+            return 1.2
+        default:
+            return 1.0
+        }
+    }
+
+    private var boost: Double { (isSelected ? selectedBoost : 0.82) * layout.intensity }
 
     @ViewBuilder
     var body: some View {
         if effect == .auto {
-            AutoIridescentParticles()
+            AutoIridescentParticles(isSelected: isSelected)
                 .allowsHitTesting(false)
         } else {
             GeometryReader { geo in
@@ -1005,6 +1091,10 @@ private struct EffectLightingLayer: View {
 }
 
 private struct AutoIridescentParticles: View {
+    var isSelected: Bool
+
+    private var selectedBoost: Double { isSelected ? 1.4 : 1.0 }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -1012,7 +1102,7 @@ private struct AutoIridescentParticles: View {
                     color: MixrColors.waveformPink,
                     size: 6.2,
                     blur: 0.85,
-                    opacity: 0.60
+                    opacity: 0.68 * selectedBoost
                 )
                 .position(x: geo.size.width * 0.62, y: geo.size.height * 0.43)
 
@@ -1020,7 +1110,7 @@ private struct AutoIridescentParticles: View {
                     color: Color(hex: "38BDF8"),
                     size: 3.8,
                     blur: 0.45,
-                    opacity: 0.54
+                    opacity: 0.61 * selectedBoost
                 )
                 .position(x: geo.size.width * 0.76, y: geo.size.height * 0.24)
 
@@ -1028,7 +1118,7 @@ private struct AutoIridescentParticles: View {
                     color: Color(hex: "A78BFA"),
                     size: 9.0,
                     blur: 1.85,
-                    opacity: 0.34
+                    opacity: 0.39 * selectedBoost
                 )
                 .position(x: geo.size.width * 0.52, y: geo.size.height * 0.67)
             }

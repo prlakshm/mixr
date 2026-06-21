@@ -9,13 +9,13 @@ private enum TLK {
     static let trackRowHeight: CGFloat  = 46
     static let waveformHeight: CGFloat  = 34
     static let smColumnWidth: CGFloat   = 54
-    static let effectsHeight: CGFloat   = 98
+    static let effectsHeight: CGFloat   = 118
     static let playheadUnit: CGFloat    = 55
     static let timelineUnitWidth: CGFloat = 10
     static let totalUnits: CGFloat      = 130
-    static let compactEffectScale: CGFloat = 0.72
-    static let compactEffectCardWidth: CGFloat = 110
-    static let compactEffectCardHeight: CGFloat = 48
+    static let compactEffectScale: CGFloat = 1.0
+    static let compactEffectCardWidth: CGFloat = 152
+    static let compactEffectCardHeight: CGFloat = 66
     static let markerUnits: [CGFloat]   = [0, 17, 33, 49, 65, 81, 97, 113, 129]
     static let minorGridStep: CGFloat   = 5
 
@@ -140,9 +140,8 @@ private struct TLRotateOverlay: View {
 
 private struct TLTransportBar: View {
     var body: some View {
-        HStack(spacing: 0) {
-            // Logo + project dropdown — tight left cluster
-            HStack(spacing: 10) {
+        ZStack {
+            HStack(spacing: 24) {
                 HStack(spacing: 7) {
                     Image(systemName: "waveform")
                         .font(.system(size: 16, weight: .bold))
@@ -162,17 +161,29 @@ private struct TLTransportBar: View {
                 }
             }
             .padding(.leading, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 12)
+            HStack {
+                Spacer()
 
-            // Playback + time + BPM/Key — shifted left to leave room for action buttons
-            HStack(spacing: 18) {
-                HStack(spacing: 22) {
+                Button { } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                        .frame(minWidth: 74)
+                }
+                .buttonStyle(MixrSecondaryGlassButtonStyle())
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.trailing, 14)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+
+            HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .center, spacing: 18) {
                     Button { } label: {
                         Image(systemName: "backward.end.fill")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(MixrColors.textSecondary)
                     }
+                    .frame(width: 28, height: 40)
 
                     Button { } label: {
                         Image(systemName: "play.fill")
@@ -189,6 +200,7 @@ private struct TLTransportBar: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(MixrColors.textSecondary)
                     }
+                    .frame(width: 28, height: 40)
                 }
 
                 HStack(spacing: 3) {
@@ -202,8 +214,9 @@ private struct TLTransportBar: View {
                         .font(.system(size: 13, weight: .regular, design: .monospaced))
                         .foregroundStyle(MixrColors.textSecondary)
                 }
+                .frame(height: 40, alignment: .center)
 
-                HStack(spacing: 16) {
+                HStack(alignment: .center, spacing: 10) {
                     VStack(spacing: 0) {
                         Text("124")
                             .font(.system(size: 14, weight: .bold))
@@ -213,6 +226,8 @@ private struct TLTransportBar: View {
                             .foregroundStyle(MixrColors.textSecondary)
                             .kerning(0.5)
                     }
+                    .frame(width: 30, height: 40)
+
                     VStack(spacing: 0) {
                         Text("Gm")
                             .font(.system(size: 14, weight: .bold))
@@ -222,28 +237,10 @@ private struct TLTransportBar: View {
                             .foregroundStyle(MixrColors.textSecondary)
                             .kerning(0.5)
                     }
+                    .frame(width: 30, height: 40)
                 }
             }
-            .layoutPriority(1)
-
-            Spacer(minLength: 8)
-
-            // Action buttons — wide enough for full labels
-            HStack(spacing: 8) {
-                Button { } label: {
-                    Label("Mixer", systemImage: "slider.horizontal.3")
-                        .frame(minWidth: 92)
-                }
-                .buttonStyle(MixrSecondaryGlassButtonStyle())
-
-                Button { } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                        .frame(minWidth: 96)
-                }
-                .buttonStyle(MixrSecondaryGlassButtonStyle())
-            }
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.trailing, 14)
+            .offset(x: 76)
         }
         .frame(height: TLK.transportHeight)
         .background(MixrColors.backgroundSecondary)
@@ -298,19 +295,7 @@ private struct TLSongRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            // Colored album icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(track.color.color.opacity(0.22))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(track.color.color.opacity(0.36), lineWidth: 0.5)
-                    }
-                Image(systemName: "music.note")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(track.color.color)
-            }
-            .frame(width: 34, height: 34)
+            TLSongColorChip(color: track.color)
 
             // Song info
             VStack(alignment: .leading, spacing: 2) {
@@ -341,6 +326,84 @@ private struct TLSongRow: View {
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
         }
+    }
+}
+
+private struct TLSongColorChip: View {
+    let color: MixrWaveformColor
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        ZStack {
+            shape
+                .fill(color.color.opacity(0.58))
+                .overlay {
+                    shape.fill(
+                        LinearGradient(
+                            colors: [
+                                color.peakColor.opacity(0.88),
+                                color.color.opacity(0.76),
+                                color.color.opacity(0.62),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                }
+                .overlay {
+                    shape.fill(
+                        RadialGradient(
+                            colors: [
+                                color.peakColor.opacity(0.52),
+                                color.color.opacity(0.34),
+                                Color.clear,
+                            ],
+                            center: UnitPoint(x: 0.34, y: 0.28),
+                            startRadius: 0,
+                            endRadius: 34
+                        )
+                    )
+                }
+                .overlay {
+                    shape.fill(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.06),
+                                Color.black.opacity(0.24),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                }
+                .overlay {
+                    shape.strokeBorder(color.peakColor.opacity(0.86), lineWidth: 0.7)
+                }
+                .overlay(alignment: .topLeading) {
+                    shape
+                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.55)
+                        .mask {
+                            LinearGradient(
+                                colors: [
+                                    Color.white,
+                                    Color.white.opacity(0.22),
+                                    Color.clear,
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        }
+                }
+
+            Image(systemName: "music.note")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.97))
+                .shadow(color: color.peakColor.opacity(0.76), radius: 3.5)
+                .shadow(color: .black.opacity(0.32), radius: 1, x: 0, y: 1)
+        }
+        .frame(width: 34, height: 34)
+        .shadow(color: color.color.opacity(0.30), radius: 4.5, x: 0, y: 1)
     }
 }
 
@@ -578,7 +641,7 @@ private struct TLEffectsPanel: View {
                 Capsule()
                     .fill(MixrColors.textSecondary.opacity(0.30))
                     .frame(width: 36, height: 4)
-                    .padding(.top, 4)
+                    .padding(.top, 5)
 
                 HStack {
                     Text("Effects")
@@ -607,11 +670,24 @@ private struct TLEffectsPanel: View {
                             }
                         }
                         .padding(.leading, 16)
-                        .padding(.trailing, 8)
-                        .padding(.top, 7)
-                        .padding(.bottom, 8)
+                        .padding(.trailing, 32)
+                        .padding(.top, 6)
+                        .padding(.bottom, 10)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 20)
+                    .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 22)
+                    .overlay(alignment: .trailing) {
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                MixrColors.backgroundSecondary.opacity(0.46),
+                                MixrColors.backgroundSecondary.opacity(0.74),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: 34)
+                        .allowsHitTesting(false)
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
