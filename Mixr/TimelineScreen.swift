@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Screen Layout Constants
 
 private enum TLK {
-    static let sidebarWidth: CGFloat    = 185
+    static let sidebarWidth: CGFloat    = 208
     static let transportHeight: CGFloat = 50
     static let rulerHeight: CGFloat     = 20
     static let trackRowHeight: CGFloat  = 46
@@ -295,7 +295,11 @@ private struct TLSongRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            TLSongColorChip(color: track.color)
+            HStack(spacing: 0) {
+                TLSongRowGripper()
+                TLSongColorChip(color: track.color)
+                    .padding(.leading, 4)
+            }
 
             // Song info
             VStack(alignment: .leading, spacing: 2) {
@@ -326,6 +330,19 @@ private struct TLSongRow: View {
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
         }
+    }
+}
+
+private struct TLSongRowGripper: View {
+    var body: some View {
+        VStack(spacing: 2.5) {
+            ForEach(0..<3, id: \.self) { _ in
+                Circle()
+                    .fill(MixrColors.textSecondary.opacity(0.62))
+                    .frame(width: 2.4, height: 2.4)
+            }
+        }
+        .frame(width: 8, height: 34)
     }
 }
 
@@ -491,7 +508,7 @@ private struct TLTimelineArea: View {
                     ZStack(alignment: .topLeading) {
                         MixrColors.backgroundSecondary
 
-                        // Vertical beat grid (drawn behind clips)
+                        // Vertical beat grid — behind tracks and waveforms
                         TLGridCanvas(width: timelineContentW, height: timelineContentH)
                             .allowsHitTesting(false)
 
@@ -534,22 +551,29 @@ private struct TLRuler: View {
             Canvas { ctx, size in
                 for unit in TLK.minorGridUnits {
                     let x = (unit / TLK.totalUnits) * width
-                    let isMajor = TLK.majorGridUnits.contains(unit)
 
                     var tick = Path()
-                    tick.move(to: CGPoint(x: x, y: size.height - (isMajor ? 7 : 4)))
+                    tick.move(to: CGPoint(x: x, y: size.height - 4))
                     tick.addLine(to: CGPoint(x: x, y: size.height))
                     ctx.stroke(
                         tick,
-                        with: .color(
-                            MixrColors.divider.opacity(isMajor ? 0.40 : 0.22)
-                        ),
+                        with: .color(MixrColors.divider.opacity(0.25)),
                         lineWidth: 0.5
                     )
                 }
 
                 for unit in TLK.markerUnits {
                     let x = (unit / TLK.totalUnits) * width
+
+                    var tick = Path()
+                    tick.move(to: CGPoint(x: x, y: size.height - 7))
+                    tick.addLine(to: CGPoint(x: x, y: size.height))
+                    ctx.stroke(
+                        tick,
+                        with: .color(MixrColors.divider.opacity(0.45)),
+                        lineWidth: 0.5
+                    )
+
                     let label = unit == 0 ? "0:00" : "\(Int(unit))"
                     let resolved = ctx.resolve(
                         Text(label)
@@ -575,19 +599,31 @@ private struct TLGridCanvas: View {
 
     var body: some View {
         Canvas { ctx, _ in
-            for unit in TLK.minorGridUnits {
+            // Minor 5-second lines
+            for unit in TLK.minorGridUnits where !TLK.majorGridUnits.contains(unit) {
                 let x = (unit / TLK.totalUnits) * width
-                let isMajor = TLK.majorGridUnits.contains(unit)
 
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: height))
                 ctx.stroke(
                     path,
-                    with: .color(
-                        MixrColors.divider.opacity(isMajor ? 0.40 : 0.22)
-                    ),
-                    lineWidth: 0.5
+                    with: .color(MixrColors.divider.opacity(0.45)),
+                    lineWidth: 0.65
+                )
+            }
+
+            // Major labeled lines
+            for unit in TLK.markerUnits {
+                let x = (unit / TLK.totalUnits) * width
+
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: height))
+                ctx.stroke(
+                    path,
+                    with: .color(MixrColors.divider.opacity(0.68)),
+                    lineWidth: 0.9
                 )
             }
         }
