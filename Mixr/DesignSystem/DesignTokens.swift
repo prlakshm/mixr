@@ -29,6 +29,7 @@ enum MixrLayout {
     static let iconButtonSize: CGFloat = 40
     static let toggleButtonWidth: CGFloat = 32
     static let toggleButtonHeight: CGFloat = 40
+    static let trackToggleSize: CGFloat = 28
     static let glassBlurRadius: CGFloat = 24
     static let borderWidth: CGFloat = 1
     static let glassBorderWidth: CGFloat = 0.5

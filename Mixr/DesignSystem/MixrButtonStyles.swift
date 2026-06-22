@@ -111,6 +111,31 @@ extension ButtonStyle where Self == MixrIconGlassButtonStyle {
     static var mixrIconGlass: MixrIconGlassButtonStyle { MixrIconGlassButtonStyle() }
 }
 
+struct MixrCompactTrackToggleButtonStyle: ButtonStyle {
+    private let size = MixrLayout.trackToggleSize
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .mixrFont(.caption)
+            .foregroundStyle(MixrColors.textPrimary.opacity(0.92))
+            .frame(width: size, height: size)
+            .background {
+                GlassBackground(level: .default, cornerRadius: size / 2)
+            }
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
+extension ButtonStyle where Self == MixrCompactTrackToggleButtonStyle {
+    static var mixrCompactTrackToggle: MixrCompactTrackToggleButtonStyle { MixrCompactTrackToggleButtonStyle() }
+}
+
 extension ButtonStyle where Self == MixrToggleButtonStyle {
     static var mixrToggle: MixrToggleButtonStyle { MixrToggleButtonStyle() }
 }

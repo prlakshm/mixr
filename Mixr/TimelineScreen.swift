@@ -298,7 +298,7 @@ private struct TLSongRow: View {
         HStack(spacing: 9) {
             HStack(spacing: 0) {
                 TLSongRowGripper()
-                TLSongColorChip(color: track.color)
+                MixrSongColorChip(color: track.color)
                     .padding(.leading, 4)
             }
 
@@ -344,151 +344,6 @@ private struct TLSongRowGripper: View {
             }
         }
         .frame(width: 8, height: 34)
-    }
-}
-
-private struct TLSongColorChip: View {
-    let color: MixrWaveformColor
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-        let bright = color.peakColor
-
-        ZStack {
-            shape
-                .fill(bright.opacity(0.80))
-                .overlay {
-                    shape.fill(
-                        LinearGradient(
-                            colors: [
-                                bright.opacity(0.96),
-                                bright.opacity(0.88),
-                                color.color.opacity(0.76),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                }
-                .overlay {
-                    shape.fill(
-                        RadialGradient(
-                            colors: [
-                                bright.opacity(0.68),
-                                color.color.opacity(0.32),
-                                Color.clear,
-                            ],
-                            center: UnitPoint(x: 0.42, y: 0.38),
-                            startRadius: 0,
-                            endRadius: 22
-                        )
-                    )
-                }
-                .overlay {
-                    shape.fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.15),
-                                Color.white.opacity(0.06),
-                                Color.clear,
-                                Color.clear,
-                            ],
-                            startPoint: UnitPoint(x: 0.02, y: 0.0),
-                            endPoint: UnitPoint(x: 0.58, y: 0.48)
-                        )
-                    )
-                    .mask {
-                        LinearGradient(
-                            colors: [
-                                Color.white,
-                                Color.white.opacity(0.55),
-                                Color.clear,
-                            ],
-                            startPoint: UnitPoint(x: 0.08, y: 0.0),
-                            endPoint: UnitPoint(x: 0.62, y: 0.52)
-                        )
-                    }
-                }
-                .overlay {
-                    shape.fill(
-                        RadialGradient(
-                            colors: [
-                                Color.white.opacity(0.18),
-                                bright.opacity(0.10),
-                                Color.clear,
-                            ],
-                            center: UnitPoint(x: 0.18, y: 0.14),
-                            startRadius: 0,
-                            endRadius: 10
-                        )
-                    )
-                }
-                .overlay {
-                    shape.fill(
-                        LinearGradient(
-                            colors: [
-                                Color.clear,
-                                Color.black.opacity(0.12),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                }
-                .overlay(alignment: .topLeading) {
-                    shape
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                        .mask {
-                            LinearGradient(
-                                colors: [
-                                    Color.white,
-                                    Color.white.opacity(0.18),
-                                    Color.clear,
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: UnitPoint(x: 0.55, y: 0.55)
-                            )
-                        }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    shape
-                        .strokeBorder(Color.black.opacity(0.18), lineWidth: 0.45)
-                        .mask {
-                            LinearGradient(
-                                colors: [
-                                    Color.clear,
-                                    Color.black.opacity(0.65),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        }
-                }
-
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            bright.opacity(0.50),
-                            Color.clear,
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 8
-                    )
-                )
-                .frame(width: 14, height: 14)
-                .blur(radius: 1.5)
-
-            Image(systemName: "music.note")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.white)
-                .shadow(color: bright.opacity(0.60), radius: 3)
-                .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
-        }
-        .frame(width: 34, height: 34)
-        .shadow(color: .black.opacity(0.24), radius: 3, x: 0, y: 1.5)
-        .shadow(color: color.color.opacity(0.28), radius: 5, x: 0, y: 0)
     }
 }
 
@@ -702,27 +557,6 @@ private struct TLPlayheadHandle: Shape {
 
 // MARK: - Track Controls Column
 
-private struct TLTrackToggleButtonStyle: ButtonStyle {
-    private let size = TLK.trackToggleSize
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .mixrFont(.caption)
-            .foregroundStyle(MixrColors.textPrimary.opacity(0.92))
-            .frame(width: size, height: size)
-            .background {
-                GlassBackground(level: .default, cornerRadius: size / 2)
-            }
-            .clipShape(Circle())
-            .overlay {
-                Circle()
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-            }
-            .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-    }
-}
-
 private struct TLTrackControlsColumn: View {
     @State private var volumes: [UUID: Double] = [
         mockTracks[0].id: 0.82,
@@ -772,10 +606,10 @@ private struct TLTrackControlRow: View {
     var body: some View {
         HStack(spacing: 5) {
             Button("S") { }
-                .buttonStyle(TLTrackToggleButtonStyle())
+                .buttonStyle(.mixrCompactTrackToggle)
 
             Button("M") { }
-                .buttonStyle(TLTrackToggleButtonStyle())
+                .buttonStyle(.mixrCompactTrackToggle)
 
             HStack(spacing: 4) {
                 Image(systemName: volumeIcon)
