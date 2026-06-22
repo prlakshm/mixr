@@ -114,66 +114,8 @@ enum MixrEffect: String, CaseIterable, Identifiable {
                 dotSize: 3.8,
                 intensity: 0.80
             )
-        case .reverb:
-            EffectLightingLayout(
-                blobCenter: CGPoint(x: 0.48, y: 0.65),
-                orbCenter:  CGPoint(x: 0.60, y: 0.48),
-                dotCenter:  CGPoint(x: 0.67, y: 0.35),
-                blobSize: 25,
-                orbSize: 11,
-                dotSize: 3.8,
-                intensity: 0.82
-            )
-        case .echo:
-            EffectLightingLayout(
-                blobCenter: CGPoint(x: 0.46, y: 0.70),
-                orbCenter:  CGPoint(x: 0.64, y: 0.45),
-                dotCenter:  CGPoint(x: 0.72, y: 0.31),
-                blobSize: 22,
-                orbSize: 12,
-                dotSize: 4.2,
-                intensity: 0.76
-            )
-        case .bassBoost:
-            EffectLightingLayout(
-                blobCenter: CGPoint(x: 0.43, y: 0.67),
-                orbCenter:  CGPoint(x: 0.56, y: 0.40),
-                dotCenter:  CGPoint(x: 0.63, y: 0.30),
-                blobSize: 24,
-                orbSize: 10,
-                dotSize: 3.4,
-                intensity: 0.74
-            )
-        case .pitchUp:
-            EffectLightingLayout(
-                blobCenter: CGPoint(x: 0.42, y: 0.68),
-                orbCenter:  CGPoint(x: 0.56, y: 0.42),
-                dotCenter:  CGPoint(x: 0.64, y: 0.30),
-                blobSize: 23,
-                orbSize: 11,
-                dotSize: 3.7,
-                intensity: 0.78
-            )
-        case .warmth:
-            EffectLightingLayout(
-                blobCenter: CGPoint(x: 0.44, y: 0.64),
-                orbCenter:  CGPoint(x: 0.58, y: 0.43),
-                dotCenter:  CGPoint(x: 0.66, y: 0.32),
-                blobSize: 21,
-                orbSize: 10.5,
-                dotSize: 3.6,
-                intensity: 0.72
-            )
-        case .chorus:
-            EffectLightingLayout(
-                blobCenter: CGPoint(x: 0.45, y: 0.66),
-                orbCenter:  CGPoint(x: 0.57, y: 0.42),
-                dotCenter:  CGPoint(x: 0.64, y: 0.31),
-                blobSize: 24,
-                orbSize: 10,
-                dotSize: 3.5,
-                intensity: 0.74
-            )
+        default:
+            EffectLightingLayout.standard(for: self)
         }
     }
 }
@@ -191,6 +133,113 @@ struct EffectLightingLayout {
     let orbSize: CGFloat
     let dotSize: CGFloat
     let intensity: Double
+
+    // Shared cluster geometry — blob lower-left → orb mid → dot upper-right.
+    private static let baseBlob = CGPoint(x: 0.44, y: 0.67)
+    private static let baseOrb  = CGPoint(x: 0.58, y: 0.43)
+    private static let baseDot  = CGPoint(x: 0.74, y: 0.40)
+
+    /// Tiered nudge: cluster shift plus per-bubble horizontal spread.
+    private struct Tier {
+        let cluster: CGPoint
+        let blobSpreadX: CGFloat
+        let orbSpreadX: CGFloat
+        let dotSpreadX: CGFloat
+    }
+
+    private static let tiers: [MixrEffect: Tier] = [
+        .reverb:    Tier(cluster: CGPoint(x:  0.04, y:  0.02), blobSpreadX: -0.03, orbSpreadX:  0.02, dotSpreadX: 0.04),
+        .echo:      Tier(cluster: CGPoint(x: -0.04, y:  0.05), blobSpreadX: -0.02, orbSpreadX:  0.04, dotSpreadX: 0.05),
+        .bassBoost: Tier(cluster: CGPoint(x: -0.05, y:  0.02), blobSpreadX:  0.03, orbSpreadX:  0.01, dotSpreadX: 0.07),
+        .pitchUp:   Tier(cluster: CGPoint(x: -0.06, y:  0.03), blobSpreadX:  0.04, orbSpreadX:  0.03, dotSpreadX: 0.06),
+        .warmth:    Tier(cluster: CGPoint(x:  0.02, y: -0.02), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
+        .chorus:    Tier(cluster: CGPoint(x:  0.03, y:  0.03), blobSpreadX: -0.02, orbSpreadX: -0.03, dotSpreadX: 0.04),
+    ]
+
+    static func standard(for effect: MixrEffect) -> EffectLightingLayout {
+        let tier = tiers[effect] ?? Tier(cluster: .zero, blobSpreadX: 0, orbSpreadX: 0, dotSpreadX: 0)
+        let metrics = metrics(for: effect)
+
+        let blob = clampBlob(
+            baseBlob + tier.cluster + CGPoint(x: tier.blobSpreadX, y: 0),
+            blobSize: metrics.blobSize
+        )
+        let orb = clamp(
+            baseOrb + tier.cluster + CGPoint(x: tier.orbSpreadX, y: 0),
+            radius: metrics.orbSize * 0.5 + 2
+        )
+        let dot = clampDot(
+            baseDot + tier.cluster + CGPoint(x: tier.dotSpreadX, y: 0),
+            radius: metrics.dotSize * 0.5 + 3
+        )
+
+        return EffectLightingLayout(
+            blobCenter: blob,
+            orbCenter: orb,
+            dotCenter: dot,
+            blobSize: metrics.blobSize,
+            orbSize: metrics.orbSize,
+            dotSize: metrics.dotSize,
+            intensity: metrics.intensity
+        )
+    }
+
+    private static func metrics(for effect: MixrEffect) -> (blobSize: CGFloat, orbSize: CGFloat, dotSize: CGFloat, intensity: Double) {
+        switch effect {
+        case .reverb:    (25, 11,   3.8, 0.82)
+        case .echo:      (22, 12,   4.2, 0.76)
+        case .bassBoost: (24, 10,   3.4, 0.74)
+        case .pitchUp:   (23, 11,   3.7, 0.78)
+        case .warmth:    (21, 10.5, 3.6, 0.72)
+        case .chorus:    (24, 10,   3.5, 0.74)
+        default:         (24, 11,   3.8, 0.76)
+        }
+    }
+
+    private static func clamp(_ point: CGPoint, radius: CGFloat) -> CGPoint {
+        let marginX = radius / EffectCardMetrics.width
+        let marginY = radius / EffectCardMetrics.height
+        return CGPoint(
+            x: min(max(point.x, marginX), 1 - marginX),
+            y: min(max(point.y, marginY), 1 - marginY)
+        )
+    }
+
+    /// Nudges the bottom blob slightly right when it would be heavily clipped by the icon tile.
+    private static func clampBlob(_ point: CGPoint, blobSize: CGFloat) -> CGPoint {
+        let radius = blobSize * 0.5 + 4
+        let clamped = clamp(point, radius: radius)
+
+        let cardW = EffectCardMetrics.width
+        var centerX = clamped.x * cardW
+        let leftEdge = centerX - radius
+
+        let iconTrailing = EffectCardMetrics.iconTileTrailingX
+        let allowedOverlap: CGFloat = 14
+        let maxNudge: CGFloat = 12
+
+        if leftEdge < iconTrailing - allowedOverlap {
+            let deficit = (iconTrailing - allowedOverlap) - leftEdge
+            centerX += min(deficit, maxNudge)
+        }
+
+        let marginX = radius / cardW
+        let x = min(max(centerX / cardW, marginX), 1 - marginX)
+        return CGPoint(x: x, y: clamped.y)
+    }
+
+    /// Keeps the accent dot below headings and inset from card edges.
+    private static func clampDot(_ point: CGPoint, radius: CGFloat) -> CGPoint {
+        let clamped = clamp(point, radius: radius)
+        return CGPoint(
+            x: min(max(clamped.x, 0.72), 0.86),
+            y: min(max(clamped.y, 0.38), 0.72)
+        )
+    }
+}
+
+private func + (lhs: CGPoint, rhs: CGPoint) -> CGPoint {
+    CGPoint(x: lhs.x + rhs.x, y: lhs.y + rhs.y)
 }
 
 // MARK: - Layout
@@ -203,9 +252,14 @@ enum EffectCardMetrics {
     static let iconTileSize: CGFloat   = 46
     static let iconTileRadius: CGFloat = 12
     static let iconSize: CGFloat       = 22
+    static let titleFontSize: CGFloat  = 11
     static let titleGap: CGFloat       = 9
     static let glassBubbleSize: CGFloat    = 13
     static let reflectionArcSize: CGFloat  = 28
+
+    /// Icon tile occupies the leading foreground — keep blobs out of this rect.
+    static var iconTileTrailingX: CGFloat { inset + iconTileSize }
+    static var iconTileBottomY: CGFloat { (inset - 1) + iconTileSize }
 }
 
 // MARK: - Selected Glow Tuning
@@ -238,6 +292,7 @@ struct EffectCard: View {
             cardBloom
             EffectLightingLayer(effect: effect, isSelected: isActive)
             foregroundContent
+                .zIndex(1)
             glassBubbleDecoration
         }
         .frame(width: EffectCardMetrics.width, height: EffectCardMetrics.height)
@@ -338,8 +393,7 @@ struct EffectCard: View {
             GlassIconTile(effect: effect, isSelected: isActive)
             VStack(alignment: .leading, spacing: 1) {
                 Text(effect.title)
-                    .mixrFont(.metadata)
-                    .fontWeight(.semibold)
+                    .font(.system(size: EffectCardMetrics.titleFontSize, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
                     .lineLimit(1)
 
@@ -350,7 +404,7 @@ struct EffectCard: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.top, effect.subtitle == nil ? 3 : 1)
+            .padding(.top, effect.subtitle == nil ? 5 : 3)
         }
         .padding(.leading, EffectCardMetrics.inset)
         .padding(.top, EffectCardMetrics.inset - 1)
