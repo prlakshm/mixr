@@ -756,7 +756,7 @@ private struct TLTrackControlsColumn: View {
 
             Spacer()
         }
-        .padding(.leading, 6)
+        .padding(.leading, 7.5)
         .padding(.trailing, 8)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .leading) {
