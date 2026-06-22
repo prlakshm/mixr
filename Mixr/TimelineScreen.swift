@@ -8,7 +8,8 @@ private enum TLK {
     static let rulerHeight: CGFloat     = 20
     static let trackRowHeight: CGFloat  = 46
     static let waveformHeight: CGFloat  = 34
-    static let smColumnWidth: CGFloat   = 54
+    static let smColumnWidth: CGFloat   = 154
+    static let trackToggleSize: CGFloat = 28
     static let effectsHeight: CGFloat   = 118
     static let playheadUnit: CGFloat    = 55
     static let timelineUnitWidth: CGFloat = 10
@@ -532,7 +533,7 @@ private struct TLTimelineArea: View {
                 .frame(width: timelineViewportW, height: geo.size.height)
                 .clipped()
 
-                TLSMColumn()
+                TLTrackControlsColumn()
                     .frame(width: TLK.smColumnWidth, height: geo.size.height)
             }
         }
@@ -699,23 +700,54 @@ private struct TLPlayheadHandle: Shape {
     }
 }
 
-// MARK: - S / M Button Column
+// MARK: - Track Controls Column
 
-private struct TLSMColumn: View {
+private struct TLTrackToggleButtonStyle: ButtonStyle {
+    private let size = TLK.trackToggleSize
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .mixrFont(.caption)
+            .foregroundStyle(MixrColors.textPrimary.opacity(0.92))
+            .frame(width: size, height: size)
+            .background {
+                GlassBackground(level: .default, cornerRadius: size / 2)
+            }
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
+private struct TLTrackControlsColumn: View {
+    @State private var volumes: [UUID: Double] = [
+        mockTracks[0].id: 0.82,
+        mockTracks[1].id: 0.74,
+        mockTracks[2].id: 0.68,
+        mockTracks[3].id: 0.91,
+        mockTracks[4].id: 0.77,
+    ]
+
     var body: some View {
         VStack(spacing: 0) {
-            // Blank space that lines up with the ruler
             Color.clear
                 .frame(height: TLK.rulerHeight)
                 .overlay(alignment: .bottom) {
                     MixrColors.divider.frame(height: 0.5)
                 }
 
-            ForEach(mockTracks) { _ in
-                HStack(spacing: 5) {
-                    Button("S") { }.buttonStyle(MixrToggleButtonStyle())
-                    Button("M") { }.buttonStyle(MixrToggleButtonStyle())
-                }
+            ForEach(mockTracks) { track in
+                TLTrackControlRow(
+                    track: track,
+                    volume: Binding(
+                        get: { volumes[track.id] ?? 0.75 },
+                        set: { volumes[track.id] = $0 }
+                    )
+                )
                 .frame(height: TLK.trackRowHeight)
                 .overlay(alignment: .bottom) {
                     MixrColors.divider.frame(height: 0.5)
@@ -724,10 +756,49 @@ private struct TLSMColumn: View {
 
             Spacer()
         }
+        .padding(.horizontal, 8)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .leading) {
             MixrColors.divider.frame(width: 0.5)
         }
+    }
+}
+
+private struct TLTrackControlRow: View {
+    let track: MockTrack
+    @Binding var volume: Double
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Button("S") { }
+                .buttonStyle(TLTrackToggleButtonStyle())
+
+            Button("M") { }
+                .buttonStyle(TLTrackToggleButtonStyle())
+
+            HStack(spacing: 4) {
+                Image(systemName: volumeIcon)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(MixrColors.textSecondary.opacity(0.85))
+                    .frame(width: 11)
+
+                TLVolumeSlider(
+                    value: $volume,
+                    accentColor: track.color.color,
+                    trackColor: track.color.color
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.leading, 2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private var volumeIcon: String {
+        if volume <= 0.01 { return "speaker.slash.fill" }
+        if volume < 0.34 { return "speaker.wave.1.fill" }
+        if volume < 0.67 { return "speaker.wave.2.fill" }
+        return "speaker.wave.3.fill"
     }
 }
 
