@@ -608,7 +608,7 @@ private struct TLGridCanvas: View {
                 path.addLine(to: CGPoint(x: x, y: height))
                 ctx.stroke(
                     path,
-                    with: .color(MixrColors.divider.opacity(0.45)),
+                    with: .color(MixrColors.divider.opacity(0.55)),
                     lineWidth: 0.65
                 )
             }
@@ -622,7 +622,7 @@ private struct TLGridCanvas: View {
                 path.addLine(to: CGPoint(x: x, y: height))
                 ctx.stroke(
                     path,
-                    with: .color(MixrColors.divider.opacity(0.68)),
+                    with: .color(MixrColors.divider.opacity(0.8)),
                     lineWidth: 0.9
                 )
             }
