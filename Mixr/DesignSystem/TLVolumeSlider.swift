@@ -6,7 +6,7 @@ struct TLVolumeSlider: View {
     let accentColor: Color
     let trackColor: Color
 
-    private let trackHeight: CGFloat = 4
+    private let trackHeight: CGFloat = 5
     private let thumbWidth: CGFloat = 5
     private let thumbHeight: CGFloat = 14
 
@@ -63,11 +63,7 @@ struct TLVolumeSlider: View {
                 )
             }
             .overlay {
-                shape.strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
-            }
-            .overlay {
-                shape.strokeBorder(trackColor.opacity(0.12), lineWidth: 0.7)
-                    .blur(radius: 0.5)
+                shape.strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
             }
             .frame(width: width, height: trackHeight)
             .shadow(color: .black.opacity(0.28), radius: 1.5, x: 0, y: 1)
@@ -78,9 +74,9 @@ struct TLVolumeSlider: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        accentColor.opacity(0.50),
-                        accentColor.opacity(0.78),
-                        accentColor.opacity(0.62),
+                        Color.white.opacity(0.09),
+                        MixrColors.divider.opacity(0.42),
+                        MixrColors.glassNavyElevated.opacity(0.50),
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -91,52 +87,141 @@ struct TLVolumeSlider: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.14),
+                                Color.white.opacity(0.10),
                                 Color.clear,
+                                Color.black.opacity(0.14),
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
             }
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.05), lineWidth: 0.4)
+            }
             .frame(width: width, height: trackHeight)
-            .shadow(color: accentColor.opacity(0.14), radius: 2.5, x: 0, y: 0)
     }
 
     private var sliderThumb: some View {
-        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-            .fill(MixrColors.glassNavyElevated.opacity(0.58))
-            .background {
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.10)
-                    .environment(\.colorScheme, .dark)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .fill(
+        let shape = RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+        let bright = accentColor
+
+        return ZStack {
+            // Song chip color grading — peak-forward, luminous body.
+            shape
+                .fill(bright.opacity(0.80))
+                .overlay {
+                    shape.fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.82),
-                                Color.white.opacity(0.38),
-                                accentColor.opacity(0.16),
+                                bright.opacity(0.96),
+                                bright.opacity(0.88),
+                                trackColor.opacity(0.76),
                             ],
-                            startPoint: .top,
-                            endPoint: .bottom
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
                     )
-            }
-            .frame(width: thumbWidth, height: thumbHeight)
-            .overlay {
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.55)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .strokeBorder(accentColor.opacity(0.18), lineWidth: 0.6)
-            }
-            .shadow(color: accentColor.opacity(0.12), radius: 3, x: 0, y: 0)
-            .shadow(color: .black.opacity(0.36), radius: 2, x: 0, y: 1)
+                }
+                .overlay {
+                    shape.fill(
+                        RadialGradient(
+                            colors: [
+                                bright.opacity(0.68),
+                                trackColor.opacity(0.32),
+                                Color.clear,
+                            ],
+                            center: UnitPoint(x: 0.42, y: 0.32),
+                            startRadius: 0,
+                            endRadius: thumbHeight * 0.52
+                        )
+                    )
+                }
+                .overlay {
+                    shape.fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.15),
+                                Color.white.opacity(0.06),
+                                Color.clear,
+                            ],
+                            startPoint: UnitPoint(x: 0.02, y: 0.0),
+                            endPoint: UnitPoint(x: 0.58, y: 0.48)
+                        )
+                    )
+                    .mask {
+                        LinearGradient(
+                            colors: [
+                                Color.white,
+                                Color.white.opacity(0.55),
+                                Color.clear,
+                            ],
+                            startPoint: UnitPoint(x: 0.08, y: 0.0),
+                            endPoint: UnitPoint(x: 0.62, y: 0.52)
+                        )
+                    }
+                }
+                .overlay {
+                    shape.fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.18),
+                                bright.opacity(0.10),
+                                Color.clear,
+                            ],
+                            center: UnitPoint(x: 0.18, y: 0.14),
+                            startRadius: 0,
+                            endRadius: thumbHeight * 0.42
+                        )
+                    )
+                }
+                .overlay {
+                    shape.fill(
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                Color.black.opacity(0.12),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                }
+
+            // Premium glass edge lighting — subtle, not plastic.
+            shape
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.45)
+                .mask {
+                    LinearGradient(
+                        colors: [
+                            Color.white,
+                            Color.white.opacity(0.20),
+                            Color.clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: UnitPoint(x: 0.55, y: 0.65)
+                    )
+                }
+
+            shape
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.12),
+                            bright.opacity(0.38),
+                            trackColor.opacity(0.24),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
+        }
+        .frame(width: thumbWidth, height: thumbHeight)
+        .shadow(color: bright.opacity(0.22), radius: 3.5, x: 0, y: 0)
+        .shadow(color: trackColor.opacity(0.10), radius: 6, x: 0, y: 0)
+        .shadow(color: .black.opacity(0.30), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -152,8 +237,8 @@ struct TLVolumeSlider: View {
 
                 TLVolumeSlider(
                     value: $value,
-                    accentColor: MixrColors.waveformPink,
-                    trackColor: MixrColors.waveformPink
+                    accentColor: MixrWaveformColor.pink.peakColor,
+                    trackColor: MixrWaveformColor.pink.color
                 )
                 .frame(width: 72)
             }

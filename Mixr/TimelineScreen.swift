@@ -785,7 +785,7 @@ private struct TLTrackControlRow: View {
 
                 TLVolumeSlider(
                     value: $volume,
-                    accentColor: track.color.color,
+                    accentColor: track.color.peakColor,
                     trackColor: track.color.color
                 )
                 .frame(maxWidth: .infinity)
