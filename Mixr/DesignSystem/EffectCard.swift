@@ -149,10 +149,10 @@ struct EffectLightingLayout {
 
     private static let tiers: [MixrEffect: Tier] = [
         .reverb:    Tier(cluster: CGPoint(x:  0.04, y:  0.02), blobSpreadX: -0.03, orbSpreadX:  0.02, dotSpreadX: 0.04),
-        .echo:      Tier(cluster: CGPoint(x: -0.04, y:  0.05), blobSpreadX: -0.02, orbSpreadX:  0.04, dotSpreadX: 0.05),
+        .echo:      Tier(cluster: CGPoint(x: -0.03, y:  0.05), blobSpreadX: -0.02, orbSpreadX:  0.04, dotSpreadX: 0.05),
         .bassBoost: Tier(cluster: CGPoint(x: -0.05, y:  0.02), blobSpreadX:  0.03, orbSpreadX:  0.01, dotSpreadX: 0.07),
         .pitchUp:   Tier(cluster: CGPoint(x: -0.06, y:  0.03), blobSpreadX:  0.04, orbSpreadX:  0.03, dotSpreadX: 0.06),
-        .warmth:    Tier(cluster: CGPoint(x:  0.02, y: -0.02), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
+        .warmth:    Tier(cluster: CGPoint(x:  0.01, y: -0.01), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
         .chorus:    Tier(cluster: CGPoint(x:  0.03, y:  0.03), blobSpreadX: -0.02, orbSpreadX: -0.03, dotSpreadX: 0.04),
     ]
 
