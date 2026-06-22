@@ -8,7 +8,7 @@ private enum TLK {
     static let rulerHeight: CGFloat     = 20
     static let trackRowHeight: CGFloat  = 46
     static let waveformHeight: CGFloat  = 34
-    static let smColumnWidth: CGFloat   = 154
+    static let smColumnWidth: CGFloat   = 130
     static let trackToggleSize: CGFloat = 28
     static let effectsHeight: CGFloat   = 118
     static let playheadUnit: CGFloat    = 55
@@ -756,7 +756,8 @@ private struct TLTrackControlsColumn: View {
 
             Spacer()
         }
-        .padding(.horizontal, 8)
+        .padding(.leading, 6)
+        .padding(.trailing, 8)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .leading) {
             MixrColors.divider.frame(width: 0.5)
@@ -789,7 +790,7 @@ private struct TLTrackControlRow: View {
                 )
                 .frame(maxWidth: .infinity)
             }
-            .padding(.leading, 2)
+            .padding(.leading, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
