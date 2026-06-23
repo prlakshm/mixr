@@ -60,8 +60,28 @@ struct TimelineScreen: View {
     @State private var showFilePicker = false
     @State private var isEffectsCollapsed = false
 
-    private var playheadUnit: CGFloat {
-        MixrTimeline.units(fromSeconds: playback.currentTimeSeconds)
+    // Playhead drag state
+    @State private var isPlayheadDragging = false
+    @State private var dragPlayheadUnit: CGFloat = 0
+    @State private var wasPlayingBeforeDrag = false
+
+    /// Displayed playhead position — drag overrides live position during scrub.
+    private var effectivePlayheadUnit: CGFloat {
+        isPlayheadDragging
+            ? dragPlayheadUnit
+            : MixrTimeline.units(fromSeconds: playback.currentTimeSeconds)
+    }
+
+    /// Displayed timestamp — shows dragged position while scrubbing.
+    private var displayTimeSeconds: Double {
+        isPlayheadDragging
+            ? MixrTimeline.seconds(fromUnits: dragPlayheadUnit)
+            : playback.currentTimeSeconds
+    }
+
+    /// Maximum unit the playhead can reach (= end of the longest clip).
+    private var maxPlayheadUnit: CGFloat {
+        MixrTimeline.units(fromSeconds: max(1, playback.totalDurationSeconds))
     }
 
     var body: some View {
@@ -75,13 +95,19 @@ struct TimelineScreen: View {
                 MixrColors.background.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    TLTransportBar(playback: playback, library: library)
-                        .frame(height: TLK.transportHeight)
+                    TLTransportBar(
+                        playback: playback,
+                        library: library,
+                        displayTimeSeconds: displayTimeSeconds
+                    )
+                    .frame(height: TLK.transportHeight)
 
                     TLTrackArea(
                         tracks: $library.tracks,
                         selectedTrackID: library.selectedTrackID,
-                        playheadUnit: playheadUnit,
+                        effectivePlayheadUnit: effectivePlayheadUnit,
+                        maxPlayheadUnit: maxPlayheadUnit,
+                        isPlayheadDragging: isPlayheadDragging,
                         showFilePicker: $showFilePicker,
                         onImportURLs: { urls in
                             library.addTracks(from: urls)
@@ -97,6 +123,20 @@ struct TimelineScreen: View {
                         },
                         onMixSettingsChanged: {
                             playback.applyMixSettings(from: library.tracks)
+                        },
+                        onPlayheadDragStart: {
+                            wasPlayingBeforeDrag = playback.isPlaying
+                            if playback.isPlaying { playback.pause() }
+                        },
+                        onPlayheadDragChanged: { unit in
+                            isPlayheadDragging = true
+                            dragPlayheadUnit = unit
+                        },
+                        onPlayheadDragEnded: { unit in
+                            isPlayheadDragging = false
+                            let secs = MixrTimeline.seconds(fromUnits: unit)
+                            playback.seek(to: secs)
+                            if wasPlayingBeforeDrag { playback.play() }
                         }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -166,6 +206,7 @@ private struct TLRotateOverlay: View {
 private struct TLTransportBar: View {
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
+    var displayTimeSeconds: Double = 0
 
     var body: some View {
         ZStack {
@@ -236,7 +277,7 @@ private struct TLTransportBar: View {
                 }
 
                 HStack(spacing: 3) {
-                    Text(MixrTimeline.formattedTime(playback.currentTimeSeconds))
+                    Text(MixrTimeline.formattedTime(displayTimeSeconds))
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(MixrColors.textPrimary)
                     Text("/")
@@ -289,28 +330,35 @@ private struct TLTransportBar: View {
 private struct TLTrackArea: View {
     @Binding var tracks: [MixrTrack]
     let selectedTrackID: UUID?
-    let playheadUnit: CGFloat
+    let effectivePlayheadUnit: CGFloat
+    let maxPlayheadUnit: CGFloat
+    let isPlayheadDragging: Bool
     @Binding var showFilePicker: Bool
     let onImportURLs: ([URL]) -> Void
     let onDeleteTrack: (UUID) -> Void
     let onReorder: (IndexSet, Int) -> Void
     let onSelectTrack: (UUID) -> Void
     let onMixSettingsChanged: () -> Void
+    let onPlayheadDragStart: () -> Void
+    let onPlayheadDragChanged: (CGFloat) -> Void
+    let onPlayheadDragEnded: (CGFloat) -> Void
 
-    @State private var draggingID: UUID?       = nil
+    @State private var draggingID: UUID?        = nil
     @State private var dragTranslation: CGFloat = 0
-    @State private var isTimelineDropTarget = false
+    @State private var isTimelineDropTarget     = false
 
     var body: some View {
         GeometryReader { geo in
-            let laneViewportW = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
-            let contentW      = max(laneViewportW, TLK.totalUnits * TLK.timelineUnitWidth)
-            let rowsH         = CGFloat(tracks.count) * TLK.trackRowHeight
-            let trackSectionH = tracks.isEmpty
+            let laneVW   = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
+            let contentW = max(laneVW, TLK.totalUnits * TLK.timelineUnitWidth)
+            let rowsH    = CGFloat(tracks.count) * TLK.trackRowHeight
+            let lanesH   = tracks.isEmpty
                 ? max(geo.size.height - TLK.rulerHeight, TLK.trackRowHeight)
                 : rowsH
+            let totalH   = TLK.rulerHeight + lanesH
 
             ZStack(alignment: .topLeading) {
+                // Full-area background
                 HStack(spacing: 0) {
                     MixrColors.backgroundSecondary.frame(width: TLK.sidebarWidth)
                     MixrColors.backgroundSecondary
@@ -318,27 +366,73 @@ private struct TLTrackArea: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
 
+                // Main layout — vertical scroll wraps the three columns
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        rulerRow(contentW: contentW, laneViewportW: laneViewportW)
+                    HStack(alignment: .top, spacing: 0) {
 
-                        HStack(alignment: .top, spacing: 0) {
-                            sidebarTrackRows
-                            timelineLanesCanvas(
-                                contentW: contentW,
-                                trackSectionH: trackSectionH,
-                                viewportW: laneViewportW
-                            )
-                            controlsTrackRows
+                        // ── Left: sidebar (no horizontal scroll) ──
+                        sidebarColumn(lanesH: lanesH)
+
+                        // ── Centre: single horizontal scroll for ruler + lanes ──
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            ZStack(alignment: .topLeading) {
+                                // Ruler sits at the top
+                                TLRuler(width: contentW)
+                                    .frame(width: contentW, height: TLK.rulerHeight)
+
+                                // Lanes sit below the ruler
+                                lanesContent(contentW: contentW, lanesH: lanesH, viewportW: laneVW)
+                                    .offset(y: TLK.rulerHeight)
+
+                                // Unified draggable playhead (handle + line)
+                                TLDraggablePlayhead(
+                                    timelineWidth: contentW,
+                                    totalHeight: totalH,
+                                    playheadUnit: effectivePlayheadUnit,
+                                    maxUnit: maxPlayheadUnit,
+                                    isDragging: isPlayheadDragging,
+                                    onDragStart: onPlayheadDragStart,
+                                    onDragChanged: onPlayheadDragChanged,
+                                    onDragEnded: onPlayheadDragEnded
+                                )
+                            }
+                            .frame(width: contentW, height: totalH)
                         }
+                        .frame(width: laneVW, height: totalH)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 0, style: .continuous)
+                                .strokeBorder(
+                                    isTimelineDropTarget
+                                        ? MixrColors.primaryPurple.opacity(0.52)
+                                        : MixrColors.divider.opacity(0.95),
+                                    lineWidth: isTimelineDropTarget ? 1.2 : 0.55
+                                )
+                                .animation(.easeInOut(duration: 0.18), value: isTimelineDropTarget)
+                        }
+                        .overlay {
+                            if isTimelineDropTarget {
+                                RoundedRectangle(cornerRadius: 0, style: .continuous)
+                                    .strokeBorder(MixrColors.textPrimary.opacity(0.18), lineWidth: 0.5)
+                                    .padding(2)
+                                    .transition(.opacity)
+                            }
+                        }
+                        .onDrop(
+                            of: TLAudioDrop.supportedTypes,
+                            isTargeted: $isTimelineDropTarget,
+                            perform: handleAudioDrop
+                        )
+
+                        // ── Right: controls (no horizontal scroll) ──
+                        controlsColumn(lanesH: lanesH)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
 
+                // Import footer (fixed to sidebar bottom)
                 VStack(spacing: 0) {
                     Spacer()
-                    importFooter
-                        .frame(width: TLK.sidebarWidth)
+                    importFooter.frame(width: TLK.sidebarWidth)
                 }
                 .frame(width: TLK.sidebarWidth, height: geo.size.height)
             }
@@ -347,58 +441,44 @@ private struct TLTrackArea: View {
         }
     }
 
-    // MARK: Ruler row
+    // MARK: Column helpers
 
     private func columnHeader(_ title: String, leadingInset: CGFloat) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(MixrColors.textPrimary)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(MixrColors.textSecondary.opacity(0.45))
             Spacer(minLength: 0)
         }
         .padding(.leading, leadingInset)
     }
 
-    @ViewBuilder
-    private func rulerRow(contentW: CGFloat, laneViewportW: CGFloat) -> some View {
-        HStack(spacing: 0) {
+    private func sidebarColumn(lanesH: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            // Label — matches ruler height
             MixrColors.backgroundSecondary
                 .frame(width: TLK.sidebarWidth, height: TLK.rulerHeight)
-                .overlay {
-                    columnHeader("Tracks", leadingInset: 10.5)
-                }
-                .overlay(alignment: .bottom) {
-                    MixrColors.divider.frame(height: 0.5)
-                }
-                .overlay(alignment: .trailing) {
-                    MixrColors.divider.frame(width: 0.5)
-                }
+                .overlay { columnHeader("Tracks", leadingInset: 10.5) }
+                .overlay(alignment: .bottom) { MixrColors.divider.frame(height: 0.5) }
+                .overlay(alignment: .trailing) { MixrColors.divider.frame(width: 0.5) }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                ZStack(alignment: .topLeading) {
-                    TLRuler(width: contentW)
-                        .frame(width: contentW, height: TLK.rulerHeight)
+            sidebarTrackRows
+        }
+        .frame(width: TLK.sidebarWidth)
+    }
 
-                    playheadHandle(in: contentW, playheadUnit: playheadUnit)
-                }
-                .frame(width: contentW, height: TLK.rulerHeight)
-            }
-            .frame(width: laneViewportW, height: TLK.rulerHeight)
-            .background(MixrColors.background.opacity(0.80))
-
+    private func controlsColumn(lanesH: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            // Label — matches ruler height
             MixrColors.backgroundSecondary
                 .frame(width: TLK.smColumnWidth, height: TLK.rulerHeight)
-                .overlay {
-                    columnHeader("Controls", leadingInset: 10.5)
-                }
-                .overlay(alignment: .bottom) {
-                    MixrColors.divider.frame(height: 0.5)
-                }
-                .overlay(alignment: .leading) {
-                    MixrColors.divider.frame(width: 0.5)
-                }
+                .overlay { columnHeader("Controls", leadingInset: 10.5) }
+                .overlay(alignment: .bottom) { MixrColors.divider.frame(height: 0.5) }
+                .overlay(alignment: .leading) { MixrColors.divider.frame(width: 0.5) }
+
+            controlsTrackRows
         }
-        .frame(height: TLK.rulerHeight)
+        .frame(width: TLK.smColumnWidth)
     }
 
     // MARK: Sidebar track rows
@@ -448,80 +528,42 @@ private struct TLTrackArea: View {
         }
     }
 
-    // MARK: Timeline lanes (horizontal scroll)
+    // MARK: Timeline lanes content (no scroll wrapper — parent provides horizontal scroll)
 
     @ViewBuilder
-    private func timelineLanesCanvas(contentW: CGFloat, trackSectionH: CGFloat, viewportW: CGFloat) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            ZStack(alignment: .topLeading) {
-                TLTimelineSurface(isDropTarget: isTimelineDropTarget)
-                    .frame(width: contentW, height: trackSectionH)
-
-                TLGridCanvas(width: contentW, height: trackSectionH)
-                    .allowsHitTesting(false)
-
-                VStack(spacing: 0) {
-                    ForEach(tracks) { track in
-                        TLTrackLane(track: track, timelineWidth: contentW)
-                            .frame(height: TLK.trackRowHeight)
-                            .offset(y: rowOffset(trackID: track.id))
-                            .zIndex(draggingID == track.id ? 1 : 0)
-                    }
-                }
-
-                TLClipBoundaryCanvas(
-                    tracks: tracks,
-                    timelineWidth: contentW,
-                    totalHeight: trackSectionH,
-                    topInset: 0
-                )
-                .allowsHitTesting(false)
-
-                TLPlayhead(
-                    timelineWidth: contentW,
-                    totalHeight: trackSectionH,
-                    playheadUnit: playheadUnit,
-                    showsHandle: false
-                )
-                .allowsHitTesting(false)
-
-                if tracks.isEmpty {
-                    TLEmptyTimelineState(isDropTarget: isTimelineDropTarget)
-                        .frame(width: min(contentW, viewportW), height: trackSectionH)
-                        .position(x: min(contentW, viewportW) / 2, y: trackSectionH / 2)
-                        .allowsHitTesting(false)
-                }
-            }
-            .frame(width: contentW, height: trackSectionH)
-        }
-        .frame(width: viewportW, height: trackSectionH)
-        .background {
+    private func lanesContent(contentW: CGFloat, lanesH: CGFloat, viewportW: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
             TLTimelineSurface(isDropTarget: isTimelineDropTarget)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 0, style: .continuous)
-                .strokeBorder(
-                    isTimelineDropTarget
-                        ? MixrColors.primaryPurple.opacity(0.52)
-                        : MixrColors.divider.opacity(0.95),
-                    lineWidth: isTimelineDropTarget ? 1.2 : 0.55
-                )
-                .animation(.easeInOut(duration: 0.18), value: isTimelineDropTarget)
-        }
-        .overlay {
-            if isTimelineDropTarget {
-                RoundedRectangle(cornerRadius: 0, style: .continuous)
-                    .strokeBorder(MixrColors.textPrimary.opacity(0.18), lineWidth: 0.5)
-                    .padding(2)
-                    .transition(.opacity)
+                .frame(width: contentW, height: lanesH)
+
+            TLGridCanvas(width: contentW, height: lanesH)
+                .allowsHitTesting(false)
+
+            VStack(spacing: 0) {
+                ForEach(tracks) { track in
+                    TLTrackLane(track: track, timelineWidth: contentW)
+                        .frame(height: TLK.trackRowHeight)
+                        .offset(y: rowOffset(trackID: track.id))
+                        .zIndex(draggingID == track.id ? 1 : 0)
+                }
+            }
+
+            TLClipBoundaryCanvas(
+                tracks: tracks,
+                timelineWidth: contentW,
+                totalHeight: lanesH,
+                topInset: 0
+            )
+            .allowsHitTesting(false)
+
+            if tracks.isEmpty {
+                TLEmptyTimelineState(isDropTarget: isTimelineDropTarget)
+                    .frame(width: min(contentW, viewportW), height: lanesH)
+                    .position(x: min(contentW, viewportW) / 2, y: lanesH / 2)
+                    .allowsHitTesting(false)
             }
         }
-        .onDrop(
-            of: TLAudioDrop.supportedTypes,
-            isTargeted: $isTimelineDropTarget,
-            perform: handleAudioDrop
-        )
-        .clipped()
+        .frame(width: contentW, height: lanesH)
     }
 
     // MARK: Controls track rows
@@ -550,15 +592,6 @@ private struct TLTrackArea: View {
         .overlay(alignment: .leading) {
             MixrColors.divider.frame(width: 0.5)
         }
-    }
-
-    private func playheadHandle(in timelineWidth: CGFloat, playheadUnit: CGFloat) -> some View {
-        let xPos = (playheadUnit / TLK.totalUnits) * timelineWidth
-
-        return TLPlayheadHandle()
-            .fill(Color.white)
-            .frame(width: TLK.playheadHandleWidth, height: TLK.playheadHandleHeight)
-            .offset(x: xPos - TLK.playheadHandleWidth / 2, y: TLK.rulerHeight - TLK.playheadHandleHeight)
     }
 
     // MARK: Import button
@@ -1063,13 +1096,22 @@ private enum TLAudioDrop {
     }
 }
 
-// MARK: - Playhead
+// MARK: - Draggable Playhead
 
-private struct TLPlayhead: View {
+/// Unified playhead: triangle handle (sits at ruler bottom) + vertical line (runs full height).
+/// Handles all drag logic; the parent merely receives callbacks with new timeline units.
+private struct TLDraggablePlayhead: View {
     let timelineWidth: CGFloat
-    let totalHeight: CGFloat
-    var playheadUnit: CGFloat = 0
-    var showsHandle: Bool = true
+    let totalHeight: CGFloat        // rulerHeight + lanesHeight
+    let playheadUnit: CGFloat       // 0…TLK.totalUnits
+    let maxUnit: CGFloat            // clamp ceiling = units(totalDurationSeconds)
+    var isDragging: Bool = false
+    var onDragStart:   () -> Void          = {}
+    var onDragChanged: (CGFloat) -> Void   = { _ in }
+    var onDragEnded:   (CGFloat) -> Void   = { _ in }
+
+    @State private var gestureActive    = false
+    @State private var gestureStartUnit: CGFloat = 0
 
     private var xPos: CGFloat {
         (playheadUnit / TLK.totalUnits) * timelineWidth
@@ -1077,17 +1119,51 @@ private struct TLPlayhead: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
+            // ── Vertical line ──
             Rectangle()
-                .fill(Color.white.opacity(0.90))
-                .frame(width: 1, height: totalHeight)
+                .fill(isDragging ? Color.white : Color.white.opacity(0.90))
+                .frame(width: isDragging ? 1.5 : 1, height: totalHeight)
                 .offset(x: xPos - 0.5)
+                .allowsHitTesting(false)
+                .animation(.easeOut(duration: 0.1), value: isDragging)
 
-            if showsHandle {
+            // ── Triangle handle with enlarged hit target ──
+            ZStack {
+                // Invisible hit-target rectangle
+                Color.clear
+                    .frame(width: 44, height: TLK.rulerHeight)
+
+                // Visual triangle
                 TLPlayheadHandle()
-                    .fill(Color.white)
+                    .fill(isDragging ? Color.white : Color.white.opacity(0.95))
                     .frame(width: TLK.playheadHandleWidth, height: TLK.playheadHandleHeight)
-                    .offset(x: xPos - TLK.playheadHandleWidth / 2, y: TLK.rulerHeight - TLK.playheadHandleHeight)
+                    .shadow(
+                        color: isDragging ? .white.opacity(0.55) : .clear,
+                        radius: isDragging ? 7 : 0
+                    )
+                    .animation(.easeOut(duration: 0.12), value: isDragging)
             }
+            .offset(x: xPos - 22, y: TLK.rulerHeight - TLK.playheadHandleHeight)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        if !gestureActive {
+                            gestureActive    = true
+                            gestureStartUnit = playheadUnit
+                            onDragStart()
+                        }
+                        let raw = gestureStartUnit
+                            + (value.translation.width / timelineWidth) * TLK.totalUnits
+                        onDragChanged(max(0, min(raw, maxUnit)))
+                    }
+                    .onEnded { value in
+                        gestureActive = false
+                        let raw = gestureStartUnit
+                            + (value.translation.width / timelineWidth) * TLK.totalUnits
+                        onDragEnded(max(0, min(raw, maxUnit)))
+                    }
+            )
         }
     }
 }
@@ -1225,7 +1301,8 @@ private struct TLEffectsPanel: View {
             Capsule()
                 .fill(MixrColors.textSecondary.opacity(0.30))
                 .frame(width: 36, height: 4)
-                .padding(.top, 5)
+                .padding(.top, 4)
+                .offset(y: 5)
 
             HStack {
                 Text("Effects")
