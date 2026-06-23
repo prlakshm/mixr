@@ -1,24 +1,26 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Screen Layout Constants
 
-private enum TLK {
-    static let sidebarWidth: CGFloat    = 208
-    static let transportHeight: CGFloat = 50
-    static let rulerHeight: CGFloat     = 20
-    static let trackRowHeight: CGFloat  = 46
-    static let waveformHeight: CGFloat  = 34
-    static let smColumnWidth: CGFloat   = 130
-    static let trackToggleSize: CGFloat = 28
-    static let effectsHeight: CGFloat   = 118
-    static let playheadUnit: CGFloat    = 55
+enum TLK {
+    static let sidebarWidth: CGFloat      = 208
+    static let transportHeight: CGFloat   = 50
+    static let rulerHeight: CGFloat       = 20
+    static let trackRowHeight: CGFloat    = 46
+    static let waveformHeight: CGFloat    = 34
+    static let smColumnWidth: CGFloat     = 130
+    static let trackToggleSize: CGFloat   = 28
+    static let effectsHeight: CGFloat     = 118
+    static let playheadUnit: CGFloat      = 55
     static let timelineUnitWidth: CGFloat = 10
-    static let totalUnits: CGFloat      = 130
-    static let compactEffectScale: CGFloat = 1.0
-    static let compactEffectCardWidth: CGFloat = 152
-    static let compactEffectCardHeight: CGFloat = 66
-    static let markerUnits: [CGFloat]   = [0, 17, 33, 49, 65, 81, 97, 113, 129]
-    static let minorGridStep: CGFloat   = 5
+    static let totalUnits: CGFloat        = 130
+    static let compactEffectScale: CGFloat         = 1.0
+    static let compactEffectCardWidth: CGFloat     = 152
+    static let compactEffectCardHeight: CGFloat    = 66
+    static let markerUnits: [CGFloat]     = [0, 17, 33, 49, 65, 81, 97, 113, 129]
+    static let minorGridStep: CGFloat     = 5
+    static let importButtonHeight: CGFloat = 44
 
     static var minorGridUnits: [CGFloat] {
         stride(from: 0, through: Int(totalUnits), by: Int(minorGridStep)).map { CGFloat($0) }
@@ -27,63 +29,17 @@ private enum TLK {
     static let majorGridUnits: Set<CGFloat> = Set(markerUnits)
 }
 
-// MARK: - Mock Data
-
-private struct MockTrack: Identifiable {
-    let id = UUID()
-    let title: String
-    let artist: String
-    let duration: String
-    let bpm: Int
-    let color: MixrWaveformColor
-    let clips: [MockClip]
-}
-
-private struct MockClip: Identifiable {
-    let id = UUID()
-    let start: CGFloat   // timeline units  0 – totalUnits
-    let length: CGFloat  // timeline units
-}
-
-private let mockTracks: [MockTrack] = [
-    MockTrack(
-        title: "Blinding Lights", artist: "The Weeknd",
-        duration: "3:20", bpm: 124, color: .pink,
-        clips: [
-            MockClip(start: 0,   length: 57),
-            MockClip(start: 113, length: 17),
-        ]
-    ),
-    MockTrack(
-        title: "Levitating", artist: "Dua Lipa",
-        duration: "3:23", bpm: 124, color: .purple,
-        clips: [MockClip(start: 17, length: 48)]
-    ),
-    MockTrack(
-        title: "Good 4 U", artist: "Olivia Rodrigo",
-        duration: "2:58", bpm: 124, color: .red,
-        clips: [MockClip(start: 33, length: 48)]
-    ),
-    MockTrack(
-        title: "Stay", artist: "The Kid LAROI",
-        duration: "2:21", bpm: 124, color: .yellow,
-        clips: [MockClip(start: 49, length: 48)]
-    ),
-    MockTrack(
-        title: "Heat Waves", artist: "Glass Animals",
-        duration: "3:28", bpm: 124, color: .blue,
-        clips: [MockClip(start: 65, length: 65)]
-    ),
-]
-
 // MARK: - Root
 
 struct TimelineScreen: View {
+    @StateObject private var library = TrackLibrary()
+    @State private var showFilePicker = false
+
     var body: some View {
         GeometryReader { geo in
-            let isPortrait = geo.size.height > geo.size.width
-            let effectsHeight = min(TLK.effectsHeight, geo.size.height * 0.24)
-            let timelineHeight = max(0, geo.size.height - TLK.transportHeight - effectsHeight)
+            let isPortrait    = geo.size.height > geo.size.width
+            let effectsH      = min(TLK.effectsHeight, geo.size.height * 0.24)
+            let timelineH     = max(0, geo.size.height - TLK.transportHeight - effectsH)
 
             ZStack {
                 MixrColors.background.ignoresSafeArea()
@@ -91,17 +47,17 @@ struct TimelineScreen: View {
                 VStack(spacing: 0) {
                     TLTransportBar()
 
-                    HStack(spacing: 0) {
-                        TLSongSidebar()
-                            .frame(width: TLK.sidebarWidth, height: timelineHeight)
-
-                        TLTimelineArea()
-                            .frame(height: timelineHeight)
-                    }
-                    .frame(height: timelineHeight)
+                    TLTrackArea(
+                        tracks: $library.tracks,
+                        showFilePicker: $showFilePicker,
+                        onReorder: { source, destination in
+                            library.reorder(from: source, to: destination)
+                        }
+                    )
+                    .frame(height: timelineH)
 
                     TLEffectsPanel()
-                        .frame(height: effectsHeight)
+                        .frame(height: effectsH)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 .clipped()
@@ -114,15 +70,23 @@ struct TimelineScreen: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.mp3, .wav, .mpeg4Audio, .aiff, .audio],
+            allowsMultipleSelection: true
+        ) { result in
+            guard case .success(let urls) = result else { return }
+            library.addTracks(from: urls)
+        }
     }
 }
+
+// MARK: - Rotate Overlay
 
 private struct TLRotateOverlay: View {
     var body: some View {
         ZStack {
-            Color.black.opacity(0.88)
-                .ignoresSafeArea()
-
+            Color.black.opacity(0.88).ignoresSafeArea()
             VStack(spacing: 12) {
                 Image(systemName: "iphone.gen2.landscape")
                     .font(.system(size: 42, weight: .regular))
@@ -151,7 +115,6 @@ private struct TLTransportBar: View {
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(MixrColors.textPrimary)
                 }
-
                 HStack(spacing: 4) {
                     Text("My Remix")
                         .font(.system(size: 13, weight: .semibold))
@@ -166,7 +129,6 @@ private struct TLTransportBar: View {
 
             HStack {
                 Spacer()
-
                 Button { } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                         .frame(minWidth: 74)
@@ -251,58 +213,268 @@ private struct TLTransportBar: View {
     }
 }
 
-// MARK: - Song Sidebar
+// MARK: - Track Area (unified three-column scrollable layout)
 
-private struct TLSongSidebar: View {
+private struct TLTrackArea: View {
+    @Binding var tracks: [MixrTrack]
+    @Binding var showFilePicker: Bool
+    let onReorder: (IndexSet, Int) -> Void
+
+    @State private var draggingID: UUID?       = nil
+    @State private var dragTranslation: CGFloat = 0
+
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    ForEach(mockTracks) { track in
-                        TLSongRow(track: track)
-                    }
+        GeometryReader { geo in
+            let laneViewportW = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
+            let contentW      = max(laneViewportW, TLK.totalUnits * TLK.timelineUnitWidth)
+            let rowsH         = CGFloat(tracks.count) * TLK.trackRowHeight
+            let contentH      = max(geo.size.height - TLK.rulerHeight, rowsH)
+
+            ZStack(alignment: .topLeading) {
+                // Column background fills
+                HStack(spacing: 0) {
+                    MixrColors.backgroundSecondary.frame(width: TLK.sidebarWidth)
+                    MixrColors.backgroundSecondary
+                    MixrColors.backgroundSecondary.frame(width: TLK.smColumnWidth)
                 }
+                .frame(width: geo.size.width)
+
+                // Single shared vertical scroll for all three columns
+                ScrollView(.vertical, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 0) {
+                        // LEFT: sidebar song rows
+                        sidebarRows(contentH: contentH)
+
+                        // CENTER: horizontal-scrolling timeline canvas
+                        timelineCanvas(
+                            contentW: contentW,
+                            contentH: TLK.rulerHeight + contentH,
+                            viewportW: laneViewportW
+                        )
+
+                        // RIGHT: S/M + volume controls
+                        controlsRows(contentH: contentH)
+                    }
+                    .frame(minHeight: geo.size.height)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+
+                // Import Songs — always visible, pinned to sidebar bottom
+                VStack(spacing: 0) {
+                    Spacer()
+                    importButton
+                        .frame(width: TLK.sidebarWidth)
+                        .background(
+                            MixrColors.backgroundSecondary
+                                .overlay(alignment: .top) {
+                                    MixrColors.divider.frame(height: 0.5)
+                                }
+                        )
+                }
+                .frame(width: TLK.sidebarWidth, height: geo.size.height)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+        }
+    }
+
+    // MARK: Sidebar rows
+
+    @ViewBuilder
+    private func sidebarRows(contentH: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            // Ruler height spacer — aligns song rows with timeline track lanes
+            Color.clear
+                .frame(height: TLK.rulerHeight)
+                .overlay(alignment: .bottom) {
+                    MixrColors.divider.frame(height: 0.5)
+                }
+
+            ForEach(Array(tracks.enumerated()), id: \.element.id) { idx, track in
+                TLSongRow(
+                    track: track,
+                    onDragChanged: { delta in
+                        if draggingID == nil { draggingID = track.id }
+                        dragTranslation = delta
+                    },
+                    onDragEnded: { delta in
+                        commitReorder(fromID: track.id, translation: delta)
+                    }
+                )
+                .frame(height: TLK.trackRowHeight)
+                .overlay(alignment: .bottom) {
+                    MixrColors.divider.frame(height: 0.5)
+                }
+                .offset(y: rowOffset(trackID: track.id))
+                .zIndex(draggingID == track.id ? 1 : 0)
+                .scaleEffect(
+                    y: draggingID == track.id ? 1.02 : 1,
+                    anchor: .center
+                )
+                .shadow(
+                    color: draggingID == track.id ? .black.opacity(0.28) : .clear,
+                    radius: 6, x: 0, y: 3
+                )
             }
 
-            // Import Songs
-            Button { } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("Import Songs")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(MixrColors.textSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .background {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(MixrColors.divider, lineWidth: 0.5)
-                }
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            // Padding so rows don't hide under the import button
+            Color.clear.frame(height: TLK.importButtonHeight + 8)
         }
+        .frame(width: TLK.sidebarWidth)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .trailing) {
             MixrColors.divider.frame(width: 0.5)
         }
     }
+
+    // MARK: Timeline canvas (horizontal scroll)
+
+    @ViewBuilder
+    private func timelineCanvas(contentW: CGFloat, contentH: CGFloat, viewportW: CGFloat) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            ZStack(alignment: .topLeading) {
+                MixrColors.backgroundSecondary
+
+                TLGridCanvas(width: contentW, height: contentH)
+                    .allowsHitTesting(false)
+
+                VStack(spacing: 0) {
+                    TLRuler(width: contentW)
+                        .frame(height: TLK.rulerHeight)
+
+                    ForEach(tracks) { track in
+                        TLTrackLane(track: track, timelineWidth: contentW)
+                            .frame(height: TLK.trackRowHeight)
+                            .offset(y: rowOffset(trackID: track.id))
+                            .zIndex(draggingID == track.id ? 1 : 0)
+                    }
+                }
+
+                TLPlayhead(timelineWidth: contentW, totalHeight: contentH)
+                    .allowsHitTesting(false)
+            }
+            .frame(width: contentW, height: contentH)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(width: viewportW)
+        .clipped()
+    }
+
+    // MARK: Controls rows
+
+    @ViewBuilder
+    private func controlsRows(contentH: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: TLK.rulerHeight)
+                .overlay(alignment: .bottom) {
+                    MixrColors.divider.frame(height: 0.5)
+                }
+
+            ForEach(Array(tracks.enumerated()), id: \.element.id) { idx, track in
+                TLTrackControlRow(
+                    track: track,
+                    volume: $tracks[idx].volume
+                )
+                .frame(height: TLK.trackRowHeight)
+                .overlay(alignment: .bottom) {
+                    MixrColors.divider.frame(height: 0.5)
+                }
+                .offset(y: rowOffset(trackID: track.id))
+                .zIndex(draggingID == track.id ? 1 : 0)
+            }
+
+            Spacer()
+        }
+        .padding(.leading, 7.5)
+        .padding(.trailing, 8)
+        .frame(width: TLK.smColumnWidth)
+        .background(MixrColors.backgroundSecondary)
+        .overlay(alignment: .leading) {
+            MixrColors.divider.frame(width: 0.5)
+        }
+    }
+
+    // MARK: Import button
+
+    private var importButton: some View {
+        Button {
+            showFilePicker = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Import Songs")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(MixrColors.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: Drag helpers
+
+    /// Visual Y offset for a row during a drag.
+    /// The grabbed row follows `dragTranslation`; surrounding rows shift to show the insertion gap.
+    private func rowOffset(trackID: UUID) -> CGFloat {
+        guard let dragID = draggingID,
+              let fromIdx = tracks.firstIndex(where: { $0.id == dragID })
+        else { return 0 }
+
+        let steps    = Int((dragTranslation / TLK.trackRowHeight).rounded())
+        let insertAt = max(0, min(tracks.count - 1, fromIdx + steps))
+
+        if trackID == dragID { return dragTranslation }
+
+        guard let thisIdx = tracks.firstIndex(where: { $0.id == trackID }) else { return 0 }
+
+        // Rows between the original position and insertion point shift to open the gap
+        if fromIdx < insertAt, thisIdx > fromIdx, thisIdx <= insertAt { return -TLK.trackRowHeight }
+        if fromIdx > insertAt, thisIdx >= insertAt, thisIdx < fromIdx { return  TLK.trackRowHeight }
+        return 0
+    }
+
+    private func commitReorder(fromID: UUID, translation: CGFloat) {
+        defer {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                draggingID      = nil
+                dragTranslation = 0
+            }
+        }
+        guard let fromIdx = tracks.firstIndex(where: { $0.id == fromID }) else { return }
+        let steps    = Int((translation / TLK.trackRowHeight).rounded())
+        let insertAt = max(0, min(tracks.count - 1, fromIdx + steps))
+        guard insertAt != fromIdx else { return }
+        onReorder(IndexSet([fromIdx]), insertAt > fromIdx ? insertAt + 1 : insertAt)
+    }
 }
 
+// MARK: - Song Row
+
 private struct TLSongRow: View {
-    let track: MockTrack
+    let track: MixrTrack
+    var onDragChanged: ((CGFloat) -> Void)? = nil
+    var onDragEnded: ((CGFloat) -> Void)?   = nil
 
     var body: some View {
         HStack(spacing: 9) {
             HStack(spacing: 0) {
-                TLSongRowGripper()
+                TLSongRowGripper(
+                    onDragChanged: onDragChanged,
+                    onDragEnded:   onDragEnded
+                )
                 MixrSongColorChip(color: track.color)
                     .padding(.leading, 4)
             }
 
-            // Song info
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 0) {
                     Text(track.title)
@@ -328,13 +500,13 @@ private struct TLSongRow: View {
         }
         .padding(.horizontal, 10)
         .frame(height: TLK.trackRowHeight)
-        .overlay(alignment: .bottom) {
-            MixrColors.divider.frame(height: 0.5)
-        }
     }
 }
 
 private struct TLSongRowGripper: View {
+    var onDragChanged: ((CGFloat) -> Void)? = nil
+    var onDragEnded: ((CGFloat) -> Void)?   = nil
+
     var body: some View {
         VStack(spacing: 2.5) {
             ForEach(0..<3, id: \.self) { _ in
@@ -344,54 +516,12 @@ private struct TLSongRowGripper: View {
             }
         }
         .frame(width: 8, height: 34)
-    }
-}
-
-// MARK: - Timeline Area
-
-private struct TLTimelineArea: View {
-    var body: some View {
-        GeometryReader { geo in
-            let timelineViewportW = max(0, geo.size.width - TLK.smColumnWidth)
-            let timelineContentW = max(timelineViewportW, TLK.totalUnits * TLK.timelineUnitWidth)
-            let timelineContentH = max(
-                geo.size.height,
-                TLK.rulerHeight + CGFloat(mockTracks.count) * TLK.trackRowHeight
-            )
-
-            HStack(spacing: 0) {
-                ScrollView([.horizontal, .vertical], showsIndicators: false) {
-                    ZStack(alignment: .topLeading) {
-                        MixrColors.backgroundSecondary
-
-                        // Vertical beat grid — behind tracks and waveforms
-                        TLGridCanvas(width: timelineContentW, height: timelineContentH)
-                            .allowsHitTesting(false)
-
-                        // Ruler + track rows stacked vertically
-                        VStack(spacing: 0) {
-                            TLRuler(width: timelineContentW)
-                                .frame(height: TLK.rulerHeight)
-
-                            ForEach(mockTracks) { track in
-                                TLTrackLane(track: track, timelineWidth: timelineContentW)
-                                    .frame(height: TLK.trackRowHeight)
-                            }
-                        }
-
-                        // Playhead on top of everything
-                        TLPlayhead(timelineWidth: timelineContentW, totalHeight: timelineContentH)
-                            .allowsHitTesting(false)
-                    }
-                    .frame(width: timelineContentW, height: timelineContentH)
-                }
-                .frame(width: timelineViewportW, height: geo.size.height)
-                .clipped()
-
-                TLTrackControlsColumn()
-                    .frame(width: TLK.smColumnWidth, height: geo.size.height)
-            }
-        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in onDragChanged?(value.translation.height) }
+                .onEnded   { value in onDragEnded?(value.translation.height)   }
+        )
     }
 }
 
@@ -407,28 +537,18 @@ private struct TLRuler: View {
             Canvas { ctx, size in
                 for unit in TLK.minorGridUnits {
                     let x = (unit / TLK.totalUnits) * width
-
                     var tick = Path()
                     tick.move(to: CGPoint(x: x, y: size.height - 4))
                     tick.addLine(to: CGPoint(x: x, y: size.height))
-                    ctx.stroke(
-                        tick,
-                        with: .color(MixrColors.divider.opacity(0.25)),
-                        lineWidth: 0.5
-                    )
+                    ctx.stroke(tick, with: .color(MixrColors.divider.opacity(0.25)), lineWidth: 0.5)
                 }
 
                 for unit in TLK.markerUnits {
                     let x = (unit / TLK.totalUnits) * width
-
                     var tick = Path()
                     tick.move(to: CGPoint(x: x, y: size.height - 7))
                     tick.addLine(to: CGPoint(x: x, y: size.height))
-                    ctx.stroke(
-                        tick,
-                        with: .color(MixrColors.divider.opacity(0.45)),
-                        lineWidth: 0.5
-                    )
+                    ctx.stroke(tick, with: .color(MixrColors.divider.opacity(0.45)), lineWidth: 0.5)
 
                     let label = unit == 0 ? "0:00" : "\(Int(unit))"
                     let resolved = ctx.resolve(
@@ -455,32 +575,19 @@ private struct TLGridCanvas: View {
 
     var body: some View {
         Canvas { ctx, _ in
-            // Minor 5-second lines
             for unit in TLK.minorGridUnits where !TLK.majorGridUnits.contains(unit) {
                 let x = (unit / TLK.totalUnits) * width
-
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: height))
-                ctx.stroke(
-                    path,
-                    with: .color(MixrColors.divider.opacity(0.55)),
-                    lineWidth: 0.65
-                )
+                ctx.stroke(path, with: .color(MixrColors.divider.opacity(0.55)), lineWidth: 0.65)
             }
-
-            // Major labeled lines
             for unit in TLK.markerUnits {
                 let x = (unit / TLK.totalUnits) * width
-
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: height))
-                ctx.stroke(
-                    path,
-                    with: .color(MixrColors.divider.opacity(0.8)),
-                    lineWidth: 0.9
-                )
+                ctx.stroke(path, with: .color(MixrColors.divider.opacity(0.8)), lineWidth: 0.9)
             }
         }
         .frame(width: width, height: height)
@@ -490,15 +597,13 @@ private struct TLGridCanvas: View {
 // MARK: - Track Lane
 
 private struct TLTrackLane: View {
-    let track: MockTrack
+    let track: MixrTrack
     let timelineWidth: CGFloat
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // Very subtle track color tint
             track.color.color.opacity(0.025)
 
-            // Clips
             ForEach(track.clips) { clip in
                 let xOffset = (clip.start  / TLK.totalUnits) * timelineWidth
                 let clipW   = max(0, (clip.length / TLK.totalUnits) * timelineWidth)
@@ -529,13 +634,11 @@ private struct TLPlayhead: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // Vertical line
             Rectangle()
                 .fill(Color.white.opacity(0.90))
                 .frame(width: 1, height: totalHeight)
                 .offset(x: xPos - 0.5)
 
-            // Downward-pointing handle in ruler
             TLPlayheadHandle()
                 .fill(Color.white)
                 .frame(width: 14, height: 11)
@@ -555,61 +658,16 @@ private struct TLPlayheadHandle: Shape {
     }
 }
 
-// MARK: - Track Controls Column
-
-private struct TLTrackControlsColumn: View {
-    @State private var volumes: [UUID: Double] = [
-        mockTracks[0].id: 0.82,
-        mockTracks[1].id: 0.74,
-        mockTracks[2].id: 0.68,
-        mockTracks[3].id: 0.91,
-        mockTracks[4].id: 0.77,
-    ]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(height: TLK.rulerHeight)
-                .overlay(alignment: .bottom) {
-                    MixrColors.divider.frame(height: 0.5)
-                }
-
-            ForEach(mockTracks) { track in
-                TLTrackControlRow(
-                    track: track,
-                    volume: Binding(
-                        get: { volumes[track.id] ?? 0.75 },
-                        set: { volumes[track.id] = $0 }
-                    )
-                )
-                .frame(height: TLK.trackRowHeight)
-                .overlay(alignment: .bottom) {
-                    MixrColors.divider.frame(height: 0.5)
-                }
-            }
-
-            Spacer()
-        }
-        .padding(.leading, 7.5)
-        .padding(.trailing, 8)
-        .background(MixrColors.backgroundSecondary)
-        .overlay(alignment: .leading) {
-            MixrColors.divider.frame(width: 0.5)
-        }
-    }
-}
+// MARK: - Track Control Row
 
 private struct TLTrackControlRow: View {
-    let track: MockTrack
+    let track: MixrTrack
     @Binding var volume: Double
 
     var body: some View {
         HStack(spacing: 5) {
-            Button("S") { }
-                .buttonStyle(.mixrCompactTrackToggle)
-
-            Button("M") { }
-                .buttonStyle(.mixrCompactTrackToggle)
+            Button("S") { }.buttonStyle(.mixrCompactTrackToggle)
+            Button("M") { }.buttonStyle(.mixrCompactTrackToggle)
 
             HStack(spacing: 4) {
                 Image(systemName: volumeIcon)
@@ -620,7 +678,7 @@ private struct TLTrackControlRow: View {
                 TLVolumeSlider(
                     value: $volume,
                     accentColor: track.color.peakColor,
-                    trackColor: track.color.color
+                    trackColor:  track.color.color
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -631,8 +689,8 @@ private struct TLTrackControlRow: View {
 
     private var volumeIcon: String {
         if volume <= 0.01 { return "speaker.slash.fill" }
-        if volume < 0.34 { return "speaker.wave.1.fill" }
-        if volume < 0.67 { return "speaker.wave.2.fill" }
+        if volume < 0.34  { return "speaker.wave.1.fill" }
+        if volume < 0.67  { return "speaker.wave.2.fill" }
         return "speaker.wave.3.fill"
     }
 }
