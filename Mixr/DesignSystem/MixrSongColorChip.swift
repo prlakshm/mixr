@@ -1,14 +1,36 @@
 import SwiftUI
+import UIKit
 
 /// Sidebar song color chip — matches waveform / track color family.
 struct MixrSongColorChip: View {
     let color: MixrWaveformColor
+    var artworkData: Data? = nil
 
     var body: some View {
+        Group {
+            if let artworkData, let image = UIImage(data: artworkData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                defaultChipContent
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.24), radius: 3, x: 0, y: 1.5)
+        .shadow(color: color.color.opacity(0.28), radius: 5, x: 0, y: 0)
+    }
+
+    private var defaultChipContent: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         let bright = color.peakColor
 
-        ZStack {
+        return ZStack {
             shape
                 .fill(bright.opacity(0.80))
                 .overlay {
@@ -140,8 +162,5 @@ struct MixrSongColorChip: View {
                 .shadow(color: bright.opacity(0.60), radius: 3)
                 .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
         }
-        .frame(width: 34, height: 34)
-        .shadow(color: .black.opacity(0.24), radius: 3, x: 0, y: 1.5)
-        .shadow(color: color.color.opacity(0.28), radius: 5, x: 0, y: 0)
     }
 }

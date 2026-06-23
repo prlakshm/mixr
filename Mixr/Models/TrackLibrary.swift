@@ -8,8 +8,22 @@ import CoreMedia
 @MainActor
 final class TrackLibrary: ObservableObject {
     @Published var tracks: [MixrTrack] = []
+    @Published var selectedTrackID: UUID?
+    @Published private(set) var projectBPM: Int?
 
     private let colorCycle: [MixrWaveformColor] = [.pink, .purple, .red, .yellow, .blue]
+
+    var displayKey: String {
+        if let selectedTrackID,
+           let track = tracks.first(where: { $0.id == selectedTrackID }) {
+            return track.keyDisplay
+        }
+        return tracks.first?.keyDisplay ?? "--"
+    }
+
+    var projectBPMDisplay: String {
+        projectBPM.map(String.init) ?? "--"
+    }
 
     // MARK: - Import
 
@@ -28,27 +42,79 @@ final class TrackLibrary: ObservableObject {
                 artist: parsed.artist ?? "Unknown Artist",
                 duration: "--:--",
                 durationSeconds: nil,
-                bpm: 120,
+                bpm: nil,
+                key: nil,
                 color: color,
                 volume: 0.75,
+                isMuted: false,
                 url: url,
+                artworkData: nil,
                 clips: [MixrClip(id: UUID(), start: 0, length: 48)]
             )
             tracks.append(placeholder)
 
+            if selectedTrackID == nil {
+                selectedTrackID = trackID
+            }
+
             Task {
+                // ── Phase 1: embedded metadata (fast) ──
                 let metadata = await Self.audioMetadata(from: url)
                 guard let idx = tracks.firstIndex(where: { $0.id == trackID }) else { return }
-                tracks[idx].title  = metadata.title
-                tracks[idx].artist = metadata.artist
+
+                tracks[idx].title       = metadata.title
+                tracks[idx].artist      = metadata.artist
+                tracks[idx].artworkData = metadata.artworkData
+
+                if let bpm = metadata.bpm {
+                    tracks[idx].bpm           = bpm
+                    tracks[idx].bpmConfidence = nil  // from embedded metadata, fully trusted
+                    if projectBPM == nil { projectBPM = bpm }
+                }
+                if let key = metadata.key {
+                    tracks[idx].key           = key
+                    tracks[idx].keyConfidence = nil
+                }
 
                 if let seconds = metadata.durationSeconds {
                     tracks[idx].duration        = Self.formattedDuration(seconds)
                     tracks[idx].durationSeconds = seconds
                     tracks[idx].clips[0].length = Self.clipUnits(for: seconds)
                 }
+
+                // ── Phase 2: on-device audio analysis when metadata is absent ──
+                let needsBPM = metadata.bpm == nil
+                let needsKey = metadata.key == nil
+                guard needsBPM || needsKey else { return }
+
+                let analysis = await MixrAudioAnalyzer.analyze(url: url)
+                guard let idx2 = tracks.firstIndex(where: { $0.id == trackID }) else { return }
+
+                let bpmThreshold = 0.30
+                let keyThreshold = 0.25
+
+                if needsBPM,
+                   let bpm  = analysis.bpm,
+                   let conf = analysis.bpmConfidence, conf >= bpmThreshold {
+                    tracks[idx2].bpm           = bpm
+                    tracks[idx2].bpmConfidence = conf
+                    if projectBPM == nil { projectBPM = bpm }
+                }
+
+                if needsKey,
+                   let key  = analysis.key,
+                   let conf = analysis.keyConfidence, conf >= keyThreshold {
+                    tracks[idx2].key           = key
+                    tracks[idx2].keyConfidence = conf
+                }
             }
         }
+    }
+
+    // MARK: - Selection
+
+    func selectTrack(id: UUID) {
+        selectedTrackID = id
     }
 
     // MARK: - Reorder
@@ -64,6 +130,15 @@ final class TrackLibrary: ObservableObject {
     func deleteTrack(id: UUID) {
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
             tracks.removeAll { $0.id == id }
+        }
+
+        if selectedTrackID == id {
+            selectedTrackID = tracks.first?.id
+        }
+
+        if tracks.isEmpty {
+            selectedTrackID = nil
+            projectBPM = nil
         }
     }
 
@@ -117,6 +192,11 @@ final class TrackLibrary: ObservableObject {
             ]
         )
 
+        let bpm = await bpmValue(in: metadata)
+        let key = await keyValue(in: metadata)
+
+        let artworkData = await artworkData(in: metadata)
+
         let cmDuration = try? await asset.load(.duration)
         let seconds = cmDuration.map(CMTimeGetSeconds)
         let validSeconds = seconds.flatMap { value in
@@ -126,7 +206,10 @@ final class TrackLibrary: ObservableObject {
         return ImportedAudioMetadata(
             title: title,
             artist: artist ?? albumArtist ?? fallbackArtist,
-            durationSeconds: validSeconds
+            durationSeconds: validSeconds,
+            bpm: bpm,
+            key: normalizedKey(key),
+            artworkData: artworkData
         )
     }
 
@@ -147,6 +230,86 @@ final class TrackLibrary: ObservableObject {
                 if let value, !value.isEmpty {
                     return value
                 }
+            }
+        }
+
+        return nil
+    }
+
+    private static func bpmValue(in metadata: [AVMetadataItem]) async -> Int? {
+        let identifiers: [AVMetadataIdentifier] = [
+            .iTunesMetadataBeatsPerMin,
+        ]
+
+        for identifier in identifiers {
+            let items = AVMetadataItem.metadataItems(
+                from: metadata,
+                filteredByIdentifier: identifier
+            )
+
+            for item in items {
+                if let number = try? await item.load(.numberValue) {
+                    let bpm = number.intValue
+                    if bpm > 0 { return bpm }
+                }
+
+                if let string = try? await item.load(.stringValue) {
+                    if let bpm = parseBPM(string) { return bpm }
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private static func parseBPM(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let value = Int(trimmed), value > 0 { return value }
+
+        let digits = trimmed.filter(\.isNumber)
+        if let value = Int(digits), value > 0 { return value }
+        return nil
+    }
+
+    private static func keyValue(in metadata: [AVMetadataItem]) async -> String? {
+        for item in metadata {
+            let identifier = item.identifier?.rawValue.lowercased() ?? ""
+            guard identifier.contains("key") else { continue }
+
+            if let value = try? await item.load(.stringValue) {
+                if let normalized = normalizedKey(value) { return normalized }
+            }
+        }
+
+        return nil
+    }
+
+    private static func normalizedKey(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func artworkData(in metadata: [AVMetadataItem]) async -> Data? {
+        let items = AVMetadataItem.metadataItems(
+            from: metadata,
+            filteredByIdentifier: .commonIdentifierArtwork
+        )
+
+        for item in items {
+            if let data = try? await item.load(.dataValue), !data.isEmpty {
+                return data
+            }
+        }
+
+        let iTunesItems = AVMetadataItem.metadataItems(
+            from: metadata,
+            filteredByIdentifier: .iTunesMetadataCoverArt
+        )
+
+        for item in iTunesItems {
+            if let data = try? await item.load(.dataValue), !data.isEmpty {
+                return data
             }
         }
 
@@ -177,7 +340,7 @@ final class TrackLibrary: ObservableObject {
 
     /// Maps audio duration to timeline clip length in units.
     /// Assumes the full 130-unit timeline spans ~240 seconds.
-    private static func clipUnits(for seconds: Double) -> CGFloat {
+    static func clipUnits(for seconds: Double) -> CGFloat {
         let units = CGFloat(seconds / 240.0) * 130
         return min(max(units, 10), 120)
     }
@@ -187,6 +350,9 @@ private struct ImportedAudioMetadata {
     let title: String
     let artist: String
     let durationSeconds: Double?
+    let bpm: Int?
+    let key: String?
+    let artworkData: Data?
 }
 
 private struct FilenameMetadata {
