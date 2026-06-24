@@ -347,6 +347,94 @@ private struct TLTrackArea: View {
     @State private var dragTranslation: CGFloat = 0
     @State private var isTimelineDropTarget     = false
 
+    // Clip editing state
+    @State private var selectedClipID:   UUID?       = nil
+    @State private var clipTapAnchorX:   CGFloat?    = nil
+    @State private var activeGrip:       ActiveGrip? = nil
+    @State private var currentContentW:  CGFloat     = 0
+
+    // MARK: - Clip lookup
+
+    private struct FoundClip {
+        let trackIdx: Int
+        let clipIdx:  Int
+        let track:    MixrTrack
+        let clip:     MixrClip
+    }
+
+    private func findClip(_ id: UUID) -> FoundClip? {
+        for (ti, track) in tracks.enumerated() {
+            if let ci = track.clips.firstIndex(where: { $0.id == id }) {
+                return FoundClip(trackIdx: ti, clipIdx: ci, track: track, clip: track.clips[ci])
+            }
+        }
+        return nil
+    }
+
+    private func splitClip(id: UUID) {
+        guard let f = findClip(id) else { return }
+        let phUnit  = effectivePlayheadUnit
+        let inClip  = phUnit > f.clip.start && phUnit < f.clip.start + f.clip.length
+        let splitAt = inClip ? phUnit : f.clip.start + f.clip.length / 2
+        guard splitAt - f.clip.start >= 2,
+              f.clip.start + f.clip.length - splitAt >= 2 else { return }
+        let leftLen  = splitAt - f.clip.start
+        let rightLen = f.clip.length - leftLen
+        let newID    = UUID()
+        tracks[f.trackIdx].clips[f.clipIdx].length = leftLen
+        tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
+        tracks[f.trackIdx].clips.insert(
+            MixrClip(id: newID, start: splitAt, length: rightLen),
+            at: f.clipIdx + 1
+        )
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            selectedClipID  = newID
+            activeGrip      = nil
+            clipTapAnchorX  = splitAt / TLK.totalUnits * currentContentW
+        }
+    }
+
+    private func duplicateClip(id: UUID) {
+        guard let f = findClip(id) else { return }
+        let newStart = f.clip.start + f.clip.length
+        guard newStart < TLK.totalUnits else { return }
+        let newLen = min(f.clip.length, TLK.totalUnits - newStart)
+        let newID  = UUID()
+        tracks[f.trackIdx].clips.insert(
+            MixrClip(id: newID, start: newStart, length: newLen),
+            at: f.clipIdx + 1
+        )
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            selectedClipID = newID
+            activeGrip     = nil
+            clipTapAnchorX = (newStart + newLen * 0.2) / TLK.totalUnits * currentContentW
+        }
+    }
+
+    private func deleteClip(id: UUID) {
+        guard let f = findClip(id) else { return }
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            tracks[f.trackIdx].clips.remove(at: f.clipIdx)
+            selectedClipID = nil
+            activeGrip     = nil
+            clipTapAnchorX = nil
+        }
+    }
+
+    private func setTransition(type: ClipTransitionType, grip: ActiveGrip) {
+        guard let f = findClip(grip.clipID) else { return }
+        var tx = ClipTransition()
+        tx.type = type
+        if grip.side == .leading {
+            tracks[f.trackIdx].clips[f.clipIdx].transitionIn  = tx
+        } else {
+            tracks[f.trackIdx].clips[f.clipIdx].transitionOut = tx
+        }
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            activeGrip = nil
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             let laneVW   = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
@@ -395,6 +483,56 @@ private struct TLTrackArea: View {
                                     onDragChanged: onPlayheadDragChanged,
                                     onDragEnded: onPlayheadDragEnded
                                 )
+
+                                // TOOLBAR — visible when clip selected and no grip menu open
+                                if let cid = selectedClipID, activeGrip == nil, let f = findClip(cid) {
+                                    let tbW    = TLClipEditingMetrics.toolbarWidth
+                                    let tbH    = TLClipEditingMetrics.toolbarBodyHeight + TLClipEditingMetrics.toolbarPointerH
+                                    let ancX   = clipTapAnchorX ?? (effectivePlayheadUnit / TLK.totalUnits) * contentW
+                                    let tbX    = max(tbW / 2 + 4, min(contentW - tbW / 2 - 4, ancX))
+                                    let tbTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - tbH - 6
+                                    TLClipContextToolbar(
+                                        onSplit:     { splitClip(id: cid) },
+                                        onDuplicate: { duplicateClip(id: cid) },
+                                        onDelete:    { deleteClip(id: cid) }
+                                    )
+                                    .frame(width: tbW)
+                                    .offset(x: tbX - tbW / 2, y: max(2, tbTopY))
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .scale(scale: 0.90, anchor: .bottom)),
+                                        removal:   .opacity.combined(with: .scale(scale: 0.90, anchor: .bottom))
+                                    ))
+                                    .animation(.spring(response: 0.25, dampingFraction: 0.85), value: selectedClipID)
+                                    .zIndex(20)
+                                }
+
+                                // TRANSITION MENU — visible when a grip is active
+                                if let grip = activeGrip, let f = findClip(grip.clipID) {
+                                    let mW     = TLClipEditingMetrics.menuWidth
+                                    let edgeX  = (grip.side == .leading
+                                        ? f.clip.start
+                                        : f.clip.start + f.clip.length) / TLK.totalUnits * contentW
+                                    let rawX   = grip.side == .leading ? edgeX + 8 : edgeX - mW - 8
+                                    let menuX  = max(4, min(contentW - mW - 4, rawX))
+                                    let menuY  = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight + 4
+                                    let curTx  = grip.side == .leading
+                                        ? f.clip.transitionIn.type
+                                        : f.clip.transitionOut.type
+                                    TLTransitionMenu(
+                                        title:      grip.side == .leading ? "Transition In" : "Transition Out",
+                                        selected:   curTx,
+                                        trackColor: f.track.color.color,
+                                        onSelect:   { setTransition(type: $0, grip: grip) }
+                                    )
+                                    .frame(width: mW)
+                                    .offset(x: menuX, y: menuY)
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .scale(scale: 0.93, anchor: .topLeading)),
+                                        removal:   .opacity.combined(with: .scale(scale: 0.93, anchor: .topLeading))
+                                    ))
+                                    .animation(.spring(response: 0.25, dampingFraction: 0.85), value: activeGrip)
+                                    .zIndex(21)
+                                }
                             }
                             .frame(width: contentW, height: totalH)
                         }
@@ -437,6 +575,8 @@ private struct TLTrackArea: View {
                 .frame(width: TLK.sidebarWidth, height: geo.size.height)
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .onAppear { currentContentW = contentW }
+            .onChange(of: contentW) { _, new in currentContentW = new }
             .clipped()
         }
     }
@@ -535,16 +675,40 @@ private struct TLTrackArea: View {
         ZStack(alignment: .topLeading) {
             TLTimelineSurface(isDropTarget: isTimelineDropTarget)
                 .frame(width: contentW, height: lanesH)
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                        selectedClipID = nil
+                        activeGrip     = nil
+                        clipTapAnchorX = nil
+                    }
+                }
 
             TLGridCanvas(width: contentW, height: lanesH)
                 .allowsHitTesting(false)
 
             VStack(spacing: 0) {
                 ForEach(tracks) { track in
-                    TLTrackLane(track: track, timelineWidth: contentW)
-                        .frame(height: TLK.trackRowHeight)
-                        .offset(y: rowOffset(trackID: track.id))
-                        .zIndex(draggingID == track.id ? 1 : 0)
+                    TLTrackLane(
+                        track:          track,
+                        timelineWidth:  contentW,
+                        selectedClipID: selectedClipID,
+                        activeGrip:     activeGrip,
+                        onClipTapped:   { clipID, tapX in
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                selectedClipID = clipID
+                                activeGrip     = nil
+                                clipTapAnchorX = tapX
+                            }
+                        },
+                        onGripTapped:   { grip in
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                activeGrip = grip
+                            }
+                        }
+                    )
+                    .frame(height: TLK.trackRowHeight)
+                    .offset(y: rowOffset(trackID: track.id))
+                    .zIndex(draggingID == track.id ? 1 : 0)
                 }
             }
 
@@ -1006,21 +1170,101 @@ private struct TLEmptyTimelineState: View {
 // MARK: - Track Lane
 
 private struct TLTrackLane: View {
-    let track: MixrTrack
-    let timelineWidth: CGFloat
+    let track:          MixrTrack
+    let timelineWidth:  CGFloat
+    var selectedClipID: UUID?       = nil
+    var activeGrip:     ActiveGrip? = nil
+    var onClipTapped:   ((UUID, CGFloat) -> Void)? = nil
+    var onGripTapped:   ((ActiveGrip) -> Void)?    = nil
+
+    private let gripHit    = TLClipEditingMetrics.gripHit
+    private let gripVisual = TLClipEditingMetrics.gripVisual
+    private let indSize    = TLClipEditingMetrics.indicatorSize
 
     var body: some View {
         ZStack(alignment: .leading) {
             track.color.color.opacity(0.025)
 
             ForEach(track.clips) { clip in
-                let xOffset = (clip.start  / TLK.totalUnits) * timelineWidth
-                let clipW   = max(0, (clip.length / TLK.totalUnits) * timelineWidth)
+                let xOffset = (clip.start / TLK.totalUnits) * timelineWidth
+                let clipW   = max(1, (clip.length / TLK.totalUnits) * timelineWidth)
+                let isSel   = clip.id == selectedClipID
 
                 WaveformClip(waveformColor: track.color)
                     .frame(height: TLK.waveformHeight)
                     .frame(width: clipW)
+                    .overlay {
+                        if isSel {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(track.color.color.opacity(0.92), lineWidth: 2.0)
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+                                .padding(2)
+                        }
+                    }
+                    .shadow(color: isSel ? track.color.color.opacity(0.50) : .clear, radius: 8)
+                    .shadow(color: isSel ? track.color.color.opacity(0.22) : .clear, radius: 20)
+                    .shadow(color: isSel ? Color.black.opacity(0.30) : .clear, radius: 6, x: 0, y: 3)
+                    .zIndex(isSel ? 2 : 0)
                     .offset(x: xOffset)
+                    .contentShape(Rectangle())
+                    .onTapGesture { location in
+                        onClipTapped?(clip.id, xOffset + location.x)
+                    }
+
+                // Leading grip
+                TLTransitionGrip(
+                    trackColor:    track.color.color,
+                    isActive:      activeGrip?.clipID == clip.id && activeGrip?.side == .leading,
+                    hasTransition: clip.transitionIn.type != .none,
+                    onTap: {
+                        onGripTapped?(ActiveGrip(
+                            clipID:  clip.id,
+                            trackID: track.id,
+                            side:    .leading
+                        ))
+                    }
+                )
+                .frame(width: gripHit, height: gripHit)
+                .offset(x: xOffset - gripHit / 2,
+                        y: (TLK.waveformHeight - gripHit) / 2)
+
+                // Trailing grip
+                TLTransitionGrip(
+                    trackColor:    track.color.color,
+                    isActive:      activeGrip?.clipID == clip.id && activeGrip?.side == .trailing,
+                    hasTransition: clip.transitionOut.type != .none,
+                    onTap: {
+                        onGripTapped?(ActiveGrip(
+                            clipID:  clip.id,
+                            trackID: track.id,
+                            side:    .trailing
+                        ))
+                    }
+                )
+                .frame(width: gripHit, height: gripHit)
+                .offset(x: xOffset + clipW - gripHit / 2,
+                        y: (TLK.waveformHeight - gripHit) / 2)
+
+                // Leading indicator (shown when transition applied)
+                if clip.transitionIn.type != .none {
+                    TLClipTransitionIndicator(
+                        transitionType: clip.transitionIn.type,
+                        trackColor:     track.color.color
+                    )
+                    .offset(x: xOffset - indSize / 2,
+                            y: -indSize / 2)
+                }
+
+                // Trailing indicator
+                if clip.transitionOut.type != .none {
+                    TLClipTransitionIndicator(
+                        transitionType: clip.transitionOut.type,
+                        trackColor:     track.color.color
+                    )
+                    .offset(x: xOffset + clipW - indSize / 2,
+                            y: -indSize / 2)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

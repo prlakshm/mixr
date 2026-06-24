@@ -1,5 +1,37 @@
 import SwiftUI
 
+// MARK: - Clip Transition Types
+
+enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable {
+    case none      = "None / Hard Cut"
+    case crossfade = "Crossfade"
+    case fadeOut   = "Fade Out"
+    case echoOut   = "Echo Out"
+    case auto      = "Auto"
+
+    var id: Self { self }
+}
+
+struct ClipTransition: Equatable, Sendable {
+    var type:     ClipTransitionType = .none
+    var duration: Double = 0.5
+    var strength: Double = 1.0
+    var curve:    String = "linear"
+
+    static let none = ClipTransition()
+}
+
+enum GripSide: Equatable {
+    case leading   // Transition In
+    case trailing  // Transition Out
+}
+
+struct ActiveGrip: Equatable {
+    let clipID:  UUID
+    let trackID: UUID
+    let side:    GripSide
+}
+
 // MARK: - Track Model
 
 struct MixrTrack: Identifiable {
@@ -37,6 +69,8 @@ struct MixrTrack: Identifiable {
 
 struct MixrClip: Identifiable {
     let id: UUID
-    var start: CGFloat   // timeline units (0–totalUnits)
-    var length: CGFloat  // timeline units
+    var start:         CGFloat   // timeline units (0–totalUnits)
+    var length:        CGFloat   // timeline units
+    var transitionIn:  ClipTransition = .none
+    var transitionOut: ClipTransition = .none
 }
