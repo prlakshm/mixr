@@ -105,6 +105,7 @@ struct TimelineScreen: View {
                         displayTimeSeconds: displayTimeSeconds
                     )
                     .frame(height: TLK.transportHeight)
+                    .zIndex(1)
 
                     TLTrackArea(
                         tracks: $library.tracks,
@@ -149,11 +150,12 @@ struct TimelineScreen: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .layoutPriority(1)
-                    .clipped()
+                    .zIndex(20)
 
                     TLEffectsPanel(isCollapsed: $isEffectsCollapsed)
                         .frame(height: effectsH)
                         .clipped()
+                        .zIndex(0)
                 }
                 .animation(.spring(response: 0.34, dampingFraction: 0.86), value: isEffectsCollapsed)
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -550,7 +552,6 @@ private struct TLTrackArea: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .onAppear { currentContentW = contentW }
             .onChange(of: contentW) { _, new in currentContentW = new }
-            .clipped()
         }
     }
 

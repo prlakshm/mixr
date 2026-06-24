@@ -56,12 +56,12 @@ private struct TLClipToolbarAction: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 5) {
+            VStack(spacing: 3) {
                 Image(systemName: icon)
-                    .font(.system(size: 8.8, weight: .regular))
+                    .font(.system(size: 10.0, weight: .regular))
                     .foregroundStyle(foreground)
                 Text(label)
-                    .font(.system(size: 7.3, weight: .medium))
+                    .font(.system(size: 8.2, weight: .medium))
                     .foregroundStyle(foreground)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
@@ -274,13 +274,15 @@ struct TLClipContextToolbar: View {
         let radius: CGFloat = 9
 
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 TLClipToolbarAction(icon: "scissors",   label: "Split",     action: onSplit)
+                toolbarDivider
                 TLClipToolbarAction(icon: "doc.on.doc", label: "Duplicate", action: onDuplicate)
+                toolbarDivider
                 TLClipToolbarAction(icon: "trash",      label: "Delete",    isDestructive: true, action: onDelete)
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 4)
+            .padding(.vertical, 5)
             .frame(width: tbW, height: tbH)
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -341,6 +343,13 @@ struct TLClipContextToolbar: View {
                 }
                 .frame(width: pW, height: pH)
         }
+    }
+
+    private var toolbarDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.13))
+            .frame(width: 0.5, height: 22)
+            .padding(.vertical, 8)
     }
 }
 
