@@ -1098,8 +1098,9 @@ private enum TLAudioDrop {
 
 // MARK: - Draggable Playhead
 
-/// Unified playhead: triangle handle (sits at ruler bottom) + vertical line (runs full height).
-/// Handles all drag logic; the parent merely receives callbacks with new timeline units.
+/// Unified playhead: triangle handle (sits at ruler bottom) + vertical line (runs from triangle
+/// tip down through all lanes). The gesture hit strip is placed via HStack layout (not .offset)
+/// so the interactive area actually follows the playhead at any x position.
 private struct TLDraggablePlayhead: View {
     let timelineWidth: CGFloat
     let totalHeight: CGFloat        // rulerHeight + lanesHeight
@@ -1110,61 +1111,77 @@ private struct TLDraggablePlayhead: View {
     var onDragChanged: (CGFloat) -> Void   = { _ in }
     var onDragEnded:   (CGFloat) -> Void   = { _ in }
 
-    @State private var gestureActive    = false
-    @State private var gestureStartUnit: CGFloat = 0
+    @State private var gestureActive = false
+
+    // Width of the invisible drag strip centred on the playhead line
+    private let hitWidth: CGFloat = 44
 
     private var xPos: CGFloat {
         (playheadUnit / TLK.totalUnits) * timelineWidth
     }
 
+    // The triangle tip sits exactly at y = rulerHeight; the line starts there.
+    private var lineStartY: CGFloat { TLK.rulerHeight }
+    private var lineHeight: CGFloat { totalHeight - TLK.rulerHeight }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // ── Vertical line ──
+
+            // ── Vertical line — starts at triangle tip, runs through all lanes ──
             Rectangle()
                 .fill(isDragging ? Color.white : Color.white.opacity(0.90))
-                .frame(width: isDragging ? 1.5 : 1, height: totalHeight)
-                .offset(x: xPos - 0.5)
+                .frame(width: isDragging ? 1.5 : 1, height: lineHeight)
+                .offset(x: xPos - 0.5, y: lineStartY)
                 .allowsHitTesting(false)
-                .animation(.easeOut(duration: 0.1), value: isDragging)
+                .animation(.easeOut(duration: 0.08), value: isDragging)
 
-            // ── Triangle handle with enlarged hit target ──
-            ZStack {
-                // Invisible hit-target rectangle
+            // ── Triangle handle — top cap, tip aligns with line start ──
+            TLPlayheadHandle()
+                .fill(isDragging ? Color.white : Color.white.opacity(0.95))
+                .frame(width: TLK.playheadHandleWidth, height: TLK.playheadHandleHeight)
+                .shadow(
+                    color: isDragging ? .white.opacity(0.50) : .clear,
+                    radius: isDragging ? 6 : 0
+                )
+                .offset(
+                    x: xPos - TLK.playheadHandleWidth / 2,
+                    y: lineStartY - TLK.playheadHandleHeight
+                )
+                .allowsHitTesting(false)
+                .animation(.easeOut(duration: 0.08), value: isDragging)
+
+            // ── Hit strip — positioned via HStack so layout (hit-test) area moves with xPos ──
+            // .offset() only shifts drawing; HStack spacing physically relocates the view.
+            HStack(spacing: 0) {
+                Color.clear.frame(width: max(0, xPos - hitWidth / 2))
                 Color.clear
-                    .frame(width: 44, height: TLK.rulerHeight)
-
-                // Visual triangle
-                TLPlayheadHandle()
-                    .fill(isDragging ? Color.white : Color.white.opacity(0.95))
-                    .frame(width: TLK.playheadHandleWidth, height: TLK.playheadHandleHeight)
-                    .shadow(
-                        color: isDragging ? .white.opacity(0.55) : .clear,
-                        radius: isDragging ? 7 : 0
+                    .frame(width: hitWidth, height: totalHeight)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        // coordinateSpace: .named("phContent") maps value.location to the
+                        // outer ZStack's coordinate space (= timeline content coordinates),
+                        // so we can directly convert x → timeline units regardless of scroll.
+                        DragGesture(minimumDistance: 0, coordinateSpace: .named("phContent"))
+                            .onChanged { value in
+                                if !gestureActive {
+                                    gestureActive = true
+                                    onDragStart()
+                                }
+                                let unit = (value.location.x / timelineWidth) * TLK.totalUnits
+                                onDragChanged(max(0, min(unit, maxUnit)))
+                            }
+                            .onEnded { value in
+                                gestureActive = false
+                                let unit = (value.location.x / timelineWidth) * TLK.totalUnits
+                                onDragEnded(max(0, min(unit, maxUnit)))
+                            }
                     )
-                    .animation(.easeOut(duration: 0.12), value: isDragging)
+                Spacer(minLength: 0)
             }
-            .offset(x: xPos - 22, y: TLK.rulerHeight - TLK.playheadHandleHeight)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                    .onChanged { value in
-                        if !gestureActive {
-                            gestureActive    = true
-                            gestureStartUnit = playheadUnit
-                            onDragStart()
-                        }
-                        let raw = gestureStartUnit
-                            + (value.translation.width / timelineWidth) * TLK.totalUnits
-                        onDragChanged(max(0, min(raw, maxUnit)))
-                    }
-                    .onEnded { value in
-                        gestureActive = false
-                        let raw = gestureStartUnit
-                            + (value.translation.width / timelineWidth) * TLK.totalUnits
-                        onDragEnded(max(0, min(raw, maxUnit)))
-                    }
-            )
+            .frame(width: timelineWidth, height: totalHeight)
         }
+        .frame(width: timelineWidth, height: totalHeight)
+        .coordinateSpace(name: "phContent")
     }
 }
 
