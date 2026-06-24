@@ -371,7 +371,7 @@ private struct TLTrackArea: View {
                     HStack(alignment: .top, spacing: 0) {
 
                         // ── Left: sidebar (no horizontal scroll) ──
-                        sidebarColumn(lanesH: lanesH)
+                        sidebarColumn()
 
                         // ── Centre: single horizontal scroll for ruler + lanes ──
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -424,7 +424,7 @@ private struct TLTrackArea: View {
                         )
 
                         // ── Right: controls (no horizontal scroll) ──
-                        controlsColumn(lanesH: lanesH)
+                        controlsColumn()
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -453,7 +453,7 @@ private struct TLTrackArea: View {
         .padding(.leading, leadingInset)
     }
 
-    private func sidebarColumn(lanesH: CGFloat) -> some View {
+    private func sidebarColumn() -> some View {
         VStack(spacing: 0) {
             // Label — matches ruler height
             MixrColors.backgroundSecondary
@@ -467,7 +467,7 @@ private struct TLTrackArea: View {
         .frame(width: TLK.sidebarWidth)
     }
 
-    private func controlsColumn(lanesH: CGFloat) -> some View {
+    private func controlsColumn() -> some View {
         VStack(spacing: 0) {
             // Label — matches ruler height
             MixrColors.backgroundSecondary

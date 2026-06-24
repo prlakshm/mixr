@@ -187,13 +187,16 @@ final class MixrPlaybackEngine: ObservableObject {
             let nodeHostTicks = syncTicks + AVAudioTime.hostTime(forSeconds: clipDelaySec)
             let nodeAVTime    = AVAudioTime(hostTime: nodeHostTicks)
 
+            let trackID = track.id
             p.node.scheduleSegment(
                 p.file,
                 startingFrame: startFrame,
                 frameCount: nFrames,
                 at: nodeAVTime          // precise output time for synchronisation
             ) { [weak self] in
-                Task { @MainActor in self?.onSegmentEnd(trackID: track.id) }
+                Task { @MainActor [weak self] in
+                    self?.onSegmentEnd(trackID: trackID)
+                }
             }
 
             // node.play() (no argument) starts the render cycle; the segment
@@ -236,7 +239,9 @@ final class MixrPlaybackEngine: ObservableObject {
     private func startTicker() {
         ticker?.invalidate()
         ticker = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            Task { @MainActor [weak self] in
+                self?.tick()
+            }
         }
     }
 
