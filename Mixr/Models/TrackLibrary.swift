@@ -15,10 +15,11 @@ final class TrackLibrary: ObservableObject {
 
     var displayKey: String {
         if let selectedTrackID,
-           let track = tracks.first(where: { $0.id == selectedTrackID }) {
+           let track = tracks.first(where: { $0.id == selectedTrackID }),
+           track.key != nil {
             return track.keyDisplay
         }
-        return tracks.first?.keyDisplay ?? "--"
+        return tracks.first(where: { $0.key != nil })?.keyDisplay ?? "--"
     }
 
     var projectBPMDisplay: String {

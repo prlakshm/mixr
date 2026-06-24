@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Clip Transition Types
 
 enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable {
-    case none      = "None / Hard Cut"
+    case none      = "None"
     case crossfade = "Crossfade"
     case fadeOut   = "Fade Out"
     case echoOut   = "Echo Out"
@@ -15,7 +15,6 @@ enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable
 struct ClipTransition: Equatable, Sendable {
     var type:     ClipTransitionType = .none
     var duration: Double = 0.5
-    var strength: Double = 1.0
     var curve:    String = "linear"
 
     static let none = ClipTransition()
@@ -59,11 +58,37 @@ struct MixrTrack: Identifiable {
         return String(bpm)
     }
 
-    /// Display key; shows "~Key" when estimated with moderate confidence, "--" when unknown.
+    /// Display key; e.g. "D# minor", "~G major", "--" when unknown.
     var keyDisplay: String {
         guard let key, !key.isEmpty else { return "--" }
-        if let conf = keyConfidence, conf < 0.6 { return "~\(key)" }
-        return key
+        let spelled = Self.spelledOutKey(key)
+        if let conf = keyConfidence, conf < 0.6 { return "~\(spelled)" }
+        return spelled
+    }
+
+    /// Formats stored key codes (e.g. "D#m", "G") as "D# minor" / "G major".
+    private static func spelledOutKey(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+
+        if lower.hasSuffix(" minor") {
+            let note = String(trimmed.dropLast(6)).trimmingCharacters(in: .whitespaces)
+            return note.isEmpty ? trimmed : "\(note) minor"
+        }
+        if lower.hasSuffix(" major") {
+            let note = String(trimmed.dropLast(6)).trimmingCharacters(in: .whitespaces)
+            return note.isEmpty ? trimmed : "\(note) major"
+        }
+
+        // Analyzer / shorthand: trailing "m" = minor (D#m, Am, …)
+        if trimmed.count > 1, trimmed.hasSuffix("m") {
+            let note = String(trimmed.dropLast())
+            if !note.isEmpty {
+                return "\(note) minor"
+            }
+        }
+
+        return "\(trimmed) major"
     }
 }
 

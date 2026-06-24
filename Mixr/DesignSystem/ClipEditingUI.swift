@@ -3,10 +3,10 @@ import SwiftUI
 // MARK: - Metrics
 
 enum TLClipEditingMetrics {
-    static let toolbarWidth:        CGFloat = 162
-    static let toolbarBodyHeight:   CGFloat = 46
-    static let toolbarPointerW:     CGFloat = 12
-    static let toolbarPointerH:     CGFloat = 7
+    static let toolbarWidth:        CGFloat = 190
+    static let toolbarBodyHeight:   CGFloat = 42
+    static let toolbarPointerW:     CGFloat = 9
+    static let toolbarPointerH:     CGFloat = 5
     static let menuWidth:           CGFloat = 176
     static let menuRowHeight:       CGFloat = 40
     static let menuEstimatedHeight: CGFloat = 240
@@ -15,21 +15,71 @@ enum TLClipEditingMetrics {
     static let gripVisual:          CGFloat = 11
     static let gripHit:             CGFloat = 32
     static let indicatorSize:       CGFloat = 20
+
+    /// Floating clip-editing panels — above playhead, clips, and grips.
+    static let toolbarZIndex: CGFloat = 100
+    static let menuZIndex:    CGFloat = 101
 }
 
 // MARK: - Press Style
 
 struct TLClipActionPressStyle: ButtonStyle {
+    var isDestructive: Bool = false
+    var isHovered: Bool = false
+
     func makeBody(configuration: Configuration) -> some View {
+        let interactionColor = isDestructive
+            ? Color.red.opacity(configuration.isPressed ? 0.20 : 0.10)
+            : Color.black.opacity(configuration.isPressed ? 0.24 : 0.13)
+
         configuration.label
             .offset(y: configuration.isPressed ? 1.5 : 0)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
             .background {
-                if configuration.isPressed {
-                    Color.black.opacity(0.20)
-                }
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(configuration.isPressed || isHovered ? interactionColor : Color.clear)
             }
-            .animation(.spring(response: 0.18, dampingFraction: 0.85),
+            .animation(.spring(response: 0.17, dampingFraction: 0.82),
                        value: configuration.isPressed)
+            .animation(.spring(response: 0.17, dampingFraction: 0.82),
+                       value: isHovered)
+    }
+}
+
+private struct TLClipToolbarAction: View {
+    let icon: String
+    let label: String
+    var isDestructive: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 8.8, weight: .regular))
+                    .foregroundStyle(foreground)
+                Text(label)
+                    .font(.system(size: 7.3, weight: .medium))
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(TLClipActionPressStyle(isDestructive: isDestructive, isHovered: isHovered))
+        .onHover { isHovered = $0 }
+    }
+
+    private var foreground: Color {
+        if isDestructive, isHovered {
+            return Color.red.opacity(0.88)
+        }
+        return MixrColors.textPrimary.opacity(0.84)
     }
 }
 
@@ -99,7 +149,7 @@ struct TLTransitionIconBox: View {
 struct TLTransitionGrip: View {
     let trackColor:    Color
     var isActive:      Bool = false
-    var hasTransition: Bool = false
+    var transitionType: ClipTransitionType = .none
 
     @GestureState private var isPressed: Bool = false
 
@@ -108,6 +158,7 @@ struct TLTransitionGrip: View {
     private let visual = TLClipEditingMetrics.gripVisual
     private let hit    = TLClipEditingMetrics.gripHit
 
+    private var hasTransition: Bool { transitionType != .none }
     private var showHalo: Bool { isActive || hasTransition }
 
     var body: some View {
@@ -118,35 +169,58 @@ struct TLTransitionGrip: View {
 
             if showHalo {
                 Circle()
-                    .fill(trackColor.opacity(0.20))
-                    .frame(width: visual + 11, height: visual + 11)
-                    .blur(radius: 5)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.72),
+                                trackColor.opacity(0.90),
+                                trackColor.opacity(0.36),
+                                trackColor.opacity(0.0),
+                            ],
+                            center: .center,
+                            startRadius: 1,
+                            endRadius: 18
+                        )
+                    )
+                    .frame(width: visual + 28, height: visual + 28)
+                    .blur(radius: 3.5)
 
                 Circle()
-                    .strokeBorder(trackColor.opacity(0.55), lineWidth: 2.0)
-                    .frame(width: visual + 6, height: visual + 6)
+                    .strokeBorder(trackColor.opacity(0.92), lineWidth: 2.2)
+                    .frame(width: visual + 10, height: visual + 10)
+                    .shadow(color: trackColor.opacity(0.75), radius: 7)
             }
 
-            Circle()
-                .fill(Color.white.opacity(isPressed ? 0.12 : 0.06))
-                .frame(width: visual + 4, height: visual + 4)
-                .blur(radius: 3)
-
-            Circle()
-                .strokeBorder(
-                    Color.white.opacity(isPressed ? 1.0 : 0.80),
-                    lineWidth: 1.5
+            if hasTransition {
+                TLTransitionIconBox(
+                    transitionType: transitionType,
+                    highlighted: true,
+                    trackColor: trackColor,
+                    size: TLClipEditingMetrics.indicatorSize
                 )
-                .frame(width: visual, height: visual)
-                .scaleEffect(isPressed ? 0.93 : 1.0)
+                .scaleEffect(isPressed ? 0.94 : 1.0)
+            } else {
+                Circle()
+                    .fill(Color.white.opacity(isPressed ? 0.15 : 0.07))
+                    .frame(width: visual + 4, height: visual + 4)
+                    .blur(radius: 3)
 
-            Circle()
-                .fill(Color.black)
-                .frame(width: visual * 0.52, height: visual * 0.52)
+                Circle()
+                    .strokeBorder(
+                        Color.white.opacity(isPressed ? 1.0 : 0.84),
+                        lineWidth: 1.5
+                    )
+                    .frame(width: visual, height: visual)
+                    .scaleEffect(isPressed ? 0.93 : 1.0)
+
+                Circle()
+                    .fill(Color.black)
+                    .frame(width: visual * 0.52, height: visual * 0.52)
+            }
         }
         .scaleEffect(isPressed ? 0.94 : 1.0)
         .animation(.easeOut(duration: 0.12), value: isActive)
-        .animation(.easeOut(duration: 0.12), value: hasTransition)
+        .animation(.easeOut(duration: 0.12), value: transitionType)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .updating($isPressed) { _, state, _ in state = true }
@@ -187,6 +261,7 @@ struct TLToolbarPointer: Shape {
 // MARK: - Clip Context Toolbar
 
 struct TLClipContextToolbar: View {
+    let trackColor:    Color
     let onSplit:     () -> Void
     let onDuplicate: () -> Void
     let onDelete:    () -> Void
@@ -196,62 +271,76 @@ struct TLClipContextToolbar: View {
         let tbH = TLClipEditingMetrics.toolbarBodyHeight
         let pW  = TLClipEditingMetrics.toolbarPointerW
         let pH  = TLClipEditingMetrics.toolbarPointerH
+        let radius: CGFloat = 9
 
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                toolbarAction(icon: "scissors",   label: "Split",     action: onSplit)
-                Divider().frame(width: 0.5, height: 28).background(MixrColors.divider)
-                toolbarAction(icon: "doc.on.doc", label: "Duplicate", action: onDuplicate)
-                Divider().frame(width: 0.5, height: 28).background(MixrColors.divider)
-                toolbarAction(icon: "trash",      label: "Delete",    action: onDelete)
+            HStack(spacing: 6) {
+                TLClipToolbarAction(icon: "scissors",   label: "Split",     action: onSplit)
+                TLClipToolbarAction(icon: "doc.on.doc", label: "Duplicate", action: onDuplicate)
+                TLClipToolbarAction(icon: "trash",      label: "Delete",    isDestructive: true, action: onDelete)
             }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
             .frame(width: tbW, height: tbH)
             .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(hex: "050810").opacity(0.65))
-                    .background {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.10)
-                            .environment(\.colorScheme, .dark)
+                let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+                shape
+                    .fill(MixrColors.glassNavyStrong.opacity(0.96))
+                    .overlay {
+                        GlassBackground(level: .strong, cornerRadius: radius)
+                            .opacity(0.46)
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        Circle()
+                            .fill(trackColor.opacity(0.08))
+                            .frame(width: tbW * 0.66, height: tbW * 0.22)
+                            .blur(radius: 16)
+                            .offset(x: -tbW * 0.08, y: tbH * 0.22)
+                    }
+                    .overlay(alignment: .top) {
+                        shape.fill(LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.075),
+                                Color.white.opacity(0.024),
+                                Color.clear,
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                        .frame(height: tbH * 0.24)
+                    }
+                    .overlay(alignment: .top) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.085))
+                            .frame(height: 0.55)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 1)
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(LinearGradient(
-                                colors: [Color.white.opacity(0.09), Color.clear],
-                                startPoint: .top,
-                                endPoint: UnitPoint(x: 0.5, y: 0.4)
-                            ))
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                        shape.strokeBorder(Color.white.opacity(0.085), lineWidth: 0.55)
                     }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .shadow(color: .black.opacity(0.55), radius: 18, x: 0, y: 6)
-            .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .shadow(color: .black.opacity(0.70), radius: 24, x: 0, y: 9)
+            .shadow(color: trackColor.opacity(0.075), radius: 12, x: 0, y: 3)
+            .shadow(color: .black.opacity(0.26), radius: 5,  x: 0, y: 2)
 
             TLToolbarPointer()
-                .fill(Color(hex: "050810").opacity(0.65))
+                .fill(MixrColors.glassNavyStrong.opacity(0.96))
+                .overlay {
+                    TLToolbarPointer()
+                        .fill(LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.045),
+                                trackColor.opacity(0.055),
+                                MixrColors.backgroundSecondary.opacity(0.10),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                }
                 .frame(width: pW, height: pH)
         }
-    }
-
-    @ViewBuilder
-    private func toolbarAction(icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(MixrColors.textPrimary)
-                Text(label)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(MixrColors.textPrimary.opacity(0.75))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .buttonStyle(TLClipActionPressStyle())
     }
 }
 
