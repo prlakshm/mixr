@@ -1697,9 +1697,6 @@ private struct TLEffectsPanel: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
                 Spacer()
-                Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(MixrColors.textSecondary)
             }
             .padding(.horizontal, 16)
             .padding(.top, 3)

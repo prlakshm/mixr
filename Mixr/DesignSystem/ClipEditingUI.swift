@@ -9,7 +9,7 @@ enum TLClipEditingMetrics {
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 164
     static let menuRowHeight:       CGFloat = 22
-    static let menuEstimatedHeight: CGFloat = 115
+    static let menuEstimatedHeight: CGFloat = 110
     static let menuIconBoxSize:     CGFloat = 22
     static let menuIconBoxRadius:   CGFloat = 6
     static let iconBoxRadius:       CGFloat = 7
@@ -354,7 +354,7 @@ struct TLTransitionMenu: View {
                         if txType != ClipTransitionType.allCases.last {
                             Rectangle()
                                 .fill(MixrColors.divider.opacity(0.5))
-                                .frame(height: 0.5)
+                                .frame(height: 0.25)
                                 .padding(.leading, 44)
                         }
                     }
@@ -413,7 +413,7 @@ struct TLTransitionMenu: View {
                         .foregroundStyle(trackColor)
                 }
             }
-            .padding(.horizontal, 15)
+            .padding(.horizontal, 20)
             .frame(height: TLClipEditingMetrics.menuRowHeight)
             .contentShape(Rectangle())
         }
