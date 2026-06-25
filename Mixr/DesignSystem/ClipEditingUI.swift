@@ -7,8 +7,8 @@ enum TLClipEditingMetrics {
     static let toolbarBodyHeight:   CGFloat = 50
     static let toolbarPointerW:     CGFloat = 7
     static let toolbarPointerH:     CGFloat = 4
-    static let menuWidth:           CGFloat = 164
-    static let menuRowHeight:       CGFloat = 22
+    static let menuWidth:           CGFloat = 170
+    static let menuRowHeight:       CGFloat = 42
     static let menuEstimatedHeight: CGFloat = 110
     static let menuIconBoxSize:     CGFloat = 22
     static let menuIconBoxRadius:   CGFloat = 6
@@ -38,7 +38,7 @@ struct TLClipActionPressStyle: ButtonStyle {
             : Color.black.opacity(0.18)
 
         configuration.label
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
             .background {
                 if fillsCell {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
