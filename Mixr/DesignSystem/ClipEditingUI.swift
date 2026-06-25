@@ -3,10 +3,10 @@ import SwiftUI
 // MARK: - Metrics
 
 enum TLClipEditingMetrics {
-    static let toolbarWidth:        CGFloat = 190
-    static let toolbarBodyHeight:   CGFloat = 42
-    static let toolbarPointerW:     CGFloat = 9
-    static let toolbarPointerH:     CGFloat = 5
+    static let toolbarWidth:        CGFloat = 222
+    static let toolbarBodyHeight:   CGFloat = 50
+    static let toolbarPointerW:     CGFloat = 7
+    static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 176
     static let menuRowHeight:       CGFloat = 40
     static let menuEstimatedHeight: CGFloat = 240
@@ -26,23 +26,30 @@ enum TLClipEditingMetrics {
 struct TLClipActionPressStyle: ButtonStyle {
     var isDestructive: Bool = false
     var fillsCell:     Bool = false
+    var isHovered:     Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         let pressedFill = isDestructive
-            ? Color.red.opacity(0.22)
-            : Color.black.opacity(0.32)
+            ? Color.red.opacity(0.18)
+            : Color.black.opacity(0.34)
+        let hoverFill = isDestructive
+            ? Color.red.opacity(0.10)
+            : Color.black.opacity(0.18)
 
         configuration.label
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 if fillsCell {
-                    Rectangle()
-                        .fill(configuration.isPressed ? pressedFill : Color.clear)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(configuration.isPressed ? pressedFill : (isHovered ? hoverFill : Color.clear))
                 }
             }
-            .opacity(configuration.isPressed && !fillsCell ? 0.85 : 1)
+            .offset(y: configuration.isPressed ? 1.25 : 0)
+            .opacity(configuration.isPressed && !fillsCell ? 0.88 : 1)
             .animation(.spring(response: 0.17, dampingFraction: 0.82),
                        value: configuration.isPressed)
+            .animation(.spring(response: 0.17, dampingFraction: 0.82),
+                       value: isHovered)
     }
 }
 
@@ -52,14 +59,16 @@ private struct TLClipToolbarAction: View {
     var isDestructive: Bool = false
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
+            VStack(spacing: 7) {
                 Image(systemName: icon)
-                    .font(.system(size: 10.0, weight: .regular))
+                    .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(foreground)
                 Text(label)
-                    .font(.system(size: 8.2, weight: .medium))
+                    .font(.system(size: 9.8, weight: .medium))
                     .foregroundStyle(foreground)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
@@ -67,13 +76,19 @@ private struct TLClipToolbarAction: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(TLClipActionPressStyle(isDestructive: isDestructive, fillsCell: true))
+        .buttonStyle(TLClipActionPressStyle(
+            isDestructive: isDestructive,
+            fillsCell: true,
+            isHovered: isHovered
+        ))
+        .onHover { isHovered = $0 }
     }
 
     private var foreground: Color {
-        isDestructive
-            ? MixrColors.textPrimary.opacity(0.84)
-            : MixrColors.textPrimary.opacity(0.92)
+        if isDestructive && isHovered {
+            return Color.red.opacity(0.88)
+        }
+        return MixrColors.textPrimary.opacity(isDestructive ? 0.84 : 0.92)
     }
 }
 
@@ -265,41 +280,66 @@ struct TLClipContextToolbar: View {
         let tbH = TLClipEditingMetrics.toolbarBodyHeight
         let pW  = TLClipEditingMetrics.toolbarPointerW
         let pH  = TLClipEditingMetrics.toolbarPointerH
-        let radius: CGFloat = MixrLayout.trackToggleSize / 2
+        let radius: CGFloat = 11
 
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
+            HStack(spacing: 6) {
                 TLClipToolbarAction(icon: "scissors",   label: "Split",     action: onSplit)
-                toolbarDivider
                 TLClipToolbarAction(icon: "doc.on.doc", label: "Duplicate", action: onDuplicate)
-                toolbarDivider
                 TLClipToolbarAction(icon: "trash",      label: "Delete",    isDestructive: true, action: onDelete)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
             .frame(width: tbW, height: tbH)
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
                 shape
-                    .fill(MixrColors.glassNavyStrong.opacity(0.80))
+                    .fill(Color(hex: "050810").opacity(0.78))
                     .background {
-                        GlassBackground(level: .strong, cornerRadius: radius)
-                            .opacity(0.55)
+                        shape
+                            .fill(.ultraThinMaterial)
+                            .opacity(0.08)
+                            .environment(\.colorScheme, .dark)
+                    }
+                    .overlay {
+                        shape
+                            .fill(LinearGradient(
+                                colors: [Color.white.opacity(0.9), Color.clear],
+                                startPoint: .top,
+                                endPoint: UnitPoint(x: 0.5, y: 0.35)
+                            ))
+                    }
+                    .overlay {
+                        shape
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        trackColor.opacity(0.09),
+                                        Color.white.opacity(0.055),
+                                        Color.clear
+                                    ],
+                                    startPoint: .bottomLeading,
+                                    endPoint: .topTrailing
+                                ),
+                                lineWidth: 0.75
+                            )
+                    }
+                    .overlay {
+                        shape
+                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
                     }
             }
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
-            }
-            .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
-            .shadow(color: .black.opacity(0.55), radius: 16, x: 0, y: 6)
+            .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
+            .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
 
             TLToolbarPointer()
-                .fill(MixrColors.glassNavyStrong.opacity(0.80))
+                .fill(Color(hex: "050810").opacity(0.78))
                 .overlay {
                     TLToolbarPointer()
                         .fill(
                             LinearGradient(
-                                colors: [Color.white.opacity(0.06), Color.clear],
+                                colors: [Color.white.opacity(0.09), Color.clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -308,35 +348,17 @@ struct TLClipContextToolbar: View {
                 .frame(width: pW, height: pH)
         }
     }
-
-    private var toolbarDivider: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.08))
-            .frame(width: 0.5)
-    }
 }
 
 // MARK: - Transition Menu
 
 struct TLTransitionMenu: View {
-    let title:      String
     let selected:   ClipTransitionType
     let trackColor: Color
     let onSelect:   (ClipTransitionType) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(MixrColors.textSecondary)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
-            MixrColors.divider.frame(height: 0.5)
-
             ForEach(ClipTransitionType.allCases) { txType in
                 menuRow(txType)
                 if txType != ClipTransitionType.allCases.last {
@@ -357,7 +379,7 @@ struct TLTransitionMenu: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.09), Color.clear],
+                            colors: [Color.white.opacity(0.045), Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0.5, y: 0.35)
                         ))
@@ -387,7 +409,7 @@ struct TLTransitionMenu: View {
 
                 Text(txType.rawValue)
                     .font(.system(size: 13, weight: isSel ? .semibold : .regular))
-                    .foregroundStyle(MixrColors.textPrimary)
+                    .foregroundStyle(isSel ? trackColor : MixrColors.textPrimary)
 
                 Spacer()
 

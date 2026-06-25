@@ -784,7 +784,6 @@ private struct TLTrackArea: View {
                 ? f.clip.transitionIn.type
                 : f.clip.transitionOut.type
             TLTransitionMenu(
-                title:      grip.side == .leading ? "Transition In" : "Transition Out",
                 selected:   curTx,
                 trackColor: f.track.color.color,
                 onSelect:   { setTransition(type: $0, grip: grip) }
@@ -1322,18 +1321,18 @@ private struct TLTrackLane: View {
                     .overlay {
                         if isSel {
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(track.color.color.opacity(0.98), lineWidth: 2.4)
-                                .shadow(color: track.color.color.opacity(1.0), radius: 8)
-                                .shadow(color: track.color.color.opacity(0.52), radius: 18)
+                                .strokeBorder(track.color.color.opacity(1.0), lineWidth: 2.6)
+                                .shadow(color: track.color.color.opacity(1.0), radius: 9)
+                                .shadow(color: track.color.color.opacity(0.56), radius: 20)
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.65)
+                                .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.7)
                                 .padding(1.5)
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            track.color.color.opacity(0.23),
-                                            track.color.color.opacity(0.06),
+                                            track.color.color.opacity(0.26),
+                                            track.color.color.opacity(0.07),
                                             Color.clear,
                                         ],
                                         startPoint: .leading,
@@ -1343,8 +1342,8 @@ private struct TLTrackLane: View {
                                 .blendMode(.screen)
                         }
                     }
-                    .shadow(color: isSel ? track.color.color.opacity(0.78) : .clear, radius: 11)
-                    .shadow(color: isSel ? track.color.color.opacity(0.38) : .clear, radius: 28)
+                    .shadow(color: isSel ? track.color.color.opacity(0.84) : .clear, radius: 12)
+                    .shadow(color: isSel ? track.color.color.opacity(0.42) : .clear, radius: 30)
                     .shadow(color: isSel ? Color.black.opacity(0.34) : .clear, radius: 7, x: 0, y: 4)
                     .zIndex(isSel ? 2 : 0)
                     .offset(x: xOffset)
