@@ -16,33 +16,33 @@ enum TLClipEditingMetrics {
     static let gripHit:             CGFloat = 32
     static let indicatorSize:       CGFloat = 20
 
-    /// Floating clip-editing panels — above playhead, clips, and grips.
-    static let toolbarZIndex: CGFloat = 100
-    static let menuZIndex:    CGFloat = 101
+    /// Floating clip-editing panels — above transport and clipped timeline content.
+    static let toolbarZIndex: CGFloat = 200
+    static let menuZIndex:    CGFloat = 201
 }
 
 // MARK: - Press Style
 
 struct TLClipActionPressStyle: ButtonStyle {
     var isDestructive: Bool = false
-    var isHovered: Bool = false
+    var fillsCell:     Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let interactionColor = isDestructive
-            ? Color.red.opacity(configuration.isPressed ? 0.20 : 0.10)
-            : Color.black.opacity(configuration.isPressed ? 0.24 : 0.13)
+        let pressedFill = isDestructive
+            ? Color.red.opacity(0.22)
+            : Color.black.opacity(0.32)
 
         configuration.label
-            .offset(y: configuration.isPressed ? 1.5 : 0)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(configuration.isPressed || isHovered ? interactionColor : Color.clear)
+                if fillsCell {
+                    Rectangle()
+                        .fill(configuration.isPressed ? pressedFill : Color.clear)
+                }
             }
+            .opacity(configuration.isPressed && !fillsCell ? 0.85 : 1)
             .animation(.spring(response: 0.17, dampingFraction: 0.82),
                        value: configuration.isPressed)
-            .animation(.spring(response: 0.17, dampingFraction: 0.82),
-                       value: isHovered)
     }
 }
 
@@ -51,8 +51,6 @@ private struct TLClipToolbarAction: View {
     let label: String
     var isDestructive: Bool = false
     let action: () -> Void
-
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -66,20 +64,16 @@ private struct TLClipToolbarAction: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 5)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(TLClipActionPressStyle(isDestructive: isDestructive, isHovered: isHovered))
-        .onHover { isHovered = $0 }
+        .buttonStyle(TLClipActionPressStyle(isDestructive: isDestructive, fillsCell: true))
     }
 
     private var foreground: Color {
-        if isDestructive, isHovered {
-            return Color.red.opacity(0.88)
-        }
-        return MixrColors.textPrimary.opacity(0.84)
+        isDestructive
+            ? MixrColors.textPrimary.opacity(0.84)
+            : MixrColors.textPrimary.opacity(0.92)
     }
 }
 
@@ -271,7 +265,7 @@ struct TLClipContextToolbar: View {
         let tbH = TLClipEditingMetrics.toolbarBodyHeight
         let pW  = TLClipEditingMetrics.toolbarPointerW
         let pH  = TLClipEditingMetrics.toolbarPointerH
-        let radius: CGFloat = 9
+        let radius: CGFloat = MixrLayout.trackToggleSize / 2
 
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -281,65 +275,35 @@ struct TLClipContextToolbar: View {
                 toolbarDivider
                 TLClipToolbarAction(icon: "trash",      label: "Delete",    isDestructive: true, action: onDelete)
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 5)
             .frame(width: tbW, height: tbH)
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
                 shape
-                    .fill(MixrColors.glassNavyStrong.opacity(0.96))
-                    .overlay {
+                    .fill(MixrColors.glassNavyStrong.opacity(0.80))
+                    .background {
                         GlassBackground(level: .strong, cornerRadius: radius)
-                            .opacity(0.46)
-                    }
-                    .overlay(alignment: .bottomLeading) {
-                        Circle()
-                            .fill(trackColor.opacity(0.08))
-                            .frame(width: tbW * 0.66, height: tbW * 0.22)
-                            .blur(radius: 16)
-                            .offset(x: -tbW * 0.08, y: tbH * 0.22)
-                    }
-                    .overlay(alignment: .top) {
-                        shape.fill(LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.075),
-                                Color.white.opacity(0.024),
-                                Color.clear,
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ))
-                        .frame(height: tbH * 0.24)
-                    }
-                    .overlay(alignment: .top) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.085))
-                            .frame(height: 0.55)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 1)
-                    }
-                    .overlay {
-                        shape.strokeBorder(Color.white.opacity(0.085), lineWidth: 0.55)
+                            .opacity(0.55)
                     }
             }
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .shadow(color: .black.opacity(0.70), radius: 24, x: 0, y: 9)
-            .shadow(color: trackColor.opacity(0.075), radius: 12, x: 0, y: 3)
-            .shadow(color: .black.opacity(0.26), radius: 5,  x: 0, y: 2)
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
+            .shadow(color: .black.opacity(0.55), radius: 16, x: 0, y: 6)
 
             TLToolbarPointer()
-                .fill(MixrColors.glassNavyStrong.opacity(0.96))
+                .fill(MixrColors.glassNavyStrong.opacity(0.80))
                 .overlay {
                     TLToolbarPointer()
-                        .fill(LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.045),
-                                trackColor.opacity(0.055),
-                                MixrColors.backgroundSecondary.opacity(0.10),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ))
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.06), Color.clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                 }
                 .frame(width: pW, height: pH)
         }
@@ -347,9 +311,8 @@ struct TLClipContextToolbar: View {
 
     private var toolbarDivider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.13))
-            .frame(width: 0.5, height: 22)
-            .padding(.vertical, 8)
+            .fill(Color.white.opacity(0.08))
+            .frame(width: 0.5)
     }
 }
 

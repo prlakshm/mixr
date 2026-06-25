@@ -28,9 +28,10 @@ enum TLK {
     static let timelineDurationSeconds: CGFloat = 240
     static let rulerLabelStepSeconds: CGFloat = 30
 
-    /// Timeline layering — playhead above lanes; clip-editing overlays are highest (see TLClipEditingMetrics).
-    static let timelinePlayheadZIndex: CGFloat = 50
-    static let timelineGripZIndex:     CGFloat = 10
+    /// Timeline layering — playhead line above tracks; handle above line; clip-editing overlays highest.
+    static let timelinePlayheadLineZIndex:   CGFloat = 20
+    static let timelinePlayheadHandleZIndex: CGFloat = 25
+    static let timelineGripZIndex:           CGFloat = 10
 
     static var minorGridUnits: [CGFloat] {
         stride(from: 0, through: Int(totalUnits), by: Int(minorGridStep)).map { CGFloat($0) }
@@ -364,6 +365,9 @@ private struct TLTrackArea: View {
     @State private var activeGrip:       ActiveGrip? = nil
     @State private var currentContentW:  CGFloat     = 0
 
+    // Scroll tracking for floating overlay positioning
+    @State private var hScrollOffset: CGFloat = 0
+
     // MARK: - Clip lookup
 
     private struct FoundClip {
@@ -463,7 +467,7 @@ private struct TLTrackArea: View {
             let rowsH    = CGFloat(tracks.count) * TLK.trackRowHeight
             let lanesH   = tracks.isEmpty
                 ? max(geo.size.height - TLK.rulerHeight, TLK.trackRowHeight)
-                : rowsH
+                : max(rowsH, geo.size.height - TLK.rulerHeight)
             let totalH   = TLK.rulerHeight + lanesH
 
             ZStack(alignment: .topLeading) {
@@ -481,37 +485,34 @@ private struct TLTrackArea: View {
 
                         // ── Left: sidebar (no horizontal scroll) ──
                         sidebarColumn()
+                            .zIndex(2)
 
                         // ── Centre: single horizontal scroll for ruler + lanes ──
                         ScrollView(.horizontal, showsIndicators: false) {
                             ZStack(alignment: .topLeading) {
-                                // Ruler sits at the top
                                 TLRuler(width: contentW)
                                     .frame(width: contentW, height: TLK.rulerHeight)
 
-                                // Lanes sit below the ruler
-                                lanesContent(contentW: contentW, lanesH: lanesH, viewportW: laneVW)
-                                    .offset(y: TLK.rulerHeight)
-
-                                // Unified draggable playhead (handle + line)
-                                TLDraggablePlayhead(
+                                TLPlayheadLine(
                                     timelineWidth: contentW,
                                     totalHeight: totalH,
                                     playheadUnit: effectivePlayheadUnit,
-                                    maxUnit: maxPlayheadUnit,
-                                    isDragging: isPlayheadDragging,
-                                    onDragStart: onPlayheadDragStart,
-                                    onDragChanged: onPlayheadDragChanged,
-                                    onDragEnded: onPlayheadDragEnded
+                                    isDragging: isPlayheadDragging
                                 )
-                                .zIndex(TLK.timelinePlayheadZIndex)
+                                .zIndex(TLK.timelinePlayheadLineZIndex)
+
+                                lanesContent(contentW: contentW, lanesH: lanesH, viewportW: laneVW)
+                                    .offset(y: TLK.rulerHeight)
+                                    .zIndex(10)
+
                             }
                             .frame(width: contentW, height: totalH)
-                            .overlay(alignment: .topLeading) {
-                                clipEditingOverlays(contentW: contentW)
-                            }
+                        }
+                        .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.x }) { _, new in
+                            hScrollOffset = new
                         }
                         .frame(width: laneVW, height: totalH)
+                        .zIndex(1)
                         .overlay {
                             RoundedRectangle(cornerRadius: 0, style: .continuous)
                                 .strokeBorder(
@@ -538,9 +539,28 @@ private struct TLTrackArea: View {
 
                         // ── Right: controls (no horizontal scroll) ──
                         controlsColumn()
+                            .zIndex(2)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+
+                // Floating clip-editing overlays — outside all scroll views, above sidebar/controls
+                clipEditingFloatingOverlay(
+                    sidebarW: TLK.sidebarWidth,
+                    contentW: currentContentW,
+                    laneVW:   laneVW,
+                    hScrollOffset: hScrollOffset
+                )
+                .zIndex(300)
+                .allowsHitTesting(selectedClipID != nil || activeGrip != nil)
+
+                floatingPlayheadHandle(
+                    sidebarW: TLK.sidebarWidth,
+                    contentW: currentContentW,
+                    laneVW: laneVW,
+                    hScrollOffset: hScrollOffset
+                )
+                .zIndex(250)
 
                 // Import footer (fixed to sidebar bottom)
                 VStack(spacing: 0) {
@@ -548,6 +568,7 @@ private struct TLTrackArea: View {
                     importFooter.frame(width: TLK.sidebarWidth)
                 }
                 .frame(width: TLK.sidebarWidth, height: geo.size.height)
+                .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .onAppear { currentContentW = contentW }
@@ -708,16 +729,30 @@ private struct TLTrackArea: View {
         .frame(width: contentW, height: lanesH)
     }
 
-    // MARK: Clip editing overlays (highest z-index — above playhead, clips, grips)
+    // MARK: Clip editing floating overlays
+    // Rendered in the TLTrackArea outer ZStack so they are never clipped by the
+    // horizontal or vertical scroll views. X is converted from content-space to
+    // screen-space by adding sidebarW and subtracting the current scroll offset.
 
     @ViewBuilder
-    private func clipEditingOverlays(contentW: CGFloat) -> some View {
-        // TOOLBAR — visible when clip selected and no grip menu open
+    private func clipEditingFloatingOverlay(
+        sidebarW: CGFloat,
+        contentW: CGFloat,
+        laneVW: CGFloat,
+        hScrollOffset: CGFloat
+    ) -> some View {
+        let screenXFor: (CGFloat) -> CGFloat = { contentX in
+            sidebarW + contentX - hScrollOffset
+        }
+
         if let cid = selectedClipID, activeGrip == nil, let f = findClip(cid) {
             let tbW    = TLClipEditingMetrics.toolbarWidth
             let tbH    = TLClipEditingMetrics.toolbarBodyHeight + TLClipEditingMetrics.toolbarPointerH
             let ancX   = clipTapAnchorX ?? (effectivePlayheadUnit / TLK.totalUnits) * contentW
-            let tbX    = max(tbW / 2 + 4, min(contentW - tbW / 2 - 4, ancX))
+            // Clamp so toolbar stays within the lane viewport
+            let minSX  = sidebarW + tbW / 2 + 4
+            let maxSX  = sidebarW + laneVW - tbW / 2 - 4
+            let tbSX   = max(minSX, min(maxSX, screenXFor(ancX)))
             let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight
             let tbTopY    = trackTopY + TLK.trackRowHeight * 0.03 - tbH * 0.5
             TLClipContextToolbar(
@@ -727,23 +762,23 @@ private struct TLTrackArea: View {
                 onDelete:    { deleteClip(id: cid) }
             )
             .frame(width: tbW)
-            .offset(x: tbX - tbW / 2, y: tbTopY)
+            .offset(x: tbSX - tbW / 2, y: tbTopY)
             .transition(.asymmetric(
                 insertion: .opacity.combined(with: .scale(scale: 0.90, anchor: .bottom)),
                 removal:   .opacity.combined(with: .scale(scale: 0.90, anchor: .bottom))
             ))
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: selectedClipID)
-            .zIndex(TLClipEditingMetrics.toolbarZIndex)
         }
 
-        // TRANSITION MENU — visible when a grip is active
         if let grip = activeGrip, let f = findClip(grip.clipID) {
             let mW     = TLClipEditingMetrics.menuWidth
             let edgeX  = (grip.side == .leading
                 ? f.clip.start
                 : f.clip.start + f.clip.length) / TLK.totalUnits * contentW
             let rawX   = grip.side == .leading ? edgeX + 8 : edgeX - mW - 8
-            let menuX  = max(4, min(contentW - mW - 4, rawX))
+            // Clamp in content space, then convert to screen space
+            let clampedContentX = max(0, min(contentW - mW - 4, rawX))
+            let menuSX = max(sidebarW + 4, min(sidebarW + laneVW - mW - 4, screenXFor(clampedContentX)))
             let menuY  = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight + 4
             let curTx  = grip.side == .leading
                 ? f.clip.transitionIn.type
@@ -755,14 +790,72 @@ private struct TLTrackArea: View {
                 onSelect:   { setTransition(type: $0, grip: grip) }
             )
             .frame(width: mW)
-            .offset(x: menuX, y: menuY)
+            .offset(x: menuSX, y: menuY)
             .transition(.asymmetric(
                 insertion: .opacity.combined(with: .scale(scale: 0.93, anchor: .topLeading)),
                 removal:   .opacity.combined(with: .scale(scale: 0.93, anchor: .topLeading))
             ))
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: activeGrip)
-            .zIndex(TLClipEditingMetrics.menuZIndex)
         }
+    }
+
+    // MARK: Floating playhead handle
+    // The vertical play line stays inside the timeline viewport. The triangle
+    // handle is fixed to the ruler strip so it always appears above the grid.
+
+    private func floatingPlayheadHandle(
+        sidebarW: CGFloat,
+        contentW: CGFloat,
+        laneVW: CGFloat,
+        hScrollOffset: CGFloat
+    ) -> some View {
+        let contentX = (effectivePlayheadUnit / TLK.totalUnits) * contentW
+        let screenX = sidebarW + contentX - hScrollOffset
+        let handleVisible = screenX >= sidebarW - TLK.playheadHandleWidth
+            && screenX <= sidebarW + laneVW + TLK.playheadHandleWidth
+        let hitWidth: CGFloat = 44
+        let hitHeight = TLK.rulerHeight + TLK.playheadHandleHeight
+
+        return ZStack(alignment: .topLeading) {
+            if handleVisible {
+                TLPlayheadHandle()
+                    .fill(isPlayheadDragging ? Color.white : Color.white.opacity(0.95))
+                    .frame(width: TLK.playheadHandleWidth, height: TLK.playheadHandleHeight)
+                    .shadow(
+                        color: isPlayheadDragging ? .white.opacity(0.50) : .clear,
+                        radius: isPlayheadDragging ? 6 : 0
+                    )
+                    .offset(
+                        x: screenX - TLK.playheadHandleWidth / 2,
+                        y: TLK.rulerHeight - TLK.playheadHandleHeight
+                    )
+                    .allowsHitTesting(false)
+                    .animation(.easeOut(duration: 0.08), value: isPlayheadDragging)
+
+                Color.clear
+                    .frame(width: hitWidth, height: hitHeight)
+                    .contentShape(Rectangle())
+                    .offset(x: screenX - hitWidth / 2, y: 0)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if !isPlayheadDragging {
+                                    onPlayheadDragStart()
+                                }
+                                let contentLocationX = value.location.x - sidebarW + hScrollOffset
+                                let unit = (contentLocationX / contentW) * TLK.totalUnits
+                                onPlayheadDragChanged(max(0, min(unit, maxPlayheadUnit)))
+                            }
+                            .onEnded { value in
+                                let contentLocationX = value.location.x - sidebarW + hScrollOffset
+                                let unit = (contentLocationX / contentW) * TLK.totalUnits
+                                onPlayheadDragEnded(max(0, min(unit, maxPlayheadUnit)))
+                            }
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(handleVisible)
     }
 
     // MARK: Controls track rows
@@ -1370,16 +1463,38 @@ private enum TLAudioDrop {
     }
 }
 
-// MARK: - Draggable Playhead
+// MARK: - Playhead (line + handle split for correct z-order)
 
-/// Unified playhead: triangle handle (sits at ruler bottom) + vertical line (runs from triangle
-/// tip down through all lanes). The gesture hit strip is placed via HStack layout (not .offset)
-/// so the interactive area actually follows the playhead at any x position.
-private struct TLDraggablePlayhead: View {
+private struct TLPlayheadLine: View {
     let timelineWidth: CGFloat
-    let totalHeight: CGFloat        // rulerHeight + lanesHeight
-    let playheadUnit: CGFloat       // 0…TLK.totalUnits
-    let maxUnit: CGFloat            // clamp ceiling = units(totalDurationSeconds)
+    let totalHeight: CGFloat
+    let playheadUnit: CGFloat
+    var isDragging: Bool = false
+
+    private var xPos: CGFloat {
+        (playheadUnit / TLK.totalUnits) * timelineWidth
+    }
+
+    private var lineStartY: CGFloat { TLK.rulerHeight }
+    private var lineHeight: CGFloat { totalHeight - TLK.rulerHeight }
+
+    var body: some View {
+        Rectangle()
+            .fill(isDragging ? Color.white : Color.white.opacity(0.90))
+            .frame(width: isDragging ? 1.5 : 1, height: lineHeight)
+            .offset(x: xPos - 0.5, y: lineStartY)
+            .frame(width: timelineWidth, height: totalHeight, alignment: .topLeading)
+            .allowsHitTesting(false)
+            .animation(.easeOut(duration: 0.08), value: isDragging)
+    }
+}
+
+/// Triangle scrub handle + drag hit strip — sits above the line and lane chrome.
+private struct TLPlayheadHandleControl: View {
+    let timelineWidth: CGFloat
+    let totalHeight: CGFloat
+    let playheadUnit: CGFloat
+    let maxUnit: CGFloat
     var isDragging: Bool = false
     var onDragStart:   () -> Void          = {}
     var onDragChanged: (CGFloat) -> Void   = { _ in }
@@ -1387,7 +1502,6 @@ private struct TLDraggablePlayhead: View {
 
     @State private var gestureActive = false
 
-    // Width of the invisible drag strip centred on the playhead line
     private let hitWidth: CGFloat = 44
     private var hitHeight: CGFloat { TLK.rulerHeight + TLK.playheadHandleHeight }
 
@@ -1395,22 +1509,10 @@ private struct TLDraggablePlayhead: View {
         (playheadUnit / TLK.totalUnits) * timelineWidth
     }
 
-    // The triangle tip sits exactly at y = rulerHeight; the line starts there.
     private var lineStartY: CGFloat { TLK.rulerHeight }
-    private var lineHeight: CGFloat { totalHeight - TLK.rulerHeight }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-
-            // ── Vertical line — starts at triangle tip, runs through all lanes ──
-            Rectangle()
-                .fill(isDragging ? Color.white : Color.white.opacity(0.90))
-                .frame(width: isDragging ? 1.5 : 1, height: lineHeight)
-                .offset(x: xPos - 0.5, y: lineStartY)
-                .allowsHitTesting(false)
-                .animation(.easeOut(duration: 0.08), value: isDragging)
-
-            // ── Triangle handle — top cap, tip aligns with line start ──
             TLPlayheadHandle()
                 .fill(isDragging ? Color.white : Color.white.opacity(0.95))
                 .frame(width: TLK.playheadHandleWidth, height: TLK.playheadHandleHeight)
@@ -1425,17 +1527,12 @@ private struct TLDraggablePlayhead: View {
                 .allowsHitTesting(false)
                 .animation(.easeOut(duration: 0.08), value: isDragging)
 
-            // ── Hit strip — positioned via HStack so layout (hit-test) area moves with xPos ──
-            // .offset() only shifts drawing; HStack spacing physically relocates the view.
             HStack(spacing: 0) {
                 Color.clear.frame(width: max(0, xPos - hitWidth / 2))
                 Color.clear
                     .frame(width: hitWidth, height: hitHeight)
                     .contentShape(Rectangle())
                     .gesture(
-                        // coordinateSpace: .named("phContent") maps value.location to the
-                        // outer ZStack's coordinate space (= timeline content coordinates),
-                        // so we can directly convert x → timeline units regardless of scroll.
                         DragGesture(minimumDistance: 0, coordinateSpace: .named("phContent"))
                             .onChanged { value in
                                 if !gestureActive {
