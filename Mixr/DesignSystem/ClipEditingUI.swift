@@ -7,10 +7,11 @@ enum TLClipEditingMetrics {
     static let toolbarBodyHeight:   CGFloat = 50
     static let toolbarPointerW:     CGFloat = 7
     static let toolbarPointerH:     CGFloat = 4
-    static let menuWidth:           CGFloat = 176
-    static let menuRowHeight:       CGFloat = 40
-    static let menuEstimatedHeight: CGFloat = 240
-    static let iconBoxSize:         CGFloat = 26
+    static let menuWidth:           CGFloat = 164
+    static let menuRowHeight:       CGFloat = 22
+    static let menuEstimatedHeight: CGFloat = 115
+    static let menuIconBoxSize:     CGFloat = 22
+    static let menuIconBoxRadius:   CGFloat = 6
     static let iconBoxRadius:       CGFloat = 7
     static let gripVisual:          CGFloat = 11
     static let gripHit:             CGFloat = 32
@@ -98,10 +99,13 @@ struct TLTransitionIconBox: View {
     let transitionType: ClipTransitionType
     var highlighted:    Bool    = false
     var trackColor:     Color   = .white
-    var size:           CGFloat = TLClipEditingMetrics.iconBoxSize
+    var size:           CGFloat = TLClipEditingMetrics.menuIconBoxSize
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: TLClipEditingMetrics.iconBoxRadius, style: .continuous)
+        let radius = size == TLClipEditingMetrics.indicatorSize
+            ? TLClipEditingMetrics.iconBoxRadius
+            : TLClipEditingMetrics.menuIconBoxRadius
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         ZStack {
             shape
                 .fill(highlighted
@@ -294,35 +298,20 @@ struct TLClipContextToolbar: View {
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
                 shape
-                    .fill(Color(hex: "050810").opacity(0.78))
+                    .fill(Color(hex: "050810").opacity(0.68))
                     .background {
                         shape
                             .fill(.ultraThinMaterial)
-                            .opacity(0.08)
+                            .opacity(0.10)
                             .environment(\.colorScheme, .dark)
                     }
                     .overlay {
                         shape
                             .fill(LinearGradient(
-                                colors: [Color.white.opacity(0.9), Color.clear],
+                                colors: [Color.white.opacity(0.03), Color.clear],
                                 startPoint: .top,
                                 endPoint: UnitPoint(x: 0.5, y: 0.35)
                             ))
-                    }
-                    .overlay {
-                        shape
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [
-                                        trackColor.opacity(0.09),
-                                        Color.white.opacity(0.055),
-                                        Color.clear
-                                    ],
-                                    startPoint: .bottomLeading,
-                                    endPoint: .topTrailing
-                                ),
-                                lineWidth: 0.75
-                            )
                     }
                     .overlay {
                         shape
@@ -334,12 +323,12 @@ struct TLClipContextToolbar: View {
             .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
 
             TLToolbarPointer()
-                .fill(Color(hex: "050810").opacity(0.78))
+                .fill(Color(hex: "050810").opacity(0.68))
                 .overlay {
                     TLToolbarPointer()
                         .fill(
                             LinearGradient(
-                                colors: [Color.white.opacity(0.09), Color.clear],
+                                colors: [Color.white.opacity(0.045), Color.clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -361,12 +350,17 @@ struct TLTransitionMenu: View {
         VStack(spacing: 0) {
             ForEach(ClipTransitionType.allCases) { txType in
                 menuRow(txType)
-                if txType != ClipTransitionType.allCases.last {
-                    MixrColors.divider.opacity(0.5).frame(height: 0.5)
-                        .padding(.leading, 48)
-                }
+                    .overlay(alignment: .bottom) {
+                        if txType != ClipTransitionType.allCases.last {
+                            Rectangle()
+                                .fill(MixrColors.divider.opacity(0.5))
+                                .frame(height: 0.5)
+                                .padding(.leading, 44)
+                        }
+                    }
             }
         }
+        .padding(.vertical, 2)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(hex: "050810").opacity(0.68))
@@ -400,7 +394,7 @@ struct TLTransitionMenu: View {
         Button {
             onSelect(txType)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
                 TLTransitionIconBox(
                     transitionType: txType,
                     highlighted: isSel,
@@ -408,18 +402,18 @@ struct TLTransitionMenu: View {
                 )
 
                 Text(txType.rawValue)
-                    .font(.system(size: 13, weight: isSel ? .semibold : .regular))
+                    .font(.system(size: 12, weight: isSel ? .semibold : .regular))
                     .foregroundStyle(isSel ? trackColor : MixrColors.textPrimary)
 
                 Spacer()
 
                 if isSel {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(trackColor)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 15)
             .frame(height: TLClipEditingMetrics.menuRowHeight)
             .contentShape(Rectangle())
         }
