@@ -9,7 +9,9 @@ enum TLClipEditingMetrics {
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
     static let menuRowHeight:       CGFloat = 42
-    static let menuEstimatedHeight: CGFloat = 110
+    static var menuEstimatedHeight: CGFloat {
+        CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 4
+    }
     static let menuIconBoxSize:     CGFloat = 22
     static let menuIconBoxRadius:   CGFloat = 6
     static let iconBoxRadius:       CGFloat = 7
@@ -347,20 +349,7 @@ struct TLTransitionMenu: View {
     let onSelect:   (ClipTransitionType) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(ClipTransitionType.allCases) { txType in
-                menuRow(txType)
-                    .overlay(alignment: .bottom) {
-                        if txType != ClipTransitionType.allCases.last {
-                            Rectangle()
-                                .fill(MixrColors.divider.opacity(0.5))
-                                .frame(height: 0.25)
-                                .padding(.leading, 44)
-                        }
-                    }
-            }
-        }
-        .padding(.vertical, 2)
+        menuRows
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(hex: "050810").opacity(0.68))
@@ -386,6 +375,23 @@ struct TLTransitionMenu: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
         .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
+    }
+
+    private var menuRows: some View {
+        VStack(spacing: 0) {
+            ForEach(ClipTransitionType.allCases) { txType in
+                menuRow(txType)
+                    .overlay(alignment: .bottom) {
+                        if txType != ClipTransitionType.allCases.last {
+                            Rectangle()
+                                .fill(MixrColors.divider.opacity(0.5))
+                                .frame(height: 0.25)
+                                .padding(.leading, 44)
+                        }
+                    }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder

@@ -114,6 +114,7 @@ struct TimelineScreen: View {
                         effectivePlayheadUnit: effectivePlayheadUnit,
                         maxPlayheadUnit: maxPlayheadUnit,
                         isPlayheadDragging: isPlayheadDragging,
+                        bottomOverlayAllowance: effectsH,
                         showFilePicker: $showFilePicker,
                         onImportURLs: { urls in
                             library.addTracks(from: urls)
@@ -344,6 +345,7 @@ private struct TLTrackArea: View {
     let effectivePlayheadUnit: CGFloat
     let maxPlayheadUnit: CGFloat
     let isPlayheadDragging: Bool
+    let bottomOverlayAllowance: CGFloat
     @Binding var showFilePicker: Bool
     let onImportURLs: ([URL]) -> Void
     let onDeleteTrack: (UUID) -> Void
@@ -367,6 +369,7 @@ private struct TLTrackArea: View {
 
     // Scroll tracking for floating overlay positioning
     @State private var hScrollOffset: CGFloat = 0
+    @State private var vScrollOffset: CGFloat = 0
 
     // MARK: - Clip lookup
 
@@ -542,6 +545,9 @@ private struct TLTrackArea: View {
                             .zIndex(2)
                     }
                 }
+                .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, new in
+                    vScrollOffset = new
+                }
                 .frame(width: geo.size.width, height: geo.size.height)
 
                 // Floating clip-editing overlays — outside all scroll views, above sidebar/controls
@@ -549,10 +555,11 @@ private struct TLTrackArea: View {
                     sidebarW: TLK.sidebarWidth,
                     contentW: currentContentW,
                     laneVW:   laneVW,
-                    hScrollOffset: hScrollOffset
+                    viewportH: geo.size.height + bottomOverlayAllowance,
+                    hScrollOffset: hScrollOffset,
+                    vScrollOffset: vScrollOffset
                 )
                 .zIndex(300)
-                .allowsHitTesting(selectedClipID != nil || activeGrip != nil)
 
                 floatingPlayheadHandle(
                     sidebarW: TLK.sidebarWidth,
@@ -739,7 +746,9 @@ private struct TLTrackArea: View {
         sidebarW: CGFloat,
         contentW: CGFloat,
         laneVW: CGFloat,
-        hScrollOffset: CGFloat
+        viewportH: CGFloat,
+        hScrollOffset: CGFloat,
+        vScrollOffset: CGFloat
     ) -> some View {
         let screenXFor: (CGFloat) -> CGFloat = { contentX in
             sidebarW + contentX - hScrollOffset
@@ -748,13 +757,10 @@ private struct TLTrackArea: View {
         if let cid = selectedClipID, activeGrip == nil, let f = findClip(cid) {
             let tbW    = TLClipEditingMetrics.toolbarWidth
             let tbH    = TLClipEditingMetrics.toolbarBodyHeight + TLClipEditingMetrics.toolbarPointerH
-            let ancX   = clipTapAnchorX ?? (effectivePlayheadUnit / TLK.totalUnits) * contentW
-            // Clamp so toolbar stays within the lane viewport
-            let minSX  = sidebarW + tbW / 2 + 4
-            let maxSX  = sidebarW + laneVW - tbW / 2 - 4
-            let tbSX   = max(minSX, min(maxSX, screenXFor(ancX)))
-            let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight
-            let tbTopY    = trackTopY + TLK.trackRowHeight * 0.03 - tbH * 0.5
+            let playheadContentX = (effectivePlayheadUnit / TLK.totalUnits) * contentW
+            let tbSX   = screenXFor(playheadContentX)
+            let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
+            let tbTopY    = trackTopY + TLK.trackRowHeight * 0.03 - tbH * 0.5 - 6
             TLClipContextToolbar(
                 trackColor: f.track.color.color,
                 onSplit:     { splitClip(id: cid) },
@@ -779,7 +785,27 @@ private struct TLTrackArea: View {
             // Clamp in content space, then convert to screen space
             let clampedContentX = max(0, min(contentW - mW - 4, rawX))
             let menuSX = max(sidebarW + 4, min(sidebarW + laneVW - mW - 4, screenXFor(clampedContentX)))
-            let menuY  = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight + 4
+            let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
+            let desiredMenuY = trackTopY + 4 - 10
+            let maxMenuY = viewportH - TLClipEditingMetrics.menuEstimatedHeight - 12
+            let bottomTrackMenuY = max(4, min(desiredMenuY, maxMenuY))
+            let menuY: CGFloat = {
+                guard tracks.count >= 3 else { return bottomTrackMenuY }
+
+                let bottomIdx = tracks.count - 1
+                if f.trackIdx == bottomIdx { return bottomTrackMenuY }
+
+                if f.trackIdx == bottomIdx - 1 {
+                    let redReferenceIdx = max(0, bottomIdx - 2)
+                    let redReferenceTopY = TLK.rulerHeight
+                        + CGFloat(redReferenceIdx) * TLK.trackRowHeight
+                        - vScrollOffset
+                    let redReferenceMenuY = redReferenceTopY + 4 - 10
+                    return max(4, min((redReferenceMenuY + bottomTrackMenuY) * 0.5, maxMenuY))
+                }
+
+                return max(4, min(desiredMenuY, maxMenuY))
+            }()
             let curTx  = grip.side == .leading
                 ? f.clip.transitionIn.type
                 : f.clip.transitionOut.type
@@ -814,8 +840,9 @@ private struct TLTrackArea: View {
             && screenX <= sidebarW + laneVW + TLK.playheadHandleWidth
         let hitWidth: CGFloat = 44
         let hitHeight = TLK.rulerHeight + TLK.playheadHandleHeight
+        let hitOriginX = screenX - hitWidth / 2
 
-        return ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .top) {
             if handleVisible {
                 TLPlayheadHandle()
                     .fill(isPlayheadDragging ? Color.white : Color.white.opacity(0.95))
@@ -824,37 +851,33 @@ private struct TLTrackArea: View {
                         color: isPlayheadDragging ? .white.opacity(0.50) : .clear,
                         radius: isPlayheadDragging ? 6 : 0
                     )
-                    .offset(
-                        x: screenX - TLK.playheadHandleWidth / 2,
-                        y: TLK.rulerHeight - TLK.playheadHandleHeight
-                    )
+                    .offset(y: TLK.rulerHeight - TLK.playheadHandleHeight)
                     .allowsHitTesting(false)
                     .animation(.easeOut(duration: 0.08), value: isPlayheadDragging)
 
                 Color.clear
                     .frame(width: hitWidth, height: hitHeight)
                     .contentShape(Rectangle())
-                    .offset(x: screenX - hitWidth / 2, y: 0)
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
                                 if !isPlayheadDragging {
                                     onPlayheadDragStart()
                                 }
-                                let contentLocationX = value.location.x - sidebarW + hScrollOffset
+                                let contentLocationX = hitOriginX + value.location.x - sidebarW + hScrollOffset
                                 let unit = (contentLocationX / contentW) * TLK.totalUnits
                                 onPlayheadDragChanged(max(0, min(unit, maxPlayheadUnit)))
                             }
                             .onEnded { value in
-                                let contentLocationX = value.location.x - sidebarW + hScrollOffset
+                                let contentLocationX = hitOriginX + value.location.x - sidebarW + hScrollOffset
                                 let unit = (contentLocationX / contentW) * TLK.totalUnits
                                 onPlayheadDragEnded(max(0, min(unit, maxPlayheadUnit)))
                             }
                     )
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .allowsHitTesting(handleVisible)
+        .frame(width: hitWidth, height: hitHeight)
+        .offset(x: hitOriginX, y: 0)
     }
 
     // MARK: Controls track rows
@@ -1023,7 +1046,7 @@ private struct TLSongRow: View {
                 .offset(x: isDeleting ? -TLK.sidebarWidth : swipeOffset)
                 .opacity(isDeleting ? 0.72 : 1)
                 .contentShape(Rectangle())
-                .gesture(swipeGesture)
+                .simultaneousGesture(swipeGesture)
                 .zIndex(1)
         }
         .frame(height: TLK.trackRowHeight)
@@ -1120,9 +1143,10 @@ private struct TLSongRow: View {
             .onChanged { value in
                 let horizontal = value.translation.width
                 let vertical = value.translation.height
-                guard abs(horizontal) > abs(vertical) else { return }
 
                 if swipeDragStartOffset == nil {
+                    let horizontalIntent = abs(horizontal) > max(14, abs(vertical) * 1.35)
+                    guard horizontalIntent else { return }
                     swipeDragStartOffset = swipeOffset
                 }
 
@@ -1137,7 +1161,7 @@ private struct TLSongRow: View {
                 let horizontal = value.translation.width
                 let vertical = value.translation.height
                 defer { swipeDragStartOffset = nil }
-                guard abs(horizontal) > abs(vertical) else { return }
+                guard swipeDragStartOffset != nil || abs(horizontal) > max(18, abs(vertical) * 1.35) else { return }
 
                 let shouldReveal = swipeOffset < -revealThreshold || value.predictedEndTranslation.width < -deleteActionWidth
                 withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
