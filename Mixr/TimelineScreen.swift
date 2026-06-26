@@ -787,34 +787,19 @@ private struct TLTrackArea: View {
             let clampedContentX = max(0, min(contentW - mW - 4, rawX))
             let menuSX = max(sidebarW + 4, min(sidebarW + laneVW - mW - 4, screenXFor(clampedContentX)))
             let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
-            let colorMenuYOffset: CGFloat = switch f.track.color {
-            case .red, .yellow: -10
-            default: 0
-            }
-            let desiredMenuY = trackTopY + 4 - 10 + colorMenuYOffset
             let maxMenuY = viewportH - TLClipEditingMetrics.menuEstimatedHeight - 12
-            let bottomTrackMenuY = max(4, min(desiredMenuY, maxMenuY))
-            let menuY: CGFloat = {
-                guard tracks.count >= 3 else { return bottomTrackMenuY }
 
-                let bottomIdx = tracks.count - 1
-                if f.trackIdx == bottomIdx { return bottomTrackMenuY }
+            let baseMenuY = trackTopY - 16
 
-                if f.trackIdx == bottomIdx - 1 {
-                    let redReferenceIdx = max(0, bottomIdx - 2)
-                    let redReferenceTopY = TLK.rulerHeight
-                        + CGFloat(redReferenceIdx) * TLK.trackRowHeight
-                        - vScrollOffset
-                    let redReferenceColorOffset: CGFloat = switch tracks[redReferenceIdx].color {
-                    case .red, .yellow: -10
-                    default: 0
-                    }
-                    let redReferenceMenuY = redReferenceTopY + 4 - 10 + redReferenceColorOffset
-                    return max(4, min((redReferenceMenuY + bottomTrackMenuY) * 0.5, maxMenuY))
-                }
+            let perTrackDrop: CGFloat = 6
 
-                return max(4, min(desiredMenuY, maxMenuY))
-            }()
+            let menuOffsetY: CGFloat = f.trackIdx == 0
+                ? -20
+                : -10 + CGFloat(f.trackIdx) * perTrackDrop
+
+            let unclampedMenuY = baseMenuY + menuOffsetY
+
+            let menuY = max(4, min(unclampedMenuY, maxMenuY))
             let curTx  = grip.side == .leading
                 ? f.clip.transitionIn.type
                 : f.clip.transitionOut.type
