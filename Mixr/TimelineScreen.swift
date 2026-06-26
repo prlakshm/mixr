@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 // MARK: - Screen Layout Constants
 
@@ -545,8 +546,18 @@ private struct TLTrackArea: View {
                             .zIndex(2)
                     }
                 }
-                .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, new in
+                .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { old, new in
                     vScrollOffset = new
+                    // #region agent log
+                    if abs(new - old) > 0.5 {
+                        AgentDebug.log(
+                            location: "TLTrackArea.verticalScroll",
+                            message: "vScrollOffsetChanged",
+                            hypothesisId: "ALL",
+                            data: ["oldY": Double(old), "newY": Double(new), "deltaY": Double(new - old)]
+                        )
+                    }
+                    // #endregion
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
 
@@ -578,8 +589,40 @@ private struct TLTrackArea: View {
                 .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .onAppear { currentContentW = contentW }
+            .onAppear {
+                currentContentW = contentW
+                // #region agent log
+                AgentDebug.log(
+                    location: "TLTrackArea.body",
+                    message: "scrollMetrics",
+                    hypothesisId: "E",
+                    data: [
+                        "geoH": Double(geo.size.height),
+                        "totalH": Double(totalH),
+                        "rowsH": Double(rowsH),
+                        "lanesH": Double(lanesH),
+                        "scrollableH": Double(totalH - geo.size.height),
+                        "trackCount": Double(tracks.count)
+                    ]
+                )
+                // #endregion
+            }
             .onChange(of: contentW) { _, new in currentContentW = new }
+            .onChange(of: tracks.count) { _, newCount in
+                // #region agent log
+                AgentDebug.log(
+                    location: "TLTrackArea.body",
+                    message: "scrollMetricsTrackCountChanged",
+                    hypothesisId: "E",
+                    data: [
+                        "geoH": Double(geo.size.height),
+                        "totalH": Double(totalH),
+                        "scrollableH": Double(totalH - geo.size.height),
+                        "trackCount": Double(newCount)
+                    ]
+                )
+                // #endregion
+            }
         }
     }
 
@@ -786,7 +829,11 @@ private struct TLTrackArea: View {
             let clampedContentX = max(0, min(contentW - mW - 4, rawX))
             let menuSX = max(sidebarW + 4, min(sidebarW + laneVW - mW - 4, screenXFor(clampedContentX)))
             let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
-            let desiredMenuY = trackTopY + 4 - 10
+            let colorMenuYOffset: CGFloat = switch f.track.color {
+            case .red, .yellow: -10
+            default: 0
+            }
+            let desiredMenuY = trackTopY + 4 - 10 + colorMenuYOffset
             let maxMenuY = viewportH - TLClipEditingMetrics.menuEstimatedHeight - 12
             let bottomTrackMenuY = max(4, min(desiredMenuY, maxMenuY))
             let menuY: CGFloat = {
@@ -800,7 +847,11 @@ private struct TLTrackArea: View {
                     let redReferenceTopY = TLK.rulerHeight
                         + CGFloat(redReferenceIdx) * TLK.trackRowHeight
                         - vScrollOffset
-                    let redReferenceMenuY = redReferenceTopY + 4 - 10
+                    let redReferenceColorOffset: CGFloat = switch tracks[redReferenceIdx].color {
+                    case .red, .yellow: -10
+                    default: 0
+                    }
+                    let redReferenceMenuY = redReferenceTopY + 4 - 10 + redReferenceColorOffset
                     return max(4, min((redReferenceMenuY + bottomTrackMenuY) * 0.5, maxMenuY))
                 }
 
@@ -1026,7 +1077,6 @@ private struct TLSongRow: View {
     var onSelect: (() -> Void)? = nil
 
     @State private var swipeOffset: CGFloat = 0
-    @State private var swipeDragStartOffset: CGFloat?
     @State private var isDeleting = false
 
     private let deleteActionWidth: CGFloat = 72
@@ -1046,7 +1096,14 @@ private struct TLSongRow: View {
                 .offset(x: isDeleting ? -TLK.sidebarWidth : swipeOffset)
                 .opacity(isDeleting ? 0.72 : 1)
                 .contentShape(Rectangle())
-                .simultaneousGesture(swipeGesture)
+                .overlay {
+                    TLRowHorizontalSwipeHandler(
+                        swipeOffset: $swipeOffset,
+                        deleteActionWidth: deleteActionWidth,
+                        revealThreshold: revealThreshold,
+                        onHorizontalSwipeBegan: closeDeleteAction
+                    )
+                }
                 .zIndex(1)
         }
         .frame(height: TLK.trackRowHeight)
@@ -1138,38 +1195,6 @@ private struct TLSongRow: View {
         }
     }
 
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-
-                if swipeDragStartOffset == nil {
-                    let horizontalIntent = abs(horizontal) > max(14, abs(vertical) * 1.35)
-                    guard horizontalIntent else { return }
-                    swipeDragStartOffset = swipeOffset
-                }
-
-                let baseOffset = swipeDragStartOffset ?? 0
-                let nextOffset = min(0, max(-deleteActionWidth, baseOffset + horizontal))
-
-                withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.88)) {
-                    swipeOffset = nextOffset
-                }
-            }
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-                defer { swipeDragStartOffset = nil }
-                guard swipeDragStartOffset != nil || abs(horizontal) > max(18, abs(vertical) * 1.35) else { return }
-
-                let shouldReveal = swipeOffset < -revealThreshold || value.predictedEndTranslation.width < -deleteActionWidth
-                withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                    swipeOffset = shouldReveal ? -deleteActionWidth : 0
-                }
-            }
-    }
-
     private func closeDeleteAction() {
         guard swipeOffset != 0 else { return }
 
@@ -1179,9 +1204,169 @@ private struct TLSongRow: View {
     }
 }
 
+// UIView that passes touches through in the gripper region so the SwiftUI
+// DragGesture on TLSongRowGripper still receives them.
+private final class TLGripperPassthroughView: UIView {
+    // Gripper is 8pt wide at leading padding 10pt → passthrough through first ~26pt
+    var gripperPassthroughWidth: CGFloat = 26
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if point.x < gripperPassthroughWidth { return nil }
+        return super.hitTest(point, with: event)
+    }
+}
+
+private struct TLRowHorizontalSwipeHandler: UIViewRepresentable {
+    @Binding var swipeOffset: CGFloat
+    let deleteActionWidth: CGFloat
+    let revealThreshold: CGFloat
+    var onHorizontalSwipeBegan: () -> Void = {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            swipeOffset: $swipeOffset,
+            deleteActionWidth: deleteActionWidth,
+            revealThreshold: revealThreshold,
+            onHorizontalSwipeBegan: onHorizontalSwipeBegan
+        )
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = TLGripperPassthroughView()
+        view.backgroundColor = .clear
+        let pan = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handlePan(_:))
+        )
+        pan.delegate = context.coordinator
+        pan.cancelsTouchesInView = false
+        view.addGestureRecognizer(pan)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        @Binding var swipeOffset: CGFloat
+        let deleteActionWidth: CGFloat
+        let revealThreshold: CGFloat
+        var onHorizontalSwipeBegan: () -> Void
+        private var dragStartOffset: CGFloat = 0
+        private var isActive = false
+
+        private let horizontalDominance: CGFloat = 1.25
+        private let minimumDirectionMovement: CGFloat = 8
+
+        init(
+            swipeOffset: Binding<CGFloat>,
+            deleteActionWidth: CGFloat,
+            revealThreshold: CGFloat,
+            onHorizontalSwipeBegan: @escaping () -> Void
+        ) {
+            _swipeOffset = swipeOffset
+            self.deleteActionWidth = deleteActionWidth
+            self.revealThreshold = revealThreshold
+            self.onHorizontalSwipeBegan = onHorizontalSwipeBegan
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+                  let view = pan.view else { return false }
+
+            let t = pan.translation(in: view)
+            let v = pan.velocity(in: view)
+            let movement = max(abs(t.x), abs(t.y))
+            let speed = hypot(v.x, v.y)
+
+            // Fast horizontal flick — begin immediately.
+            if speed > 80, abs(v.x) > abs(v.y) * horizontalDominance {
+                // #region agent log
+                AgentDebug.log(
+                    location: "TLRowHorizontalSwipeHandler.Coordinator",
+                    message: "horizontalSwipeShouldBegin",
+                    hypothesisId: "H",
+                    data: ["dx": Double(t.x), "dy": Double(t.y), "vx": Double(v.x), "vy": Double(v.y), "shouldBegin": 1],
+                    runId: "fix-shouldBegin"
+                )
+                // #endregion
+                return true
+            }
+
+            // Not enough movement yet — don't claim; ScrollView keeps the gesture.
+            guard movement >= minimumDirectionMovement else { return false }
+
+            let shouldBegin = abs(t.x) > abs(t.y) * horizontalDominance
+
+            // #region agent log
+            AgentDebug.log(
+                location: "TLRowHorizontalSwipeHandler.Coordinator",
+                message: shouldBegin ? "horizontalSwipeShouldBegin" : "verticalScrollPassthrough",
+                hypothesisId: "H",
+                data: [
+                    "dx": Double(t.x),
+                    "dy": Double(t.y),
+                    "vx": Double(v.x),
+                    "vy": Double(v.y),
+                    "shouldBegin": shouldBegin ? 1 : 0
+                ],
+                runId: "fix-shouldBegin"
+            )
+            // #endregion
+
+            return shouldBegin
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool {
+            // Scroll view owns vertical drags; when we begin (horizontal only), stay exclusive.
+            if other is UIPanGestureRecognizer, other.view is UIScrollView { return false }
+            return true
+        }
+
+        @objc func handlePan(_ pan: UIPanGestureRecognizer) {
+            guard let view = pan.view else { return }
+            let tx = pan.translation(in: view).x
+
+            switch pan.state {
+            case .began:
+                isActive = true
+                dragStartOffset = swipeOffset
+                onHorizontalSwipeBegan()
+            case .changed:
+                guard isActive else { return }
+                let next = min(0, max(-deleteActionWidth, dragStartOffset + tx))
+                DispatchQueue.main.async {
+                    withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.88)) {
+                        self.swipeOffset = next
+                    }
+                }
+            case .ended, .cancelled:
+                defer {
+                    isActive = false
+                    pan.setTranslation(.zero, in: view)
+                }
+                guard isActive else { return }
+                let projected = dragStartOffset + tx + pan.velocity(in: view).x * 0.12
+                let shouldReveal = swipeOffset < -revealThreshold || projected < -deleteActionWidth
+                DispatchQueue.main.async {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                        self.swipeOffset = shouldReveal ? -self.deleteActionWidth : 0
+                    }
+                }
+            default:
+                break
+            }
+        }
+    }
+}
+
 private struct TLSongRowGripper: View {
     var onDragChanged: ((CGFloat) -> Void)? = nil
     var onDragEnded: ((CGFloat) -> Void)?   = nil
+
+    @State private var didLogGripperDrag = false
 
     var body: some View {
         VStack(spacing: 2.5) {
@@ -1195,8 +1380,25 @@ private struct TLSongRowGripper: View {
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 8)
-                .onChanged { value in onDragChanged?(value.translation.height) }
-                .onEnded   { value in onDragEnded?(value.translation.height)   }
+                .onChanged { value in
+                    if !didLogGripperDrag {
+                        didLogGripperDrag = true
+                        // #region agent log
+                        AgentDebug.log(
+                            location: "TLSongRowGripper",
+                            message: "gripperDragStarted",
+                            hypothesisId: "A",
+                            data: ["dy": Double(value.translation.height)],
+                            runId: "post-fix"
+                        )
+                        // #endregion
+                    }
+                    onDragChanged?(value.translation.height)
+                }
+                .onEnded { value in
+                    didLogGripperDrag = false
+                    onDragEnded?(value.translation.height)
+                }
         )
     }
 }
@@ -1763,6 +1965,40 @@ private struct TLCompactEffectCard: View {
                 height: TLK.compactEffectCardHeight,
                 alignment: .topLeading
             )
+    }
+}
+
+// MARK: - Agent Debug (session 2eb3d0)
+
+private enum AgentDebug {
+    static func log(
+        location: String,
+        message: String,
+        hypothesisId: String,
+        data: [String: Double] = [:],
+        runId: String = "pre-fix"
+    ) {
+        // #region agent log
+        var payload: [String: Any] = [
+            "sessionId": "2eb3d0",
+            "runId": runId,
+            "hypothesisId": hypothesisId,
+            "location": location,
+            "message": message,
+            "timestamp": Int(Date().timeIntervalSince1970 * 1000),
+            "data": data
+        ]
+        guard JSONSerialization.isValidJSONObject(payload),
+              let json = try? JSONSerialization.data(withJSONObject: payload),
+              let url = URL(string: "http://127.0.0.1:7297/ingest/3fa61adb-c351-4b63-9e6b-a7e315d8f650")
+        else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("2eb3d0", forHTTPHeaderField: "X-Debug-Session-Id")
+        req.httpBody = json
+        URLSession.shared.dataTask(with: req).resume()
+        // #endregion
     }
 }
 
