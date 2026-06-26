@@ -546,18 +546,8 @@ private struct TLTrackArea: View {
                             .zIndex(2)
                     }
                 }
-                .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { old, new in
+                .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, new in
                     vScrollOffset = new
-                    // #region agent log
-                    if abs(new - old) > 0.5 {
-                        AgentDebug.log(
-                            location: "TLTrackArea.verticalScroll",
-                            message: "vScrollOffsetChanged",
-                            hypothesisId: "ALL",
-                            data: ["oldY": Double(old), "newY": Double(new), "deltaY": Double(new - old)]
-                        )
-                    }
-                    // #endregion
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
 
@@ -589,40 +579,8 @@ private struct TLTrackArea: View {
                 .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .onAppear {
-                currentContentW = contentW
-                // #region agent log
-                AgentDebug.log(
-                    location: "TLTrackArea.body",
-                    message: "scrollMetrics",
-                    hypothesisId: "E",
-                    data: [
-                        "geoH": Double(geo.size.height),
-                        "totalH": Double(totalH),
-                        "rowsH": Double(rowsH),
-                        "lanesH": Double(lanesH),
-                        "scrollableH": Double(totalH - geo.size.height),
-                        "trackCount": Double(tracks.count)
-                    ]
-                )
-                // #endregion
-            }
+            .onAppear { currentContentW = contentW }
             .onChange(of: contentW) { _, new in currentContentW = new }
-            .onChange(of: tracks.count) { _, newCount in
-                // #region agent log
-                AgentDebug.log(
-                    location: "TLTrackArea.body",
-                    message: "scrollMetricsTrackCountChanged",
-                    hypothesisId: "E",
-                    data: [
-                        "geoH": Double(geo.size.height),
-                        "totalH": Double(totalH),
-                        "scrollableH": Double(totalH - geo.size.height),
-                        "trackCount": Double(newCount)
-                    ]
-                )
-                // #endregion
-            }
         }
     }
 
@@ -1280,40 +1238,13 @@ private struct TLRowHorizontalSwipeHandler: UIViewRepresentable {
 
             // Fast horizontal flick — begin immediately.
             if speed > 80, abs(v.x) > abs(v.y) * horizontalDominance {
-                // #region agent log
-                AgentDebug.log(
-                    location: "TLRowHorizontalSwipeHandler.Coordinator",
-                    message: "horizontalSwipeShouldBegin",
-                    hypothesisId: "H",
-                    data: ["dx": Double(t.x), "dy": Double(t.y), "vx": Double(v.x), "vy": Double(v.y), "shouldBegin": 1],
-                    runId: "fix-shouldBegin"
-                )
-                // #endregion
                 return true
             }
 
             // Not enough movement yet — don't claim; ScrollView keeps the gesture.
             guard movement >= minimumDirectionMovement else { return false }
 
-            let shouldBegin = abs(t.x) > abs(t.y) * horizontalDominance
-
-            // #region agent log
-            AgentDebug.log(
-                location: "TLRowHorizontalSwipeHandler.Coordinator",
-                message: shouldBegin ? "horizontalSwipeShouldBegin" : "verticalScrollPassthrough",
-                hypothesisId: "H",
-                data: [
-                    "dx": Double(t.x),
-                    "dy": Double(t.y),
-                    "vx": Double(v.x),
-                    "vy": Double(v.y),
-                    "shouldBegin": shouldBegin ? 1 : 0
-                ],
-                runId: "fix-shouldBegin"
-            )
-            // #endregion
-
-            return shouldBegin
+            return abs(t.x) > abs(t.y) * horizontalDominance
         }
 
         func gestureRecognizer(
@@ -1366,8 +1297,6 @@ private struct TLSongRowGripper: View {
     var onDragChanged: ((CGFloat) -> Void)? = nil
     var onDragEnded: ((CGFloat) -> Void)?   = nil
 
-    @State private var didLogGripperDrag = false
-
     var body: some View {
         VStack(spacing: 2.5) {
             ForEach(0..<3, id: \.self) { _ in
@@ -1381,22 +1310,9 @@ private struct TLSongRowGripper: View {
         .gesture(
             DragGesture(minimumDistance: 8)
                 .onChanged { value in
-                    if !didLogGripperDrag {
-                        didLogGripperDrag = true
-                        // #region agent log
-                        AgentDebug.log(
-                            location: "TLSongRowGripper",
-                            message: "gripperDragStarted",
-                            hypothesisId: "A",
-                            data: ["dy": Double(value.translation.height)],
-                            runId: "post-fix"
-                        )
-                        // #endregion
-                    }
                     onDragChanged?(value.translation.height)
                 }
                 .onEnded { value in
-                    didLogGripperDrag = false
                     onDragEnded?(value.translation.height)
                 }
         )
@@ -1965,40 +1881,6 @@ private struct TLCompactEffectCard: View {
                 height: TLK.compactEffectCardHeight,
                 alignment: .topLeading
             )
-    }
-}
-
-// MARK: - Agent Debug (session 2eb3d0)
-
-private enum AgentDebug {
-    static func log(
-        location: String,
-        message: String,
-        hypothesisId: String,
-        data: [String: Double] = [:],
-        runId: String = "pre-fix"
-    ) {
-        // #region agent log
-        var payload: [String: Any] = [
-            "sessionId": "2eb3d0",
-            "runId": runId,
-            "hypothesisId": hypothesisId,
-            "location": location,
-            "message": message,
-            "timestamp": Int(Date().timeIntervalSince1970 * 1000),
-            "data": data
-        ]
-        guard JSONSerialization.isValidJSONObject(payload),
-              let json = try? JSONSerialization.data(withJSONObject: payload),
-              let url = URL(string: "http://127.0.0.1:7297/ingest/3fa61adb-c351-4b63-9e6b-a7e315d8f650")
-        else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("2eb3d0", forHTTPHeaderField: "X-Debug-Session-Id")
-        req.httpBody = json
-        URLSession.shared.dataTask(with: req).resume()
-        // #endregion
     }
 }
 
