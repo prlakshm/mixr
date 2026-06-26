@@ -786,18 +786,12 @@ private struct TLTrackArea: View {
             // Clamp in content space, then convert to screen space
             let clampedContentX = max(0, min(contentW - mW - 4, rawX))
             let menuSX = max(sidebarW + 4, min(sidebarW + laneVW - mW - 4, screenXFor(clampedContentX)))
-            let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
             let maxMenuY = viewportH - TLClipEditingMetrics.menuEstimatedHeight - 12
 
-            let baseMenuY = trackTopY - 16
+            let firstTrackMenuY: CGFloat = TLK.rulerHeight - 24 - vScrollOffset
+            let perTrackDrop: CGFloat = 44
 
-            let perTrackDrop: CGFloat = 6
-
-            let menuOffsetY: CGFloat = f.trackIdx == 0
-                ? -20
-                : -10 + CGFloat(f.trackIdx) * perTrackDrop
-
-            let unclampedMenuY = baseMenuY + menuOffsetY
+            let unclampedMenuY = firstTrackMenuY + CGFloat(f.trackIdx) * perTrackDrop
 
             let menuY = max(4, min(unclampedMenuY, maxMenuY))
             let curTx  = grip.side == .leading
