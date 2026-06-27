@@ -66,16 +66,20 @@ private struct TLClipToolbarAction: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 7) {
+            VStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(foreground)
+                    .offset(y: icon == "scissors" ? 1.5 : 0)
+                    .frame(height: 14)
+
                 Text(label)
                     .font(.system(size: 9.8, weight: .medium))
                     .foregroundStyle(foreground)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
             }
+            .padding(.top, 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
@@ -182,7 +186,7 @@ struct TLTransitionGrip: View {
                 .frame(width: hit, height: hit)
                 .contentShape(Rectangle())
 
-            if showHalo {
+            if showHalo && !hasTransition {
                 Circle()
                     .fill(
                         RadialGradient(
@@ -207,11 +211,36 @@ struct TLTransitionGrip: View {
             }
 
             if hasTransition {
+                if isActive {
+                    RoundedRectangle(
+                        cornerRadius: TLClipEditingMetrics.menuIconBoxRadius,
+                        style: .continuous
+                    )
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.58),
+                                trackColor.opacity(0.82),
+                                trackColor.opacity(0.28),
+                                trackColor.opacity(0.0),
+                            ],
+                            center: .center,
+                            startRadius: 1,
+                            endRadius: 18
+                        )
+                    )
+                    .frame(
+                        width: TLClipEditingMetrics.menuIconBoxSize + 20,
+                        height: TLClipEditingMetrics.menuIconBoxSize + 20
+                    )
+                    .blur(radius: 3.5)
+                }
+
                 TLTransitionIconBox(
                     transitionType: transitionType,
                     highlighted: true,
                     trackColor: trackColor,
-                    size: TLClipEditingMetrics.indicatorSize
+                    size: TLClipEditingMetrics.menuIconBoxSize
                 )
                 .scaleEffect(isPressed ? 0.94 : 1.0)
             } else {
@@ -295,7 +324,8 @@ struct TLClipContextToolbar: View {
                 TLClipToolbarAction(icon: "trash",      label: "Delete",    isDestructive: true, action: onDelete)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.top, 8)      // decrease top padding
+            .padding(.bottom, 10)   // more spacing bottom
             .frame(width: tbW, height: tbH)
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)

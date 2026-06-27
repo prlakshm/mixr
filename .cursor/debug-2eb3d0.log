@@ -1,1 +1,5 @@
-{"data":{"newY":-8.3333333333333339,"deltaY":-4.0000000000000009,"oldY":-4.333333333333333},"message":"vScrollOffsetChanged","runId":"pre-fix","hypothesisId":"ALL","timestamp":1782481966105,"sessionId":"2eb3d0","location":"TLTrackArea.verticalScroll"}
+{"hypothesisId":"D","data":{"unit":26.133333333333336,"x":261.33333333333337},"message":"timelineBackgroundTap","sessionId":"2eb3d0","runId":"pre-fix","timestamp":1782589086808,"location":"TLTimelineSurface"}
+{"hypothesisId":"A","data":{"clipLen":110.76666666666667,"clipPx":1107.6666666666665,"gripHit":32,"side":0},"message":"gripTapped","sessionId":"2eb3d0","runId":"pre-fix","timestamp":1782589089586,"location":"TLTrackLane"}
+{"hypothesisId":"D","data":{"unit":46.36666666666666,"x":463.66666666666663},"message":"timelineBackgroundTap","sessionId":"2eb3d0","runId":"pre-fix","timestamp":1782589094307,"location":"TLTimelineSurface"}
+{"hypothesisId":"D","data":{"x":381.66666666666663,"unit":38.166666666666664},"message":"timelineBackgroundTap","sessionId":"2eb3d0","runId":"pre-fix","timestamp":1782589187620,"location":"TLTimelineSurface"}
+{"hypothesisId":"A","data":{"clipLen":110.76666666666667,"side":0,"clipPx":1107.6666666666665,"gripHit":32},"message":"gripTapped","sessionId":"2eb3d0","runId":"pre-fix","timestamp":1782589188770,"location":"TLTrackLane"}
