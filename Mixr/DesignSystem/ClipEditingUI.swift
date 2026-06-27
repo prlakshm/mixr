@@ -63,14 +63,20 @@ private struct TLClipToolbarAction: View {
     let action: () -> Void
 
     @State private var isHovered = false
-
+    
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(foreground)
-                    .offset(y: icon == "scissors" ? 1.5 : 0)
+                    .offset(
+                        y: icon == "scissors"
+                        ? 1.5
+                            : icon == "trash"
+                        ? 1
+                                : 0
+                    ) // offset to fix some icons being slightly higher than rest
                     .frame(height: 14)
 
                 Text(label)
