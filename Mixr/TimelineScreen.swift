@@ -1427,7 +1427,7 @@ private struct TLTrackLane: View {
     var onClipTapped:   ((UUID, CGFloat) -> Void)? = nil
     var onGripTapped:   ((ActiveGrip) -> Void)?    = nil
 
-    private let gripHit    = TLClipEditingMetrics.gripHit
+    private let gripHit = TLClipEditingMetrics.gripHit
 
     var body: some View {
         ZStack(alignment: .leading) {
