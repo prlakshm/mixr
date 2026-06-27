@@ -217,38 +217,70 @@ struct TLTransitionGrip: View {
             }
 
             if hasTransition {
-                if isActive {
-                    RoundedRectangle(
-                        cornerRadius: TLClipEditingMetrics.menuIconBoxRadius,
-                        style: .continuous
-                    )
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.white.opacity(0.58),
-                                trackColor.opacity(0.82),
-                                trackColor.opacity(0.28),
-                                trackColor.opacity(0.0),
-                            ],
-                            center: .center,
-                            startRadius: 1,
-                            endRadius: 18
-                        )
-                    )
-                    .frame(
-                        width: TLClipEditingMetrics.menuIconBoxSize + 20,
-                        height: TLClipEditingMetrics.menuIconBoxSize + 20
-                    )
-                    .blur(radius: 3.5)
-                }
-
-                TLTransitionIconBox(
-                    transitionType: transitionType,
-                    highlighted: true,
-                    trackColor: trackColor,
-                    size: TLClipEditingMetrics.menuIconBoxSize
+                // Colored glow behind the icon box (always visible, brighter when active)
+                RoundedRectangle(
+                    cornerRadius: TLClipEditingMetrics.menuIconBoxRadius + 2,
+                    style: .continuous
                 )
-                .scaleEffect(isPressed ? 0.94 : 1.0)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(isActive ? 0.72 : 0.52),
+                            trackColor.opacity(isActive ? 0.95 : 0.80),
+                            trackColor.opacity(isActive ? 0.45 : 0.32),
+                            trackColor.opacity(0.0),
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 20
+                    )
+                )
+                .frame(width: 46, height: 46)
+                .blur(radius: 4)
+
+                // White separation ring so the box reads clearly over the waveform
+                RoundedRectangle(cornerRadius: TLClipEditingMetrics.menuIconBoxRadius + 2, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+                    .frame(width: 28, height: 28)
+
+                // Glass icon box — slightly larger than menu variant for grip legibility
+                let boxSize: CGFloat = 26
+                let shape = RoundedRectangle(cornerRadius: TLClipEditingMetrics.menuIconBoxRadius, style: .continuous)
+                ZStack {
+                    shape
+                        .fill(Color(hex: "050810").opacity(0.72))
+                        .background {
+                            shape
+                                .fill(trackColor.opacity(0.28))
+                        }
+                        .overlay {
+                            shape.fill(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.10), Color.clear],
+                                    startPoint: .top,
+                                    endPoint: UnitPoint(x: 0.5, y: 0.4)
+                                )
+                            )
+                        }
+                        .overlay {
+                            shape.strokeBorder(trackColor.opacity(0.60), lineWidth: 0.75)
+                        }
+
+                    TLTransitionIconBox(
+                        transitionType: transitionType,
+                        highlighted: true,
+                        trackColor: trackColor,
+                        size: boxSize
+                    )
+                    .background(Color.clear)
+                    // Only the icon itself — strip its own background so our backing shows
+                    .compositingGroup()
+                }
+                .frame(width: boxSize, height: boxSize)
+                .clipShape(shape)
+                .shadow(color: trackColor.opacity(0.70), radius: 8)
+                .shadow(color: .black.opacity(0.55), radius: 4, x: 0, y: 2)
+                .scaleEffect(isPressed ? 0.92 : 1.0)
             } else {
                 Circle()
                     .fill(Color.white.opacity(isPressed ? 0.15 : 0.07))
