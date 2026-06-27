@@ -66,7 +66,7 @@ private struct TLClipToolbarAction: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: 6.2) {
                 Image(systemName: icon)
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(foreground)

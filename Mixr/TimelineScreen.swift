@@ -721,14 +721,6 @@ private struct TLTrackArea: View {
                 }
             }
 
-            TLClipBoundaryCanvas(
-                tracks: tracks,
-                timelineWidth: contentW,
-                totalHeight: lanesH,
-                topInset: 0
-            )
-            .allowsHitTesting(false)
-
             if tracks.isEmpty {
                 TLEmptyTimelineState(isDropTarget: isTimelineDropTarget)
                     .frame(width: min(contentW, viewportW), height: lanesH)
@@ -1356,7 +1348,7 @@ private struct TLGridCanvas: View {
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: height))
-                ctx.stroke(path, with: .color(MixrColors.divider.opacity(0.55)), lineWidth: 0.65)
+                ctx.stroke(path, with: .color(MixrColors.divider.opacity(0.60)), lineWidth: 0.70)
             }
         }
         .frame(width: width, height: height)
