@@ -693,6 +693,8 @@ private struct TLTrackArea: View {
 
             VStack(spacing: 0) {
                 ForEach(tracks) { track in
+                    let laneHasSelectedClip = track.clips.contains { $0.id == selectedClipID }
+
                     TLTrackLane(
                         track:          track,
                         timelineWidth:  contentW,
@@ -715,7 +717,7 @@ private struct TLTrackArea: View {
                     )
                     .frame(height: TLK.trackRowHeight)
                     .offset(y: rowOffset(trackID: track.id))
-                    .zIndex(draggingID == track.id ? 1 : 0)
+                    .zIndex(laneHasSelectedClip ? 5 : (draggingID == track.id ? 1 : 0))
                 }
             }
 
@@ -1430,41 +1432,46 @@ private struct TLTrackLane: View {
     var body: some View {
         ZStack(alignment: .leading) {
             track.color.color.opacity(0.025)
+            MixrColors.divider
+                .frame(height: 0.5)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .allowsHitTesting(false)
 
             ForEach(track.clips) { clip in
                 let xOffset = (clip.start / TLK.totalUnits) * timelineWidth
                 let clipW   = max(1, (clip.length / TLK.totalUnits) * timelineWidth)
                 let isSel   = clip.id == selectedClipID
+                let selectedBorderHeight = TLK.trackRowHeight - 2
 
                 WaveformClip(waveformColor: track.color)
                     .frame(height: TLK.waveformHeight)
                     .frame(width: clipW)
                     .overlay {
                         if isSel {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(track.color.color.opacity(1.0), lineWidth: 2.6)
-                                .shadow(color: track.color.color.opacity(1.0), radius: 9)
-                                .shadow(color: track.color.color.opacity(0.56), radius: 20)
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.7)
-                                .padding(1.5)
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            track.color.color.opacity(0.26),
-                                            track.color.color.opacity(0.07),
-                                            Color.clear,
-                                        ],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .blendMode(.screen)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(track.color.color.opacity(0.88), lineWidth: 8.2)
+                                    .blur(radius: 5.6)
+                                    .opacity(0.7)
+                                    .padding(-3.0)
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(track.color.color.opacity(0.38), lineWidth: 8.5)
+                                    .blur(radius: 3.2)
+                                    .opacity(0.82)
+                                    .padding(1.0)
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(track.color.color.opacity(1.0), lineWidth: 2.4)
+                                    .shadow(color: track.color.color.opacity(0.88), radius: 7)
+                                    .shadow(color: track.color.color.opacity(0.5), radius: 15)
+                                    .padding(-0.35)
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
+                                    .padding(1.2)
+                            }
+                            .frame(width: clipW, height: selectedBorderHeight)
+                            .allowsHitTesting(false)
                         }
                     }
-                    .shadow(color: isSel ? track.color.color.opacity(0.84) : .clear, radius: 12)
-                    .shadow(color: isSel ? track.color.color.opacity(0.42) : .clear, radius: 30)
                     .shadow(color: isSel ? Color.black.opacity(0.34) : .clear, radius: 7, x: 0, y: 4)
                     .zIndex(isSel ? 2 : 0)
                     .offset(x: xOffset)
@@ -1511,10 +1518,6 @@ private struct TLTrackLane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
-        .overlay(alignment: .bottom) {
-            MixrColors.divider.frame(height: 0.5)
-        }
     }
 }
 
