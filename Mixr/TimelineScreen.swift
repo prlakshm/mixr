@@ -24,9 +24,9 @@ enum TLK {
     static let compactEffectCardWidth: CGFloat     = 152
     static let compactEffectCardHeight: CGFloat    = 66
     static let markerUnits: [CGFloat]     = [0, 17, 33, 49, 65, 81, 97, 113, 129]
-    static let minorGridStep: CGFloat     = 5
     static let importFooterHeight: CGFloat = 46
     static let timelineDurationSeconds: CGFloat = 240
+    static let gridLineStepSeconds: CGFloat = 10
     static let rulerLabelStepSeconds: CGFloat = 30
 
     /// Timeline layering — playhead line above tracks; handle above line; clip-editing overlays highest.
@@ -34,8 +34,12 @@ enum TLK {
     static let timelinePlayheadHandleZIndex: CGFloat = 25
     static let timelineGripZIndex:           CGFloat = 10
 
-    static var minorGridUnits: [CGFloat] {
-        stride(from: 0, through: Int(totalUnits), by: Int(minorGridStep)).map { CGFloat($0) }
+    static var gridLineSeconds: [CGFloat] {
+        stride(
+            from: 0,
+            through: Int(timelineDurationSeconds),
+            by: Int(gridLineStepSeconds)
+        ).map { CGFloat($0) }
     }
 
     static var rulerLabelSeconds: [CGFloat] {
@@ -1302,7 +1306,8 @@ private struct TLRuler: View {
             MixrColors.background.opacity(0.80)
 
             Canvas { ctx, size in
-                for unit in TLK.minorGridUnits {
+                for seconds in TLK.gridLineSeconds {
+                    let unit = TLK.timelineUnit(for: seconds)
                     let x = (unit / TLK.totalUnits) * width
                     var tick = Path()
                     tick.move(to: CGPoint(x: x, y: size.height - 4))
@@ -1324,8 +1329,11 @@ private struct TLRuler: View {
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundStyle(MixrColors.textSecondary)
                     )
-                    let labelX = max(2, x + 3)
-                    ctx.draw(resolved, at: CGPoint(x: labelX, y: 5), anchor: .topLeading)
+                    if seconds == 0 {
+                        ctx.draw(resolved, at: CGPoint(x: 2, y: 5), anchor: .topLeading)
+                    } else {
+                        ctx.draw(resolved, at: CGPoint(x: x, y: 5), anchor: .top)
+                    }
                 }
             }
         }
@@ -1343,12 +1351,13 @@ private struct TLGridCanvas: View {
 
     var body: some View {
         Canvas { ctx, _ in
-            for unit in TLK.minorGridUnits {
+            for seconds in TLK.gridLineSeconds {
+                let unit = TLK.timelineUnit(for: seconds)
                 let x = (unit / TLK.totalUnits) * width
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: height))
-                ctx.stroke(path, with: .color(MixrColors.divider.opacity(0.60)), lineWidth: 0.70)
+                ctx.stroke(path, with: .color(MixrColors.divider.opacity(0.55)), lineWidth: 0.65)
             }
         }
         .frame(width: width, height: height)
