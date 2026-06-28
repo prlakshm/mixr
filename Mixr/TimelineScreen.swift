@@ -34,6 +34,16 @@ enum TLK {
     static let timelinePlayheadHandleZIndex: CGFloat = 25
     static let timelineGripZIndex:           CGFloat = 10
 
+    /// Duplicate auto-scroll — only when start is off-screen or in the last ~25% of viewport.
+    static let duplicateScrollViewportAnchor:  CGFloat = 0.275   // 27.5% from leading edge
+    static let duplicateScrollComfortThreshold:  CGFloat = 0.75    // scroll if past 75% of viewport
+    static let duplicateScrollAnimationDuration: Double  = 0.55
+
+    /// Ease-out curve — starts confidently, decelerates into place (no spring).
+    static var duplicateScrollAnimation: Animation {
+        .timingCurve(0.22, 1.0, 0.36, 1.0, duration: duplicateScrollAnimationDuration)
+    }
+
     static var gridLineSeconds: [CGFloat] {
         stride(
             from: 0,
@@ -180,7 +190,9 @@ struct TimelineScreen: View {
             playback.syncTracks(library.tracks)
         }
         // Track list or clip geometry changed → full sync (may add/remove players)
-        .onChange(of: library.tracks.map { "\($0.id):\($0.clips.first?.length ?? 0)" }.joined()) { _, _ in
+        .onChange(of: library.tracks.map { track in
+            track.clips.map { "\($0.start):\($0.length)" }.joined(separator: ",")
+        }.joined(separator: "|")) { _, _ in
             playback.syncTracks(library.tracks)
         }
         // Only volume/mute changed → lightweight update, does NOT restart engine
@@ -370,11 +382,18 @@ private struct TLTrackArea: View {
     @State private var selectedClipID:   UUID?       = nil
     @State private var clipTapAnchorX:   CGFloat?    = nil
     @State private var activeGrip:       ActiveGrip? = nil
-    @State private var currentContentW:  CGFloat     = 0
+    @State private var currentContentW:     CGFloat = 0
+    @State private var currentContentUnits: CGFloat = TLK.totalUnits
+    @State private var currentLaneVW:       CGFloat = 0
 
     // Scroll tracking for floating overlay positioning
     @State private var hScrollOffset: CGFloat = 0
     @State private var vScrollOffset: CGFloat = 0
+    @State private var hScrollPosition = ScrollPosition()
+
+    // Duplicate auto-scroll — scrollAnchorUnit is recomputed into an exact offset at scroll time.
+    @State private var scrollAnchorUnit: CGFloat = 0
+    @State private var scrollTrigger: UUID?
 
     // MARK: - Clip lookup
 
@@ -394,6 +413,41 @@ private struct TLTrackArea: View {
         return nil
     }
 
+    /// Scroll after duplicate only when the new clip start is off-screen or in the
+    /// trailing ~25% of the visible timeline (not comfortably visible).
+    private func shouldAutoScrollToDuplicateStart(
+        _ startUnit: CGFloat,
+        contentUnits: CGFloat,
+        contentW: CGFloat,
+        viewportW: CGFloat
+    ) -> Bool {
+        guard viewportW > 0, contentUnits > 0, contentW > 0 else { return false }
+        let startX = (startUnit / contentUnits) * contentW
+        let visibleMin = hScrollOffset
+        let visibleMax = hScrollOffset + viewportW
+
+        if startX < visibleMin || startX > visibleMax {
+            return true
+        }
+        if startX >= visibleMin + viewportW * TLK.duplicateScrollComfortThreshold {
+            return true
+        }
+        return false
+    }
+
+    /// Content-space x offset that places `startUnit` at ~27.5% from the viewport's leading edge.
+    private func duplicateScrollOffset(
+        startUnit: CGFloat,
+        contentUnits: CGFloat,
+        contentW: CGFloat,
+        viewportW: CGFloat
+    ) -> CGFloat {
+        let startX = (startUnit / contentUnits) * contentW
+        let target = startX - viewportW * TLK.duplicateScrollViewportAnchor
+        let maxOffset = max(0, contentW - viewportW)
+        return max(0, min(target, maxOffset))
+    }
+
     private func splitClip(id: UUID) {
         guard let f = findClip(id) else { return }
         let phUnit  = effectivePlayheadUnit
@@ -410,27 +464,48 @@ private struct TLTrackArea: View {
             MixrClip(id: newID, start: splitAt, length: rightLen),
             at: f.clipIdx + 1
         )
+        let contentUnits = MixrTimeline.contentUnits(for: tracks)
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID  = newID
             activeGrip      = nil
-            clipTapAnchorX  = splitAt / TLK.totalUnits * currentContentW
+            clipTapAnchorX  = splitAt / contentUnits * currentContentW
         }
     }
 
     private func duplicateClip(id: UUID) {
         guard let f = findClip(id) else { return }
         let newStart = f.clip.start + f.clip.length
-        guard newStart < TLK.totalUnits else { return }
-        let newLen = min(f.clip.length, TLK.totalUnits - newStart)
+        // Bug 1 fix: always copy the full source length, never truncate.
+        let newLen = f.clip.length
         let newID  = UUID()
+        // Bug 2 fix: push every clip that follows the source rightward by newLen
+        // so the duplicate slots in without overlapping any neighbour.
+        for i in (f.clipIdx + 1)..<tracks[f.trackIdx].clips.count {
+            tracks[f.trackIdx].clips[i].start += newLen
+        }
+        // Source clip's outgoing transition is stale after insertion; clear it so
+        // the source exits cleanly into the new independent duplicate.
+        tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
         tracks[f.trackIdx].clips.insert(
             MixrClip(id: newID, start: newStart, length: newLen),
             at: f.clipIdx + 1
         )
+        let contentUnits = MixrTimeline.contentUnits(for: tracks)
+        onTimelineTapped(newStart)
+        let contentW = max(currentLaneVW, contentUnits * TLK.timelineUnitWidth)
+        if shouldAutoScrollToDuplicateStart(
+            newStart,
+            contentUnits: contentUnits,
+            contentW: contentW,
+            viewportW: currentLaneVW
+        ) {
+            scrollAnchorUnit = newStart
+            scrollTrigger = UUID()
+        }
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID = newID
             activeGrip     = nil
-            clipTapAnchorX = (newStart + newLen * 0.2) / TLK.totalUnits * currentContentW
+            clipTapAnchorX = newStart / contentUnits * currentContentW
         }
     }
 
@@ -471,7 +546,8 @@ private struct TLTrackArea: View {
     var body: some View {
         GeometryReader { geo in
             let laneVW   = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
-            let contentW = max(laneVW, TLK.totalUnits * TLK.timelineUnitWidth)
+            let contentUnits = MixrTimeline.contentUnits(for: tracks)
+            let contentW = max(laneVW, contentUnits * TLK.timelineUnitWidth)
             let rowsH    = CGFloat(tracks.count) * TLK.trackRowHeight
             let lanesH   = tracks.isEmpty
                 ? max(geo.size.height - TLK.rulerHeight, TLK.trackRowHeight)
@@ -498,26 +574,52 @@ private struct TLTrackArea: View {
                         // ── Centre: single horizontal scroll for ruler + lanes ──
                         ScrollView(.horizontal, showsIndicators: false) {
                             ZStack(alignment: .topLeading) {
-                                TLRuler(width: contentW)
+                                TLRuler(width: contentW, contentUnits: contentUnits)
                                     .frame(width: contentW, height: TLK.rulerHeight)
 
                                 TLPlayheadLine(
                                     timelineWidth: contentW,
                                     totalHeight: totalH,
                                     playheadUnit: effectivePlayheadUnit,
+                                    contentUnits: contentUnits,
                                     isDragging: isPlayheadDragging
                                 )
                                 .zIndex(TLK.timelinePlayheadLineZIndex)
 
-                                lanesContent(contentW: contentW, lanesH: lanesH, viewportW: laneVW)
-                                    .offset(y: TLK.rulerHeight)
-                                    .zIndex(10)
-
+                                lanesContent(
+                                    contentW: contentW,
+                                    contentUnits: contentUnits,
+                                    lanesH: lanesH,
+                                    viewportW: laneVW
+                                )
+                                .offset(y: TLK.rulerHeight)
+                                .zIndex(10)
                             }
                             .frame(width: contentW, height: totalH)
                         }
+                        .scrollPosition($hScrollPosition)
                         .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.x }) { _, new in
                             hScrollOffset = new
+                        }
+                        .onChange(of: scrollTrigger) { _, trigger in
+                            guard trigger != nil else { return }
+                            let startUnit = scrollAnchorUnit
+                            Task { @MainActor in
+                                // Wait for extended contentW to commit after duplicate.
+                                try? await Task.sleep(for: .milliseconds(40))
+                                let units = MixrTimeline.contentUnits(for: tracks)
+                                let w = max(currentLaneVW, units * TLK.timelineUnitWidth)
+                                let target = duplicateScrollOffset(
+                                    startUnit: startUnit,
+                                    contentUnits: units,
+                                    contentW: w,
+                                    viewportW: currentLaneVW
+                                )
+                                withAnimation(TLK.duplicateScrollAnimation) {
+                                    hScrollPosition.scrollTo(x: target)
+                                }
+                                scrollTrigger = nil
+                            }
                         }
                         .frame(width: laneVW, height: totalH)
                         .zIndex(1)
@@ -559,6 +661,7 @@ private struct TLTrackArea: View {
                 clipEditingFloatingOverlay(
                     sidebarW: TLK.sidebarWidth,
                     contentW: currentContentW,
+                    contentUnits: currentContentUnits,
                     laneVW:   laneVW,
                     viewportH: geo.size.height + bottomOverlayAllowance,
                     hScrollOffset: hScrollOffset,
@@ -569,6 +672,7 @@ private struct TLTrackArea: View {
                 floatingPlayheadHandle(
                     sidebarW: TLK.sidebarWidth,
                     contentW: currentContentW,
+                    contentUnits: currentContentUnits,
                     laneVW: laneVW,
                     hScrollOffset: hScrollOffset
                 )
@@ -583,8 +687,14 @@ private struct TLTrackArea: View {
                 .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .onAppear { currentContentW = contentW }
+            .onAppear {
+                currentContentW = contentW
+                currentContentUnits = contentUnits
+                currentLaneVW = laneVW
+            }
             .onChange(of: contentW) { _, new in currentContentW = new }
+            .onChange(of: contentUnits) { _, new in currentContentUnits = new }
+            .onChange(of: laneVW) { _, new in currentLaneVW = new }
         }
     }
 
@@ -678,12 +788,12 @@ private struct TLTrackArea: View {
     // MARK: Timeline lanes content (no scroll wrapper — parent provides horizontal scroll)
 
     @ViewBuilder
-    private func lanesContent(contentW: CGFloat, lanesH: CGFloat, viewportW: CGFloat) -> some View {
+    private func lanesContent(contentW: CGFloat, contentUnits: CGFloat, lanesH: CGFloat, viewportW: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             TLTimelineSurface(isDropTarget: isTimelineDropTarget)
                 .frame(width: contentW, height: lanesH)
                 .onTapGesture { location in
-                    let unit = (location.x / contentW) * TLK.totalUnits
+                    let unit = (location.x / contentW) * contentUnits
                     onTimelineTapped(max(0, min(unit, maxPlayheadUnit)))
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                         selectedClipID = nil
@@ -692,7 +802,7 @@ private struct TLTrackArea: View {
                     }
                 }
 
-            TLGridCanvas(width: contentW, height: lanesH)
+            TLGridCanvas(width: contentW, height: lanesH, contentUnits: contentUnits)
                 .allowsHitTesting(false)
 
             VStack(spacing: 0) {
@@ -702,10 +812,11 @@ private struct TLTrackArea: View {
                     TLTrackLane(
                         track:          track,
                         timelineWidth:  contentW,
+                        contentUnits:   contentUnits,
                         selectedClipID: selectedClipID,
                         activeGrip:     activeGrip,
                         onClipTapped:   { clipID, tapX in
-                            let unit = (tapX / contentW) * TLK.totalUnits
+                            let unit = (tapX / contentW) * contentUnits
                             onTimelineTapped(max(0, min(unit, maxPlayheadUnit)))
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 selectedClipID = clipID
@@ -744,6 +855,7 @@ private struct TLTrackArea: View {
     private func clipEditingFloatingOverlay(
         sidebarW: CGFloat,
         contentW: CGFloat,
+        contentUnits: CGFloat,
         laneVW: CGFloat,
         viewportH: CGFloat,
         hScrollOffset: CGFloat,
@@ -756,7 +868,7 @@ private struct TLTrackArea: View {
         if let cid = selectedClipID, activeGrip == nil, let f = findClip(cid) {
             let tbW    = TLClipEditingMetrics.toolbarWidth
             let tbH    = TLClipEditingMetrics.toolbarBodyHeight + TLClipEditingMetrics.toolbarPointerH
-            let playheadContentX = (effectivePlayheadUnit / TLK.totalUnits) * contentW
+            let playheadContentX = (effectivePlayheadUnit / contentUnits) * contentW
             let tbSX   = screenXFor(playheadContentX)
             let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
             let tbTopY    = trackTopY + TLK.trackRowHeight * 0.03 - tbH * 0.5 - 6
@@ -779,7 +891,7 @@ private struct TLTrackArea: View {
             let mW     = TLClipEditingMetrics.menuWidth
             let edgeX  = (grip.side == .leading
                 ? f.clip.start
-                : f.clip.start + f.clip.length) / TLK.totalUnits * contentW
+                : f.clip.start + f.clip.length) / contentUnits * contentW
             let rawX   = grip.side == .leading ? edgeX + 8 : edgeX - mW - 8
             // Clamp in content space, then convert to screen space
             let clampedContentX = max(0, min(contentW - mW - 4, rawX))
@@ -817,10 +929,11 @@ private struct TLTrackArea: View {
     private func floatingPlayheadHandle(
         sidebarW: CGFloat,
         contentW: CGFloat,
+        contentUnits: CGFloat,
         laneVW: CGFloat,
         hScrollOffset: CGFloat
     ) -> some View {
-        let contentX = (effectivePlayheadUnit / TLK.totalUnits) * contentW
+        let contentX = (effectivePlayheadUnit / contentUnits) * contentW
         let screenX = sidebarW + contentX - hScrollOffset
         let handleVisible = screenX >= sidebarW - TLK.playheadHandleWidth
             && screenX <= sidebarW + laneVW + TLK.playheadHandleWidth
@@ -851,12 +964,12 @@ private struct TLTrackArea: View {
                                     onPlayheadDragStart()
                                 }
                                 let contentLocationX = hitOriginX + value.location.x - sidebarW + hScrollOffset
-                                let unit = (contentLocationX / contentW) * TLK.totalUnits
+                                let unit = (contentLocationX / contentW) * contentUnits
                                 onPlayheadDragChanged(max(0, min(unit, maxPlayheadUnit)))
                             }
                             .onEnded { value in
                                 let contentLocationX = hitOriginX + value.location.x - sidebarW + hScrollOffset
-                                let unit = (contentLocationX / contentW) * TLK.totalUnits
+                                let unit = (contentLocationX / contentW) * contentUnits
                                 onPlayheadDragEnded(max(0, min(unit, maxPlayheadUnit)))
                             }
                     )
@@ -1300,24 +1413,25 @@ private struct TLSongRowGripper: View {
 
 private struct TLRuler: View {
     let width: CGFloat
+    let contentUnits: CGFloat
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             MixrColors.background.opacity(0.80)
 
             Canvas { ctx, size in
-                for seconds in TLK.gridLineSeconds {
-                    let unit = TLK.timelineUnit(for: seconds)
-                    let x = (unit / TLK.totalUnits) * width
+                for seconds in MixrTimeline.gridLineSeconds(upToContentUnits: contentUnits) {
+                    let unit = MixrTimeline.units(fromSeconds: Double(seconds))
+                    let x = (unit / contentUnits) * width
                     var tick = Path()
                     tick.move(to: CGPoint(x: x, y: size.height - 4))
                     tick.addLine(to: CGPoint(x: x, y: size.height))
                     ctx.stroke(tick, with: .color(MixrColors.divider.opacity(0.25)), lineWidth: 0.5)
                 }
 
-                for seconds in TLK.rulerLabelSeconds {
-                    let unit = TLK.timelineUnit(for: seconds)
-                    let x = (unit / TLK.totalUnits) * width
+                for seconds in MixrTimeline.rulerLabelSeconds(upToContentUnits: contentUnits) {
+                    let unit = MixrTimeline.units(fromSeconds: Double(seconds))
+                    let x = (unit / contentUnits) * width
                     var tick = Path()
                     tick.move(to: CGPoint(x: x, y: size.height - 7))
                     tick.addLine(to: CGPoint(x: x, y: size.height))
@@ -1348,12 +1462,13 @@ private struct TLRuler: View {
 private struct TLGridCanvas: View {
     let width: CGFloat
     let height: CGFloat
+    let contentUnits: CGFloat
 
     var body: some View {
         Canvas { ctx, _ in
-            for seconds in TLK.gridLineSeconds {
-                let unit = TLK.timelineUnit(for: seconds)
-                let x = (unit / TLK.totalUnits) * width
+            for seconds in MixrTimeline.gridLineSeconds(upToContentUnits: contentUnits) {
+                let unit = MixrTimeline.units(fromSeconds: Double(seconds))
+                let x = (unit / contentUnits) * width
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: height))
@@ -1423,6 +1538,7 @@ private struct TLEmptyTimelineState: View {
 private struct TLTrackLane: View {
     let track:          MixrTrack
     let timelineWidth:  CGFloat
+    let contentUnits:   CGFloat
     var selectedClipID: UUID?       = nil
     var activeGrip:     ActiveGrip? = nil
     var onClipTapped:   ((UUID, CGFloat) -> Void)? = nil
@@ -1439,8 +1555,8 @@ private struct TLTrackLane: View {
                 .allowsHitTesting(false)
 
             ForEach(track.clips) { clip in
-                let xOffset = (clip.start / TLK.totalUnits) * timelineWidth
-                let clipW   = max(1, (clip.length / TLK.totalUnits) * timelineWidth)
+                let xOffset = (clip.start / contentUnits) * timelineWidth
+                let clipW   = max(1, (clip.length / contentUnits) * timelineWidth)
                 let isSel   = clip.id == selectedClipID
                 let selectedBorderHeight = TLK.trackRowHeight - 2
 
@@ -1474,12 +1590,15 @@ private struct TLTrackLane: View {
                         }
                     }
                     .shadow(color: isSel ? Color.black.opacity(0.34) : .clear, radius: 7, x: 0, y: 4)
-                    .zIndex(isSel ? 2 : 0)
-                    .offset(x: xOffset)
                     .contentShape(Rectangle())
                     .onTapGesture { location in
                         onClipTapped?(clip.id, xOffset + location.x)
                     }
+                    // position() moves both the render AND the hit-test frame, unlike offset().
+                    // Center the clip at its correct x position and the lane's vertical midpoint.
+                    .position(x: xOffset + clipW / 2,
+                              y: TLK.trackRowHeight / 2)
+                    .zIndex(isSel ? 2 : 0)
 
                 // Leading grip
                 TLTransitionGrip(
@@ -1495,8 +1614,8 @@ private struct TLTrackLane: View {
                     }
                 )
                 .frame(width: gripHit, height: gripHit)
-                .offset(x: xOffset - gripHit / 2,
-                        y: (TLK.waveformHeight - gripHit) / 2)
+                .position(x: xOffset,
+                          y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
                 .zIndex(TLK.timelineGripZIndex)
 
                 // Trailing grip
@@ -1513,8 +1632,8 @@ private struct TLTrackLane: View {
                     }
                 )
                 .frame(width: gripHit, height: gripHit)
-                .offset(x: xOffset + clipW - gripHit / 2,
-                        y: (TLK.waveformHeight - gripHit) / 2)
+                .position(x: xOffset + clipW,
+                          y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
                 .zIndex(TLK.timelineGripZIndex)
             }
         }
@@ -1593,10 +1712,11 @@ private struct TLPlayheadLine: View {
     let timelineWidth: CGFloat
     let totalHeight: CGFloat
     let playheadUnit: CGFloat
+    let contentUnits: CGFloat
     var isDragging: Bool = false
 
     private var xPos: CGFloat {
-        (playheadUnit / TLK.totalUnits) * timelineWidth
+        (playheadUnit / contentUnits) * timelineWidth
     }
 
     private var lineStartY: CGFloat { TLK.rulerHeight }
