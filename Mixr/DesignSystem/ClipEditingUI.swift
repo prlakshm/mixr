@@ -12,7 +12,7 @@ enum TLClipEditingMetrics {
     static var menuEstimatedHeight: CGFloat {
         CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 4
     }
-    static let menuIconBoxSize:     CGFloat = 22
+    static let menuIconBoxSize:     CGFloat = 22.5
     static let menuIconBoxRadius:   CGFloat = 6
     static let iconBoxRadius:       CGFloat = 7
     static let gripVisual:          CGFloat = 11
@@ -217,6 +217,15 @@ struct TLTransitionGrip: View {
             }
 
             if hasTransition {
+                let boxSize = TLClipEditingMetrics.menuIconBoxSize
+                let gripScale = boxSize / 26
+                let glowSize = 46 * gripScale
+                let ringSize = 28 * gripScale
+                let shape = RoundedRectangle(
+                    cornerRadius: TLClipEditingMetrics.menuIconBoxRadius,
+                    style: .continuous
+                )
+
                 // Colored glow behind the icon box (always visible, brighter when active)
                 RoundedRectangle(
                     cornerRadius: TLClipEditingMetrics.menuIconBoxRadius + 2,
@@ -232,26 +241,27 @@ struct TLTransitionGrip: View {
                         ],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 20
+                        endRadius: 20 * gripScale
                     )
                 )
-                .frame(width: 46, height: 46)
-                .blur(radius: 4)
+                .frame(width: glowSize, height: glowSize)
+                .blur(radius: 4 * gripScale)
 
                 // White separation ring so the box reads clearly over the waveform
-                RoundedRectangle(cornerRadius: TLClipEditingMetrics.menuIconBoxRadius + 2, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
-                    .frame(width: 28, height: 28)
+                RoundedRectangle(
+                    cornerRadius: TLClipEditingMetrics.menuIconBoxRadius + 2,
+                    style: .continuous
+                )
+                .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+                .frame(width: ringSize, height: ringSize)
 
-                // Glass icon box — slightly larger than menu variant for grip legibility
-                let boxSize: CGFloat = 26
-                let shape = RoundedRectangle(cornerRadius: TLClipEditingMetrics.menuIconBoxRadius, style: .continuous)
+                // Glass icon box — custom plate with transition icon on top
                 ZStack {
                     shape
-                        .fill(Color(hex: "050810").opacity(0.72))
+                        .fill(Color(hex: "020309").opacity(0.94))
                         .background {
                             shape
-                                .fill(trackColor.opacity(0.28))
+                                .fill(trackColor.opacity(0.10))
                         }
                         .overlay {
                             shape.fill(
@@ -263,7 +273,10 @@ struct TLTransitionGrip: View {
                             )
                         }
                         .overlay {
-                            shape.strokeBorder(trackColor.opacity(0.60), lineWidth: 0.75)
+                            shape.strokeBorder(
+                                trackColor.opacity(0.60),
+                                lineWidth: 1 * gripScale
+                            )
                         }
 
                     TLTransitionIconBox(
@@ -273,13 +286,12 @@ struct TLTransitionGrip: View {
                         size: boxSize
                     )
                     .background(Color.clear)
-                    // Only the icon itself — strip its own background so our backing shows
                     .compositingGroup()
                 }
                 .frame(width: boxSize, height: boxSize)
                 .clipShape(shape)
-                .shadow(color: trackColor.opacity(0.70), radius: 8)
-                .shadow(color: .black.opacity(0.55), radius: 4, x: 0, y: 2)
+                .shadow(color: trackColor.opacity(0.70), radius: 8 * gripScale)
+                .shadow(color: .black.opacity(0.55), radius: 4 * gripScale, x: 0, y: 2 * gripScale)
                 .scaleEffect(isPressed ? 0.92 : 1.0)
             } else {
                 Circle()
