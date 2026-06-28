@@ -448,6 +448,15 @@ private struct TLTrackArea: View {
         return max(0, min(target, maxOffset))
     }
 
+    /// Reset horizontal scroll and playhead to 0:00 when the timeline is cleared.
+    private func scrollToTimelineStart() {
+        scrollTrigger = nil
+        onTimelineTapped(0)
+        withAnimation(TLK.duplicateScrollAnimation) {
+            hScrollPosition.scrollTo(x: 0)
+        }
+    }
+
     private func splitClip(id: UUID) {
         guard let f = findClip(id) else { return }
         let phUnit  = effectivePlayheadUnit
@@ -695,6 +704,11 @@ private struct TLTrackArea: View {
             .onChange(of: contentW) { _, new in currentContentW = new }
             .onChange(of: contentUnits) { _, new in currentContentUnits = new }
             .onChange(of: laneVW) { _, new in currentLaneVW = new }
+            .onChange(of: tracks.isEmpty) { _, isEmpty in
+                if isEmpty {
+                    scrollToTimelineStart()
+                }
+            }
         }
     }
 
