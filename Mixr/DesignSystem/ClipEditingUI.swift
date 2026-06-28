@@ -89,11 +89,7 @@ private struct TLClipToolbarAction: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(TLClipActionPressStyle(
-            isDestructive: isDestructive,
-            fillsCell: true,
-            isHovered: isHovered
-        ))
+        .buttonStyle(TLClipActionPressStyle(isDestructive: isDestructive))
         .onHover { isHovered = $0 }
     }
 
