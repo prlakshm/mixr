@@ -258,10 +258,10 @@ struct TLTransitionGrip: View {
                 // Glass icon box — custom plate with transition icon on top
                 ZStack {
                     shape
-                        .fill(Color(hex: "020309").opacity(0.94))
+                        .fill(Color(hex: "010207").opacity(0.96))
                         .background {
                             shape
-                                .fill(trackColor.opacity(0.10))
+                                .fill(trackColor.opacity(0.08))
                         }
                         .overlay {
                             shape.fill(
