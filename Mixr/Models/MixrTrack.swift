@@ -17,7 +17,17 @@ struct ClipTransition: Equatable, Sendable {
     var duration: Double = 0.5
     var curve:    String = "linear"
 
-    static let none = ClipTransition()
+    nonisolated init(
+        type: ClipTransitionType = .none,
+        duration: Double = 0.5,
+        curve: String = "linear"
+    ) {
+        self.type = type
+        self.duration = duration
+        self.curve = curve
+    }
+
+    nonisolated static let none = ClipTransition()
 }
 
 enum GripSide: Equatable {

@@ -83,6 +83,7 @@ enum TLK {
     static let clipDragScrimAnim:     Double  = 0.13
     static let clipDragDropResponse:  Double  = 0.38
     static let clipDragDropDamping:   Double  = 0.80
+    static let clipInsertionSnapZone: CGFloat = 14
 }
 
 // MARK: - Clip Drag State
@@ -128,6 +129,29 @@ private struct ClipDragState {
     func proposedStart(contentUnits: CGFloat, contentW: CGFloat) -> CGFloat {
         guard contentW > 0 else { return 0 }
         return max(0, (proposedLeadingEdgePx / contentW) * contentUnits)
+    }
+
+    func pointerUnit(sidebarWidth: CGFloat, contentUnits: CGFloat, contentW: CGFloat) -> CGFloat? {
+        guard contentW > 0, contentUnits > 0 else { return nil }
+        let contentX = cursorAreaX - sidebarWidth + scrollX
+        return max(0, (contentX / contentW) * contentUnits)
+    }
+
+    func resolvedStart(
+        contentUnits: CGFloat,
+        contentW: CGFloat,
+        sidebarWidth: CGFloat,
+        clips: [MixrClip]
+    ) -> CGFloat {
+        let rawStart = proposedStart(contentUnits: contentUnits, contentW: contentW)
+        let snapZoneUnits = (TLK.clipInsertionSnapZone / max(1, contentW)) * contentUnits
+        return MixrTimeline.resolvedClipInsertionStart(
+            moving: clipID,
+            rawStart: rawStart,
+            pointerUnit: pointerUnit(sidebarWidth: sidebarWidth, contentUnits: contentUnits, contentW: contentW),
+            in: clips,
+            snapZoneUnits: snapZoneUnits
+        )
     }
 }
 
@@ -695,7 +719,14 @@ private struct TLTrackArea: View {
                     delta = -TLK.clipDragScrollSpeed * t * t
                 }
                 if delta != 0 {
-                    let maxOff  = max(0, currentContentW - currentLaneVW)
+                    let movingClipW = currentContentUnits > 0
+                        ? (drag.originalClip.length / currentContentUnits) * currentContentW
+                        : 0
+                    let desiredContentW = max(
+                        currentContentW,
+                        drag.proposedLeadingEdgePx + movingClipW + currentLaneVW * 0.35
+                    )
+                    let maxOff = max(0, desiredContentW - currentLaneVW)
                     let newScrollX = max(0, min(drag.scrollX + delta, maxOff))
                     clipDragState?.scrollX = newScrollX
                     clipDragState?.proposedLeadingEdgePx =
@@ -715,7 +746,12 @@ private struct TLTrackArea: View {
               tracks[ti].clips.contains(where: { $0.id == drag.clipID })
         else { cancelClipDrag(); return }
 
-        let proposedStart = drag.proposedStart(contentUnits: currentContentUnits, contentW: currentContentW)
+        let proposedStart = drag.resolvedStart(
+            contentUnits: currentContentUnits,
+            contentW: currentContentW,
+            sidebarWidth: TLK.sidebarWidth,
+            clips: tracks[ti].clips
+        )
         let reflowedClips = MixrTimeline.reflowedClips(
             moving: drag.clipID,
             to: proposedStart,
@@ -755,7 +791,13 @@ private struct TLTrackArea: View {
         if let drag = clipDragState,
            let track = tracks.first(where: { $0.id == drag.trackID }) {
             let clipW = max(1, (drag.originalClip.length / contentUnits) * contentW)
-            let clampedStart = drag.proposedStart(contentUnits: contentUnits, contentW: contentW)
+            let clips = tracks.first(where: { $0.id == drag.trackID })?.clips ?? []
+            let clampedStart = drag.resolvedStart(
+                contentUnits: contentUnits,
+                contentW: contentW,
+                sidebarWidth: TLK.sidebarWidth,
+                clips: clips
+            )
             let clampedX = TLK.sidebarWidth + (clampedStart / contentUnits) * contentW - drag.scrollX
 
             WaveformClip(waveformColor: track.color)
@@ -765,6 +807,7 @@ private struct TLTrackArea: View {
                 .shadow(color: track.color.color.opacity(0.35), radius: 12)
                 .scaleEffect(TLK.clipDragLiftScale)
                 .offset(x: clampedX, y: drag.floatingY)
+                .animation(.spring(response: 0.22, dampingFraction: 0.82), value: clampedX)
                 .allowsHitTesting(false)
         }
     }
@@ -774,7 +817,12 @@ private struct TLTrackArea: View {
         if let drag = clipDragState,
            let track = tracks.first(where: { $0.id == drag.trackID }) {
             // The indicator marks the clip's proposed leading edge on the timeline.
-            let proposedStart = drag.proposedStart(contentUnits: currentContentUnits, contentW: currentContentW)
+            let proposedStart = drag.resolvedStart(
+                contentUnits: currentContentUnits,
+                contentW: currentContentW,
+                sidebarWidth: TLK.sidebarWidth,
+                clips: track.clips
+            )
             let screenX = TLK.sidebarWidth
                 + (proposedStart / currentContentUnits) * currentContentW
                 - drag.scrollX
@@ -787,6 +835,7 @@ private struct TLTrackArea: View {
                 .frame(width: 2, height: TLK.trackRowHeight)
                 .shadow(color: track.color.color.opacity(0.60), radius: 6)
                 .offset(x: screenX - 1, y: trackTopY)
+                .animation(.spring(response: 0.22, dampingFraction: 0.82), value: screenX)
                 .allowsHitTesting(false)
         }
     }
@@ -794,7 +843,14 @@ private struct TLTrackArea: View {
     var body: some View {
         GeometryReader { geo in
             let laneVW   = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
-            let contentUnits = MixrTimeline.contentUnits(for: tracks)
+            let baseContentUnits = MixrTimeline.contentUnits(for: tracks)
+            let baseContentW = max(laneVW, baseContentUnits * TLK.timelineUnitWidth)
+            let dragContentUnits = clipDragState.map {
+                $0.proposedStart(contentUnits: baseContentUnits, contentW: baseContentW)
+                    + $0.originalClip.length
+                    + MixrTimeline.units(fromSeconds: 20)
+            } ?? baseContentUnits
+            let contentUnits = max(baseContentUnits, dragContentUnits)
             let contentW = max(laneVW, contentUnits * TLK.timelineUnitWidth)
             let rowsH    = CGFloat(tracks.count) * TLK.trackRowHeight
             let lanesH   = tracks.isEmpty
@@ -1859,7 +1915,12 @@ private struct TLTrackLane: View {
 
     private func reflowPreviewClips() -> [MixrClip]? {
         guard let drag = clipDragState else { return nil }
-        let proposedStart = drag.proposedStart(contentUnits: contentUnits, contentW: timelineWidth)
+        let proposedStart = drag.resolvedStart(
+            contentUnits: contentUnits,
+            contentW: timelineWidth,
+            sidebarWidth: TLK.sidebarWidth,
+            clips: track.clips
+        )
         return MixrTimeline.reflowedClips(
             moving: drag.clipID,
             to: proposedStart,
