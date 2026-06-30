@@ -131,12 +131,6 @@ private struct ClipDragState {
     /// 0…1 animated gap opening when inserting into a clip body.
     var insertPreviewProgress: CGFloat = 0
 
-    /// Screen X of the floating clip's leading edge in "tlareaRoot" space.
-    var floatingX: CGFloat { cursorAreaX - grabScreenPx }
-
-    /// Screen Y of the floating clip's top in "tlareaRoot" space.
-    var floatingY: CGFloat { cursorAreaY - grabScreenPy }
-
     /// Raw proposed start in timeline units (before snap resolution).
     func proposedStart(contentUnits: CGFloat, contentW: CGFloat) -> CGFloat {
         guard contentW > 0 else { return 0 }
@@ -898,24 +892,24 @@ private struct TLTrackArea: View {
                 .shadow(color: .black.opacity(0.55), radius: TLK.clipDragShadowRadius, x: 0, y: TLK.clipDragShadowY)
                 .shadow(color: track.color.color.opacity(0.44), radius: 14)
                 .scaleEffect(TLK.clipDragLiftScale)
-                .offset(x: drag.floatingX, y: drag.floatingY - TLK.clipDragLiftY)
+                .offset(
+                    x: drag.cursorAreaX - clipW / 2,
+                    y: drag.cursorAreaY - TLK.waveformHeight / 2
+                )
                 .allowsHitTesting(false)
         } else if let armedID = clipDragArmed,
                   let f = findClip(armedID) {
             let clipW = max(1, (f.clip.length / contentUnits) * contentW)
-            let contentX = (f.clip.start / contentUnits) * contentW
-            let screenX = TLK.sidebarWidth + contentX - hScrollOffset
-            let clipTopY = TLK.rulerHeight
-                + CGFloat(f.trackIdx) * TLK.trackRowHeight
-                + (TLK.trackRowHeight - TLK.waveformHeight) / 2
-                - vScrollOffset
             WaveformClip(waveformColor: f.track.color)
                 .frame(height: TLK.waveformHeight)
                 .frame(width: clipW)
                 .shadow(color: .black.opacity(0.55), radius: TLK.clipDragShadowRadius, x: 0, y: TLK.clipDragShadowY)
                 .shadow(color: f.track.color.color.opacity(0.44), radius: 14)
                 .scaleEffect(TLK.clipDragLiftScale)
-                .offset(x: screenX, y: clipTopY - TLK.clipDragLiftY)
+                .offset(
+                    x: clipDragArmedAreaX - clipW / 2,
+                    y: clipDragArmedAreaY - TLK.waveformHeight / 2
+                )
                 .allowsHitTesting(false)
         }
     }
