@@ -106,7 +106,13 @@ enum MixrTimeline {
         }
     }
 
-    /// Priority: snap before → snap after → insert into clip body → free place.
+    /// Priority:
+    ///   1. Ghost restore  — within 10px of originalStart → return original start (no ripple)
+    ///   2. Clip-edge snap — within snapZone of any clip edge → snap before/after
+    ///   3. Literal gap    — rawStart lands entirely in empty space → place exactly there
+    ///   4. Insert into clip body — pointer inside a clip body (outside edge snap zones)
+    ///   5. Free placement
+    ///
     /// Hysteresis: if pointer moved less than `hysteresisUnits` from the last anchor, keep `previousResult`.
     nonisolated static func resolveClipDrop(
         moving clipID: UUID,
@@ -117,6 +123,7 @@ enum MixrTimeline {
         hysteresisUnits: CGFloat,
         previousResult: ClipDropResult?,
         previousPointerUnit: CGFloat?,
+        originalStart: CGFloat? = nil,
         epsilon: CGFloat = clipEdgeEpsilon
     ) -> ClipDropResult {
         if let previousResult,
@@ -132,7 +139,13 @@ enum MixrTimeline {
         let others = clips.filter { $0.id != clipID }
         let snapZone = max(0, snapZoneUnits)
 
-        // 1 — Snap before (leading edge)
+        // 1 — Ghost restore: released within snapZone of original position → no-op drop
+        if let orig = originalStart,
+           abs(rawStart - orig) <= snapZone + epsilon {
+            return .place(start: orig)
+        }
+
+        // 2 — Clip-edge snap (before or after a clip edge)
         if let target = bestSnapTarget(
             kind: .before,
             pointerUnit: pointerUnit,
@@ -148,7 +161,6 @@ enum MixrTimeline {
             return .place(start: start)
         }
 
-        // 2 — Snap after (trailing edge)
         if let target = bestSnapTarget(
             kind: .after,
             pointerUnit: pointerUnit,
@@ -159,7 +171,20 @@ enum MixrTimeline {
             return .place(start: max(0, target.start + target.length))
         }
 
-        // 3 — Insert into clip body (outside edge snap zones)
+        // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+        let clampedStart = max(0, rawStart)
+        let movingEnd = clampedStart + movingClip.length
+        let startsInClip = others.contains { clip in
+            clampedStart > clip.start + epsilon
+                && clampedStart < clip.start + clip.length - epsilon
+        }
+        if !startsInClip {
+            // Tail may overlap a later clip — that's handled by reflowedClips ripple on commit.
+            // Drop exactly here; do NOT force an insert-into-clip in this case.
+            return .place(start: clampedStart)
+        }
+
+        // 4 — Insert into clip body (pointer lands inside a clip, outside its edge snap zones)
         if let target = insertTarget(
             pointerUnit: pointerUnit,
             others: others,
@@ -176,8 +201,8 @@ enum MixrTimeline {
             )
         }
 
-        // 4 — Free placement
-        return .place(start: max(0, rawStart))
+        // 5 — Free placement
+        return .place(start: clampedStart)
     }
 
     /// Commit-only mutation — never call during drag preview.
