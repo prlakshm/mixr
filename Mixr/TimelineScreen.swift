@@ -73,7 +73,10 @@ enum TLK {
 
     // Clip drag-move
     static let clipDragGhostOpacity:  Double  = 0.28
-    static let clipDragLiftScale:     CGFloat = 1.04
+    static let clipDragLongPressDuration: Double = 0.50
+    static let clipDragLongPressMaxDistance: CGFloat = 8
+    static let clipDragLiftScale:     CGFloat = 1.05
+    static let clipDragLiftY:         CGFloat = 6
     static let clipDragNeighborShift: CGFloat = 10       // pt shift each neighbor
     static let clipDragScrollZone:    CGFloat = 100      // px from viewport edge
     static let clipDragScrollSpeed:   CGFloat = 20       // max px per 60 fps frame
@@ -83,7 +86,10 @@ enum TLK {
     static let clipDragScrimAnim:     Double  = 0.13
     static let clipDragDropResponse:  Double  = 0.38
     static let clipDragDropDamping:   Double  = 0.80
-    static let clipInsertionSnapZone: CGFloat = 14
+    static let clipDragArmedSettleDuration: Double = 0.09
+    static let clipInsertPreviewResponse: Double = 0.22
+    static let clipInsertionSnapZone: CGFloat = 20
+    static let clipInsertionSnapHysteresis: CGFloat = 8
 }
 
 // MARK: - Clip Drag State
@@ -118,40 +124,68 @@ private struct ClipDragState {
     /// Kept in sync by updateClipDrag and the scroll loop.
     var proposedLeadingEdgePx: CGFloat
 
+    /// Last resolved drop result — used for snap hysteresis.
+    var lastDropResult: ClipDropResult?
+    var lastPointerUnit: CGFloat?
+
+    /// 0…1 animated gap opening when inserting into a clip body.
+    var insertPreviewProgress: CGFloat = 0
+
     /// Screen X of the floating clip's leading edge in "tlareaRoot" space.
-    /// Because cursorAreaX is stable w.r.t. scroll, this keeps the clip under the finger.
     var floatingX: CGFloat { cursorAreaX - grabScreenPx }
 
     /// Screen Y of the floating clip's top in "tlareaRoot" space.
     var floatingY: CGFloat { cursorAreaY - grabScreenPy }
 
-    /// Proposed clip start in timeline units derived from the current proposedLeadingEdgePx.
+    /// Raw proposed start in timeline units (before snap resolution).
     func proposedStart(contentUnits: CGFloat, contentW: CGFloat) -> CGFloat {
         guard contentW > 0 else { return 0 }
         return max(0, (proposedLeadingEdgePx / contentW) * contentUnits)
     }
 
-    func pointerUnit(sidebarWidth: CGFloat, contentUnits: CGFloat, contentW: CGFloat) -> CGFloat? {
-        guard contentW > 0, contentUnits > 0 else { return nil }
-        let contentX = cursorAreaX - sidebarWidth + scrollX
-        return max(0, (contentX / contentW) * contentUnits)
+    /// Pointer position in timeline units (insertion indicator follows resolved start).
+    func pointerUnit(contentUnits: CGFloat, contentW: CGFloat) -> CGFloat {
+        guard contentW > 0 else { return 0 }
+        let grabOffsetUnits = (grabScreenPx / contentW) * contentUnits
+        return max(0, proposedStart(contentUnits: contentUnits, contentW: contentW) + grabOffsetUnits)
     }
 
-    func resolvedStart(
-        contentUnits: CGFloat,
-        contentW: CGFloat,
-        sidebarWidth: CGFloat,
-        clips: [MixrClip]
-    ) -> CGFloat {
-        let rawStart = proposedStart(contentUnits: contentUnits, contentW: contentW)
-        let snapZoneUnits = (TLK.clipInsertionSnapZone / max(1, contentW)) * contentUnits
-        return MixrTimeline.resolvedClipInsertionStart(
+    func snapZoneUnits(contentW: CGFloat, contentUnits: CGFloat) -> CGFloat {
+        guard contentW > 0 else { return 0 }
+        return (TLK.clipInsertionSnapZone / contentW) * contentUnits
+    }
+
+    func hysteresisUnits(contentW: CGFloat, contentUnits: CGFloat) -> CGFloat {
+        guard contentW > 0 else { return 0 }
+        return (TLK.clipInsertionSnapHysteresis / contentW) * contentUnits
+    }
+
+    mutating func resolveDropResult(contentUnits: CGFloat, contentW: CGFloat, clips: [MixrClip]) -> ClipDropResult {
+        let raw = proposedStart(contentUnits: contentUnits, contentW: contentW)
+        let pointer = pointerUnit(contentUnits: contentUnits, contentW: contentW)
+        let result = MixrTimeline.resolveClipDrop(
             moving: clipID,
-            rawStart: rawStart,
-            pointerUnit: pointerUnit(sidebarWidth: sidebarWidth, contentUnits: contentUnits, contentW: contentW),
+            rawStart: raw,
+            pointerUnit: pointer,
             in: clips,
-            snapZoneUnits: snapZoneUnits
+            snapZoneUnits: snapZoneUnits(contentW: contentW, contentUnits: contentUnits),
+            hysteresisUnits: hysteresisUnits(contentW: contentW, contentUnits: contentUnits),
+            previousResult: lastDropResult,
+            previousPointerUnit: lastPointerUnit
         )
+        lastDropResult = result
+        lastPointerUnit = pointer
+        return result
+    }
+
+    func currentDropResult(contentUnits: CGFloat, contentW: CGFloat, clips: [MixrClip]) -> ClipDropResult {
+        if let lastDropResult { return lastDropResult }
+        var copy = self
+        return copy.resolveDropResult(contentUnits: contentUnits, contentW: contentW, clips: clips)
+    }
+
+    func insertionStart(for result: ClipDropResult) -> CGFloat {
+        MixrTimeline.insertionStart(for: result, movingClipLength: originalClip.length)
     }
 }
 
@@ -480,6 +514,10 @@ private struct TLTrackArea: View {
 
     // Clip drag-move state
     @State private var clipDragState:  ClipDragState? = nil
+    @State private var clipDragArmed:  UUID? = nil
+    @State private var clipDragArmedAt: Date? = nil
+    @State private var clipDragArmedAreaX: CGFloat = 0
+    @State private var clipDragArmedAreaY: CGFloat = 0
     @State private var isDraggingClip: Bool = false
     /// 60 fps loop that drives edge auto-scroll while a drag is active.
     @State private var clipDragScrollTask: Task<Void, Never>? = nil
@@ -643,9 +681,27 @@ private struct TLTrackArea: View {
 
     // MARK: - Clip drag-move
 
-    /// Called on the very first drag event for a clip.
-    /// `startAreaX/Y` = where the gesture started in "tlareaRoot" space.
-    /// `cursorAreaX/Y` = current cursor position in "tlareaRoot" space.
+    private var clipDragSettleComplete: Bool {
+        guard let armedAt = clipDragArmedAt else { return clipDragState != nil }
+        return Date().timeIntervalSince(armedAt) >= TLK.clipDragArmedSettleDuration
+    }
+
+    /// Long-press began — lift clip in place, show scrim, wait for settle before tracking movement.
+    private func armClipDrag(clipID: UUID, areaX: CGFloat, areaY: CGFloat) {
+        guard clipDragState == nil, clipDragArmed == nil, findClip(clipID) != nil else { return }
+        clipDragArmed = clipID
+        clipDragArmedAt = Date()
+        clipDragArmedAreaX = areaX
+        clipDragArmedAreaY = areaY
+        withAnimation(.easeOut(duration: TLK.clipDragScrimAnim)) {
+            isDraggingClip = true
+            activeGrip = nil
+            selectedClipID = clipID
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    /// Called on drag events after the long press has armed clip movement.
     private func startClipDrag(
         clipID: UUID,
         cursorAreaX: CGFloat, cursorAreaY: CGFloat,
@@ -653,20 +709,17 @@ private struct TLTrackArea: View {
     ) {
         guard clipDragState == nil, let f = findClip(clipID) else { return }
 
-        // xOffset = clip's leading edge in content pixels
         let xOffset = (f.clip.start / currentContentUnits) * currentContentW
-
-        // Horizontal grab offset: how many content-px from clip's leading edge to cursor
         let grabScreenPx = startAreaX - TLK.sidebarWidth - xOffset + hScrollOffset
-
-        // Vertical grab offset: px from clip's top to cursor in "tlareaRoot" space
         let clipTopAreaY = TLK.rulerHeight
             + CGFloat(f.trackIdx) * TLK.trackRowHeight
             + (TLK.trackRowHeight - TLK.waveformHeight) / 2
             - vScrollOffset
         let grabScreenPy = startAreaY - clipTopAreaY
-
         let initialLeadingEdgePx = cursorAreaX - TLK.sidebarWidth + hScrollOffset - grabScreenPx
+
+        clipDragArmed = nil
+        clipDragArmedAt = nil
 
         clipDragState = ClipDragState(
             clipID: clipID,
@@ -680,23 +733,65 @@ private struct TLTrackArea: View {
             scrollX: hScrollOffset,
             proposedLeadingEdgePx: initialLeadingEdgePx
         )
-        withAnimation(.easeOut(duration: TLK.clipDragScrimAnim)) {
-            isDraggingClip = true
-            activeGrip     = nil
-            selectedClipID = clipID
-        }
         beginDragScrollLoop()
     }
 
-    /// Updates cursor position and recomputes proposed drop location.
+    /// Updates cursor position and recomputes proposed drop location + insert preview progress.
     private func updateClipDrag(cursorAreaX: CGFloat, cursorAreaY: CGFloat) {
-        guard clipDragState != nil else { return }
-        clipDragState?.cursorAreaX = cursorAreaX
-        clipDragState?.cursorAreaY = cursorAreaY
-        if let drag = clipDragState {
-            clipDragState?.proposedLeadingEdgePx =
-                cursorAreaX - TLK.sidebarWidth + drag.scrollX - drag.grabScreenPx
+        guard var drag = clipDragState else { return }
+        drag.cursorAreaX = cursorAreaX
+        drag.cursorAreaY = cursorAreaY
+        drag.proposedLeadingEdgePx =
+            cursorAreaX - TLK.sidebarWidth + drag.scrollX - drag.grabScreenPx
+
+        guard let ti = tracks.firstIndex(where: { $0.id == drag.trackID }) else { return }
+        let result = drag.resolveDropResult(
+            contentUnits: currentContentUnits,
+            contentW: currentContentW,
+            clips: tracks[ti].clips
+        )
+
+        let targetProgress: CGFloat
+        if case .insertIntoClip = result {
+            targetProgress = 1
+        } else {
+            targetProgress = 0
         }
+
+        if drag.insertPreviewProgress != targetProgress {
+            withAnimation(.spring(response: TLK.clipInsertPreviewResponse, dampingFraction: 0.82)) {
+                drag.insertPreviewProgress = targetProgress
+                clipDragState = drag
+            }
+        } else {
+            clipDragState = drag
+        }
+    }
+
+    private func handleClipMoveChanged(
+        clipID: UUID,
+        cursorAreaX: CGFloat, cursorAreaY: CGFloat,
+        startAreaX: CGFloat, startAreaY: CGFloat
+    ) {
+        if clipDragArmed == clipID, clipDragState == nil {
+            guard clipDragSettleComplete else { return }
+            startClipDrag(
+                clipID: clipID,
+                cursorAreaX: cursorAreaX, cursorAreaY: cursorAreaY,
+                startAreaX: startAreaX, startAreaY: startAreaY
+            )
+            updateClipDrag(cursorAreaX: cursorAreaX, cursorAreaY: cursorAreaY)
+        } else if clipDragState?.clipID == clipID {
+            updateClipDrag(cursorAreaX: cursorAreaX, cursorAreaY: cursorAreaY)
+        }
+    }
+
+    private func handleClipMoveEnded() {
+        if clipDragArmed != nil, clipDragState == nil {
+            cancelClipDrag()
+            return
+        }
+        commitClipDrop()
     }
 
     /// 60 fps loop: drives proportional edge auto-scroll while a clip drag is active.
@@ -738,6 +833,14 @@ private struct TLTrackArea: View {
         }
     }
 
+    private func currentDropResult(for drag: ClipDragState, clips: [MixrClip]) -> ClipDropResult {
+        drag.currentDropResult(
+            contentUnits: currentContentUnits,
+            contentW: currentContentW,
+            clips: clips
+        )
+    }
+
     private func commitClipDrop() {
         clipDragScrollTask?.cancel()
         clipDragScrollTask = nil
@@ -746,28 +849,24 @@ private struct TLTrackArea: View {
               tracks[ti].clips.contains(where: { $0.id == drag.clipID })
         else { cancelClipDrag(); return }
 
-        let proposedStart = drag.resolvedStart(
-            contentUnits: currentContentUnits,
-            contentW: currentContentW,
-            sidebarWidth: TLK.sidebarWidth,
-            clips: tracks[ti].clips
-        )
-        let reflowedClips = MixrTimeline.reflowedClips(
+        let result = currentDropResult(for: drag, clips: tracks[ti].clips)
+        let reflowedClips = MixrTimeline.applyClipDrop(
+            result: result,
             moving: drag.clipID,
-            to: proposedStart,
             in: tracks[ti].clips
         )
         let committedStart = reflowedClips.first(where: { $0.id == drag.clipID })?.start
-            ?? max(0, proposedStart)
+            ?? MixrTimeline.insertionStart(for: result, movingClipLength: drag.originalClip.length)
         let committedEnd = reflowedClips
             .map { $0.start + $0.length }
             .max() ?? committedStart
 
-        // Seek playhead to the moved clip's start
         onTimelineTapped(max(0, min(committedStart, max(maxPlayheadUnit, committedEnd))))
         withAnimation(.spring(response: TLK.clipDragDropResponse, dampingFraction: TLK.clipDragDropDamping)) {
             tracks[ti].clips = reflowedClips
             clipDragState  = nil
+            clipDragArmed  = nil
+            clipDragArmedAt = nil
             isDraggingClip = false
             selectedClipID = drag.clipID
         }
@@ -776,8 +875,10 @@ private struct TLTrackArea: View {
     private func cancelClipDrag() {
         clipDragScrollTask?.cancel()
         clipDragScrollTask = nil
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
             clipDragState  = nil
+            clipDragArmed  = nil
+            clipDragArmedAt = nil
             isDraggingClip = false
         }
     }
@@ -791,23 +892,30 @@ private struct TLTrackArea: View {
         if let drag = clipDragState,
            let track = tracks.first(where: { $0.id == drag.trackID }) {
             let clipW = max(1, (drag.originalClip.length / contentUnits) * contentW)
-            let clips = tracks.first(where: { $0.id == drag.trackID })?.clips ?? []
-            let clampedStart = drag.resolvedStart(
-                contentUnits: contentUnits,
-                contentW: contentW,
-                sidebarWidth: TLK.sidebarWidth,
-                clips: clips
-            )
-            let clampedX = TLK.sidebarWidth + (clampedStart / contentUnits) * contentW - drag.scrollX
-
             WaveformClip(waveformColor: track.color)
                 .frame(height: TLK.waveformHeight)
                 .frame(width: clipW)
                 .shadow(color: .black.opacity(0.55), radius: TLK.clipDragShadowRadius, x: 0, y: TLK.clipDragShadowY)
-                .shadow(color: track.color.color.opacity(0.35), radius: 12)
+                .shadow(color: track.color.color.opacity(0.44), radius: 14)
                 .scaleEffect(TLK.clipDragLiftScale)
-                .offset(x: clampedX, y: drag.floatingY)
-                .animation(.spring(response: 0.22, dampingFraction: 0.82), value: clampedX)
+                .offset(x: drag.floatingX, y: drag.floatingY - TLK.clipDragLiftY)
+                .allowsHitTesting(false)
+        } else if let armedID = clipDragArmed,
+                  let f = findClip(armedID) {
+            let clipW = max(1, (f.clip.length / contentUnits) * contentW)
+            let contentX = (f.clip.start / contentUnits) * contentW
+            let screenX = TLK.sidebarWidth + contentX - hScrollOffset
+            let clipTopY = TLK.rulerHeight
+                + CGFloat(f.trackIdx) * TLK.trackRowHeight
+                + (TLK.trackRowHeight - TLK.waveformHeight) / 2
+                - vScrollOffset
+            WaveformClip(waveformColor: f.track.color)
+                .frame(height: TLK.waveformHeight)
+                .frame(width: clipW)
+                .shadow(color: .black.opacity(0.55), radius: TLK.clipDragShadowRadius, x: 0, y: TLK.clipDragShadowY)
+                .shadow(color: f.track.color.color.opacity(0.44), radius: 14)
+                .scaleEffect(TLK.clipDragLiftScale)
+                .offset(x: screenX, y: clipTopY - TLK.clipDragLiftY)
                 .allowsHitTesting(false)
         }
     }
@@ -816,15 +924,10 @@ private struct TLTrackArea: View {
     private func clipDragInsertionIndicator() -> some View {
         if let drag = clipDragState,
            let track = tracks.first(where: { $0.id == drag.trackID }) {
-            // The indicator marks the clip's proposed leading edge on the timeline.
-            let proposedStart = drag.resolvedStart(
-                contentUnits: currentContentUnits,
-                contentW: currentContentW,
-                sidebarWidth: TLK.sidebarWidth,
-                clips: track.clips
-            )
+            let result = currentDropResult(for: drag, clips: track.clips)
+            let insertStart = drag.insertionStart(for: result)
             let screenX = TLK.sidebarWidth
-                + (proposedStart / currentContentUnits) * currentContentW
+                + (insertStart / currentContentUnits) * currentContentW
                 - drag.scrollX
             let trackTopY = TLK.rulerHeight
                 + CGFloat(drag.trackIdx) * TLK.trackRowHeight
@@ -837,6 +940,21 @@ private struct TLTrackArea: View {
                 .offset(x: screenX - 1, y: trackTopY)
                 .animation(.spring(response: 0.22, dampingFraction: 0.82), value: screenX)
                 .allowsHitTesting(false)
+        } else if let armedID = clipDragArmed,
+                  let f = findClip(armedID) {
+            let screenX = TLK.sidebarWidth
+                + (f.clip.start / currentContentUnits) * currentContentW
+                - hScrollOffset
+            let trackTopY = TLK.rulerHeight
+                + CGFloat(f.trackIdx) * TLK.trackRowHeight
+                - vScrollOffset
+
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(f.track.color.color.opacity(0.85))
+                .frame(width: 2, height: TLK.trackRowHeight)
+                .shadow(color: f.track.color.color.opacity(0.60), radius: 6)
+                .offset(x: screenX - 1, y: trackTopY)
+                .allowsHitTesting(false)
         }
     }
 
@@ -845,10 +963,11 @@ private struct TLTrackArea: View {
             let laneVW   = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
             let baseContentUnits = MixrTimeline.contentUnits(for: tracks)
             let baseContentW = max(laneVW, baseContentUnits * TLK.timelineUnitWidth)
-            let dragContentUnits = clipDragState.map {
-                $0.proposedStart(contentUnits: baseContentUnits, contentW: baseContentW)
-                    + $0.originalClip.length
-                    + MixrTimeline.units(fromSeconds: 20)
+            let dragContentUnits = clipDragState.map { drag in
+                let trackClips = tracks.first(where: { $0.id == drag.trackID })?.clips ?? []
+                let result = currentDropResult(for: drag, clips: trackClips)
+                let insertStart = drag.insertionStart(for: result)
+                return insertStart + drag.originalClip.length + MixrTimeline.units(fromSeconds: 20)
             } ?? baseContentUnits
             let contentUnits = max(baseContentUnits, dragContentUnits)
             let contentW = max(laneVW, contentUnits * TLK.timelineUnitWidth)
@@ -1138,6 +1257,7 @@ private struct TLTrackArea: View {
                 ForEach(tracks) { track in
                     let laneHasSelectedClip = track.clips.contains { $0.id == selectedClipID }
                     let isThisDragTrack = clipDragState?.trackID == track.id
+                        || (clipDragArmed != nil && track.clips.contains { $0.id == clipDragArmed })
 
                     TLTrackLane(
                         track:          track,
@@ -1145,6 +1265,7 @@ private struct TLTrackArea: View {
                         contentUnits:   contentUnits,
                         selectedClipID: selectedClipID,
                         activeGrip:     activeGrip,
+                        armedClipID:    isThisDragTrack ? clipDragArmed : nil,
                         clipDragState:  isThisDragTrack ? clipDragState : nil,
                         isScrimmed:     isDraggingClip && !isThisDragTrack,
                         isActiveForDrag: isDraggingClip && isThisDragTrack,
@@ -1164,19 +1285,21 @@ private struct TLTrackArea: View {
                                 activeGrip = grip
                             }
                         },
+                        onClipDragArmed: { clipID, areaX, areaY in
+                            armClipDrag(clipID: clipID, areaX: areaX, areaY: areaY)
+                        },
                         onClipDragChanged: { clipID, cursorAreaX, cursorAreaY, startAreaX, startAreaY in
-                            if clipDragState == nil {
-                                startClipDrag(
-                                    clipID: clipID,
-                                    cursorAreaX: cursorAreaX, cursorAreaY: cursorAreaY,
-                                    startAreaX: startAreaX,   startAreaY: startAreaY
-                                )
-                            } else {
-                                updateClipDrag(cursorAreaX: cursorAreaX, cursorAreaY: cursorAreaY)
-                            }
+                            handleClipMoveChanged(
+                                clipID: clipID,
+                                cursorAreaX: cursorAreaX, cursorAreaY: cursorAreaY,
+                                startAreaX: startAreaX, startAreaY: startAreaY
+                            )
                         },
                         onClipDragEnded: {
-                            commitClipDrop()
+                            handleClipMoveEnded()
+                        },
+                        onClipDragCancelled: {
+                            cancelClipDrag()
                         }
                     )
                     .frame(height: TLK.trackRowHeight)
@@ -1892,6 +2015,174 @@ private struct TLEmptyTimelineState: View {
     }
 }
 
+// MARK: - Clip Move Gesture Bridge
+
+private struct TLClipMoveGestureBridge: UIViewRepresentable {
+    let clipID: UUID
+    let areaFrame: CGRect
+    let contentXOffset: CGFloat
+    let isEnabled: Bool
+    var onTap: (UUID, CGFloat) -> Void
+    var onMoveArmed: (UUID, CGFloat, CGFloat) -> Void
+    var onMoveChanged: (UUID, CGFloat, CGFloat, CGFloat, CGFloat) -> Void
+    var onMoveEnded: () -> Void
+    var onMoveCancelled: () -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        view.isMultipleTouchEnabled = false
+
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesBegan = false
+        tap.delaysTouchesEnded = false
+        tap.delegate = context.coordinator
+        view.addGestureRecognizer(tap)
+
+        let longPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPress.minimumPressDuration = TLK.clipDragLongPressDuration
+        longPress.allowableMovement = TLK.clipDragLongPressMaxDistance
+        longPress.cancelsTouchesInView = false
+        longPress.delaysTouchesBegan = false
+        longPress.delaysTouchesEnded = false
+        longPress.delegate = context.coordinator
+        view.addGestureRecognizer(longPress)
+
+        context.coordinator.longPressRecognizer = longPress
+        context.coordinator.tapRecognizer = tap
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.clipID = clipID
+        context.coordinator.areaFrame = areaFrame
+        context.coordinator.contentXOffset = contentXOffset
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.onTap = onTap
+        context.coordinator.onMoveArmed = onMoveArmed
+        context.coordinator.onMoveChanged = onMoveChanged
+        context.coordinator.onMoveEnded = onMoveEnded
+        context.coordinator.onMoveCancelled = onMoveCancelled
+        context.coordinator.longPressRecognizer?.isEnabled = isEnabled
+        context.coordinator.tapRecognizer?.isEnabled = isEnabled
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            clipID: clipID,
+            areaFrame: areaFrame,
+            contentXOffset: contentXOffset,
+            isEnabled: isEnabled,
+            onTap: onTap,
+            onMoveArmed: onMoveArmed,
+            onMoveChanged: onMoveChanged,
+            onMoveEnded: onMoveEnded,
+            onMoveCancelled: onMoveCancelled
+        )
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var clipID: UUID
+        var areaFrame: CGRect
+        var contentXOffset: CGFloat
+        var isEnabled: Bool
+        var onTap: (UUID, CGFloat) -> Void
+        var onMoveArmed: (UUID, CGFloat, CGFloat) -> Void
+        var onMoveChanged: (UUID, CGFloat, CGFloat, CGFloat, CGFloat) -> Void
+        var onMoveEnded: () -> Void
+        var onMoveCancelled: () -> Void
+        weak var longPressRecognizer: UILongPressGestureRecognizer?
+        weak var tapRecognizer: UITapGestureRecognizer?
+
+        private var startLocation: CGPoint?
+        private var didBeginMove = false
+
+        init(
+            clipID: UUID,
+            areaFrame: CGRect,
+            contentXOffset: CGFloat,
+            isEnabled: Bool,
+            onTap: @escaping (UUID, CGFloat) -> Void,
+            onMoveArmed: @escaping (UUID, CGFloat, CGFloat) -> Void,
+            onMoveChanged: @escaping (UUID, CGFloat, CGFloat, CGFloat, CGFloat) -> Void,
+            onMoveEnded: @escaping () -> Void,
+            onMoveCancelled: @escaping () -> Void
+        ) {
+            self.clipID = clipID
+            self.areaFrame = areaFrame
+            self.contentXOffset = contentXOffset
+            self.isEnabled = isEnabled
+            self.onTap = onTap
+            self.onMoveArmed = onMoveArmed
+            self.onMoveChanged = onMoveChanged
+            self.onMoveEnded = onMoveEnded
+            self.onMoveCancelled = onMoveCancelled
+        }
+
+        @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard isEnabled, recognizer.state == .ended else { return }
+            let local = recognizer.location(in: recognizer.view)
+            onTap(clipID, contentXOffset + local.x)
+        }
+
+        @objc func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard isEnabled, let view = recognizer.view else { return }
+            let local = recognizer.location(in: view)
+            let areaPoint = CGPoint(
+                x: areaFrame.minX + local.x,
+                y: areaFrame.minY + local.y
+            )
+
+            switch recognizer.state {
+            case .began:
+                startLocation = local
+                didBeginMove = true
+                onMoveArmed(clipID, areaPoint.x, areaPoint.y)
+            case .changed:
+                guard let startLocation else { return }
+                let startAreaPoint = CGPoint(
+                    x: areaFrame.minX + startLocation.x,
+                    y: areaFrame.minY + startLocation.y
+                )
+                onMoveChanged(
+                    clipID,
+                    areaPoint.x,
+                    areaPoint.y,
+                    startAreaPoint.x,
+                    startAreaPoint.y
+                )
+            case .ended:
+                if didBeginMove { onMoveEnded() }
+                reset()
+            case .cancelled, .failed:
+                if didBeginMove { onMoveCancelled() }
+                reset()
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        private func reset() {
+            startLocation = nil
+            didBeginMove = false
+        }
+    }
+}
+
 // MARK: - Track Lane
 
 private struct TLTrackLane: View {
@@ -1900,42 +2191,53 @@ private struct TLTrackLane: View {
     let contentUnits:   CGFloat
     var selectedClipID: UUID?          = nil
     var activeGrip:     ActiveGrip?    = nil
+    var armedClipID:    UUID?          = nil
     /// Non-nil when a clip on THIS track is actively being dragged.
     var clipDragState:  ClipDragState? = nil
     var isScrimmed:     Bool           = false
     var isActiveForDrag: Bool          = false
     var onClipTapped:   ((UUID, CGFloat) -> Void)?          = nil
     var onGripTapped:   ((ActiveGrip) -> Void)?             = nil
-    /// clipID · cursorAreaX · cursorAreaY · startAreaX · startAreaY
-    /// All positions in the "tlareaRoot" named coordinate space (outer ZStack, outside scroll views).
+    var onClipDragArmed:   ((UUID, CGFloat, CGFloat) -> Void)?                     = nil
     var onClipDragChanged: ((UUID, CGFloat, CGFloat, CGFloat, CGFloat) -> Void)? = nil
     var onClipDragEnded:   (() -> Void)?                                         = nil
+    var onClipDragCancelled: (() -> Void)?                                       = nil
 
     private let gripHit = TLClipEditingMetrics.gripHit
 
-    private func reflowPreviewClips() -> [MixrClip]? {
-        guard let drag = clipDragState else { return nil }
-        let proposedStart = drag.resolvedStart(
+    private func resolvedPreviewFrames() -> [ClipRenderFrame] {
+        guard let drag = clipDragState else {
+            return track.clips.map {
+                ClipRenderFrame(clipID: $0.id, start: $0.start, length: $0.length)
+            }
+        }
+        var copy = drag
+        let result = copy.currentDropResult(
             contentUnits: contentUnits,
             contentW: timelineWidth,
-            sidebarWidth: TLK.sidebarWidth,
             clips: track.clips
         )
-        return MixrTimeline.reflowedClips(
+        return MixrTimeline.resolveClipRenderFrames(
             moving: drag.clipID,
-            to: proposedStart,
-            in: track.clips
+            dropResult: result,
+            insertPreviewProgress: drag.insertPreviewProgress,
+            in: track.clips,
+            neighborShiftPx: TLK.clipDragNeighborShift
         )
     }
 
-    private func displayClip(_ clip: MixrClip, in previewClips: [MixrClip]?) -> MixrClip {
-        previewClips?.first(where: { $0.id == clip.id }) ?? clip
+    private func modelClip(for id: UUID) -> MixrClip? {
+        track.clips.first(where: { $0.id == id })
+    }
+
+    private func segments(for clipID: UUID, in frames: [ClipRenderFrame]) -> [ClipRenderFrame] {
+        frames.filter { $0.clipID == clipID && !$0.isSourceGhost }
     }
 
     // MARK: Body
 
     var body: some View {
-        let previewClips = reflowPreviewClips()
+        let frames = resolvedPreviewFrames()
 
         ZStack(alignment: .leading) {
             track.color.color.opacity(0.025)
@@ -1945,117 +2247,79 @@ private struct TLTrackLane: View {
                 .allowsHitTesting(false)
 
             ForEach(track.clips) { clip in
-                let shownClip = displayClip(clip, in: previewClips)
-                let xOffset  = (shownClip.start / contentUnits) * timelineWidth
-                let clipW    = max(1, (shownClip.length / contentUnits) * timelineWidth)
-                let isSel    = clip.id == selectedClipID
+                let clipSegments = segments(for: clip.id, in: frames)
                 let isDraggingThis = clipDragState?.clipID == clip.id
-                let selectedBorderHeight = TLK.trackRowHeight - 2
+                let isArmedThis = armedClipID == clip.id && clipDragState == nil
+                let isSel = clip.id == selectedClipID
+                // Original model position — stable, never changes during drag.
+                let origXOffset = (clip.start / contentUnits) * timelineWidth
+                let origClipW   = max(1, (clip.length / contentUnits) * timelineWidth)
 
+                // Visual rendering — driven by render frames (may animate/split/shift)
+                ForEach(clipSegments) { segment in
+                    let xOffset = (segment.start / contentUnits) * timelineWidth + segment.neighborShiftPx
+                    let clipW   = max(1, (segment.length / contentUnits) * timelineWidth)
+                    clipBody(
+                        clip: clip,
+                        segment: segment,
+                        xOffset: xOffset,
+                        clipW: clipW,
+                        isSel: isSel,
+                        isDraggingThis: isDraggingThis,
+                        isArmedThis: isArmedThis
+                    )
+                }
+
+                // Permanent gesture hit area — always present regardless of drag state so that
+                // the UILongPressGestureRecognizer UIView is NEVER removed mid-gesture.
+                // isEnabled stays true for the actively-dragged clip so that .changed / .ended
+                // events continue to fire even after clipDragState is set.
+                Color.clear
+                    .frame(width: origClipW, height: TLK.trackRowHeight)
+                    .contentShape(Rectangle())
+                    .overlay {
+                        GeometryReader { proxy in
+                            TLClipMoveGestureBridge(
+                                clipID: clip.id,
+                                areaFrame: proxy.frame(in: .named("tlareaRoot")),
+                                contentXOffset: origXOffset,
+                                isEnabled: clipDragState == nil || isDraggingThis,
+                                onTap: { clipID, tapX in
+                                    guard clipDragState == nil else { return }
+                                    onClipTapped?(clipID, tapX)
+                                },
+                                onMoveArmed:     { id, x, y           in onClipDragArmed?(id, x, y) },
+                                onMoveChanged:   { id, cx, cy, sx, sy in onClipDragChanged?(id, cx, cy, sx, sy) },
+                                onMoveEnded:     {                        onClipDragEnded?() },
+                                onMoveCancelled: {                        onClipDragCancelled?() }
+                            )
+                        }
+                    }
+                    .position(x: origXOffset + origClipW / 2, y: TLK.trackRowHeight / 2)
+                    .zIndex(isDraggingThis ? 3 : 0)
+
+                if !isDraggingThis && !isArmedThis {
+                    clipGrips(for: clip, segments: clipSegments)
+                }
+            }
+
+            // Ghost of dragged clip at original position — visual only, no gesture.
+            // The permanent hit area above handles all gesture events for the dragged clip.
+            if let drag = clipDragState,
+               let ghost = frames.first(where: { $0.isSourceGhost }),
+               drag.trackID == track.id {
+                let xOffset = (ghost.start / contentUnits) * timelineWidth
+                let clipW   = max(1, (ghost.length / contentUnits) * timelineWidth)
                 WaveformClip(waveformColor: track.color)
                     .frame(height: TLK.waveformHeight)
                     .frame(width: clipW)
-                    // Selection border — hidden while being dragged (floating copy carries it)
-                    .overlay {
-                        if isSel && !isDraggingThis {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(track.color.color.opacity(0.88), lineWidth: 8.2)
-                                    .blur(radius: 5.6)
-                                    .opacity(0.7)
-                                    .padding(-3.0)
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .strokeBorder(track.color.color.opacity(0.38), lineWidth: 8.5)
-                                    .blur(radius: 3.2)
-                                    .opacity(0.82)
-                                    .padding(1.0)
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(track.color.color.opacity(1.0), lineWidth: 2.4)
-                                    .shadow(color: track.color.color.opacity(0.88), radius: 7)
-                                    .shadow(color: track.color.color.opacity(0.5), radius: 15)
-                                    .padding(-0.35)
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
-                                    .padding(1.2)
-                            }
-                            .frame(width: clipW, height: selectedBorderHeight)
-                            .allowsHitTesting(false)
-                        }
-                    }
-                    .shadow(color: isSel && !isDraggingThis ? Color.black.opacity(0.34) : .clear,
-                            radius: 7, x: 0, y: 4)
-                    // Ghost fade when this clip is being dragged (floating copy shows at full opacity)
-                    .opacity(isDraggingThis ? TLK.clipDragGhostOpacity : 1.0)
-                    .contentShape(Rectangle())
-                    .onTapGesture { location in
-                        guard clipDragState == nil else { return }
-                        onClipTapped?(clip.id, xOffset + location.x)
-                    }
-                    // Drag gesture — uses the "tlareaRoot" named coordinate space (outer ZStack,
-                    // outside both scroll views). This means value.location is stable: it does NOT
-                    // change when the timeline scrolls, so the floating clip stays under the finger.
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 4, coordinateSpace: .named("tlareaRoot"))
-                            .onChanged { value in
-                                onClipDragChanged?(
-                                    clip.id,
-                                    value.location.x,  value.location.y,
-                                    value.startLocation.x, value.startLocation.y
-                                )
-                            }
-                            .onEnded { _ in
-                                onClipDragEnded?()
-                            }
-                    )
-                    // position() moves both the render AND the hit-test frame.
+                    .opacity(TLK.clipDragGhostOpacity)
+                    .allowsHitTesting(false)
                     .position(x: xOffset + clipW / 2, y: TLK.trackRowHeight / 2)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.75), value: shownClip.start)
-                    .zIndex(isDraggingThis ? 0 : (isSel ? 2 : 0))
-
-                // Transition grips — hidden during drag to keep the ghost clean
-                if !isDraggingThis {
-                    // Leading grip
-                    TLTransitionGrip(
-                        trackColor:     track.color.color,
-                        isActive:       activeGrip?.clipID == clip.id && activeGrip?.side == .leading,
-                        transitionType: shownClip.transitionIn.type,
-                        onTap: {
-                            onGripTapped?(ActiveGrip(
-                                clipID:  clip.id,
-                                trackID: track.id,
-                                side:    .leading
-                            ))
-                        }
-                    )
-                    .frame(width: gripHit, height: gripHit)
-                    .position(x: xOffset,
-                              y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.75), value: shownClip.start)
-                    .zIndex(TLK.timelineGripZIndex)
-
-                    // Trailing grip
-                    TLTransitionGrip(
-                        trackColor:     track.color.color,
-                        isActive:       activeGrip?.clipID == clip.id && activeGrip?.side == .trailing,
-                        transitionType: shownClip.transitionOut.type,
-                        onTap: {
-                            onGripTapped?(ActiveGrip(
-                                clipID:  clip.id,
-                                trackID: track.id,
-                                side:    .trailing
-                            ))
-                        }
-                    )
-                    .frame(width: gripHit, height: gripHit)
-                    .position(x: xOffset + clipW,
-                              y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.75), value: shownClip.start)
-                    .zIndex(TLK.timelineGripZIndex)
-                }
+                    .zIndex(0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Scrim: covers this lane during another track's drag
         .overlay {
             if isScrimmed {
                 Color.black.opacity(TLK.clipDragScrimOpacity)
@@ -2063,13 +2327,99 @@ private struct TLTrackLane: View {
                     .transition(.opacity)
             }
         }
-        // Active-lane glow border
         .overlay {
             if isActiveForDrag {
                 Rectangle()
                     .strokeBorder(track.color.color.opacity(0.38), lineWidth: 1)
                     .allowsHitTesting(false)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func clipBody(
+        clip: MixrClip,
+        segment: ClipRenderFrame,
+        xOffset: CGFloat,
+        clipW: CGFloat,
+        isSel: Bool,
+        isDraggingThis: Bool,
+        isArmedThis: Bool
+    ) -> some View {
+        let selectedBorderHeight = TLK.trackRowHeight - 2
+
+        WaveformClip(waveformColor: track.color)
+            .frame(height: TLK.waveformHeight)
+            .frame(width: clipW)
+            .overlay {
+                if isSel && !isDraggingThis {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(track.color.color.opacity(0.88), lineWidth: 8.2)
+                            .blur(radius: 5.6)
+                            .opacity(0.7)
+                            .padding(-3.0)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(track.color.color.opacity(0.38), lineWidth: 8.5)
+                            .blur(radius: 3.2)
+                            .opacity(0.82)
+                            .padding(1.0)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(track.color.color.opacity(1.0), lineWidth: 2.4)
+                            .shadow(color: track.color.color.opacity(0.88), radius: 7)
+                            .shadow(color: track.color.color.opacity(0.5), radius: 15)
+                            .padding(-0.35)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
+                            .padding(1.2)
+                    }
+                    .frame(width: clipW, height: selectedBorderHeight)
+                    .allowsHitTesting(false)
+                }
+            }
+            .shadow(color: isSel && !isDraggingThis && !isArmedThis ? Color.black.opacity(0.34) : .clear,
+                    radius: 7, x: 0, y: 4)
+            .opacity(isArmedThis ? 0 : segment.opacity)
+            .allowsHitTesting(false)
+            .position(x: xOffset + clipW / 2, y: TLK.trackRowHeight / 2)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: segment.start)
+            .animation(.spring(response: TLK.clipInsertPreviewResponse, dampingFraction: 0.82), value: segment.length)
+            .zIndex(isSel ? 2 : 0)
+    }
+
+    @ViewBuilder
+    private func clipGrips(for clip: MixrClip, segments: [ClipRenderFrame]) -> some View {
+        if let first = segments.first {
+            let xOffset = (first.start / contentUnits) * timelineWidth + first.neighborShiftPx
+            TLTransitionGrip(
+                trackColor: track.color.color,
+                isActive: activeGrip?.clipID == clip.id && activeGrip?.side == .leading,
+                transitionType: clip.transitionIn.type,
+                onTap: {
+                    onGripTapped?(ActiveGrip(clipID: clip.id, trackID: track.id, side: .leading))
+                }
+            )
+            .frame(width: gripHit, height: gripHit)
+            .position(x: xOffset, y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: first.start)
+            .zIndex(TLK.timelineGripZIndex)
+        }
+
+        if let last = segments.last {
+            let xOffset = (last.start / contentUnits) * timelineWidth + last.neighborShiftPx
+            let clipW = max(1, (last.length / contentUnits) * timelineWidth)
+            TLTransitionGrip(
+                trackColor: track.color.color,
+                isActive: activeGrip?.clipID == clip.id && activeGrip?.side == .trailing,
+                transitionType: clip.transitionOut.type,
+                onTap: {
+                    onGripTapped?(ActiveGrip(clipID: clip.id, trackID: track.id, side: .trailing))
+                }
+            )
+            .frame(width: gripHit, height: gripHit)
+            .position(x: xOffset + clipW, y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: last.start)
+            .zIndex(TLK.timelineGripZIndex)
         }
     }
 }
