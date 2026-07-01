@@ -290,7 +290,22 @@ private struct ClipDragState {
     }
 
     func indicatorDropResult(contentUnits: CGFloat, contentW: CGFloat, clips: [MixrClip]) -> ClipDropResult {
-        .place(start: max(0, resolvedInsertStart))
+        let insertStart = max(0, resolvedInsertStart)
+        guard !isIndicatorSnapped else {
+            return .place(start: insertStart)
+        }
+
+        return MixrTimeline.resolveClipDrop(
+            moving: clipID,
+            rawStart: insertStart,
+            pointerUnit: insertStart,
+            in: clips,
+            snapZoneUnits: snapZoneUnits(contentW: contentW, contentUnits: contentUnits),
+            hysteresisUnits: 0,
+            previousResult: nil,
+            previousPointerUnit: nil,
+            originalStart: nil
+        )
     }
 
     /// Converts a timeline-unit insertion start to screen X in tlareaRoot space.
