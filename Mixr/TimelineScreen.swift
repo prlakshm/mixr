@@ -88,7 +88,7 @@ enum TLK {
     static let clipDragDropDamping:   Double  = 0.80
     static let clipDragArmedSettleDuration: Double = 0.09
     static let clipInsertPreviewResponse: Double = 0.22
-    static let clipInsertionSnapZone: CGFloat = 20
+    static let clipInsertionSnapZone: CGFloat = 10
     static let clipInsertionSnapHysteresis: CGFloat = 8
     /// Indicator eases to its resolved target over this duration (magnetic snap glide).
     static let clipIndicatorEaseDuration: Double = 0.10
@@ -136,6 +136,8 @@ private struct ClipDragState {
     /// The resolved insertion start (timeline units) that the indicator eases toward.
     /// Updated every drag event; the indicator animates to its corresponding screen X.
     var resolvedInsertStart: CGFloat = 0
+    var isIndicatorSnapped: Bool = false
+    var activeSnapStart: CGFloat? = nil
 
     // MARK: - Helpers
 
@@ -208,8 +210,87 @@ private struct ClipDragState {
         MixrTimeline.insertionStart(for: result, movingClipLength: originalClip.length)
     }
 
-    func rawInsertionStart(contentUnits: CGFloat, contentW: CGFloat) -> CGFloat {
-        proposedStart(contentUnits: contentUnits, contentW: contentW)
+    private func nearestSnapStart(
+        rawStart: CGFloat,
+        contentUnits: CGFloat,
+        contentW: CGFloat,
+        clips: [MixrClip]
+    ) -> CGFloat? {
+        let snapZone = snapZoneUnits(contentW: contentW, contentUnits: contentUnits)
+        let others = clips.filter { $0.id != clipID }
+        var best: (start: CGFloat, distance: CGFloat)?
+
+        for clip in others {
+            let edges = [clip.start, clip.start + clip.length]
+            for edge in edges {
+                let distance = abs(rawStart - edge)
+                guard distance <= snapZone + MixrTimeline.clipEdgeEpsilon else { continue }
+                if best == nil || distance < best!.distance - MixrTimeline.clipEdgeEpsilon {
+                    best = (max(0, edge), distance)
+                }
+            }
+        }
+
+        return best?.start
+    }
+
+    mutating func updateIndicatorTarget(
+        contentUnits: CGFloat,
+        contentW: CGFloat,
+        clips: [MixrClip]
+    ) -> (start: CGFloat, isSnapped: Bool) {
+        let raw = proposedStart(contentUnits: contentUnits, contentW: contentW)
+        let snapZone = snapZoneUnits(contentW: contentW, contentUnits: contentUnits)
+
+        if let activeSnapStart {
+            if abs(raw - activeSnapStart) <= snapZone + MixrTimeline.clipEdgeEpsilon {
+                resolvedInsertStart = activeSnapStart
+                isIndicatorSnapped = true
+                return (activeSnapStart, true)
+            }
+            self.activeSnapStart = nil
+        }
+
+        if let snapStart = nearestSnapStart(
+            rawStart: raw,
+            contentUnits: contentUnits,
+            contentW: contentW,
+            clips: clips
+        ) {
+            activeSnapStart = snapStart
+            resolvedInsertStart = snapStart
+            isIndicatorSnapped = true
+            return (snapStart, true)
+        }
+
+        resolvedInsertStart = raw
+        isIndicatorSnapped = false
+        return (raw, false)
+    }
+
+    func indicatorTarget(contentUnits: CGFloat, contentW: CGFloat, clips: [MixrClip]) -> (start: CGFloat, isSnapped: Bool) {
+        if let activeSnapStart, isIndicatorSnapped {
+            let raw = proposedStart(contentUnits: contentUnits, contentW: contentW)
+            let snapZone = snapZoneUnits(contentW: contentW, contentUnits: contentUnits)
+            if abs(raw - activeSnapStart) <= snapZone + MixrTimeline.clipEdgeEpsilon {
+                return (activeSnapStart, true)
+            }
+        }
+
+        let raw = proposedStart(contentUnits: contentUnits, contentW: contentW)
+        if let snapStart = nearestSnapStart(
+            rawStart: raw,
+            contentUnits: contentUnits,
+            contentW: contentW,
+            clips: clips
+        ) {
+            return (snapStart, true)
+        }
+        return (raw, false)
+    }
+
+    func indicatorDropResult(contentUnits: CGFloat, contentW: CGFloat, clips: [MixrClip]) -> ClipDropResult {
+        .place(start: max(0, resolvedInsertStart))
     }
 
     /// Converts a timeline-unit insertion start to screen X in tlareaRoot space.
@@ -778,24 +859,30 @@ private struct TLTrackArea: View {
             cursorAreaX - TLK.sidebarWidth + drag.scrollX - drag.grabScreenPx
 
         guard let ti = tracks.firstIndex(where: { $0.id == drag.trackID }) else { return }
-        let result = drag.resolveDropResult(
+        let wasSnapped = drag.isIndicatorSnapped
+        let previousInsertStart = drag.resolvedInsertStart
+        let target = drag.updateIndicatorTarget(
             contentUnits: currentContentUnits,
             contentW: currentContentW,
             clips: tracks[ti].clips
         )
-
-        // Indicator eases to the resolved target — magnetic snap feel.
-        let newInsertStart = drag.insertionStart(for: result)
-        let indicatorMoved = abs(newInsertStart - drag.resolvedInsertStart) > 0.001
-        drag.resolvedInsertStart = newInsertStart
-
-        let targetProgress: CGFloat = { if case .insertIntoClip = result { return 1 }; return 0 }()
+        let shouldAnimateIndicator = wasSnapped || target.isSnapped
+        let newInsertStart = target.start
+        let indicatorMoved = abs(newInsertStart - previousInsertStart) > 0.001
+        let targetProgress: CGFloat = 0
         let progressChanged = drag.insertPreviewProgress != targetProgress
 
         if progressChanged || indicatorMoved {
-            withAnimation(.easeOut(duration: TLK.clipIndicatorEaseDuration)) {
+            let update = {
                 drag.insertPreviewProgress = targetProgress
                 clipDragState = drag
+            }
+            if shouldAnimateIndicator {
+                withAnimation(.easeOut(duration: TLK.clipIndicatorEaseDuration)) {
+                    update()
+                }
+            } else {
+                update()
             }
         } else {
             clipDragState = drag
@@ -865,17 +952,16 @@ private struct TLTrackArea: View {
                     updatedDrag.proposedLeadingEdgePx =
                         drag.cursorAreaX - TLK.sidebarWidth + newScrollX - drag.grabScreenPx
                     if let ti = tracks.firstIndex(where: { $0.id == updatedDrag.trackID }) {
-                        let result = updatedDrag.resolveDropResult(
+                        _ = updatedDrag.updateIndicatorTarget(
                             contentUnits: currentContentUnits,
                             contentW: currentContentW,
                             clips: tracks[ti].clips
                         )
-                        updatedDrag.insertPreviewProgress = {
-                            if case .insertIntoClip = result { return 1 }
-                            return 0
-                        }()
+                        updatedDrag.insertPreviewProgress = 0
                     }
-                    clipDragState = updatedDrag
+                    withAnimation(.easeOut(duration: TLK.clipIndicatorEaseDuration)) {
+                        clipDragState = updatedDrag
+                    }
                     hScrollPosition.scrollTo(x: newScrollX)
                 }
                 try? await Task.sleep(for: .milliseconds(16))   // ≈ 60 fps
@@ -899,9 +985,8 @@ private struct TLTrackArea: View {
               tracks[ti].clips.contains(where: { $0.id == drag.clipID })
         else { cancelClipDrag(); return }
 
-        // Fresh resolve at commit — ignore hysteresis cache so the committed position
-        // exactly matches the indicator's resolved target at the moment of release.
-        let result = drag.freshDropResult(
+        // Commit to the same placement target shown by the insertion indicator.
+        let result = drag.indicatorDropResult(
             contentUnits: currentContentUnits,
             contentW: currentContentW,
             clips: tracks[ti].clips
@@ -1027,8 +1112,11 @@ private struct TLTrackArea: View {
             let baseContentW = max(laneVW, baseContentUnits * TLK.timelineUnitWidth)
             let dragContentUnits = clipDragState.map { drag in
                 let trackClips = tracks.first(where: { $0.id == drag.trackID })?.clips ?? []
-                let result = currentDropResult(for: drag, clips: trackClips)
-                let insertStart = drag.insertionStart(for: result)
+                let insertStart = drag.indicatorTarget(
+                    contentUnits: baseContentUnits,
+                    contentW: baseContentW,
+                    clips: trackClips
+                ).start
                 return insertStart + drag.originalClip.length + MixrTimeline.units(fromSeconds: 20)
             } ?? baseContentUnits
             let contentUnits = max(baseContentUnits, dragContentUnits)
@@ -2281,48 +2369,50 @@ private struct TLTrackLane: View {
             }
         }
 
-        let result = drag.currentDropResult(
-            contentUnits: contentUnits,
-            contentW: timelineWidth,
-            clips: track.clips
-        )
+        let snapStart = drag.isIndicatorSnapped ? drag.resolvedInsertStart : nil
+        let snapPreviewIDs = snapPreviewNeighborIDs(around: snapStart)
 
-        if case .place = result {
-            let reflowedClips = MixrTimeline.applyClipDrop(
-                result: result,
-                moving: drag.clipID,
-                in: track.clips
-            )
-            return track.clips.compactMap { clip in
-                if clip.id == drag.clipID {
-                    return ClipRenderFrame(
-                        clipID: clip.id,
-                        start: clip.start,
-                        length: clip.length,
-                        opacity: TLK.clipDragGhostOpacity,
-                        isSourceGhost: true
-                    )
-                }
-                guard let previewClip = reflowedClips.first(where: { $0.id == clip.id }) else {
-                    return nil
-                }
+        return track.clips.compactMap { clip in
+            if clip.id == drag.clipID {
                 return ClipRenderFrame(
                     clipID: clip.id,
-                    start: previewClip.start,
-                    length: previewClip.length
+                    start: clip.start,
+                    length: clip.length,
+                    opacity: TLK.clipDragGhostOpacity,
+                    isSourceGhost: true
                 )
             }
-        }
 
-        return track.clips.map {
-            ClipRenderFrame(
-                clipID: $0.id,
-                start: $0.start,
-                length: $0.length,
-                opacity: $0.id == drag.clipID ? TLK.clipDragGhostOpacity : 1.0,
-                isSourceGhost: $0.id == drag.clipID
+            let neighborShiftPx: CGFloat
+            if clip.id == snapPreviewIDs.left {
+                neighborShiftPx = -TLK.clipDragNeighborShift
+            } else if clip.id == snapPreviewIDs.right {
+                neighborShiftPx = TLK.clipDragNeighborShift
+            } else {
+                neighborShiftPx = 0
+            }
+
+            return ClipRenderFrame(
+                clipID: clip.id,
+                start: clip.start,
+                length: clip.length,
+                neighborShiftPx: neighborShiftPx
             )
         }
+    }
+
+    private func snapPreviewNeighborIDs(around snapStart: CGFloat?) -> (left: UUID?, right: UUID?) {
+        guard let snapStart else { return (nil, nil) }
+        let epsilon = MixrTimeline.clipEdgeEpsilon
+        let others = track.clips.filter { $0.id != clipDragState?.clipID }
+        let left = others
+            .filter { abs(($0.start + $0.length) - snapStart) <= epsilon }
+            .max { lhs, rhs in lhs.start < rhs.start }
+        let right = others
+            .filter { abs($0.start - snapStart) <= epsilon }
+            .min { lhs, rhs in lhs.start < rhs.start }
+
+        return (left?.id, right?.id)
     }
 
     private func modelClip(for id: UUID) -> MixrClip? {
