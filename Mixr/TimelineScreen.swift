@@ -77,7 +77,7 @@ enum TLK {
     static let clipDragLongPressMaxDistance: CGFloat = 8
     static let clipDragLiftScale:     CGFloat = 1.05
     static let clipDragLiftY:         CGFloat = 6
-    static let clipDragNeighborShift: CGFloat = 10       // pt shift each neighbor
+    static let clipDragNeighborShift: CGFloat = 20       // pt shift each neighbor
     static let clipDragScrollZone:    CGFloat = 120      // px from viewport edge
     static let clipDragScrollSpeed:   CGFloat = 10       // max px per 60 fps frame
     static let clipDragShadowRadius:  CGFloat = 18
