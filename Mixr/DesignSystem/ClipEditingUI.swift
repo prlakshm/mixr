@@ -10,7 +10,8 @@ enum TLClipEditingMetrics {
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
     static let menuSettingsWidth:   CGFloat = 336
-    static let menuSettingsSegmentedWidth: CGFloat = 224
+    static let menuSettingsDurationSegmentedWidth: CGFloat = 224
+    static let menuSettingsCurveSegmentedWidth: CGFloat = 204
     static let menuSettingsControlGap: CGFloat = 15
     static let menuRowHeight:       CGFloat = 42
     static let menuSlideDuration:   Double  = 0.30
@@ -620,14 +621,16 @@ struct TLTransitionMenu: View {
                 }
             settingsRow(
                 title: "Duration",
-                control: durationControl
+                control: durationControl,
+                controlWidth: TLClipEditingMetrics.menuSettingsDurationSegmentedWidth
             )
             .overlay(alignment: .bottom) {
                 menuDivider
             }
             settingsRow(
                 title: "Curve",
-                control: curveControl
+                control: curveControl,
+                controlWidth: TLClipEditingMetrics.menuSettingsCurveSegmentedWidth
             )
         }
         .padding(.vertical, 2)
@@ -663,7 +666,8 @@ struct TLTransitionMenu: View {
 
     private func settingsRow<Control: View>(
         title: String,
-        control: Control
+        control: Control,
+        controlWidth: CGFloat
     ) -> some View {
         HStack(spacing: 0) {
             Text(title)
@@ -675,7 +679,7 @@ struct TLTransitionMenu: View {
                 .frame(width: TLClipEditingMetrics.menuSettingsControlGap)
 
             control
-                .frame(width: TLClipEditingMetrics.menuSettingsSegmentedWidth)
+                .frame(width: controlWidth)
 
             Spacer(minLength: 0)
         }
@@ -779,8 +783,11 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                         .accessibilityLabel(title(option, isSelected))
 
                         if index != options.count - 1 {
+                            let nextOption = options[index + 1]
+                            let dividerTouchesSelection = option == selected || nextOption == selected
                             Rectangle()
                                 .fill(MixrColors.divider.opacity(0.55))
+                                .opacity(dividerTouchesSelection ? 0 : 1)
                                 .frame(width: dividerWidth, height: 20)
                         }
                     }
@@ -840,7 +847,11 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         let selectedCenter = CGFloat(selectedIndex) * (segmentWidth + dividerWidth)
             + segmentWidth / 2
 
-        return selectedCenter - pillWidth / 2
+        let edgeInset: CGFloat = 1
+        let rawOffset = selectedCenter - pillWidth / 2
+        let maxOffset = max(edgeInset, contentWidth - pillWidth - edgeInset)
+
+        return min(max(rawOffset, edgeInset), maxOffset)
     }
 
     private var selectedSegmentGlass: some View {
