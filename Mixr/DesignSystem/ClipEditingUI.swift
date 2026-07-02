@@ -617,7 +617,6 @@ struct TLTransitionMenu: View {
                     menuDivider
                 }
             settingsRow(
-                icon: "clock",
                 title: "Duration",
                 control: durationControl
             )
@@ -625,7 +624,6 @@ struct TLTransitionMenu: View {
                 menuDivider
             }
             settingsRow(
-                icon: "alternatingcurrent",
                 title: "Curve",
                 control: curveControl
             )
@@ -662,17 +660,10 @@ struct TLTransitionMenu: View {
     }
 
     private func settingsRow<Control: View>(
-        icon: String,
         title: String,
         control: Control
     ) -> some View {
         HStack(spacing: 9) {
-            TLTransitionSettingIconBox(
-                systemName: icon,
-                trackColor: trackColor
-            )
-            .allowsHitTesting(false)
-
             Text(title)
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(MixrColors.textPrimary)
@@ -795,46 +786,6 @@ struct TLTransitionMenu: View {
         Rectangle()
             .fill(MixrColors.divider.opacity(0.5))
             .frame(height: 0.25)
-            .padding(.leading, 44)
-    }
-}
-
-private struct TLTransitionSettingIconBox: View {
-    let systemName: String
-    let trackColor: Color
-
-    var body: some View {
-        let size = TLClipEditingMetrics.menuIconBoxSize
-        let shape = RoundedRectangle(
-            cornerRadius: TLClipEditingMetrics.menuIconBoxRadius,
-            style: .continuous
-        )
-
-        ZStack {
-            shape
-                .fill(MixrColors.glassNavyStrong.opacity(0.52))
-                .background {
-                    shape
-                        .fill(.ultraThinMaterial)
-                        .opacity(0.06)
-                        .environment(\.colorScheme, .dark)
-                }
-                .overlay {
-                    shape.strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
-                }
-                .overlay(alignment: .top) {
-                    shape
-                        .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.09), Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0.5, y: 0.35)
-                        ))
-                }
-
-            Image(systemName: systemName)
-                .font(.system(size: size * 0.48, weight: .medium))
-                .foregroundStyle(MixrColors.textPrimary)
-        }
-        .frame(width: size, height: size)
+            .padding(.leading, 20)
     }
 }
