@@ -805,6 +805,15 @@ private struct TLTrackArea: View {
         }
     }
 
+    private func updateTransition(_ transition: ClipTransition, grip: ActiveGrip) {
+        guard let f = findClip(grip.clipID) else { return }
+        if grip.side == .leading {
+            tracks[f.trackIdx].clips[f.clipIdx].transitionIn = transition
+        } else {
+            tracks[f.trackIdx].clips[f.clipIdx].transitionOut = transition
+        }
+    }
+
     // MARK: - Clip drag-move
 
     private var clipDragSettleComplete: Bool {
@@ -1550,14 +1559,15 @@ private struct TLTrackArea: View {
 
             let menuY = max(4, min(unclampedMenuY, maxMenuY))
             let curTx  = grip.side == .leading
-                ? f.clip.transitionIn.type
-                : f.clip.transitionOut.type
+                ? f.clip.transitionIn
+                : f.clip.transitionOut
             TLTransitionMenu(
                 selected:   curTx,
                 trackColor: f.track.color.color,
-                onSelect:   { setTransition(type: $0, grip: grip) }
+                onSelect:   { setTransition(type: $0, grip: grip) },
+                onUpdate:   { updateTransition($0, grip: grip) }
             )
-            .frame(width: mW)
+            .frame(width: mW, alignment: .leading)
             .offset(x: menuSX, y: menuY)
             .transition(.asymmetric(
                 insertion: .opacity.combined(with: .scale(scale: 0.93, anchor: .topLeading)),

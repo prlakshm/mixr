@@ -8,7 +8,9 @@ enum TLClipEditingMetrics {
     static let toolbarPointerW:     CGFloat = 7
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
+    static let menuSettingsWidth:   CGFloat = 336
     static let menuRowHeight:       CGFloat = 42
+    static let menuSlideDuration:   Double  = 0.30
     static var menuEstimatedHeight: CGFloat {
         CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 4
     }
@@ -420,12 +422,80 @@ struct TLClipContextToolbar: View {
 // MARK: - Transition Menu
 
 struct TLTransitionMenu: View {
-    let selected:   ClipTransitionType
+    let selected:   ClipTransition
     let trackColor: Color
     let onSelect:   (ClipTransitionType) -> Void
+    var onUpdate:   (ClipTransition) -> Void = { _ in }
+
+    @State private var page: MenuPage = .list
+
+    private enum MenuPage: Equatable {
+        case list
+        case settings(ClipTransitionType)
+    }
+
+    private enum DurationOption: Double, CaseIterable, Identifiable {
+        case one = 1
+        case two = 2
+        case four = 4
+        case eight = 8
+
+        var id: Double { rawValue }
+
+        var title: String {
+            switch self {
+            case .one: "1 Beat"
+            case .two: "2 Beats"
+            case .four: "4 Beats"
+            case .eight: "8 Beats"
+            }
+        }
+    }
+
+    private enum CurveOption: String, CaseIterable, Identifiable {
+        case linear = "linear"
+        case easeInOut = "easeInOut"
+        case easeOut = "easeOut"
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .linear: "Linear"
+            case .easeInOut: "Ease In/Out"
+            case .easeOut: "Ease Out"
+            }
+        }
+    }
 
     var body: some View {
-        menuRows
+        ZStack(alignment: .topLeading) {
+            switch page {
+            case .list:
+                menuRows
+                    .frame(width: TLClipEditingMetrics.menuWidth)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading),
+                        removal: .move(edge: .leading)
+                    ))
+            case .settings(let txType):
+                settingsPage(for: txType)
+                    .frame(width: TLClipEditingMetrics.menuSettingsWidth)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing),
+                        removal: .move(edge: .trailing)
+                    ))
+            }
+        }
+        .frame(
+            width: currentMenuWidth,
+            height: currentMenuHeight,
+            alignment: .topLeading
+        )
+        .animation(
+            .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration),
+            value: page
+        )
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(hex: "050810").opacity(0.68))
@@ -451,6 +521,29 @@ struct TLTransitionMenu: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
         .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
+        .onChange(of: selected.type) { _, newValue in
+            if newValue == .none {
+                page = .list
+            }
+        }
+    }
+
+    private var currentMenuWidth: CGFloat {
+        switch page {
+        case .list:
+            TLClipEditingMetrics.menuWidth
+        case .settings:
+            TLClipEditingMetrics.menuSettingsWidth
+        }
+    }
+
+    private var currentMenuHeight: CGFloat {
+        switch page {
+        case .list:
+            TLClipEditingMetrics.menuEstimatedHeight
+        case .settings:
+            TLClipEditingMetrics.menuRowHeight * 3 + 4
+        }
     }
 
     private var menuRows: some View {
@@ -472,9 +565,20 @@ struct TLTransitionMenu: View {
 
     @ViewBuilder
     private func menuRow(_ txType: ClipTransitionType) -> some View {
-        let isSel = txType == selected
+        let isSel = txType == selected.type
         Button {
-            onSelect(txType)
+            if txType == .none {
+                onSelect(txType)
+            } else {
+                var tx = selected.type == txType
+                    ? selected
+                    : ClipTransition(type: txType, duration: DurationOption.one.rawValue, curve: CurveOption.linear.rawValue)
+                tx.type = txType
+                onUpdate(tx)
+                withAnimation(.easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)) {
+                    page = .settings(txType)
+                }
+            }
         } label: {
             HStack(spacing: 9) {
                 TLTransitionIconBox(
@@ -493,6 +597,10 @@ struct TLTransitionMenu: View {
                     Image(systemName: "checkmark")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(trackColor)
+                } else if txType != .none {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MixrColors.textSecondary)
                 }
             }
             .padding(.horizontal, 20)
@@ -500,5 +608,233 @@ struct TLTransitionMenu: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(TLClipActionPressStyle())
+    }
+
+    private func settingsPage(for txType: ClipTransitionType) -> some View {
+        VStack(spacing: 0) {
+            settingsHeader(txType)
+                .overlay(alignment: .bottom) {
+                    menuDivider
+                }
+            settingsRow(
+                icon: "clock",
+                title: "Duration",
+                control: durationControl
+            )
+            .overlay(alignment: .bottom) {
+                menuDivider
+            }
+            settingsRow(
+                icon: "alternatingcurrent",
+                title: "Curve",
+                control: curveControl
+            )
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func settingsHeader(_ txType: ClipTransitionType) -> some View {
+        HStack(spacing: 9) {
+            Button {
+                withAnimation(.easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)) {
+                    page = .list
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(MixrColors.textPrimary)
+                    .frame(
+                        width: TLClipEditingMetrics.menuIconBoxSize,
+                        height: TLClipEditingMetrics.menuIconBoxSize
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Text(txType.rawValue)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MixrColors.textPrimary)
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .frame(height: TLClipEditingMetrics.menuRowHeight)
+    }
+
+    private func settingsRow<Control: View>(
+        icon: String,
+        title: String,
+        control: Control
+    ) -> some View {
+        HStack(spacing: 9) {
+            TLTransitionSettingIconBox(
+                systemName: icon,
+                trackColor: trackColor
+            )
+            .allowsHitTesting(false)
+
+            Text(title)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(MixrColors.textPrimary)
+                .frame(width: 55, alignment: .leading)
+
+            control
+        }
+        .padding(.horizontal, 20)
+        .frame(height: TLClipEditingMetrics.menuRowHeight)
+    }
+
+    private var durationControl: some View {
+        segmentedControl(
+            options: DurationOption.allCases,
+            selected: selectedDurationOption,
+            title: \.title
+        ) { option in
+            var tx = selected
+            tx.duration = option.rawValue
+            onUpdate(tx)
+        }
+    }
+
+    private var curveControl: some View {
+        segmentedControl(
+            options: CurveOption.allCases,
+            selected: selectedCurveOption,
+            title: \.title
+        ) { option in
+            var tx = selected
+            tx.curve = option.rawValue
+            onUpdate(tx)
+        }
+    }
+
+    private var selectedDurationOption: DurationOption {
+        DurationOption.allCases.min {
+            abs($0.rawValue - selected.duration) < abs($1.rawValue - selected.duration)
+        } ?? .one
+    }
+
+    private var selectedCurveOption: CurveOption {
+        CurveOption(rawValue: selected.curve) ?? .linear
+    }
+
+    private func segmentedControl<Option: Identifiable & Equatable>(
+        options: [Option],
+        selected: Option,
+        title: KeyPath<Option, String>,
+        onSelect: @escaping (Option) -> Void
+    ) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                Button {
+                    onSelect(option)
+                } label: {
+                    Text(option[keyPath: title])
+                        .font(.system(size: 10, weight: option == selected ? .medium : .regular))
+                        .foregroundStyle(option == selected ? MixrColors.textPrimary : MixrColors.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                        .background {
+                            if option == selected {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.25),
+                                                Color.white.opacity(0.08),
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                                    }
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+
+                if index != options.count - 1 {
+                    Rectangle()
+                        .fill(MixrColors.divider.opacity(0.55))
+                        .frame(width: 0.35, height: 20)
+                }
+            }
+        }
+        .padding(2)
+        .frame(height: 28)
+        .background {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.black.opacity(0.22))
+                .background {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.08)
+                        .environment(\.colorScheme, .dark)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [Color.white.opacity(0.06), Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0.5, y: 0.5)
+                        ))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                }
+        }
+    }
+
+    private var menuDivider: some View {
+        Rectangle()
+            .fill(MixrColors.divider.opacity(0.5))
+            .frame(height: 0.25)
+            .padding(.leading, 44)
+    }
+}
+
+private struct TLTransitionSettingIconBox: View {
+    let systemName: String
+    let trackColor: Color
+
+    var body: some View {
+        let size = TLClipEditingMetrics.menuIconBoxSize
+        let shape = RoundedRectangle(
+            cornerRadius: TLClipEditingMetrics.menuIconBoxRadius,
+            style: .continuous
+        )
+
+        ZStack {
+            shape
+                .fill(MixrColors.glassNavyStrong.opacity(0.52))
+                .background {
+                    shape
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.06)
+                        .environment(\.colorScheme, .dark)
+                }
+                .overlay {
+                    shape.strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+                }
+                .overlay(alignment: .top) {
+                    shape
+                        .fill(LinearGradient(
+                            colors: [Color.white.opacity(0.09), Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0.5, y: 0.35)
+                        ))
+                }
+
+            Image(systemName: systemName)
+                .font(.system(size: size * 0.48, weight: .medium))
+                .foregroundStyle(MixrColors.textPrimary)
+        }
+        .frame(width: size, height: size)
     }
 }
