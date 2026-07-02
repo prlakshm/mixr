@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Metrics
 
@@ -10,6 +11,7 @@ enum TLClipEditingMetrics {
     static let menuWidth:           CGFloat = 170
     static let menuSettingsWidth:   CGFloat = 336
     static let menuSettingsSegmentedWidth: CGFloat = 224
+    static let menuSettingsControlGap: CGFloat = 15
     static let menuRowHeight:       CGFloat = 42
     static let menuSlideDuration:   Double  = 0.30
     static var menuEstimatedHeight: CGFloat {
@@ -669,10 +671,13 @@ struct TLTransitionMenu: View {
                 .foregroundStyle(MixrColors.textPrimary)
                 .fixedSize(horizontal: true, vertical: false)
 
-            Spacer(minLength: 9)
+            Spacer()
+                .frame(width: TLClipEditingMetrics.menuSettingsControlGap)
 
             control
                 .frame(width: TLClipEditingMetrics.menuSettingsSegmentedWidth)
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .frame(height: TLClipEditingMetrics.menuRowHeight)
@@ -718,50 +723,80 @@ struct TLTransitionMenu: View {
         title: @escaping (Option, Bool) -> String,
         onSelect: @escaping (Option) -> Void
     ) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-                let isSelected = option == selected
-                Button {
-                    onSelect(option)
-                } label: {
-                    Text(title(option, isSelected))
-                        .font(.system(size: 10, weight: isSelected ? .medium : .regular))
-                        .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 24)
-                        .background {
-                            if isSelected {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.white.opacity(0.25),
-                                                Color.white.opacity(0.08),
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                                    }
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
+        TLTransitionSettingsSegmentedControl(
+            options: options,
+            selected: selected,
+            title: title,
+            onSelect: onSelect
+        )
+    }
 
-                if index != options.count - 1 {
-                    Rectangle()
-                        .fill(MixrColors.divider.opacity(0.55))
-                        .frame(width: 0.35, height: 20)
+    private var menuDivider: some View {
+        Rectangle()
+            .fill(MixrColors.divider.opacity(0.5))
+            .frame(height: 0.25)
+            .padding(.leading, 20)
+    }
+}
+
+private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equatable>: View {
+    private let selectedPillHorizontalPadding: CGFloat = 15
+    private let dividerWidth: CGFloat = 0.35
+
+    let options: [Option]
+    let selected: Option
+    let title: (Option, Bool) -> String
+    let onSelect: (Option) -> Void
+
+    @State private var isPillStretching = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let pillWidth = selectedPillWidth
+            let pillOffset = selectedPillOffset(in: proxy.size.width, pillWidth: pillWidth)
+
+            ZStack(alignment: .leading) {
+                selectedSegmentGlass
+                    .frame(width: pillWidth, height: 24)
+                    .scaleEffect(x: isPillStretching ? 1.035 : 1.0, y: 1.0)
+                    .offset(x: pillOffset)
+
+                HStack(spacing: 0) {
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                        let isSelected = option == selected
+                        Button {
+                            onSelect(option)
+                        } label: {
+                            Text(title(option, isSelected))
+                                .font(.system(size: 10, weight: isSelected ? .medium : .regular))
+                                .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(title(option, isSelected))
+
+                        if index != options.count - 1 {
+                            Rectangle()
+                                .fill(MixrColors.divider.opacity(0.55))
+                                .frame(width: dividerWidth, height: 20)
+                        }
+                    }
                 }
             }
+            .padding(2)
         }
-        .padding(2)
         .frame(height: 28)
+        .animation(.spring(response: 0.30, dampingFraction: 0.76), value: selected)
+        .animation(.spring(response: 0.18, dampingFraction: 0.68), value: isPillStretching)
+        .onChange(of: selected) { _, _ in
+            isPillStretching = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                isPillStretching = false
+            }
+        }
         .background {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(Color.black.opacity(0.22))
@@ -786,10 +821,43 @@ struct TLTransitionMenu: View {
         }
     }
 
-    private var menuDivider: some View {
-        Rectangle()
-            .fill(MixrColors.divider.opacity(0.5))
-            .frame(height: 0.25)
-            .padding(.leading, 20)
+    private var selectedPillWidth: CGFloat {
+        let selectedTitle = title(selected, true)
+        let font = UIFont.systemFont(ofSize: 10, weight: .medium)
+        let textWidth = (selectedTitle as NSString).size(withAttributes: [.font: font]).width
+        return ceil(textWidth + selectedPillHorizontalPadding * 2)
+    }
+
+    private func selectedPillOffset(in controlWidth: CGFloat, pillWidth: CGFloat) -> CGFloat {
+        guard let selectedIndex = options.firstIndex(of: selected), !options.isEmpty else {
+            return 2
+        }
+
+        let contentWidth = controlWidth - 4
+        let segmentCount = CGFloat(options.count)
+        let totalDividerWidth = CGFloat(max(options.count - 1, 0)) * dividerWidth
+        let segmentWidth = (contentWidth - totalDividerWidth) / segmentCount
+        let selectedCenter = CGFloat(selectedIndex) * (segmentWidth + dividerWidth)
+            + segmentWidth / 2
+
+        return selectedCenter - pillWidth / 2
+    }
+
+    private var selectedSegmentGlass: some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.25),
+                        Color.white.opacity(0.08),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+            }
     }
 }
