@@ -9,6 +9,7 @@ enum TLClipEditingMetrics {
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
     static let menuSettingsWidth:   CGFloat = 336
+    static let menuSettingsSegmentedWidth: CGFloat = 224
     static let menuRowHeight:       CGFloat = 42
     static let menuSlideDuration:   Double  = 0.30
     static var menuEstimatedHeight: CGFloat {
@@ -442,13 +443,12 @@ struct TLTransitionMenu: View {
 
         var id: Double { rawValue }
 
-        var title: String {
-            switch self {
-            case .one: "1 Beat"
-            case .two: "2 Beats"
-            case .four: "4 Beats"
-            case .eight: "8 Beats"
+        func label(isSelected: Bool) -> String {
+            let n = Int(rawValue)
+            if isSelected {
+                return n == 1 ? "1 Beat" : "\(n) Beats"
             }
+            return "\(n)"
         }
     }
 
@@ -663,13 +663,16 @@ struct TLTransitionMenu: View {
         title: String,
         control: Control
     ) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 0) {
             Text(title)
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(MixrColors.textPrimary)
-                .frame(width: 55, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
+
+            Spacer(minLength: 9)
 
             control
+                .frame(width: TLClipEditingMetrics.menuSettingsSegmentedWidth)
         }
         .padding(.horizontal, 20)
         .frame(height: TLClipEditingMetrics.menuRowHeight)
@@ -679,7 +682,7 @@ struct TLTransitionMenu: View {
         segmentedControl(
             options: DurationOption.allCases,
             selected: selectedDurationOption,
-            title: \.title
+            title: { $0.label(isSelected: $1) }
         ) { option in
             var tx = selected
             tx.duration = option.rawValue
@@ -691,7 +694,7 @@ struct TLTransitionMenu: View {
         segmentedControl(
             options: CurveOption.allCases,
             selected: selectedCurveOption,
-            title: \.title
+            title: { option, _ in option.title }
         ) { option in
             var tx = selected
             tx.curve = option.rawValue
@@ -712,23 +715,24 @@ struct TLTransitionMenu: View {
     private func segmentedControl<Option: Identifiable & Equatable>(
         options: [Option],
         selected: Option,
-        title: KeyPath<Option, String>,
+        title: @escaping (Option, Bool) -> String,
         onSelect: @escaping (Option) -> Void
     ) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                let isSelected = option == selected
                 Button {
                     onSelect(option)
                 } label: {
-                    Text(option[keyPath: title])
-                        .font(.system(size: 10, weight: option == selected ? .medium : .regular))
-                        .foregroundStyle(option == selected ? MixrColors.textPrimary : MixrColors.textSecondary)
+                    Text(title(option, isSelected))
+                        .font(.system(size: 10, weight: isSelected ? .medium : .regular))
+                        .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                         .background {
-                            if option == selected {
+                            if isSelected {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .fill(
                                         LinearGradient(
