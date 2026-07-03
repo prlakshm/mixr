@@ -886,7 +886,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         }
         .background {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color.black.opacity(0.22))
+                .fill(Color.black.opacity(0.18))
                 .background {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(.ultraThinMaterial)
@@ -896,7 +896,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                 .overlay {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.06), Color.clear],
+                            colors: [Color.white.opacity(0.08), Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0.5, y: 0.5)
                         ))
