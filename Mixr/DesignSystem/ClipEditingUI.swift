@@ -691,6 +691,8 @@ struct TLTransitionMenu: View {
         segmentedControl(
             options: DurationOption.allCases,
             selected: selectedDurationOption,
+            fontSize: 10,
+            selectionSpringResponse: 0.40,
             title: { $0.label(isSelected: $1) }
         ) { option in
             var tx = selected
@@ -703,6 +705,8 @@ struct TLTransitionMenu: View {
         segmentedControl(
             options: CurveOption.allCases,
             selected: selectedCurveOption,
+            fontSize: 10.5,
+            selectionSpringResponse: 0.30,
             title: { option, _ in option.title }
         ) { option in
             var tx = selected
@@ -724,12 +728,16 @@ struct TLTransitionMenu: View {
     private func segmentedControl<Option: Identifiable & Equatable>(
         options: [Option],
         selected: Option,
+        fontSize: CGFloat = 10,
+        selectionSpringResponse: Double = 0.30,
         title: @escaping (Option, Bool) -> String,
         onSelect: @escaping (Option) -> Void
     ) -> some View {
         TLTransitionSettingsSegmentedControl(
             options: options,
             selected: selected,
+            fontSize: fontSize,
+            selectionSpringResponse: selectionSpringResponse,
             title: title,
             onSelect: onSelect
         )
@@ -759,11 +767,9 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
     private let pillHeight: CGFloat = 24
 
     /// Gap between the selected pill and the outer edge of the segmented control.
-    /// This keeps the left-most and right-most selected states visually balanced.
     private let controlEdgeGap: CGFloat = 5
 
-    /// The actual internal padding inside the selected pill.
-    /// Increase/decrease this one value if you want all selected pills roomier/tighter.
+    /// Actual internal left/right padding inside the selected pill.
     private let selectedTextHorizontalPadding: CGFloat = 15
 
     private let minimumPillWidth: CGFloat = 46
@@ -771,6 +777,8 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
 
     let options: [Option]
     let selected: Option
+    let fontSize: CGFloat
+    let selectionSpringResponse: Double
     let title: (Option, Bool) -> String
     let onSelect: (Option) -> Void
 
@@ -791,7 +799,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                 : minimumPillWidth
 
             ZStack(alignment: .topLeading) {
-                // Dividers sit behind the pill so they never visually cut through it.
+                // Dividers stay behind the pill.
                 ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                     if index != options.count - 1,
                        layout.dividerXs.indices.contains(index) {
@@ -819,13 +827,12 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                     .position(x: selectedCenter, y: controlHeight / 2)
 
                 // Visible labels are centered on the same centers as the pill.
-                // This fixes the uneven left/right padding bug.
                 ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                     if layout.centers.indices.contains(index) {
                         let isSelected = option == selected
 
                         Text(title(option, isSelected))
-                            .font(.system(size: 10, weight: isSelected ? .medium : .regular))
+                            .font(.system(size: fontSize, weight: isSelected ? .medium : .regular))
                             .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
@@ -838,7 +845,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                     }
                 }
 
-                // Invisible buttons preserve large tap areas without moving the text.
+                // Invisible buttons preserve generous tap targets without affecting label position.
                 ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                     if layout.hitFrames.indices.contains(index) {
                         let hitFrame = layout.hitFrames[index]
@@ -868,7 +875,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         .onPreferenceChange(TLSelectedSegmentTitleWidthKey.self) { widths in
             selectedTitleWidths = widths
         }
-        .animation(.spring(response: 0.30, dampingFraction: 0.76), value: selected)
+        .animation(.spring(response: selectionSpringResponse, dampingFraction: 0.76), value: selected)
         .animation(.spring(response: 0.18, dampingFraction: 0.68), value: isPillStretching)
         .onChange(of: selected) { _, _ in
             isPillStretching = true
@@ -989,7 +996,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
     }
 
     private func estimatedTitleWidth(_ text: String) -> CGFloat {
-        CGFloat(text.count) * 5.8
+        CGFloat(text.count) * fontSize * 0.58
     }
 
     private func optionKey(_ option: Option) -> AnyHashable {
@@ -1000,9 +1007,9 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         HStack(spacing: 0) {
             ForEach(options) { option in
                 Text(title(option, true))
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: fontSize, weight: .medium))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .fixedSize()
                     .background {
                         GeometryReader { textProxy in
                             Color.clear.preference(
