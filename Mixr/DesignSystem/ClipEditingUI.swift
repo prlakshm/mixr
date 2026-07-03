@@ -10,8 +10,8 @@ enum TLClipEditingMetrics {
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
     static let menuSettingsWidth:   CGFloat = 336
-    static let menuSettingsDurationSegmentedWidth: CGFloat = 224
-    static let menuSettingsCurveSegmentedWidth: CGFloat = 204
+    static let menuSettingsDurationSegmentedWidth: CGFloat = 244
+    static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 15
     static let menuRowHeight:       CGFloat = 42
     static let menuSlideDuration:   Double  = 0.30
@@ -743,8 +743,30 @@ struct TLTransitionMenu: View {
     }
 }
 
+private struct TLSelectedSegmentTitleWidthKey: PreferenceKey {
+    static var defaultValue: [AnyHashable: CGFloat] = [:]
+
+    static func reduce(
+        value: inout [AnyHashable: CGFloat],
+        nextValue: () -> [AnyHashable: CGFloat]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equatable>: View {
-    private let selectedPillHorizontalPadding: CGFloat = 15
+    private let controlHeight: CGFloat = 28
+    private let pillHeight: CGFloat = 24
+
+    /// Gap between the selected pill and the outer edge of the segmented control.
+    /// This keeps the left-most and right-most selected states visually balanced.
+    private let controlEdgeGap: CGFloat = 5
+
+    /// The actual internal padding inside the selected pill.
+    /// Increase/decrease this one value if you want all selected pills roomier/tighter.
+    private let selectedTextHorizontalPadding: CGFloat = 15
+
+    private let minimumPillWidth: CGFloat = 46
     private let dividerWidth: CGFloat = 0.35
 
     let options: [Option]
@@ -752,54 +774,105 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
     let title: (Option, Bool) -> String
     let onSelect: (Option) -> Void
 
+    @State private var selectedTitleWidths: [AnyHashable: CGFloat] = [:]
     @State private var isPillStretching = false
 
     var body: some View {
         GeometryReader { proxy in
-            let pillWidth = selectedPillWidth
-            let pillOffset = selectedPillOffset(in: proxy.size.width, pillWidth: pillWidth)
+            let layout = segmentLayout(in: proxy.size.width)
+            let selectedIndex = options.firstIndex(of: selected) ?? 0
 
-            ZStack(alignment: .leading) {
+            let selectedCenter = layout.centers.indices.contains(selectedIndex)
+                ? layout.centers[selectedIndex]
+                : proxy.size.width / 2
+
+            let selectedPillWidth = layout.pillWidths.indices.contains(selectedIndex)
+                ? layout.pillWidths[selectedIndex]
+                : minimumPillWidth
+
+            ZStack(alignment: .topLeading) {
+                // Dividers sit behind the pill so they never visually cut through it.
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    if index != options.count - 1,
+                       layout.dividerXs.indices.contains(index) {
+                        let nextOption = options[index + 1]
+                        let dividerTouchesSelection = option == selected || nextOption == selected
+
+                        Rectangle()
+                            .fill(MixrColors.divider.opacity(0.55))
+                            .opacity(dividerTouchesSelection ? 0 : 1)
+                            .frame(width: dividerWidth, height: 20)
+                            .position(
+                                x: layout.dividerXs[index],
+                                y: controlHeight / 2
+                            )
+                    }
+                }
+
                 selectedSegmentGlass
-                    .frame(width: pillWidth, height: 24)
-                    .scaleEffect(x: isPillStretching ? 1.035 : 1.0, y: 1.0)
-                    .offset(x: pillOffset)
+                    .frame(width: selectedPillWidth, height: pillHeight)
+                    .scaleEffect(
+                        x: isPillStretching ? 1.055 : 1.0,
+                        y: 1.0,
+                        anchor: .center
+                    )
+                    .position(x: selectedCenter, y: controlHeight / 2)
 
-                HStack(spacing: 0) {
-                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                // Visible labels are centered on the same centers as the pill.
+                // This fixes the uneven left/right padding bug.
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    if layout.centers.indices.contains(index) {
                         let isSelected = option == selected
+
+                        Text(title(option, isSelected))
+                            .font(.system(size: 10, weight: isSelected ? .medium : .regular))
+                            .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .allowsHitTesting(false)
+                            .position(
+                                x: layout.centers[index],
+                                y: controlHeight / 2
+                            )
+                    }
+                }
+
+                // Invisible buttons preserve large tap areas without moving the text.
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    if layout.hitFrames.indices.contains(index) {
+                        let hitFrame = layout.hitFrames[index]
+                        let isSelected = option == selected
+
                         Button {
                             onSelect(option)
                         } label: {
-                            Text(title(option, isSelected))
-                                .font(.system(size: 10, weight: isSelected ? .medium : .regular))
-                                .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 24)
+                            Color.clear
+                                .frame(width: hitFrame.width, height: controlHeight)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(title(option, isSelected))
-
-                        if index != options.count - 1 {
-                            let nextOption = options[index + 1]
-                            let dividerTouchesSelection = option == selected || nextOption == selected
-                            Rectangle()
-                                .fill(MixrColors.divider.opacity(0.55))
-                                .opacity(dividerTouchesSelection ? 0 : 1)
-                                .frame(width: dividerWidth, height: 20)
-                        }
+                        .position(
+                            x: hitFrame.midX,
+                            y: controlHeight / 2
+                        )
                     }
                 }
             }
-            .padding(2)
         }
-        .frame(height: 28)
+        .frame(height: controlHeight)
+        .overlay(alignment: .topLeading) {
+            selectedTitleMeasurementLayer
+        }
+        .onPreferenceChange(TLSelectedSegmentTitleWidthKey.self) { widths in
+            selectedTitleWidths = widths
+        }
         .animation(.spring(response: 0.30, dampingFraction: 0.76), value: selected)
         .animation(.spring(response: 0.18, dampingFraction: 0.68), value: isPillStretching)
         .onChange(of: selected) { _, _ in
             isPillStretching = true
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                 isPillStretching = false
             }
@@ -828,30 +901,120 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         }
     }
 
-    private var selectedPillWidth: CGFloat {
-        let selectedTitle = title(selected, true)
-        let font = UIFont.systemFont(ofSize: 10, weight: .medium)
-        let textWidth = (selectedTitle as NSString).size(withAttributes: [.font: font]).width
-        return ceil(textWidth + selectedPillHorizontalPadding * 2)
+    private struct SegmentLayout {
+        let centers: [CGFloat]
+        let pillWidths: [CGFloat]
+        let hitFrames: [CGRect]
+        let dividerXs: [CGFloat]
     }
 
-    private func selectedPillOffset(in controlWidth: CGFloat, pillWidth: CGFloat) -> CGFloat {
-        guard let selectedIndex = options.firstIndex(of: selected), !options.isEmpty else {
-            return 2
+    private func segmentLayout(in controlWidth: CGFloat) -> SegmentLayout {
+        let count = options.count
+
+        guard count > 0 else {
+            return SegmentLayout(
+                centers: [],
+                pillWidths: [],
+                hitFrames: [],
+                dividerXs: []
+            )
         }
 
-        let contentWidth = controlWidth - 4
-        let segmentCount = CGFloat(options.count)
-        let totalDividerWidth = CGFloat(max(options.count - 1, 0)) * dividerWidth
-        let segmentWidth = (contentWidth - totalDividerWidth) / segmentCount
-        let selectedCenter = CGFloat(selectedIndex) * (segmentWidth + dividerWidth)
-            + segmentWidth / 2
+        let pillWidths = options.map { pillWidth(for: $0) }
 
-        let edgeInset: CGFloat = 1
-        let rawOffset = selectedCenter - pillWidth / 2
-        let maxOffset = max(edgeInset, contentWidth - pillWidth - edgeInset)
+        if count == 1 {
+            let center = controlWidth / 2
 
-        return min(max(rawOffset, edgeInset), maxOffset)
+            return SegmentLayout(
+                centers: [center],
+                pillWidths: pillWidths,
+                hitFrames: [
+                    CGRect(
+                        x: 0,
+                        y: 0,
+                        width: controlWidth,
+                        height: controlHeight
+                    )
+                ],
+                dividerXs: []
+            )
+        }
+
+        let firstCenter = controlEdgeGap + pillWidths[0] / 2
+        let lastCenter = controlWidth - controlEdgeGap - pillWidths[count - 1] / 2
+        let usableLastCenter = max(firstCenter, lastCenter)
+        let step = (usableLastCenter - firstCenter) / CGFloat(count - 1)
+
+        let centers = (0..<count).map { index in
+            firstCenter + CGFloat(index) * step
+        }
+
+        let hitFrames = centers.enumerated().map { index, center in
+            let left: CGFloat = index == 0
+                ? 0
+                : (centers[index - 1] + center) / 2
+
+            let right: CGFloat = index == count - 1
+                ? controlWidth
+                : (center + centers[index + 1]) / 2
+
+            return CGRect(
+                x: left,
+                y: 0,
+                width: max(0, right - left),
+                height: controlHeight
+            )
+        }
+
+        let dividerXs = (0..<(count - 1)).map { index in
+            (centers[index] + centers[index + 1]) / 2
+        }
+
+        return SegmentLayout(
+            centers: centers,
+            pillWidths: pillWidths,
+            hitFrames: hitFrames,
+            dividerXs: dividerXs
+        )
+    }
+
+    private func pillWidth(for option: Option) -> CGFloat {
+        let measuredWidth = selectedTitleWidths[optionKey(option)]
+            ?? estimatedTitleWidth(title(option, true))
+
+        return max(
+            minimumPillWidth,
+            ceil(measuredWidth + selectedTextHorizontalPadding * 2)
+        )
+    }
+
+    private func estimatedTitleWidth(_ text: String) -> CGFloat {
+        CGFloat(text.count) * 5.8
+    }
+
+    private func optionKey(_ option: Option) -> AnyHashable {
+        AnyHashable(option.id)
+    }
+
+    private var selectedTitleMeasurementLayer: some View {
+        HStack(spacing: 0) {
+            ForEach(options) { option in
+                Text(title(option, true))
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .background {
+                        GeometryReader { textProxy in
+                            Color.clear.preference(
+                                key: TLSelectedSegmentTitleWidthKey.self,
+                                value: [optionKey(option): textProxy.size.width]
+                            )
+                        }
+                    }
+            }
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
     }
 
     private var selectedSegmentGlass: some View {
