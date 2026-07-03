@@ -16,8 +16,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "754"
             endingLineNumber = "754"
-            landmarkName = "reduce(value:nextValue:)"
-            landmarkType = "7">
+            landmarkName = "TLSelectedSegmentTitleWidthKey"
+            landmarkType = "14">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

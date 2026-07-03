@@ -9,8 +9,8 @@ enum TLClipEditingMetrics {
     static let toolbarPointerW:     CGFloat = 7
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
-    static let menuSettingsWidth:   CGFloat = 336
-    static let menuSettingsDurationSegmentedWidth: CGFloat = 244
+    static let menuSettingsWidth:   CGFloat = 316
+    static let menuSettingsDurationSegmentedWidth: CGFloat = 216
     static let menuSettingsCurveSegmentedWidth: CGFloat = 230
     static let menuSettingsControlGap: CGFloat = 15
     static let menuRowHeight:       CGFloat = 42
