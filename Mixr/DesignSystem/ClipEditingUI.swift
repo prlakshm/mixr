@@ -14,6 +14,9 @@ enum TLClipEditingMetrics {
     static let menuSettingsCurveSegmentedWidth: CGFloat = 230
     static let menuSettingsControlGap: CGFloat = 15
     static let menuRowHeight:       CGFloat = 42
+    static let menuSettingsHeaderRowHeight: CGFloat = 34
+    static let menuSettingsHeaderIconBoxSize: CGFloat = 22.5
+    static let menuSettingsHeaderItemGap: CGFloat = 9.5
     static let menuSlideDuration:   Double  = 0.30
     static var menuEstimatedHeight: CGFloat {
         CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 4
@@ -545,7 +548,9 @@ struct TLTransitionMenu: View {
         case .list:
             TLClipEditingMetrics.menuEstimatedHeight
         case .settings:
-            TLClipEditingMetrics.menuRowHeight * 3 + 4
+            TLClipEditingMetrics.menuSettingsHeaderRowHeight
+                + TLClipEditingMetrics.menuRowHeight * 2
+                + 4
         }
     }
 
@@ -637,7 +642,7 @@ struct TLTransitionMenu: View {
     }
 
     private func settingsHeader(_ txType: ClipTransitionType) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)) {
                     page = .list
@@ -647,12 +652,26 @@ struct TLTransitionMenu: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
                     .frame(
-                        width: TLClipEditingMetrics.menuIconBoxSize,
-                        height: TLClipEditingMetrics.menuIconBoxSize
+                        width: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize,
+                        height: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize,
+                        alignment: .trailing
                     )
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            Spacer()
+                .frame(width: TLClipEditingMetrics.menuSettingsHeaderItemGap)
+
+            TLTransitionIconBox(
+                transitionType: txType,
+                highlighted: true,
+                trackColor: trackColor,
+                size: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize
+            )
+
+            Spacer()
+                .frame(width: TLClipEditingMetrics.menuSettingsHeaderItemGap)
 
             Text(txType.rawValue)
                 .font(.system(size: 12, weight: .semibold))
@@ -661,7 +680,7 @@ struct TLTransitionMenu: View {
             Spacer()
         }
         .padding(.horizontal, 20)
-        .frame(height: TLClipEditingMetrics.menuRowHeight)
+        .frame(height: TLClipEditingMetrics.menuSettingsHeaderRowHeight)
     }
 
     private func settingsRow<Control: View>(
