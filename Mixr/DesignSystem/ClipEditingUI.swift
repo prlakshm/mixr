@@ -755,6 +755,7 @@ struct TLTransitionMenu: View {
         TLTransitionSettingsSegmentedControl(
             options: options,
             selected: selected,
+            trackColor: trackColor,
             fontSize: fontSize,
             selectionSpringResponse: selectionSpringResponse,
             title: title,
@@ -796,6 +797,7 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
 
     let options: [Option]
     let selected: Option
+    let trackColor: Color
     let fontSize: CGFloat
     let selectionSpringResponse: Double
     let title: (Option, Bool) -> String
@@ -838,6 +840,8 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
 
                 selectedSegmentGlass
                     .frame(width: selectedPillWidth, height: pillHeight)
+                    .shadow(color: .black.opacity(0.30), radius: 2, x: 0, y: 1)
+                    .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 2)
                     .scaleEffect(
                         x: isPillStretching ? 1.055 : 1.0,
                         y: 1.0,
@@ -1044,20 +1048,109 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
     }
 
     private var selectedSegmentGlass: some View {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        return shape
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.25),
-                        Color.white.opacity(0.08),
+                        Color.white.opacity(0.16),
+                        Color.white.opacity(0.085),
+                        Color.white.opacity(0.045),
+                        Color.black.opacity(0.12),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+            .background {
+                shape
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.10)
+                    .environment(\.colorScheme, .dark)
             }
+            .overlay {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                trackColor.opacity(0.10),
+                                Color.clear,
+                                trackColor.opacity(0.055),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.screen)
+            }
+            .overlay {
+                shape
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.42),
+                                Color.white.opacity(0.20),
+                                trackColor.opacity(0.16),
+                                Color.white.opacity(0.08),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.75
+                    )
+            }
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.30),
+                                Color.white.opacity(0.10),
+                                Color.clear,
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.7
+                    )
+                    .frame(height: 10)
+                    .padding(.horizontal, 2)
+                    .padding(.top, 1)
+                    .blur(radius: 0.2)
+            }
+            .overlay(alignment: .topLeading) {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.22),
+                                trackColor.opacity(0.08),
+                                Color.clear,
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 24, height: 1)
+                    .padding(.leading, 8)
+                    .padding(.top, 3)
+                    .blur(radius: 0.25)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                shape
+                    .strokeBorder(trackColor.opacity(0.10), lineWidth: 0.7)
+                    .blur(radius: 0.8)
+                    .mask(shape)
+            }
+            .overlay {
+                shape
+                    .strokeBorder(Color.black.opacity(0.18), lineWidth: 0.45)
+                    .blur(radius: 0.35)
+                    .offset(y: 1)
+                    .mask(shape)
+            }
+            .shadow(color: trackColor.opacity(0.08), radius: 2, x: 0, y: 0)
+            .shadow(color: Color.black.opacity(0.24), radius: 2.5, x: 0, y: 1.5)
     }
 }
