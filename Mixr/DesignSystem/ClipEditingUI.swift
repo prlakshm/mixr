@@ -9,9 +9,9 @@ enum TLClipEditingMetrics {
     static let toolbarPointerW:     CGFloat = 7
     static let toolbarPointerH:     CGFloat = 4
     static let menuWidth:           CGFloat = 170
-    static let menuSettingsWidth:   CGFloat = 312.5
-    static let menuSettingsDurationSegmentedWidth: CGFloat = 216
-    static let menuSettingsCurveSegmentedWidth: CGFloat = 230
+    static let menuSettingsWidth:   CGFloat = 306.5
+    static let menuSettingsDurationSegmentedWidth: CGFloat = 210
+    static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 11.5
     static let menuRowHeight:       CGFloat = 42
     static let menuSettingsHeaderRowHeight: CGFloat = 34
@@ -787,10 +787,10 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
     private let pillHeight: CGFloat = 24
 
     /// Gap between the selected pill and the outer edge of the segmented control.
-    private let controlEdgeGap: CGFloat = 5
+    private let controlEdgeGap: CGFloat = 4.5
 
     /// Actual internal left/right padding inside the selected pill.
-    private let selectedTextHorizontalPadding: CGFloat = 15
+    private let selectedTextHorizontalPadding: CGFloat = 14
 
     private let minimumPillWidth: CGFloat = 46
     private let dividerWidth: CGFloat = 0.35
@@ -1127,10 +1127,89 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                     .blur(radius: 0.65)
                     .mask(shape)
             }
+            .overlay(alignment: .topTrailing) {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.126),
+                                trackColor.opacity(0.084),
+                                Color.clear,
+                            ],
+                            startPoint: .topTrailing,
+                            endPoint: .bottomLeading
+                        )
+                    )
+                    .mask {
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.94),
+                                Color.white.opacity(0.49),
+                                Color.white.opacity(0.14),
+                                Color.clear,
+                            ],
+                            startPoint: .topTrailing,
+                            endPoint: UnitPoint(x: 0.56, y: 0.74)
+                        )
+                    }
+                    .blur(radius: 0.85)
+                    .mask(shape)
+            }
+            .overlay(alignment: .topTrailing) {
+                shape
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.21),
+                                trackColor.opacity(0.11),
+                                Color.clear,
+                            ],
+                            startPoint: .topTrailing,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.65
+                    )
+                    .blur(radius: 0.38)
+                    .mask {
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.96),
+                                Color.white.opacity(0.57),
+                                Color.white.opacity(0.14),
+                                Color.clear,
+                            ],
+                            startPoint: .topTrailing,
+                            endPoint: UnitPoint(x: 0.68, y: 0.78)
+                        )
+                    }
+                    .mask(shape)
+            }
             .overlay(alignment: .bottomTrailing) {
                 shape
-                    .strokeBorder(trackColor.opacity(0.10), lineWidth: 0.7)
-                    .blur(radius: 0.8)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                trackColor.opacity(0.115),
+                                Color.white.opacity(0.062),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.65
+                    )
+                    .blur(radius: 0.7)
+                    .mask {
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.62),
+                                Color.white.opacity(0.245),
+                                Color.clear,
+                            ],
+                            startPoint: .bottomTrailing,
+                            endPoint: UnitPoint(x: 0.35, y: 0.64)
+                        )
+                    }
                     .mask(shape)
             }
             .overlay {
