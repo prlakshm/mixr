@@ -932,8 +932,9 @@ private struct TLTransitionSettingsSegmentedControl<
 
                 selectedSegmentGlass
                     .frame(width: selectedPillWidth, height: pillHeight)
-                    .shadow(color: .black.opacity(0.30), radius: 2, x: 0, y: 1)
-                    .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.24), radius: 1.2, x: 0, y: 0.5)
+                    .shadow(color: .black.opacity(0.32), radius: 2.5, x: 0, y: 1.5)
+                    .shadow(color: .black.opacity(0.15), radius: 4.5, x: 0, y: 2.5)
                     .scaleEffect(
                         x: isPillStretching ? 1.055 : 1.0,
                         y: 1.0,
@@ -1023,7 +1024,17 @@ private struct TLTransitionSettingsSegmentedControl<
         }
         .background {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color.black.opacity(0.18))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.26),
+                            Color.black.opacity(0.21),
+                            Color.black.opacity(0.30),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .background {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(.ultraThinMaterial)
@@ -1045,6 +1056,29 @@ private struct TLTransitionSettingsSegmentedControl<
                 .overlay {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.124), lineWidth: 0.65)
+                        .blur(radius: 0.25)
+                        .mask(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.9),
+                                    Color.white.opacity(0.45),
+                                    Color.clear,
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.34), lineWidth: 1)
+                        .blur(radius: 0.55)
+                        .offset(y: 1)
+                        .mask(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
         }
     }
