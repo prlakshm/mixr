@@ -1101,41 +1101,31 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                     )
             }
             .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(
+                shape
+                    .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.30),
-                                Color.white.opacity(0.10),
+                                Color.white.opacity(0.12),
+                                Color.white.opacity(0.045),
                                 Color.clear,
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.7
-                    )
-                    .frame(height: 10)
-                    .padding(.horizontal, 2)
-                    .padding(.top, 1)
-                    .blur(radius: 0.2)
-            }
-            .overlay(alignment: .topLeading) {
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.22),
-                                trackColor.opacity(0.08),
-                                Color.clear,
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
                         )
                     )
-                    .frame(width: 24, height: 1)
-                    .padding(.leading, 8)
-                    .padding(.top, 3)
-                    .blur(radius: 0.25)
+                    .mask {
+                        LinearGradient(
+                            colors: [
+                                Color.white,
+                                Color.white.opacity(0.38),
+                                Color.clear,
+                            ],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0.5, y: 0.58)
+                        )
+                    }
+                    .blur(radius: 0.65)
+                    .mask(shape)
             }
             .overlay(alignment: .bottomTrailing) {
                 shape
