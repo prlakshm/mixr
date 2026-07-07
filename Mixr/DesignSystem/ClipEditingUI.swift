@@ -4,47 +4,49 @@ import UIKit
 // MARK: - Metrics
 
 enum TLClipEditingMetrics {
-    static let toolbarWidth:        CGFloat = 222
-    static let toolbarBodyHeight:   CGFloat = 50
-    static let toolbarPointerW:     CGFloat = 7
-    static let toolbarPointerH:     CGFloat = 4
-    static let menuWidth:           CGFloat = 170
-    static let menuSettingsWidth:   CGFloat = 306.5
+    static let toolbarWidth: CGFloat = 222
+    static let toolbarBodyHeight: CGFloat = 50
+    static let toolbarPointerW: CGFloat = 7
+    static let toolbarPointerH: CGFloat = 4
+    static let menuWidth: CGFloat = 170
+    static let menuSettingsWidth: CGFloat = 306.5
     static let menuSettingsDurationSegmentedWidth: CGFloat = 210
     static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 11.5
-    static let menuRowHeight:       CGFloat = 42
+    static let menuRowHeight: CGFloat = 42
     static let menuSettingsHeaderRowHeight: CGFloat = 34
     static let menuSettingsHeaderIconBoxSize: CGFloat = 22.5
     static let menuSettingsHeaderItemGap: CGFloat = 9.5
-    static let menuSlideDuration:   Double  = 0.30
+    static let menuSlideDuration: Double = 0.30
     static var menuEstimatedHeight: CGFloat {
         CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 4
     }
-    static let menuIconBoxSize:     CGFloat = 22.5
-    static let menuIconBoxRadius:   CGFloat = 6
-    static let iconBoxRadius:       CGFloat = 7
-    static let gripVisual:          CGFloat = 11
-    static let gripHit:             CGFloat = 32
-    static let indicatorSize:       CGFloat = 20
+    static let menuIconBoxSize: CGFloat = 22.5
+    static let menuIconBoxRadius: CGFloat = 6
+    static let iconBoxRadius: CGFloat = 7
+    static let gripVisual: CGFloat = 11
+    static let gripHit: CGFloat = 32
+    static let indicatorSize: CGFloat = 20
 
     /// Floating clip-editing panels — above transport and clipped timeline content.
     static let toolbarZIndex: CGFloat = 200
-    static let menuZIndex:    CGFloat = 201
+    static let menuZIndex: CGFloat = 201
 }
 
 // MARK: - Press Style
 
 struct TLClipActionPressStyle: ButtonStyle {
     var isDestructive: Bool = false
-    var fillsCell:     Bool = false
-    var isHovered:     Bool = false
+    var fillsCell: Bool = false
+    var isHovered: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressedFill = isDestructive
+        let pressedFill =
+            isDestructive
             ? Color.red.opacity(0.18)
             : Color.black.opacity(0.34)
-        let hoverFill = isDestructive
+        let hoverFill =
+            isDestructive
             ? Color.red.opacity(0.10)
             : Color.black.opacity(0.18)
 
@@ -53,15 +55,23 @@ struct TLClipActionPressStyle: ButtonStyle {
             .background {
                 if fillsCell {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(configuration.isPressed ? pressedFill : (isHovered ? hoverFill : Color.clear))
+                        .fill(
+                            configuration.isPressed
+                                ? pressedFill
+                                : (isHovered ? hoverFill : Color.clear)
+                        )
                 }
             }
             .offset(y: configuration.isPressed ? 1.25 : 0)
             .opacity(configuration.isPressed && !fillsCell ? 0.88 : 1)
-            .animation(.spring(response: 0.17, dampingFraction: 0.82),
-                       value: configuration.isPressed)
-            .animation(.spring(response: 0.17, dampingFraction: 0.82),
-                       value: isHovered)
+            .animation(
+                .spring(response: 0.17, dampingFraction: 0.82),
+                value: configuration.isPressed
+            )
+            .animation(
+                .spring(response: 0.17, dampingFraction: 0.82),
+                value: isHovered
+            )
     }
 }
 
@@ -72,7 +82,7 @@ private struct TLClipToolbarAction: View {
     let action: () -> Void
 
     @State private var isHovered = false
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6.4) {
@@ -81,11 +91,11 @@ private struct TLClipToolbarAction: View {
                     .foregroundStyle(foreground)
                     .offset(
                         y: icon == "scissors"
-                        ? 1.5
+                            ? 1.5
                             : icon == "trash"
-                        ? 1
+                                ? 1
                                 : 0
-                    ) // offset to fix some icons being slightly higher than rest
+                    )  // offset to fix some icons being slightly higher than rest
                     .frame(height: 14)
 
                 Text(label)
@@ -114,20 +124,23 @@ private struct TLClipToolbarAction: View {
 
 struct TLTransitionIconBox: View {
     let transitionType: ClipTransitionType
-    var highlighted:    Bool    = false
-    var trackColor:     Color   = .white
-    var size:           CGFloat = TLClipEditingMetrics.menuIconBoxSize
+    var highlighted: Bool = false
+    var trackColor: Color = .white
+    var size: CGFloat = TLClipEditingMetrics.menuIconBoxSize
 
     var body: some View {
-        let radius = size == TLClipEditingMetrics.indicatorSize
+        let radius =
+            size == TLClipEditingMetrics.indicatorSize
             ? TLClipEditingMetrics.iconBoxRadius
             : TLClipEditingMetrics.menuIconBoxRadius
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         ZStack {
             shape
-                .fill(highlighted
-                    ? trackColor.opacity(0.22)
-                    : MixrColors.glassNavyStrong.opacity(0.52))
+                .fill(
+                    highlighted
+                        ? trackColor.opacity(0.22)
+                        : MixrColors.glassNavyStrong.opacity(0.52)
+                )
                 .background {
                     shape
                         .fill(.ultraThinMaterial)
@@ -136,25 +149,36 @@ struct TLTransitionIconBox: View {
                 }
                 .overlay {
                     shape.strokeBorder(
-                        highlighted ? trackColor.opacity(0.48) : Color.white.opacity(0.07),
+                        highlighted
+                            ? trackColor.opacity(0.48)
+                            : Color.white.opacity(0.07),
                         lineWidth: 0.5
                     )
                 }
                 .overlay(alignment: .top) {
                     shape
-                        .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.09), Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0.5, y: 0.35)
-                        ))
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.09), Color.clear,
+                                ],
+                                startPoint: .top,
+                                endPoint: UnitPoint(x: 0.5, y: 0.35)
+                            )
+                        )
                 }
 
             transitionIcon
-                .foregroundStyle(highlighted ? trackColor : MixrColors.textPrimary)
+                .foregroundStyle(
+                    highlighted ? trackColor : MixrColors.textPrimary
+                )
                 .font(.system(size: size * 0.44, weight: .medium))
         }
         .frame(width: size, height: size)
-        .shadow(color: highlighted ? trackColor.opacity(0.30) : .clear, radius: 6)
+        .shadow(
+            color: highlighted ? trackColor.opacity(0.30) : .clear,
+            radius: 6
+        )
     }
 
     @ViewBuilder
@@ -177,8 +201,8 @@ struct TLTransitionIconBox: View {
 // MARK: - Transition Grip
 
 struct TLTransitionGrip: View {
-    let trackColor:    Color
-    var isActive:      Bool = false
+    let trackColor: Color
+    var isActive: Bool = false
     var transitionType: ClipTransitionType = .none
 
     @GestureState private var isPressed: Bool = false
@@ -186,7 +210,7 @@ struct TLTransitionGrip: View {
     let onTap: () -> Void
 
     private let visual = TLClipEditingMetrics.gripVisual
-    private let hit    = TLClipEditingMetrics.gripHit
+    private let hit = TLClipEditingMetrics.gripHit
 
     private var hasTransition: Bool { transitionType != .none }
     private var showHalo: Bool { isActive || hasTransition }
@@ -271,7 +295,9 @@ struct TLTransitionGrip: View {
                         .overlay {
                             shape.fill(
                                 LinearGradient(
-                                    colors: [Color.white.opacity(0.10), Color.clear],
+                                    colors: [
+                                        Color.white.opacity(0.10), Color.clear,
+                                    ],
                                     startPoint: .top,
                                     endPoint: UnitPoint(x: 0.5, y: 0.4)
                                 )
@@ -296,7 +322,12 @@ struct TLTransitionGrip: View {
                 .frame(width: boxSize, height: boxSize)
                 .clipShape(shape)
                 .shadow(color: trackColor.opacity(0.70), radius: 8 * gripScale)
-                .shadow(color: .black.opacity(0.55), radius: 4 * gripScale, x: 0, y: 2 * gripScale)
+                .shadow(
+                    color: .black.opacity(0.55),
+                    radius: 4 * gripScale,
+                    x: 0,
+                    y: 2 * gripScale
+                )
                 .scaleEffect(isPressed ? 0.92 : 1.0)
             } else {
                 Circle()
@@ -332,7 +363,7 @@ struct TLTransitionGrip: View {
 
 struct TLClipTransitionIndicator: View {
     let transitionType: ClipTransitionType
-    let trackColor:     Color
+    let trackColor: Color
 
     var body: some View {
         TLTransitionIconBox(
@@ -360,30 +391,46 @@ struct TLToolbarPointer: Shape {
 // MARK: - Clip Context Toolbar
 
 struct TLClipContextToolbar: View {
-    let trackColor:    Color
-    let onSplit:     () -> Void
+    let trackColor: Color
+    let onSplit: () -> Void
     let onDuplicate: () -> Void
-    let onDelete:    () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         let tbW = TLClipEditingMetrics.toolbarWidth
         let tbH = TLClipEditingMetrics.toolbarBodyHeight
-        let pW  = TLClipEditingMetrics.toolbarPointerW
-        let pH  = TLClipEditingMetrics.toolbarPointerH
+        let pW = TLClipEditingMetrics.toolbarPointerW
+        let pH = TLClipEditingMetrics.toolbarPointerH
         let radius: CGFloat = 11
 
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                TLClipToolbarAction(icon: "scissors",   label: "Split",     action: onSplit)
-                TLClipToolbarAction(icon: "doc.on.doc", label: "Duplicate", action: onDuplicate)
-                TLClipToolbarAction(icon: "trash",      label: "Delete",    isDestructive: true, action: onDelete)
+                TLClipToolbarAction(
+                    icon: "scissors",
+                    label: "Split",
+                    action: onSplit
+                )
+                TLClipToolbarAction(
+                    icon: "doc.on.doc",
+                    label: "Duplicate",
+                    action: onDuplicate
+                )
+                TLClipToolbarAction(
+                    icon: "trash",
+                    label: "Delete",
+                    isDestructive: true,
+                    action: onDelete
+                )
             }
             .padding(.horizontal, 10)
-            .padding(.top, 8)      // decrease top padding
-            .padding(.bottom, 10)   // more spacing bottom
+            .padding(.top, 8)  // decrease top padding
+            .padding(.bottom, 10)  // more spacing bottom
             .frame(width: tbW, height: tbH)
             .background {
-                let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+                let shape = RoundedRectangle(
+                    cornerRadius: radius,
+                    style: .continuous
+                )
                 shape
                     .fill(Color(hex: "050810").opacity(0.68))
                     .background {
@@ -394,20 +441,29 @@ struct TLClipContextToolbar: View {
                     }
                     .overlay {
                         shape
-                            .fill(LinearGradient(
-                                colors: [Color.white.opacity(0.03), Color.clear],
-                                startPoint: .top,
-                                endPoint: UnitPoint(x: 0.5, y: 0.35)
-                            ))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.04), Color.clear,
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: UnitPoint(x: 0.5, y: 0.35)
+                                )
+                            )
                     }
                     .overlay {
                         shape
-                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                            .strokeBorder(
+                                Color.white.opacity(0.09),
+                                lineWidth: 0.5
+                            )
                     }
             }
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .clipShape(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+            )
             .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
-            .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
+            .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
 
             TLToolbarPointer()
                 .fill(Color(hex: "050810").opacity(0.68))
@@ -415,7 +471,9 @@ struct TLClipContextToolbar: View {
                     TLToolbarPointer()
                         .fill(
                             LinearGradient(
-                                colors: [Color.white.opacity(0.045), Color.clear],
+                                colors: [
+                                    Color.white.opacity(0.045), Color.clear,
+                                ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -429,10 +487,10 @@ struct TLClipContextToolbar: View {
 // MARK: - Transition Menu
 
 struct TLTransitionMenu: View {
-    let selected:   ClipTransition
+    let selected: ClipTransition
     let trackColor: Color
-    let onSelect:   (ClipTransitionType) -> Void
-    var onUpdate:   (ClipTransition) -> Void = { _ in }
+    let onSelect: (ClipTransitionType) -> Void
+    var onUpdate: (ClipTransition) -> Void = { _ in }
 
     @State private var page: MenuPage = .list
 
@@ -480,17 +538,21 @@ struct TLTransitionMenu: View {
             case .list:
                 menuRows
                     .frame(width: TLClipEditingMetrics.menuWidth)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading),
-                        removal: .move(edge: .leading)
-                    ))
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .leading),
+                            removal: .move(edge: .leading)
+                        )
+                    )
             case .settings(let txType):
                 settingsPage(for: txType)
                     .frame(width: TLClipEditingMetrics.menuSettingsWidth)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .trailing)
-                    ))
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        )
+                    )
             }
         }
         .frame(
@@ -513,11 +575,15 @@ struct TLTransitionMenu: View {
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.045), Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0.5, y: 0.35)
-                        ))
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.045), Color.clear,
+                                ],
+                                startPoint: .top,
+                                endPoint: UnitPoint(x: 0.5, y: 0.35)
+                            )
+                        )
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -526,7 +592,7 @@ struct TLTransitionMenu: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
-        .shadow(color: .black.opacity(0.20), radius: 4,  x: 0, y: 2)
+        .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
         .onChange(of: selected.type) { _, newValue in
             if newValue == .none {
                 page = .list
@@ -578,12 +644,19 @@ struct TLTransitionMenu: View {
             if txType == .none {
                 onSelect(txType)
             } else {
-                var tx = selected.type == txType
+                var tx =
+                    selected.type == txType
                     ? selected
-                    : ClipTransition(type: txType, duration: DurationOption.one.rawValue, curve: CurveOption.linear.rawValue)
+                    : ClipTransition(
+                        type: txType,
+                        duration: DurationOption.one.rawValue,
+                        curve: CurveOption.linear.rawValue
+                    )
                 tx.type = txType
                 onUpdate(tx)
-                withAnimation(.easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)) {
+                withAnimation(
+                    .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)
+                ) {
                     page = .settings(txType)
                 }
             }
@@ -596,8 +669,12 @@ struct TLTransitionMenu: View {
                 )
 
                 Text(txType.rawValue)
-                    .font(.system(size: 12, weight: isSel ? .semibold : .regular))
-                    .foregroundStyle(isSel ? trackColor : MixrColors.textPrimary)
+                    .font(
+                        .system(size: 12, weight: isSel ? .semibold : .regular)
+                    )
+                    .foregroundStyle(
+                        isSel ? trackColor : MixrColors.textPrimary
+                    )
 
                 Spacer()
 
@@ -627,7 +704,8 @@ struct TLTransitionMenu: View {
             settingsRow(
                 title: "Duration",
                 control: durationControl,
-                controlWidth: TLClipEditingMetrics.menuSettingsDurationSegmentedWidth
+                controlWidth: TLClipEditingMetrics
+                    .menuSettingsDurationSegmentedWidth
             )
             .overlay(alignment: .bottom) {
                 menuDivider
@@ -635,7 +713,8 @@ struct TLTransitionMenu: View {
             settingsRow(
                 title: "Curve",
                 control: curveControl,
-                controlWidth: TLClipEditingMetrics.menuSettingsCurveSegmentedWidth
+                controlWidth: TLClipEditingMetrics
+                    .menuSettingsCurveSegmentedWidth
             )
         }
         .padding(.vertical, 2)
@@ -644,7 +723,9 @@ struct TLTransitionMenu: View {
     private func settingsHeader(_ txType: ClipTransitionType) -> some View {
         HStack(spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)) {
+                withAnimation(
+                    .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)
+                ) {
                     page = .list
                 }
             } label: {
@@ -652,8 +733,10 @@ struct TLTransitionMenu: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
                     .frame(
-                        width: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize,
-                        height: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize,
+                        width: TLClipEditingMetrics
+                            .menuSettingsHeaderIconBoxSize,
+                        height: TLClipEditingMetrics
+                            .menuSettingsHeaderIconBoxSize,
                         alignment: .trailing
                     )
                     .contentShape(Rectangle())
@@ -736,7 +819,8 @@ struct TLTransitionMenu: View {
 
     private var selectedDurationOption: DurationOption {
         DurationOption.allCases.min {
-            abs($0.rawValue - selected.duration) < abs($1.rawValue - selected.duration)
+            abs($0.rawValue - selected.duration)
+                < abs($1.rawValue - selected.duration)
         } ?? .one
     }
 
@@ -782,7 +866,9 @@ private struct TLSelectedSegmentTitleWidthKey: PreferenceKey {
     }
 }
 
-private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equatable>: View {
+private struct TLTransitionSettingsSegmentedControl<
+    Option: Identifiable & Equatable
+>: View {
     private let controlHeight: CGFloat = 28
     private let pillHeight: CGFloat = 24
 
@@ -811,21 +897,27 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
             let layout = segmentLayout(in: proxy.size.width)
             let selectedIndex = options.firstIndex(of: selected) ?? 0
 
-            let selectedCenter = layout.centers.indices.contains(selectedIndex)
+            let selectedCenter =
+                layout.centers.indices.contains(selectedIndex)
                 ? layout.centers[selectedIndex]
                 : proxy.size.width / 2
 
-            let selectedPillWidth = layout.pillWidths.indices.contains(selectedIndex)
+            let selectedPillWidth =
+                layout.pillWidths.indices.contains(selectedIndex)
                 ? layout.pillWidths[selectedIndex]
                 : minimumPillWidth
 
             ZStack(alignment: .topLeading) {
                 // Dividers stay behind the pill.
-                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                ForEach(Array(options.enumerated()), id: \.element.id) {
+                    index,
+                    option in
                     if index != options.count - 1,
-                       layout.dividerXs.indices.contains(index) {
+                        layout.dividerXs.indices.contains(index)
+                    {
                         let nextOption = options[index + 1]
-                        let dividerTouchesSelection = option == selected || nextOption == selected
+                        let dividerTouchesSelection =
+                            option == selected || nextOption == selected
 
                         Rectangle()
                             .fill(MixrColors.divider.opacity(0.55))
@@ -850,13 +942,24 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                     .position(x: selectedCenter, y: controlHeight / 2)
 
                 // Visible labels are centered on the same centers as the pill.
-                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                ForEach(Array(options.enumerated()), id: \.element.id) {
+                    index,
+                    option in
                     if layout.centers.indices.contains(index) {
                         let isSelected = option == selected
 
                         Text(title(option, isSelected))
-                            .font(.system(size: fontSize, weight: isSelected ? .medium : .regular))
-                            .foregroundStyle(isSelected ? MixrColors.textPrimary : MixrColors.textSecondary)
+                            .font(
+                                .system(
+                                    size: fontSize,
+                                    weight: isSelected ? .medium : .regular
+                                )
+                            )
+                            .foregroundStyle(
+                                isSelected
+                                    ? MixrColors.textPrimary
+                                    : MixrColors.textSecondary
+                            )
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                             .fixedSize(horizontal: true, vertical: false)
@@ -869,7 +972,9 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                 }
 
                 // Invisible buttons preserve generous tap targets without affecting label position.
-                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                ForEach(Array(options.enumerated()), id: \.element.id) {
+                    index,
+                    option in
                     if layout.hitFrames.indices.contains(index) {
                         let hitFrame = layout.hitFrames[index]
                         let isSelected = option == selected
@@ -878,7 +983,10 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                             onSelect(option)
                         } label: {
                             Color.clear
-                                .frame(width: hitFrame.width, height: controlHeight)
+                                .frame(
+                                    width: hitFrame.width,
+                                    height: controlHeight
+                                )
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -898,8 +1006,14 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         .onPreferenceChange(TLSelectedSegmentTitleWidthKey.self) { widths in
             selectedTitleWidths = widths
         }
-        .animation(.spring(response: selectionSpringResponse, dampingFraction: 0.76), value: selected)
-        .animation(.spring(response: 0.18, dampingFraction: 0.68), value: isPillStretching)
+        .animation(
+            .spring(response: selectionSpringResponse, dampingFraction: 0.76),
+            value: selected
+        )
+        .animation(
+            .spring(response: 0.18, dampingFraction: 0.68),
+            value: isPillStretching
+        )
         .onChange(of: selected) { _, _ in
             isPillStretching = true
 
@@ -918,11 +1032,15 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.08), Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0.5, y: 0.5)
-                        ))
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.08), Color.clear,
+                                ],
+                                startPoint: .top,
+                                endPoint: UnitPoint(x: 0.5, y: 0.5)
+                            )
+                        )
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -971,7 +1089,8 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         }
 
         let firstCenter = controlEdgeGap + pillWidths[0] / 2
-        let lastCenter = controlWidth - controlEdgeGap - pillWidths[count - 1] / 2
+        let lastCenter =
+            controlWidth - controlEdgeGap - pillWidths[count - 1] / 2
         let usableLastCenter = max(firstCenter, lastCenter)
         let step = (usableLastCenter - firstCenter) / CGFloat(count - 1)
 
@@ -980,11 +1099,13 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
         }
 
         let hitFrames = centers.enumerated().map { index, center in
-            let left: CGFloat = index == 0
+            let left: CGFloat =
+                index == 0
                 ? 0
                 : (centers[index - 1] + center) / 2
 
-            let right: CGFloat = index == count - 1
+            let right: CGFloat =
+                index == count - 1
                 ? controlWidth
                 : (center + centers[index + 1]) / 2
 
@@ -1009,7 +1130,8 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
     }
 
     private func pillWidth(for option: Option) -> CGFloat {
-        let measuredWidth = selectedTitleWidths[optionKey(option)]
+        let measuredWidth =
+            selectedTitleWidths[optionKey(option)]
             ?? estimatedTitleWidth(title(option, true))
 
         return max(
@@ -1042,184 +1164,141 @@ private struct TLTransitionSettingsSegmentedControl<Option: Identifiable & Equat
                         }
                     }
             }
-        }
-        .opacity(0)
-        .allowsHitTesting(false)
+        }.opacity(0)
+            .allowsHitTesting(false)
     }
 
     private var selectedSegmentGlass: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-
-        return shape
-            .fill(
+        return shape.fill(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.16), Color.white.opacity(0.085),
+                    Color.white.opacity(0.03), Color.white.opacity(0.045),
+                    Color.black.opacity(0.12),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        ).background {
+            shape.fill(.ultraThinMaterial).opacity(0.10).environment(
+                \.colorScheme,
+                .dark
+            )
+        }.overlay {
+            shape.fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.16),
-                        Color.white.opacity(0.085),
-                        Color.white.opacity(0.045),
-                        Color.black.opacity(0.12),
+                        trackColor.opacity(0.13), Color.clear,
+                        trackColor.opacity(0.07),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            ).blendMode(.screen)
+        }.overlay {
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.42), Color.white.opacity(0.20),
+                        trackColor.opacity(0.19), Color.white.opacity(0.08),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.75
+            )
+        }.overlay(alignment: .top) {
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.12), Color.white.opacity(0.045),
+                        Color.clear,
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            ).mask {
+                LinearGradient(
+                    colors: [
+                        Color.white, Color.white.opacity(0.38), Color.clear,
                     ],
                     startPoint: .top,
-                    endPoint: .bottom
+                    endPoint: UnitPoint(x: 0.5, y: 0.58)
                 )
-            )
-            .background {
-                shape
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.10)
-                    .environment(\.colorScheme, .dark)
-            }
-            .overlay {
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                trackColor.opacity(0.10),
-                                Color.clear,
-                                trackColor.opacity(0.055),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .blendMode(.screen)
-            }
-            .overlay {
-                shape
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.42),
-                                Color.white.opacity(0.20),
-                                trackColor.opacity(0.16),
-                                Color.white.opacity(0.08),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.75
-                    )
-            }
-            .overlay(alignment: .top) {
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.12),
-                                Color.white.opacity(0.045),
-                                Color.clear,
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .mask {
-                        LinearGradient(
-                            colors: [
-                                Color.white,
-                                Color.white.opacity(0.38),
-                                Color.clear,
-                            ],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0.5, y: 0.58)
-                        )
-                    }
-                    .blur(radius: 0.65)
-                    .mask(shape)
-            }
-            .overlay(alignment: .topTrailing) {
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.126),
-                                trackColor.opacity(0.084),
-                                Color.clear,
-                            ],
-                            startPoint: .topTrailing,
-                            endPoint: .bottomLeading
-                        )
-                    )
-                    .mask {
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.94),
-                                Color.white.opacity(0.49),
-                                Color.white.opacity(0.14),
-                                Color.clear,
-                            ],
-                            startPoint: .topTrailing,
-                            endPoint: UnitPoint(x: 0.56, y: 0.74)
-                        )
-                    }
-                    .blur(radius: 0.85)
-                    .mask(shape)
-            }
-            .overlay(alignment: .topTrailing) {
-                shape
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.21),
-                                trackColor.opacity(0.11),
-                                Color.clear,
-                            ],
-                            startPoint: .topTrailing,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.65
-                    )
-                    .blur(radius: 0.38)
-                    .mask {
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.96),
-                                Color.white.opacity(0.57),
-                                Color.white.opacity(0.14),
-                                Color.clear,
-                            ],
-                            startPoint: .topTrailing,
-                            endPoint: UnitPoint(x: 0.68, y: 0.78)
-                        )
-                    }
-                    .mask(shape)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                shape
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.clear,
-                                trackColor.opacity(0.115),
-                                Color.white.opacity(0.062),
-                            ],
-                            startPoint: .leading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.65
-                    )
-                    .blur(radius: 0.7)
-                    .mask {
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.62),
-                                Color.white.opacity(0.245),
-                                Color.clear,
-                            ],
-                            startPoint: .bottomTrailing,
-                            endPoint: UnitPoint(x: 0.35, y: 0.64)
-                        )
-                    }
-                    .mask(shape)
-            }
-            .overlay {
-                shape
-                    .strokeBorder(Color.black.opacity(0.18), lineWidth: 0.45)
-                    .blur(radius: 0.35)
-                    .offset(y: 1)
-                    .mask(shape)
-            }
-            .shadow(color: trackColor.opacity(0.08), radius: 2, x: 0, y: 0)
-            .shadow(color: Color.black.opacity(0.24), radius: 2.5, x: 0, y: 1.5)
+            }.blur(radius: 0.65).mask(shape)
+        }.overlay(alignment: .topTrailing) {
+            shape.fill(
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(0.126), location: 0.0),
+                        .init(color: trackColor.opacity(0.12), location: 0.18),
+                        .init(color: Color.clear, location: 0.78),
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: UnitPoint(x: 0.84, y: 0.40)
+                )
+            ).mask {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.94), Color.white.opacity(0.49),
+                        Color.white.opacity(0.14), Color.clear,
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: UnitPoint(x: 0.68, y: 0.52)
+                )
+            }.blur(radius: 0.85).mask(shape)
+        }.overlay(alignment: .topTrailing) {
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.21), trackColor.opacity(0.14),
+                        Color.clear,
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.65
+            ).blur(radius: 0.38).mask {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.96), Color.white.opacity(0.57),
+                        Color.white.opacity(0.14), Color.clear,
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: UnitPoint(x: 0.68, y: 0.78)
+                )
+            }.mask(shape)
+        }.overlay(alignment: .bottomTrailing) {
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.clear, trackColor.opacity(0.115),
+                        Color.white.opacity(0.062),
+                    ],
+                    startPoint: .leading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.65
+            ).blur(radius: 0.7).mask {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.62), Color.white.opacity(0.245),
+                        Color.clear,
+                    ],
+                    startPoint: .bottomTrailing,
+                    endPoint: UnitPoint(x: 0.35, y: 0.64)
+                )
+            }.mask(shape)
+        }.overlay {
+            shape.strokeBorder(Color.black.opacity(0.18), lineWidth: 0.45).blur(
+                radius: 0.35
+            ).offset(y: 1).mask(shape)
+        }.shadow(color: trackColor.opacity(0.08), radius: 8, x: 0, y: 2).shadow(
+            color: trackColor.opacity(0.08),
+            radius: 2,
+            x: 0,
+            y: 0
+        ).shadow(color: Color.black.opacity(0.24), radius: 2.5, x: 0, y: 1.5)
     }
 }
