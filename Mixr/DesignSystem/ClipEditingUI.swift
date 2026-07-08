@@ -16,10 +16,15 @@ enum TLClipEditingMetrics {
     static let menuRowHeight: CGFloat = 42
     static let menuSettingsHeaderRowHeight: CGFloat = 34
     static let menuSettingsHeaderIconBoxSize: CGFloat = 22.5
-    static let menuSettingsHeaderItemGap: CGFloat = 9.5
+    static let menuSettingsHeaderChevronIconGap: CGFloat = 8
+    static let menuSettingsHeaderIconTitleGap: CGFloat = 9.5
+    static let menuSettingsHeaderLeadingOffset: CGFloat = -0.75
+    static let menuSettingsHorizontalPadding: CGFloat = 20
+    static let menuSettingsTopPadding: CGFloat = 4
+    static let menuSettingsBottomPadding: CGFloat = 4
     static let menuSlideDuration: Double = 0.30
     static var menuEstimatedHeight: CGFloat {
-        CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 4
+        CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 6
     }
     static let menuIconBoxSize: CGFloat = 22.5
     static let menuIconBoxRadius: CGFloat = 6
@@ -616,7 +621,8 @@ struct TLTransitionMenu: View {
         case .settings:
             TLClipEditingMetrics.menuSettingsHeaderRowHeight
                 + TLClipEditingMetrics.menuRowHeight * 2
-                + 4
+                + TLClipEditingMetrics.menuSettingsTopPadding
+                + TLClipEditingMetrics.menuSettingsBottomPadding
         }
     }
 
@@ -634,7 +640,7 @@ struct TLTransitionMenu: View {
                     }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
     }
 
     @ViewBuilder
@@ -717,52 +723,50 @@ struct TLTransitionMenu: View {
                     .menuSettingsCurveSegmentedWidth
             )
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, TLClipEditingMetrics.menuSettingsHorizontalPadding)
+        .padding(.top, TLClipEditingMetrics.menuSettingsTopPadding)
+        .padding(.bottom, TLClipEditingMetrics.menuSettingsBottomPadding)
     }
 
     private func settingsHeader(_ txType: ClipTransitionType) -> some View {
         HStack(spacing: 0) {
-            Button {
-                withAnimation(
-                    .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)
-                ) {
-                    page = .list
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(
+                        .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)
+                    ) {
+                        page = .list
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(MixrColors.textPrimary.opacity(0.8))
+                        .frame(height: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
+                .buttonStyle(.plain)
+
+                Spacer()
+                    .frame(width: TLClipEditingMetrics.menuSettingsHeaderChevronIconGap)
+
+                TLTransitionIconBox(
+                    transitionType: txType,
+                    highlighted: true,
+                    trackColor: trackColor,
+                    size: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize
+                )
+
+                Spacer()
+                    .frame(width: TLClipEditingMetrics.menuSettingsHeaderIconTitleGap)
+
+                Text(txType.rawValue)
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
-                    .frame(
-                        width: TLClipEditingMetrics
-                            .menuSettingsHeaderIconBoxSize,
-                        height: TLClipEditingMetrics
-                            .menuSettingsHeaderIconBoxSize,
-                        alignment: .trailing
-                    )
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .offset(x: TLClipEditingMetrics.menuSettingsHeaderLeadingOffset)
 
-            Spacer()
-                .frame(width: TLClipEditingMetrics.menuSettingsHeaderItemGap)
-
-            TLTransitionIconBox(
-                transitionType: txType,
-                highlighted: true,
-                trackColor: trackColor,
-                size: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize
-            )
-
-            Spacer()
-                .frame(width: TLClipEditingMetrics.menuSettingsHeaderItemGap)
-
-            Text(txType.rawValue)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(MixrColors.textPrimary)
-
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
         .frame(height: TLClipEditingMetrics.menuSettingsHeaderRowHeight)
     }
 
@@ -777,15 +781,11 @@ struct TLTransitionMenu: View {
                 .foregroundStyle(MixrColors.textPrimary)
                 .fixedSize(horizontal: true, vertical: false)
 
-            Spacer()
-                .frame(width: TLClipEditingMetrics.menuSettingsControlGap)
+            Spacer(minLength: TLClipEditingMetrics.menuSettingsControlGap)
 
             control
                 .frame(width: controlWidth)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
         .frame(height: TLClipEditingMetrics.menuRowHeight)
     }
 
@@ -851,7 +851,6 @@ struct TLTransitionMenu: View {
         Rectangle()
             .fill(MixrColors.divider.opacity(0.5))
             .frame(height: 0.25)
-            .padding(.leading, 20)
     }
 }
 
