@@ -35,6 +35,34 @@ enum MixrLayout {
     static let glassBorderWidth: CGFloat = 0.5
 }
 
+// MARK: - Shared Icons
+
+struct MixrChevron: View {
+    let direction: Direction
+    var size: CGFloat = 10
+    var color: Color = MixrColors.textSecondary
+
+    enum Direction {
+        case back
+        case forward
+
+        var systemName: String {
+            switch self {
+            case .back:
+                "chevron.left"
+            case .forward:
+                "chevron.right"
+            }
+        }
+    }
+
+    var body: some View {
+        Image(systemName: direction.systemName)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(color)
+    }
+}
+
 // MARK: - Waveform Metrics
 
 enum WaveformMetrics {

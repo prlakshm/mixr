@@ -28,7 +28,7 @@ enum TLClipEditingMetrics {
     static let menuRowHeight: CGFloat = 42
     static let menuSettingsHeaderRowHeight: CGFloat = 34
     static let menuSettingsHeaderIconBoxSize: CGFloat = 22.5
-    static let menuSettingsHeaderChevronIconGap: CGFloat = 8
+    static let menuSettingsHeaderChevronIconGap: CGFloat = 8.25
     static let menuSettingsHeaderIconTitleGap: CGFloat = 9.5
     static let menuSettingsHeaderLeadingOffset: CGFloat = -0.75
     static let menuSettingsHorizontalPadding: CGFloat = 20
@@ -149,10 +149,12 @@ private struct TLClipToolbarAction: View {
         switch icon {
         case "gauge.with.dots.needle.67percent":
             13.2
-        case "trash":
-            12
-        case "doc.on.doc":
+        case "scissors":
             11.65
+        case "doc.on.doc":
+            11.35
+        case "trash":
+            11.4
         default:
             11.5
         }
@@ -161,29 +163,21 @@ private struct TLClipToolbarAction: View {
     private var iconVerticalOffset: CGFloat {
         switch icon {
         case "scissors":
-            1.5
+            1.95
         case "gauge.with.dots.needle.67percent":
-            2.25
+            2.0
         case "doc.on.doc":
-            2.3
+            2.2
         case "trash":
-            3.2
+            2.35
         default:
             0
         }
     }
 
     private var labelVerticalOffset: CGFloat {
-        switch label {
-        case "Speed":
-            0.25
-        case "Duplicate":
-            0.45
-        case "Delete":
-            0.65
-        default:
-            0
-        }
+        // Keep all labels on Speed's optical baseline.
+        0.25
     }
 }
 
@@ -614,12 +608,14 @@ struct TLClipContextToolbar: View {
     }
 
     private var speedContent: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Button(action: onSpeedBack) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(MixrColors.textPrimary)
-                    .frame(width: 28, height: 28)
+                MixrChevron(
+                    direction: .back,
+                    size: 11,
+                    color: MixrColors.textPrimary.opacity(0.88)
+                )
+                    .frame(width: 20, height: 28)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -636,7 +632,7 @@ struct TLClipContextToolbar: View {
                 .textFieldStyle(.plain)
                 .focused($isSpeedFieldFocused)
                 .padding(.horizontal, 8)
-                .frame(height: 28)
+                .frame(width: 76, height: 28)
                 .background {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill(Color.white.opacity(0.08))
@@ -651,7 +647,7 @@ struct TLClipContextToolbar: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 22, height: 28)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -886,9 +882,7 @@ struct TLTransitionMenu: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(trackColor)
                 } else if txType != .none {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(MixrColors.textSecondary)
+                    MixrChevron(direction: .forward)
                 }
             }
             .padding(.horizontal, 20)
@@ -935,9 +929,7 @@ struct TLTransitionMenu: View {
                         page = .list
                     }
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(MixrColors.textPrimary.opacity(0.8))
+                    MixrChevron(direction: .back, size: 10.5)
                         .frame(height: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize)
                         .contentShape(Rectangle())
                 }
