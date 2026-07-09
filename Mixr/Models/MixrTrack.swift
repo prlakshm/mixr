@@ -106,6 +106,8 @@ struct MixrClip: Identifiable {
     let id: UUID
     var start:         CGFloat   // timeline units (0–totalUnits)
     var length:        CGFloat   // timeline units
+    /// Playback rate multiplier. 1.0 = normal; >1 faster/shorter; <1 slower/longer.
+    var playbackSpeed: Double = 1.0
     var transitionIn:  ClipTransition = .none
     var transitionOut: ClipTransition = .none
 }

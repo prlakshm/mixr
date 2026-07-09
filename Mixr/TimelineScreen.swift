@@ -625,6 +625,7 @@ private struct TLTrackArea: View {
     @State private var selectedClipID:   UUID?       = nil
     @State private var clipTapAnchorX:   CGFloat?    = nil
     @State private var activeGrip:       ActiveGrip? = nil
+    @State private var isSpeedEditing:   Bool        = false
     @State private var currentContentW:     CGFloat = 0
     @State private var currentContentUnits: CGFloat = TLK.totalUnits
     @State private var currentLaneVW:       CGFloat = 0
@@ -720,16 +721,23 @@ private struct TLTrackArea: View {
         let leftLen  = splitAt - f.clip.start
         let rightLen = f.clip.length - leftLen
         let newID    = UUID()
+        let inheritedSpeed = f.clip.playbackSpeed
         tracks[f.trackIdx].clips[f.clipIdx].length = leftLen
         tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
         tracks[f.trackIdx].clips.insert(
-            MixrClip(id: newID, start: splitAt, length: rightLen),
+            MixrClip(
+                id: newID,
+                start: splitAt,
+                length: rightLen,
+                playbackSpeed: inheritedSpeed
+            ),
             at: f.clipIdx + 1
         )
         let contentUnits = MixrTimeline.contentUnits(for: tracks)
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID  = newID
             activeGrip      = nil
+            isSpeedEditing  = false
             clipTapAnchorX  = splitAt / contentUnits * currentContentW
         }
     }
@@ -749,7 +757,12 @@ private struct TLTrackArea: View {
         // the source exits cleanly into the new independent duplicate.
         tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
         tracks[f.trackIdx].clips.insert(
-            MixrClip(id: newID, start: newStart, length: newLen),
+            MixrClip(
+                id: newID,
+                start: newStart,
+                length: newLen,
+                playbackSpeed: f.clip.playbackSpeed
+            ),
             at: f.clipIdx + 1
         )
         let contentUnits = MixrTimeline.contentUnits(for: tracks)
@@ -767,6 +780,7 @@ private struct TLTrackArea: View {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID = newID
             activeGrip     = nil
+            isSpeedEditing = false
             clipTapAnchorX = newStart / contentUnits * currentContentW
         }
     }
@@ -777,6 +791,7 @@ private struct TLTrackArea: View {
             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                 selectedClipID = nil
                 activeGrip     = nil
+                isSpeedEditing = false
                 clipTapAnchorX = nil
             }
             onDeleteTrack(f.track.id)
@@ -787,7 +802,58 @@ private struct TLTrackArea: View {
             tracks[f.trackIdx].clips.remove(at: f.clipIdx)
             selectedClipID = nil
             activeGrip     = nil
+            isSpeedEditing = false
             clipTapAnchorX = nil
+        }
+    }
+
+    /// Applies a playback-speed multiplier, rescales clip length from the implied
+    /// source duration, and ripples following clips only when the new end overlaps.
+    private func applyClipSpeed(id: UUID, speed: Double) {
+        guard let f = findClip(id) else { return }
+        let clamped = min(
+            TLClipEditingMetrics.maxPlaybackSpeed,
+            max(TLClipEditingMetrics.minPlaybackSpeed, speed)
+        )
+        let currentSpeed = max(f.clip.playbackSpeed, 0.0001)
+        let sourceLength = Double(f.clip.length) * currentSpeed
+        let rawNewLength = sourceLength / clamped
+        let newLength = max(
+            MixrTimeline.minClipLengthUnits,
+            CGFloat(rawNewLength)
+        )
+        let oldEnd = f.clip.start + f.clip.length
+        let newEnd = f.clip.start + newLength
+        let delta = newEnd - oldEnd
+
+        tracks[f.trackIdx].clips[f.clipIdx].length = newLength
+        tracks[f.trackIdx].clips[f.clipIdx].playbackSpeed = clamped
+
+        if delta > 0.001 {
+            // Grow: push following clips that would overlap the new end.
+            var cursor = newEnd
+            for i in (f.clipIdx + 1)..<tracks[f.trackIdx].clips.count {
+                if tracks[f.trackIdx].clips[i].start < cursor - 0.001 {
+                    tracks[f.trackIdx].clips[i].start = cursor
+                    tracks[f.trackIdx].clips[i].transitionIn = .none
+                    tracks[f.trackIdx].clips[i].transitionOut = .none
+                }
+                cursor = max(
+                    cursor,
+                    tracks[f.trackIdx].clips[i].start
+                        + tracks[f.trackIdx].clips[i].length
+                )
+            }
+            tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
+        } else if delta < -0.001 {
+            // Shrink: keep gaps; only clear a stale outgoing transition.
+            tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
+        }
+
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            isSpeedEditing = false
+            selectedClipID = id
+            activeGrip = nil
         }
     }
 
@@ -802,6 +868,7 @@ private struct TLTrackArea: View {
         }
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             activeGrip = nil
+            isSpeedEditing = false
         }
     }
 
@@ -831,6 +898,7 @@ private struct TLTrackArea: View {
         withAnimation(.easeOut(duration: TLK.clipDragScrimAnim)) {
             isDraggingClip = true
             activeGrip = nil
+            isSpeedEditing = false
             selectedClipID = clipID
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1427,6 +1495,7 @@ private struct TLTrackArea: View {
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                         selectedClipID = nil
                         activeGrip     = nil
+                        isSpeedEditing = false
                         clipTapAnchorX = nil
                     }
                 }
@@ -1457,6 +1526,7 @@ private struct TLTrackArea: View {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 selectedClipID = clipID
                                 activeGrip     = nil
+                                isSpeedEditing = false
                                 clipTapAnchorX = tapX
                             }
                         },
@@ -1464,6 +1534,7 @@ private struct TLTrackArea: View {
                             guard !isDraggingClip else { return }
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 activeGrip = grip
+                                isSpeedEditing = false
                             }
                         },
                         onClipDragArmed: { clipID, areaX, areaY in
@@ -1520,7 +1591,10 @@ private struct TLTrackArea: View {
         }
 
         if let cid = selectedClipID, activeGrip == nil, !isDraggingClip, let f = findClip(cid) {
-            let tbW    = TLClipEditingMetrics.toolbarWidth
+            let mode: TLClipContextToolbar.Mode = isSpeedEditing ? .speed : .actions
+            let tbW = mode == .speed
+                ? TLClipEditingMetrics.toolbarSpeedWidth
+                : TLClipEditingMetrics.toolbarWidth
             let tbH    = TLClipEditingMetrics.toolbarBodyHeight + TLClipEditingMetrics.toolbarPointerH
             let playheadContentX = (effectivePlayheadUnit / contentUnits) * contentW
             let tbSX   = screenXFor(playheadContentX)
@@ -1528,9 +1602,26 @@ private struct TLTrackArea: View {
             let tbTopY    = trackTopY + TLK.trackRowHeight * 0.03 - tbH * 0.5 - 6
             TLClipContextToolbar(
                 trackColor: f.track.color.color,
-                onSplit:     { splitClip(id: cid) },
+                mode: mode,
+                speedValue: f.clip.playbackSpeed,
+                onSplit: { splitClip(id: cid) },
+                onSpeed: {
+                    withAnimation(
+                        .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
+                    ) {
+                        isSpeedEditing = true
+                    }
+                },
                 onDuplicate: { duplicateClip(id: cid) },
-                onDelete:    { deleteClip(id: cid) }
+                onDelete: { deleteClip(id: cid) },
+                onSpeedBack: {
+                    withAnimation(
+                        .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
+                    ) {
+                        isSpeedEditing = false
+                    }
+                },
+                onSpeedCommit: { applyClipSpeed(id: cid, speed: $0) }
             )
             .frame(width: tbW)
             .offset(x: tbSX - tbW / 2, y: tbTopY)
@@ -1539,6 +1630,10 @@ private struct TLTrackArea: View {
                 removal:   .opacity.combined(with: .scale(scale: 0.90, anchor: .bottom))
             ))
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: selectedClipID)
+            .animation(
+                .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration),
+                value: isSpeedEditing
+            )
         }
 
         if let grip = activeGrip, let f = findClip(grip.clipID) {

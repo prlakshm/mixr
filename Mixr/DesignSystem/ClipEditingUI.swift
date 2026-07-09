@@ -4,10 +4,22 @@ import UIKit
 // MARK: - Metrics
 
 enum TLClipEditingMetrics {
-    static let toolbarWidth: CGFloat = 222
+    static let toolbarLegacyWidth: CGFloat = 202
+    static let toolbarHorizontalPadding: CGFloat = 10
+    static let toolbarLegacyActionSpacing: CGFloat = 6
+    static let toolbarActionCellSpacing: CGFloat = 3
+    static let toolbarActionSpacing: CGFloat = 24
+    /// Per-action cell width from the original 3-action toolbar.
+    static let toolbarActionWidth: CGFloat = (toolbarLegacyWidth - toolbarHorizontalPadding * 2 - toolbarLegacyActionSpacing * 2) / 3
+    static let toolbarWidth: CGFloat = toolbarHorizontalPadding * 2 + toolbarActionWidth * 4 + toolbarActionCellSpacing * 3
+    static let toolbarSpeedWidth: CGFloat = 168
     static let toolbarBodyHeight: CGFloat = 50
+    static let toolbarBodyHorizontalOffset: CGFloat = 12
     static let toolbarPointerW: CGFloat = 7
     static let toolbarPointerH: CGFloat = 4
+    static let toolbarMorphDuration: Double = 0.28
+    static let minPlaybackSpeed: Double = 0.25
+    static let maxPlaybackSpeed: Double = 4.0
     static let menuWidth: CGFloat = 170
     static let menuSettingsWidth: CGFloat = 306.5
     static let menuSettingsDurationSegmentedWidth: CGFloat = 210
@@ -44,6 +56,7 @@ struct TLClipActionPressStyle: ButtonStyle {
     var isDestructive: Bool = false
     var fillsCell: Bool = false
     var isHovered: Bool = false
+    var expandsHorizontally: Bool = true
 
     func makeBody(configuration: Configuration) -> some View {
         let pressedFill =
@@ -55,8 +68,16 @@ struct TLClipActionPressStyle: ButtonStyle {
             ? Color.red.opacity(0.10)
             : Color.black.opacity(0.18)
 
-        configuration.label
-            .frame(maxWidth: .infinity)
+        let label = Group {
+            if expandsHorizontally {
+                configuration.label
+                    .frame(maxWidth: .infinity)
+            } else {
+                configuration.label
+            }
+        }
+
+        label
             .background {
                 if fillsCell {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -92,28 +113,28 @@ private struct TLClipToolbarAction: View {
         Button(action: action) {
             VStack(spacing: 6.4) {
                 Image(systemName: icon)
-                    .font(.system(size: 11.5, weight: .regular))
+                    .font(.system(size: iconFontSize, weight: .regular))
                     .foregroundStyle(foreground)
-                    .offset(
-                        y: icon == "scissors"
-                            ? 1.5
-                            : icon == "trash"
-                                ? 1
-                                : 0
-                    )  // offset to fix some icons being slightly higher than rest
+                    .offset(y: iconVerticalOffset)
                     .frame(height: 14)
 
                 Text(label)
                     .font(.system(size: 9.8, weight: .medium))
                     .foregroundStyle(foreground)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .offset(y: labelVerticalOffset)
             }
             .padding(.top, 2)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(TLClipActionPressStyle(isDestructive: isDestructive))
+        .buttonStyle(
+            TLClipActionPressStyle(
+                isDestructive: isDestructive,
+                expandsHorizontally: false
+            )
+        )
         .onHover { isHovered = $0 }
     }
 
@@ -121,7 +142,48 @@ private struct TLClipToolbarAction: View {
         if isDestructive && isHovered {
             return Color.red.opacity(0.88)
         }
-        return MixrColors.textPrimary.opacity(isDestructive ? 0.84 : 0.92)
+        return MixrColors.textPrimary.opacity(isDestructive ? 0.88 : 0.92)
+    }
+
+    private var iconFontSize: CGFloat {
+        switch icon {
+        case "gauge.with.dots.needle.67percent":
+            13.2
+        case "trash":
+            12
+        case "doc.on.doc":
+            11.65
+        default:
+            11.5
+        }
+    }
+
+    private var iconVerticalOffset: CGFloat {
+        switch icon {
+        case "scissors":
+            1.5
+        case "gauge.with.dots.needle.67percent":
+            2.25
+        case "doc.on.doc":
+            2.3
+        case "trash":
+            3.2
+        default:
+            0
+        }
+    }
+
+    private var labelVerticalOffset: CGFloat {
+        switch label {
+        case "Speed":
+            0.25
+        case "Duplicate":
+            0.45
+        case "Delete":
+            0.65
+        default:
+            0
+        }
     }
 }
 
@@ -396,41 +458,51 @@ struct TLToolbarPointer: Shape {
 // MARK: - Clip Context Toolbar
 
 struct TLClipContextToolbar: View {
+    enum Mode: Equatable {
+        case actions
+        case speed
+    }
+
     let trackColor: Color
+    let mode: Mode
+    let speedValue: Double
     let onSplit: () -> Void
+    let onSpeed: () -> Void
     let onDuplicate: () -> Void
     let onDelete: () -> Void
+    let onSpeedBack: () -> Void
+    let onSpeedCommit: (Double) -> Void
+
+    @State private var speedText: String = "1.0"
+    @FocusState private var isSpeedFieldFocused: Bool
+
+    private var bodyWidth: CGFloat {
+        switch mode {
+        case .actions: TLClipEditingMetrics.toolbarWidth
+        case .speed: TLClipEditingMetrics.toolbarSpeedWidth
+        }
+    }
 
     var body: some View {
-        let tbW = TLClipEditingMetrics.toolbarWidth
         let tbH = TLClipEditingMetrics.toolbarBodyHeight
         let pW = TLClipEditingMetrics.toolbarPointerW
         let pH = TLClipEditingMetrics.toolbarPointerH
         let radius: CGFloat = 11
 
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                TLClipToolbarAction(
-                    icon: "scissors",
-                    label: "Split",
-                    action: onSplit
-                )
-                TLClipToolbarAction(
-                    icon: "doc.on.doc",
-                    label: "Duplicate",
-                    action: onDuplicate
-                )
-                TLClipToolbarAction(
-                    icon: "trash",
-                    label: "Delete",
-                    isDestructive: true,
-                    action: onDelete
-                )
+            ZStack {
+                actionsContent
+                    .opacity(mode == .actions ? 1 : 0)
+                    .allowsHitTesting(mode == .actions)
+
+                speedContent
+                    .opacity(mode == .speed ? 1 : 0)
+                    .allowsHitTesting(mode == .speed)
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)  // decrease top padding
-            .padding(.bottom, 10)  // more spacing bottom
-            .frame(width: tbW, height: tbH)
+            .padding(.horizontal, TLClipEditingMetrics.toolbarHorizontalPadding)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+            .frame(width: bodyWidth, height: tbH)
             .background {
                 let shape = RoundedRectangle(
                     cornerRadius: radius,
@@ -469,6 +541,7 @@ struct TLClipContextToolbar: View {
             )
             .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
             .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
+            .offset(x: TLClipEditingMetrics.toolbarBodyHorizontalOffset)
 
             TLToolbarPointer()
                 .fill(Color(hex: "050810").opacity(0.68))
@@ -486,6 +559,130 @@ struct TLClipContextToolbar: View {
                 }
                 .frame(width: pW, height: pH)
         }
+        .animation(
+            .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration),
+            value: mode
+        )
+        .onAppear {
+            speedText = Self.formattedSpeed(speedValue)
+            if mode == .speed {
+                isSpeedFieldFocused = true
+            }
+        }
+        .onChange(of: mode) { _, newMode in
+            if newMode == .speed {
+                speedText = Self.formattedSpeed(speedValue)
+                isSpeedFieldFocused = true
+            } else {
+                isSpeedFieldFocused = false
+            }
+        }
+        .onChange(of: speedValue) { _, newValue in
+            if mode == .speed, !isSpeedFieldFocused {
+                speedText = Self.formattedSpeed(newValue)
+            }
+        }
+    }
+
+    private var actionsContent: some View {
+        HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
+            TLClipToolbarAction(
+                icon: "scissors",
+                label: "Split",
+                action: onSplit
+            )
+
+            TLClipToolbarAction(
+                icon: "gauge.with.dots.needle.67percent",
+                label: "Speed",
+                action: onSpeed
+            )
+
+            TLClipToolbarAction(
+                icon: "doc.on.doc",
+                label: "Duplicate",
+                action: onDuplicate
+            )
+
+            TLClipToolbarAction(
+                icon: "trash",
+                label: "Delete",
+                isDestructive: true,
+                action: onDelete
+            )
+        }
+    }
+
+    private var speedContent: some View {
+        HStack(spacing: 8) {
+            Button(action: onSpeedBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(MixrColors.textPrimary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Text("x")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MixrColors.textPrimary)
+
+            TextField("1.0", text: $speedText)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(MixrColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.plain)
+                .focused($isSpeedFieldFocused)
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                        }
+                }
+                .onSubmit { commitSpeed() }
+
+            Button(action: commitSpeed) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(MixrColors.textPrimary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func commitSpeed() {
+        let parsed = Self.parseSpeed(speedText) ?? speedValue
+        let clamped = min(
+            TLClipEditingMetrics.maxPlaybackSpeed,
+            max(TLClipEditingMetrics.minPlaybackSpeed, parsed)
+        )
+        speedText = Self.formattedSpeed(clamped)
+        onSpeedCommit(clamped)
+    }
+
+    private static func parseSpeed(_ text: String) -> Double? {
+        let trimmed = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard !trimmed.isEmpty, let value = Double(trimmed), value.isFinite, value > 0
+        else { return nil }
+        return value
+    }
+
+    private static func formattedSpeed(_ value: Double) -> String {
+        let rounded = (value * 100).rounded() / 100
+        if abs(rounded.rounded() - rounded) < 0.001 {
+            return String(format: "%.1f", rounded)
+        }
+        return String(format: "%g", rounded)
     }
 }
 
