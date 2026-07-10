@@ -6,12 +6,17 @@ import UIKit
 enum TLClipEditingMetrics {
     static let toolbarLegacyWidth: CGFloat = 202
     static let toolbarHorizontalPadding: CGFloat = 10
+    static let toolbarTrailingPadding: CGFloat = 2.5
     static let toolbarLegacyActionSpacing: CGFloat = 6
-    static let toolbarActionCellSpacing: CGFloat = 3
+    static let toolbarActionCellSpacing: CGFloat = 2.5
     static let toolbarActionSpacing: CGFloat = 24
     /// Per-action cell width from the original 3-action toolbar.
     static let toolbarActionWidth: CGFloat = (toolbarLegacyWidth - toolbarHorizontalPadding * 2 - toolbarLegacyActionSpacing * 2) / 3
-    static let toolbarWidth: CGFloat = toolbarHorizontalPadding * 2 + toolbarActionWidth * 4 + toolbarActionCellSpacing * 3
+    static let toolbarWidth: CGFloat =
+        toolbarHorizontalPadding
+        + toolbarTrailingPadding
+        + toolbarActionWidth * 4
+        + toolbarActionCellSpacing * 3
     static let toolbarSpeedWidth: CGFloat = 168
     static let toolbarBodyHeight: CGFloat = 50
     static let toolbarBodyHorizontalOffset: CGFloat = 12
@@ -26,7 +31,7 @@ enum TLClipEditingMetrics {
     static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 11.5
     static let menuRowHeight: CGFloat = 42
-    static let menuSettingsHeaderRowHeight: CGFloat = 34
+    static let menuSettingsHeaderRowHeight: CGFloat = 33
     static let menuSettingsHeaderIconBoxSize: CGFloat = 22.5
     static let menuSettingsHeaderChevronIconGap: CGFloat = 8.25
     static let menuSettingsHeaderIconTitleGap: CGFloat = 9.5
@@ -169,7 +174,7 @@ private struct TLClipToolbarAction: View {
         case "doc.on.doc":
             2.2
         case "trash":
-            2.35
+            2.33
         default:
             0
         }
@@ -493,7 +498,8 @@ struct TLClipContextToolbar: View {
                     .opacity(mode == .speed ? 1 : 0)
                     .allowsHitTesting(mode == .speed)
             }
-            .padding(.horizontal, TLClipEditingMetrics.toolbarHorizontalPadding)
+            .padding(.leading, TLClipEditingMetrics.toolbarHorizontalPadding)
+            .padding(.trailing, TLClipEditingMetrics.toolbarTrailingPadding)
             .padding(.top, 8)
             .padding(.bottom, 10)
             .frame(width: bodyWidth, height: tbH)
@@ -930,6 +936,7 @@ struct TLTransitionMenu: View {
                     }
                 } label: {
                     MixrChevron(direction: .back, size: 10.5)
+                        .offset(y: 0.1)
                         .frame(height: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize)
                         .contentShape(Rectangle())
                 }
