@@ -175,8 +175,9 @@ final class MixrPlaybackEngine: ObservableObject {
 
             // How long before this clip starts (relative to current timeline pos)
             let clipDelaySec  = max(0, clipStart - timelineSeconds)
-            // How far into the file to seek
-            let fileOffsetSec = max(0, timelineSeconds - clipStart)
+            // How far into the file to seek — clip content begins at its
+            // source offset (set by splits/trims) plus elapsed clip time.
+            let fileOffsetSec = clip.sourceOffsetSeconds + max(0, timelineSeconds - clipStart)
 
             let playableSec = min(
                 clipEnd - max(timelineSeconds, clipStart),

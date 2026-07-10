@@ -113,7 +113,7 @@ struct MixrTrack: Identifiable {
     }
 }
 
-struct MixrClip: Identifiable, Equatable, Codable {
+struct MixrClip: Identifiable, Equatable {
     let id: UUID
     var start:         CGFloat   // timeline units (0–totalUnits)
     var length:        CGFloat   // timeline units
@@ -128,8 +128,43 @@ struct MixrClip: Identifiable, Equatable, Codable {
     var effects:       ClipEffectSettings = ClipEffectSettings()
     /// Non-nil when this clip is a built-in sound effect on the SFX track.
     var soundEffectID: String? = nil
+    /// Seconds into the source audio where this clip's content begins —
+    /// set by splits/trims so each segment plays the right part of the song.
+    var sourceOffsetSeconds: Double = 0
 
     var isSoundEffect: Bool { soundEffectID != nil }
+
+    /// Song-time (seconds into the source) at a timeline unit inside this clip.
+    func songSeconds(atUnit unit: CGFloat) -> Double {
+        sourceOffsetSeconds + MixrTimeline.seconds(fromUnits: max(0, unit - start)) * playbackSpeed
+    }
+
+    /// Timeline unit inside this clip for a given song-time (seconds into source).
+    func unit(forSongSeconds seconds: Double) -> CGFloat {
+        let speed = max(playbackSpeed, 0.0001)
+        return start + MixrTimeline.units(fromSeconds: (seconds - sourceOffsetSeconds) / speed)
+    }
+}
+
+extension MixrClip: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, start, length, playbackSpeed, transitionIn, transitionOut
+        case volume, effects, soundEffectID, sourceOffsetSeconds
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        start = try c.decode(CGFloat.self, forKey: .start)
+        length = try c.decode(CGFloat.self, forKey: .length)
+        playbackSpeed = try c.decodeIfPresent(Double.self, forKey: .playbackSpeed) ?? 1.0
+        transitionIn = try c.decodeIfPresent(ClipTransition.self, forKey: .transitionIn) ?? .none
+        transitionOut = try c.decodeIfPresent(ClipTransition.self, forKey: .transitionOut) ?? .none
+        volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? 1.0
+        effects = try c.decodeIfPresent(ClipEffectSettings.self, forKey: .effects) ?? ClipEffectSettings()
+        soundEffectID = try c.decodeIfPresent(String.self, forKey: .soundEffectID)
+        sourceOffsetSeconds = try c.decodeIfPresent(Double.self, forKey: .sourceOffsetSeconds) ?? 0
+    }
 }
 
 // MARK: - Codable track (URL persisted as a security-scoped bookmark)

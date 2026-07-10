@@ -17,254 +17,200 @@ enum AutoScope: Equatable {
     }
 }
 
-// MARK: - Auto Arrangement Engine
+// MARK: - Timeline Editor
+// The mutation vocabulary Auto composes arrangements from. Every operation
+// clamps to valid ranges and no-ops rather than corrupting the timeline.
 
-/// Local, deterministic arrangement engine — no external AI service.
-/// Applies festival/pop-EDM DJ arrangement language: risers into drops,
-/// impacts on drops, sweeps/downlifters after transitions, transition
-/// fades, and tasteful per-clip effect settings. All edits are model
-/// mutations on real tracks/clips; the caller wraps the whole run in a
-/// single undo snapshot.
-enum AutoArrangementEngine {
+private struct TimelineEditor {
+    var tracks: [MixrTrack]
 
-    /// Region half-width for the playhead scope (spec: 8–16 s total).
-    private static let playheadRegionSeconds: Double = 6
+    private let minLen = MixrTimeline.minClipLengthUnits
+    private let epsilon = MixrTimeline.clipEdgeEpsilon
 
-    /// Cap on transition moments decorated in a single entire-project run.
-    private static let maxProjectTransitions = 4
+    // MARK: Lookup
 
-    // MARK: Entry point
-
-    static func arrange(
-        tracks: [MixrTrack],
-        scope: AutoScope,
-        playheadUnit: CGFloat
-    ) -> [MixrTrack] {
-        var result = tracks
-
-        switch scope {
-        case .selectedClip(let clipID):
-            arrangeSelectedClip(clipID, in: &result)
-        case .playheadClips:
-            arrangePlayheadRegion(around: playheadUnit, in: &result)
-        case .entireProject:
-            arrangeEntireProject(in: &result)
+    func locate(_ clipID: UUID) -> (track: Int, clip: Int)? {
+        for (ti, track) in tracks.enumerated() {
+            if let ci = track.clips.firstIndex(where: { $0.id == clipID }) {
+                return (ti, ci)
+            }
         }
-
-        return result
+        return nil
     }
 
-    // MARK: Selected Clip
+    func clip(_ clipID: UUID) -> MixrClip? {
+        locate(clipID).map { tracks[$0.track].clips[$0.clip] }
+    }
 
-    private static func arrangeSelectedClip(_ clipID: UUID, in tracks: inout [MixrTrack]) {
-        guard let (ti, ci) = findClip(clipID, in: tracks) else { return }
-        let clip = tracks[ti].clips[ci]
-        let clipStart = clip.start
-        let clipEnd = clip.start + clip.length
+    /// Last clip (by start) on a track — the "outgoing" clip after edits.
+    func lastClipID(onTrack trackIdx: Int) -> UUID? {
+        tracks[trackIdx].clips.max { $0.start < $1.start }?.id
+    }
 
-        // Per-clip effect polish — energy without mud.
-        var effects = clip.effects
-        effects.setLevel(30, for: MixrEffect.reverb.rawValue)
-        effects.setLevel(22, for: MixrEffect.echo.rawValue)
-        effects.setLevel(18, for: MixrEffect.warmth.rawValue)
-        effects.reverbPreset = .hall
-        effects.echoPreset = .classic
-        tracks[ti].clips[ci].effects = effects
+    // MARK: Structural mutations
 
-        // Clean entry/exit transitions within the clip's own bounds.
-        if clipStart > MixrTimeline.clipEdgeEpsilon {
-            tracks[ti].clips[ci].transitionIn = ClipTransition(type: .crossfade, duration: 2)
-        }
-        let hasFollower = tracks[ti].clips.contains {
-            $0.id != clipID && $0.start >= clipEnd - MixrTimeline.clipEdgeEpsilon
-        }
-        tracks[ti].clips[ci].transitionOut = ClipTransition(
-            type: hasFollower ? .echoOut : .fadeOut,
-            duration: 2
+    /// Splits a clip at a timeline unit. The left keeps the id; the right is
+    /// a new clip whose source offset continues exactly where the left ends,
+    /// so both segments play the correct part of the song.
+    @discardableResult
+    mutating func splitClip(_ clipID: UUID, atUnit unit: CGFloat) -> (left: UUID, right: UUID)? {
+        guard let (ti, ci) = locate(clipID) else { return nil }
+        let original = tracks[ti].clips[ci]
+        let leftLen = unit - original.start
+        let rightLen = original.start + original.length - unit
+        guard leftLen >= minLen - epsilon, rightLen >= minLen - epsilon else { return nil }
+
+        let rightID = UUID()
+        let right = MixrClip(
+            id: rightID,
+            start: unit,
+            length: rightLen,
+            playbackSpeed: original.playbackSpeed,
+            transitionIn: .none,
+            transitionOut: original.transitionOut,
+            volume: original.volume,
+            effects: original.effects,
+            soundEffectID: original.soundEffectID,
+            sourceOffsetSeconds: original.sourceOffsetSeconds
+                + MixrTimeline.seconds(fromUnits: leftLen) * original.playbackSpeed
         )
 
-        // SFX only near this clip's region: riser into its start, impact on
-        // the downbeat, sweep-down as it releases.
-        addRiser(endingAt: clipStart, in: &tracks)
-        addSFX("impact", at: clipStart, in: &tracks)
-        addSFX("sweepDown", at: clipEnd, in: &tracks)
+        tracks[ti].clips[ci].length = leftLen
+        tracks[ti].clips[ci].transitionOut = .none
+        tracks[ti].clips.insert(right, at: ci + 1)
+        tracks[ti].clips.sort { $0.start < $1.start }
+        return (clipID, rightID)
     }
 
-    // MARK: Playhead Region
+    /// Shrinks a clip's end to `unit` (never grows, never moves neighbors).
+    mutating func trimClipEnd(_ clipID: UUID, toUnit unit: CGFloat) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        let clip = tracks[ti].clips[ci]
+        let newLen = unit - clip.start
+        guard newLen >= minLen, newLen < clip.length - epsilon else { return }
+        tracks[ti].clips[ci].length = newLen
+    }
 
-    private static func arrangePlayheadRegion(around playheadUnit: CGFloat, in tracks: inout [MixrTrack]) {
-        let halfRegion = MixrTimeline.units(fromSeconds: playheadRegionSeconds)
-        let regionStart = max(0, playheadUnit - halfRegion)
-        let regionEnd = playheadUnit + halfRegion
+    /// Shrinks a clip's start to `unit`, advancing its source offset so the
+    /// remaining content is unchanged.
+    mutating func trimClipStart(_ clipID: UUID, toUnit unit: CGFloat) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        let clip = tracks[ti].clips[ci]
+        let delta = unit - clip.start
+        guard delta > epsilon, clip.length - delta >= minLen else { return }
+        tracks[ti].clips[ci].start = unit
+        tracks[ti].clips[ci].length -= delta
+        tracks[ti].clips[ci].sourceOffsetSeconds +=
+            MixrTimeline.seconds(fromUnits: delta) * clip.playbackSpeed
+    }
 
-        // Nearest clip boundary inside the region becomes the drop point;
-        // fall back to the playhead itself.
-        let boundaries = songClipBoundaries(in: tracks)
-            .filter { $0 >= regionStart && $0 <= regionEnd }
-        let dropPoint = boundaries.min {
-            abs($0 - playheadUnit) < abs($1 - playheadUnit)
-        } ?? playheadUnit
+    /// Repositions one clip (caller is responsible for same-track overlaps —
+    /// cross-track overlap is exactly how blend sections work).
+    mutating func moveClip(_ clipID: UUID, toStart start: CGFloat) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].start = max(0, start)
+        tracks[ti].clips.sort { $0.start < $1.start }
+    }
 
-        decorateTransition(at: dropPoint, in: &tracks, intensity: .focused)
-
-        // Polish clips that touch the region — nothing outside it moves.
-        for ti in tracks.indices where !tracks[ti].isSFXTrack {
-            for ci in tracks[ti].clips.indices {
-                let clip = tracks[ti].clips[ci]
-                let clipEnd = clip.start + clip.length
-                guard clipEnd > regionStart, clip.start < regionEnd else { continue }
-
-                var effects = tracks[ti].clips[ci].effects
-                if clipEnd <= dropPoint + MixrTimeline.clipEdgeEpsilon {
-                    // Outgoing energy: echo tail out of the transition.
-                    effects.setLevel(max(effects.level(for: MixrEffect.echo.rawValue), 35), for: MixrEffect.echo.rawValue)
-                    effects.setLevel(max(effects.level(for: MixrEffect.filter.rawValue), 28), for: MixrEffect.filter.rawValue)
-                    tracks[ti].clips[ci].transitionOut = ClipTransition(type: .echoOut, duration: 2)
-                } else {
-                    // Incoming clip: open bright with a touch of space.
-                    effects.setLevel(max(effects.level(for: MixrEffect.reverb.rawValue), 24), for: MixrEffect.reverb.rawValue)
-                    effects.reverbPreset = .hall
-                    if clip.start > MixrTimeline.clipEdgeEpsilon {
-                        tracks[ti].clips[ci].transitionIn = ClipTransition(type: .crossfade, duration: 2)
-                    }
-                }
-                tracks[ti].clips[ci].effects = effects
-            }
+    /// Shifts every clip on a track, preserving internal layout. The delta
+    /// is clamped so no clip goes negative.
+    mutating func shiftTrackClips(trackIdx: Int, byUnits delta: CGFloat) {
+        guard tracks.indices.contains(trackIdx), !tracks[trackIdx].clips.isEmpty else { return }
+        let minStart = tracks[trackIdx].clips.map(\.start).min() ?? 0
+        let clamped = max(delta, -minStart)
+        guard abs(clamped) > epsilon else { return }
+        for i in tracks[trackIdx].clips.indices {
+            tracks[trackIdx].clips[i].start += clamped
         }
     }
 
-    // MARK: Entire Project
-
-    private static func arrangeEntireProject(in tracks: inout [MixrTrack]) {
-        let boundaries = songClipBoundaries(in: tracks)
-            .filter { $0 > MixrTimeline.clipEdgeEpsilon }
-        // Spread the decorated moments across the project.
-        let chosen = pickSpread(from: boundaries, limit: maxProjectTransitions)
-
-        for (index, point) in chosen.enumerated() {
-            decorateTransition(
-                at: point,
-                in: &tracks,
-                intensity: index == chosen.count - 1 ? .release : .build
-            )
-        }
-
-        // Whole-timeline fades: every clip enters/exits cleanly, with
-        // volume shaping toward transitions.
-        for ti in tracks.indices where !tracks[ti].isSFXTrack {
-            let sorted = tracks[ti].clips.sorted { $0.start < $1.start }
-            for (order, clip) in sorted.enumerated() {
-                guard let ci = tracks[ti].clips.firstIndex(where: { $0.id == clip.id }) else { continue }
-
-                if clip.start > MixrTimeline.clipEdgeEpsilon,
-                   tracks[ti].clips[ci].transitionIn.type == .none {
-                    tracks[ti].clips[ci].transitionIn = ClipTransition(type: .crossfade, duration: 2)
-                }
-                let isLast = order == sorted.count - 1
-                if tracks[ti].clips[ci].transitionOut.type == .none {
-                    tracks[ti].clips[ci].transitionOut = ClipTransition(
-                        type: isLast ? .fadeOut : .crossfade,
-                        duration: isLast ? 4 : 2
-                    )
-                }
-
-                // Gentle project-wide tone: warmth on every song clip.
-                var effects = tracks[ti].clips[ci].effects
-                effects.setLevel(max(effects.level(for: MixrEffect.warmth.rawValue), 15), for: MixrEffect.warmth.rawValue)
-                tracks[ti].clips[ci].effects = effects
-            }
-        }
+    /// Duplicates a clip's content to a new position (same source offset —
+    /// identical audio). Used sparingly for stutter/fill moments.
+    @discardableResult
+    mutating func duplicateClip(_ clipID: UUID, toStart start: CGFloat) -> UUID? {
+        guard let (ti, _) = locate(clipID), let source = clip(clipID) else { return nil }
+        let newID = UUID()
+        let copy = MixrClip(
+            id: newID,
+            start: max(0, start),
+            length: source.length,
+            playbackSpeed: source.playbackSpeed,
+            volume: source.volume,
+            effects: source.effects,
+            soundEffectID: source.soundEffectID,
+            sourceOffsetSeconds: source.sourceOffsetSeconds
+        )
+        tracks[ti].clips.append(copy)
+        tracks[ti].clips.sort { $0.start < $1.start }
+        return newID
     }
 
-    // MARK: Transition decoration
+    // MARK: Per-clip settings
 
-    private enum TransitionIntensity {
-        case focused   // playhead scope — one strong moment
-        case build     // project build: riser + impact + sweep
-        case release   // project end: downlifter + crash
+    mutating func setClipVolume(_ clipID: UUID, _ volume: Double) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].volume = min(1, max(0, volume))
     }
 
-    /// Adds the SFX vocabulary around one transition point and applies
-    /// outgoing/incoming effect settings on adjacent clips.
-    private static func decorateTransition(
-        at point: CGFloat,
-        in tracks: inout [MixrTrack],
-        intensity: TransitionIntensity
-    ) {
-        switch intensity {
-        case .focused:
-            addRiser(endingAt: point, in: &tracks)
-            addSFX("impact", at: point, in: &tracks)
-            addSFX("downlifter", at: point, in: &tracks)
-        case .build:
-            addRiser(endingAt: point, in: &tracks)
-            addSFX("impact", at: point, in: &tracks)
-            addSFX("sweepDown", at: point, in: &tracks)
-        case .release:
-            addSFX("crash", at: point, in: &tracks)
-            addSFX("downlifter", at: point, in: &tracks)
-        }
-
-        // Outgoing clips ending at the point get echo-out + filter energy;
-        // incoming clips starting there get crossfade + reverb air.
-        let epsilonZone = MixrTimeline.units(fromSeconds: 1.5)
-        for ti in tracks.indices where !tracks[ti].isSFXTrack {
-            for ci in tracks[ti].clips.indices {
-                let clip = tracks[ti].clips[ci]
-                let clipEnd = clip.start + clip.length
-
-                if abs(clipEnd - point) <= epsilonZone {
-                    var effects = clip.effects
-                    effects.setLevel(max(effects.level(for: MixrEffect.echo.rawValue), 38), for: MixrEffect.echo.rawValue)
-                    effects.setLevel(max(effects.level(for: MixrEffect.filter.rawValue), 30), for: MixrEffect.filter.rawValue)
-                    effects.echoPreset = .pingPong
-                    tracks[ti].clips[ci].effects = effects
-                    tracks[ti].clips[ci].transitionOut = ClipTransition(type: .echoOut, duration: 2)
-                    // Volume fade-down into the transition.
-                    tracks[ti].clips[ci].volume = min(tracks[ti].clips[ci].volume, 0.9)
-                } else if abs(clip.start - point) <= epsilonZone {
-                    var effects = clip.effects
-                    effects.setLevel(max(effects.level(for: MixrEffect.reverb.rawValue), 26), for: MixrEffect.reverb.rawValue)
-                    effects.reverbPreset = .hall
-                    tracks[ti].clips[ci].effects = effects
-                    tracks[ti].clips[ci].transitionIn = ClipTransition(type: .crossfade, duration: 2)
-                    tracks[ti].clips[ci].volume = 1.0
-                }
-            }
-        }
+    /// Available to arrangements (tape-stop / halftime moments); unused by
+    /// the V1 heuristics to keep results tasteful.
+    mutating func setClipSpeed(_ clipID: UUID, _ speed: Double) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].playbackSpeed = min(4, max(0.25, speed))
     }
 
-    // MARK: SFX placement
-
-    /// Riser ends exactly on the drop point when there is room; skipped when
-    /// it would need a negative start.
-    private static func addRiser(endingAt point: CGFloat, in tracks: inout [MixrTrack]) {
-        guard let riser = SoundEffectLibrary.definition(for: "riser") else { return }
-        let start = point - riser.lengthUnits
-        guard start >= 0 else { return }
-        addSFX("riser", at: start, in: &tracks)
+    mutating func setEffect(_ clipID: UUID, _ effect: MixrEffect, level: Double) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].effects.setLevel(level, for: effect.rawValue)
     }
 
-    private static func addSFX(_ id: String, at unit: CGFloat, in tracks: inout [MixrTrack]) {
-        guard let definition = SoundEffectLibrary.definition(for: id) else { return }
-        let idx = ensureSFXTrack(in: &tracks)
+    mutating func setReverbPreset(_ clipID: UUID, _ preset: ReverbPreset) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].effects.reverbPreset = preset
+    }
+
+    mutating func setEchoPreset(_ clipID: UUID, _ preset: EchoPreset) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].effects.echoPreset = preset
+    }
+
+    mutating func setTransitionIn(_ clipID: UUID, _ transition: ClipTransition) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].transitionIn = transition
+    }
+
+    mutating func setTransitionOut(_ clipID: UUID, _ transition: ClipTransition) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].transitionOut = transition
+    }
+
+    // MARK: SFX
+
+    /// Adds an SFX clip at a unit using the shared collision rule.
+    mutating func addSFX(_ definitionID: String, atUnit unit: CGFloat) {
+        guard let definition = SoundEffectLibrary.definition(for: definitionID) else { return }
+        let idx = ensureSFXTrack()
         let start = SoundEffectLibrary.nonOverlappingStart(
             proposedStart: max(0, unit),
             lengthUnits: definition.lengthUnits,
             in: tracks[idx].clips
         )
         tracks[idx].clips.append(
-            MixrClip(
-                id: UUID(),
-                start: start,
-                length: definition.lengthUnits,
-                soundEffectID: definition.id
-            )
+            MixrClip(id: UUID(), start: start, length: definition.lengthUnits, soundEffectID: definition.id)
         )
         tracks[idx].clips.sort { $0.start < $1.start }
     }
 
-    private static func ensureSFXTrack(in tracks: inout [MixrTrack]) -> Int {
+    /// Adds an SFX so it ENDS at `unit` (risers/builds into a drop).
+    /// Skipped when it would need a negative start.
+    mutating func addSFXEnding(_ definitionID: String, atUnit unit: CGFloat) {
+        guard let definition = SoundEffectLibrary.definition(for: definitionID) else { return }
+        let start = unit - definition.lengthUnits
+        guard start >= 0 else { return }
+        addSFX(definitionID, atUnit: start)
+    }
+
+    private mutating func ensureSFXTrack() -> Int {
         if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
         tracks.append(
             MixrTrack(
@@ -286,47 +232,456 @@ enum AutoArrangementEngine {
         )
         return tracks.count - 1
     }
+}
 
-    // MARK: Helpers
+// MARK: - Auto Arrangement Engine
 
-    private static func findClip(_ id: UUID, in tracks: [MixrTrack]) -> (Int, Int)? {
-        for (ti, track) in tracks.enumerated() {
-            if let ci = track.clips.firstIndex(where: { $0.id == id }) {
-                return (ti, ci)
-            }
+/// Local mashup arrangement engine — a beginner-friendly DJ assistant.
+///
+/// It analyzes each song (SongAnalyzer: real BPM/key + phrase/section
+/// heuristics), then mutates the real timeline with clip-level edits:
+/// splitting at phrase boundaries, trimming to mix-out points, moving songs
+/// into overlap, and building dedicated blend sections where the outgoing
+/// clip ducks and echoes out while the incoming clip rises underneath —
+/// plus risers/impacts/sweeps on the SFX track and per-clip effect settings
+/// that differ clip to clip. No external AI service is involved.
+///
+/// The caller (TimelineScreen.runAuto) wraps one whole run in a single undo
+/// snapshot, so undo restores the exact prior project and redo re-applies
+/// the arrangement.
+enum AutoArrangementEngine {
+
+    /// Half-width of the playhead scope's editing region (≈12 s total).
+    private static let playheadRegionSeconds: Double = 6
+
+    // MARK: Entry point
+
+    static func arrange(
+        tracks: [MixrTrack],
+        scope: AutoScope,
+        playheadUnit: CGFloat
+    ) -> [MixrTrack] {
+        var editor = TimelineEditor(tracks: tracks)
+        let analyses = analyzeSongs(tracks)
+
+        switch scope {
+        case .selectedClip(let clipID):
+            arrangeSelectedClip(clipID, editor: &editor, analyses: analyses)
+        case .playheadClips:
+            arrangePlayheadRegion(around: playheadUnit, editor: &editor, analyses: analyses)
+        case .entireProject:
+            arrangeEntireProject(editor: &editor, analyses: analyses)
         }
-        return nil
+
+        return editor.tracks
     }
 
-    /// Distinct clip starts/ends across song tracks, sorted ascending.
-    private static func songClipBoundaries(in tracks: [MixrTrack]) -> [CGFloat] {
-        var points: [CGFloat] = []
+    private static func analyzeSongs(_ tracks: [MixrTrack]) -> [UUID: SongAnalysis] {
+        var result: [UUID: SongAnalysis] = [:]
         for track in tracks where !track.isSFXTrack {
-            for clip in track.clips {
-                points.append(clip.start)
-                points.append(clip.start + clip.length)
-            }
+            result[track.id] = SongAnalyzer.analyze(track: track)
         }
-        var distinct: [CGFloat] = []
-        for p in points.sorted() {
-            if let last = distinct.last, abs(last - p) < MixrTimeline.units(fromSeconds: 1) {
-                continue
-            }
-            distinct.append(p)
-        }
-        return distinct
+        return result
     }
 
-    /// Picks up to `limit` points spread evenly across the candidates.
-    private static func pickSpread(from points: [CGFloat], limit: Int) -> [CGFloat] {
-        guard points.count > limit, limit > 0 else { return points }
-        let stride = Double(points.count - 1) / Double(limit - 1)
-        var picked: [CGFloat] = []
-        for i in 0..<limit {
-            let idx = Int((Double(i) * stride).rounded())
-            let value = points[min(idx, points.count - 1)]
-            if picked.last != value { picked.append(value) }
+    private static func analysis(
+        forClip clipID: UUID,
+        editor: TimelineEditor,
+        analyses: [UUID: SongAnalysis]
+    ) -> SongAnalysis? {
+        guard let (ti, _) = editor.locate(clipID) else { return nil }
+        return analyses[editor.tracks[ti].id]
+    }
+
+    // MARK: - Scope: Selected Clip
+
+    /// Edits stay inside the selected clip's bounds: trim its end to a clean
+    /// phrase, split it at an internal phrase boundary to create an arrival
+    /// moment with distinct effect settings per half, and place SFX only
+    /// around that clip's region. Nothing else moves.
+    private static func arrangeSelectedClip(
+        _ clipID: UUID,
+        editor: inout TimelineEditor,
+        analyses: [UUID: SongAnalysis]
+    ) {
+        guard let clip = editor.clip(clipID), !clip.isSoundEffect,
+              let analysis = analysis(forClip: clipID, editor: editor, analyses: analyses)
+        else { return }
+
+        trimEndToPhrase(clipID, analysis: analysis, maxTrimSeconds: 4, editor: &editor)
+
+        if clip.start > MixrTimeline.clipEdgeEpsilon {
+            editor.setTransitionIn(clipID, ClipTransition(type: .crossfade, duration: 4))
         }
-        return picked
+
+        applyInternalMoment(
+            clipID,
+            analysis: analysis,
+            focusUnit: nil,
+            variant: 0,
+            editor: &editor
+        )
+    }
+
+    // MARK: - Scope: Playhead Region
+
+    /// Improves the ~12 s around the playhead. If an outgoing and an
+    /// incoming song meet near the playhead, it builds a real blend section
+    /// between them (moving the incoming song locally if needed); otherwise
+    /// it creates an internal moment in the clip under the playhead.
+    private static func arrangePlayheadRegion(
+        around playheadUnit: CGFloat,
+        editor: inout TimelineEditor,
+        analyses: [UUID: SongAnalysis]
+    ) {
+        let halfRegion = MixrTimeline.units(fromSeconds: playheadRegionSeconds)
+        let regionStart = max(0, playheadUnit - halfRegion)
+        let regionEnd = playheadUnit + halfRegion
+
+        struct Candidate {
+            let trackIdx: Int
+            let clip: MixrClip
+        }
+        var candidates: [Candidate] = []
+        for (ti, track) in editor.tracks.enumerated() where !track.isSFXTrack {
+            for clip in track.clips where !clip.isSoundEffect {
+                let end = clip.start + clip.length
+                if end > regionStart - halfRegion, clip.start < regionEnd + halfRegion {
+                    candidates.append(Candidate(trackIdx: ti, clip: clip))
+                }
+            }
+        }
+        guard !candidates.isEmpty else { return }
+
+        // Blend pair: a clip ending in/near the region + a clip on another
+        // track starting in/near the region.
+        let outgoing = candidates
+            .filter { ($0.clip.start + $0.clip.length) >= regionStart && ($0.clip.start + $0.clip.length) <= regionEnd + halfRegion }
+            .min { abs($0.clip.start + $0.clip.length - playheadUnit) < abs($1.clip.start + $1.clip.length - playheadUnit) }
+        let incoming = candidates
+            .filter { candidate in
+                guard let outgoing else { return false }
+                return candidate.trackIdx != outgoing.trackIdx
+                    && candidate.clip.start >= regionStart - halfRegion
+                    && candidate.clip.start <= regionEnd + halfRegion
+            }
+            .min { abs($0.clip.start - playheadUnit) < abs($1.clip.start - playheadUnit) }
+
+        if let outgoing, let incoming,
+           let analysisA = analyses[editor.tracks[outgoing.trackIdx].id],
+           let analysisB = analyses[editor.tracks[incoming.trackIdx].id] {
+            // Position the incoming song so the blend overlaps the outgoing
+            // tail — a local move only (both clips are already near here).
+            let aEnd = outgoing.clip.start + outgoing.clip.length
+            let blendUnits = blendLengthUnits(incoming: analysisB)
+            let desiredStart = max(0, aEnd - blendUnits)
+            let delta = desiredStart - incoming.clip.start
+            // Local alignment only — enough budget to close a small gap
+            // plus the blend overlap, never a project-wide rewrite.
+            if abs(delta) <= MixrTimeline.units(fromSeconds: 20) {
+                editor.shiftTrackClips(trackIdx: incoming.trackIdx, byUnits: delta)
+            }
+            applyBlend(
+                outgoing: outgoing.clip.id,
+                incoming: incoming.clip.id,
+                analysisA: analysisA,
+                analysisB: analysisB,
+                variant: 0,
+                editor: &editor
+            )
+        } else {
+            // Single-song region: build a moment at the phrase nearest the playhead.
+            let target = candidates
+                .filter { playheadUnit >= $0.clip.start && playheadUnit <= $0.clip.start + $0.clip.length }
+                .first ?? candidates[0]
+            guard let analysis = analyses[editor.tracks[target.trackIdx].id] else { return }
+            applyInternalMoment(
+                target.clip.id,
+                analysis: analysis,
+                focusUnit: playheadUnit,
+                variant: 1,
+                editor: &editor
+            )
+        }
+    }
+
+    // MARK: - Scope: Entire Project
+
+    /// Builds the full mashup: anchors the first song with an intro moment,
+    /// chains every following song through a phrase-aligned blend section
+    /// (outgoing trimmed to a low-vocal mix-out point, incoming moved to
+    /// overlap underneath), and releases with a shaped outro.
+    private static func arrangeEntireProject(
+        editor: inout TimelineEditor,
+        analyses: [UUID: SongAnalysis]
+    ) {
+        let songTrackIdxs = editor.tracks.indices
+            .filter { !editor.tracks[$0].isSFXTrack && !editor.tracks[$0].clips.isEmpty }
+            .sorted {
+                (editor.tracks[$0].clips.map(\.start).min() ?? 0)
+                    < (editor.tracks[$1].clips.map(\.start).min() ?? 0)
+            }
+        guard let firstIdx = songTrackIdxs.first else { return }
+
+        // ── Intro: anchor the first song at 0 and shape its opening ──
+        let firstTrackID = editor.tracks[firstIdx].id
+        guard let firstMain = editor.tracks[firstIdx].clips.min(by: { $0.start < $1.start }),
+              let firstAnalysis = analyses[firstTrackID]
+        else { return }
+
+        editor.shiftTrackClips(trackIdx: firstIdx, byUnits: -firstMain.start)
+        applyIntroShaping(firstMain.id, analysis: firstAnalysis, editor: &editor)
+
+        var outgoingID = editor.lastClipID(onTrack: firstIdx) ?? firstMain.id
+        var outgoingAnalysis = firstAnalysis
+
+        // ── Chain: blend each following song under the previous one ──
+        for (k, ti) in songTrackIdxs.dropFirst().enumerated() {
+            guard let bMain = editor.tracks[ti].clips.min(by: { $0.start < $1.start }),
+                  let analysisB = analyses[editor.tracks[ti].id],
+                  let aClip = editor.clip(outgoingID)
+            else { continue }
+
+            // Trim the outgoing clip to a phrase-snapped, low-vocal mix-out
+            // point so the transition lands on a musical boundary.
+            trimEndToMixOut(outgoingID, analysis: outgoingAnalysis, editor: &editor)
+            let aEnd = (editor.clip(outgoingID).map { $0.start + $0.length }) ?? (aClip.start + aClip.length)
+
+            // Move the incoming song so it enters UNDER the outgoing tail.
+            let blendUnits = blendLengthUnits(incoming: analysisB)
+            let entry = max(0, aEnd - blendUnits)
+            editor.shiftTrackClips(trackIdx: ti, byUnits: entry - bMain.start)
+
+            applyBlend(
+                outgoing: outgoingID,
+                incoming: bMain.id,
+                analysisA: outgoingAnalysis,
+                analysisB: analysisB,
+                variant: k,
+                editor: &editor
+            )
+
+            outgoingID = editor.lastClipID(onTrack: ti) ?? bMain.id
+            outgoingAnalysis = analysisB
+        }
+
+        // ── Release: shaped outro on the final song ──
+        applyOutroShaping(outgoingID, analysis: outgoingAnalysis, editor: &editor)
+    }
+
+    // MARK: - Shared routines
+
+    /// Blend length: 4 bars of the incoming song, clamped 4–12 s.
+    private static func blendLengthUnits(incoming: SongAnalysis) -> CGFloat {
+        MixrTimeline.units(fromSeconds: min(12, max(4, incoming.barSeconds * 4)))
+    }
+
+    /// A blend section between two songs: the outgoing tail becomes its own
+    /// clip that ducks and echoes out; the incoming head becomes its own
+    /// clip that rises in warm and filtered; the SFX track sells the drop.
+    ///
+    /// True gradual gain ramps inside the blend are an AVAudioEngine
+    /// integration point — V1 approximates them with tail/head clip volumes
+    /// plus fade/crossfade transitions.
+    private static func applyBlend(
+        outgoing outgoingID: UUID,
+        incoming incomingID: UUID,
+        analysisA: SongAnalysis,
+        analysisB: SongAnalysis,
+        variant: Int,
+        editor: inout TimelineEditor
+    ) {
+        guard let a = editor.clip(outgoingID), let b = editor.clip(incomingID) else { return }
+        let aEnd = a.start + a.length
+        let blendStart = max(a.start, b.start)
+        let dropUnit = min(aEnd, blendStart + blendLengthUnits(incoming: analysisB))
+
+        guard dropUnit > blendStart + MixrTimeline.clipEdgeEpsilon else {
+            // No usable overlap (the incoming song couldn't be moved) —
+            // treat it as a phrase cut and hide the seam instead.
+            editor.setTransitionOut(outgoingID, ClipTransition(type: .echoOut, duration: 4))
+            editor.setEffect(outgoingID, .echo, level: 30)
+            editor.setEchoPreset(outgoingID, .classic)
+            editor.setTransitionIn(incomingID, ClipTransition(type: .crossfade, duration: 4))
+            editor.setEffect(incomingID, .warmth, level: 14)
+            editor.addSFXEnding(variant % 2 == 0 ? "riser" : "snareBuild", atUnit: b.start)
+            editor.addSFX("impact", atUnit: b.start)
+            return
+        }
+
+        // Outgoing tail — duck, echo out, filter motion. Split so ONLY the
+        // blend section carries the exit treatment.
+        if let (bodyID, tailID) = editor.splitClip(outgoingID, atUnit: blendStart) {
+            editor.setClipVolume(tailID, 0.78)
+            editor.setEffect(tailID, .echo, level: 32 + Double(variant % 3) * 5)
+            editor.setEchoPreset(tailID, variant % 2 == 0 ? .pingPong : .classic)
+            editor.setEffect(tailID, .filter, level: 26 + Double(variant % 2) * 8)
+            editor.setTransitionOut(tailID, ClipTransition(type: .fadeOut, duration: 8))
+            editor.setEffect(bodyID, .warmth, level: 12)
+        } else {
+            // Too short to split — fade the whole outgoing clip.
+            editor.setClipVolume(outgoingID, 0.85)
+            editor.setEffect(outgoingID, .echo, level: 28)
+            editor.setTransitionOut(outgoingID, ClipTransition(type: .fadeOut, duration: 8))
+        }
+
+        // Incoming head — rise underneath, warm and slightly filtered so it
+        // doesn't fight the outgoing vocal, then open to full volume.
+        if let (headID, bodyID) = editor.splitClip(incomingID, atUnit: dropUnit) {
+            editor.setClipVolume(headID, 0.88)
+            editor.setTransitionIn(headID, ClipTransition(type: .crossfade, duration: 8))
+            editor.setEffect(headID, .warmth, level: 16)
+            editor.setEffect(headID, .filter, level: 10 + Double(variant % 2) * 6)
+            editor.setClipVolume(bodyID, 1.0)
+            editor.setEffect(bodyID, .reverb, level: 14)
+            editor.setReverbPreset(bodyID, .hall)
+        } else {
+            editor.setTransitionIn(incomingID, ClipTransition(type: .crossfade, duration: 8))
+            editor.setEffect(incomingID, .warmth, level: 14)
+        }
+
+        // SFX vocabulary — build into the drop, hit it, breathe out after.
+        editor.addSFXEnding(variant % 2 == 0 ? "riser" : "snareBuild", atUnit: dropUnit)
+        editor.addSFX("impact", atUnit: dropUnit)
+        editor.addSFX(variant % 2 == 0 ? "sweepDown" : "downlifter", atUnit: dropUnit)
+    }
+
+    /// Splits a clip at an internal phrase boundary to create an arrival
+    /// moment — each half gets its own settings, SFX stay in the clip's region.
+    private static func applyInternalMoment(
+        _ clipID: UUID,
+        analysis: SongAnalysis,
+        focusUnit: CGFloat?,
+        variant: Int,
+        editor: inout TimelineEditor
+    ) {
+        guard let clip = editor.clip(clipID) else { return }
+        let clipEnd = clip.start + clip.length
+        let margin = MixrTimeline.minClipLengthUnits
+
+        // Candidate phrase boundaries strictly inside the clip.
+        let songLow = clip.songSeconds(atUnit: clip.start + margin)
+        let songHigh = clip.songSeconds(atUnit: clipEnd - margin)
+        let candidates = analysis.phraseBoundaries.filter { $0 > songLow && $0 < songHigh }
+
+        let targetSong: Double?
+        if let focusUnit {
+            let focusSong = clip.songSeconds(atUnit: focusUnit)
+            targetSong = candidates.min { abs($0 - focusSong) < abs($1 - focusSong) }
+        } else {
+            // Default arrival ~62% through the clip's window.
+            let goal = songLow + (songHigh - songLow) * 0.62
+            targetSong = candidates.min { abs($0 - goal) < abs($1 - goal) }
+        }
+
+        if let targetSong,
+           let (firstID, secondID) = editor.splitClip(clipID, atUnit: clip.unit(forSongSeconds: targetSong)) {
+            let splitUnit = editor.clip(secondID)?.start ?? clip.unit(forSongSeconds: targetSong)
+
+            editor.setEffect(firstID, .warmth, level: 14)
+            editor.setEffect(secondID, .filter, level: 24 + Double(variant % 2) * 6)
+            editor.setEffect(secondID, .echo, level: 18)
+            editor.setEffect(secondID, .reverb, level: 16)
+            editor.setReverbPreset(secondID, .hall)
+
+            editor.addSFXEnding("riser", atUnit: splitUnit)
+            editor.addSFX("impact", atUnit: splitUnit)
+            editor.addSFX("sweepDown", atUnit: clipEnd)
+        } else {
+            // Too short to split — per-clip polish only.
+            editor.setEffect(clipID, .reverb, level: 22)
+            editor.setReverbPreset(clipID, .hall)
+            editor.setEffect(clipID, .echo, level: 16)
+            editor.setTransitionOut(clipID, ClipTransition(type: .echoOut, duration: 4))
+            editor.addSFX("impact", atUnit: clip.start)
+            editor.addSFX("sweepDown", atUnit: clipEnd)
+        }
+    }
+
+    /// First song's opening: a dedicated intro clip that sits lower and
+    /// filtered, then an impact where the song fully opens up.
+    private static func applyIntroShaping(
+        _ clipID: UUID,
+        analysis: SongAnalysis,
+        editor: inout TimelineEditor
+    ) {
+        guard let clip = editor.clip(clipID) else { return }
+        let introEndSong = analysis.introCandidate?.endSeconds ?? analysis.phraseSeconds
+        let splitUnit = clip.unit(forSongSeconds: introEndSong)
+
+        if let (introID, _) = editor.splitClip(clipID, atUnit: splitUnit) {
+            editor.setClipVolume(introID, 0.85)
+            editor.setEffect(introID, .filter, level: 24)
+            editor.addSFX("impact", atUnit: splitUnit)
+        } else {
+            editor.setEffect(clipID, .filter, level: 14)
+        }
+    }
+
+    /// Last song's release: a dedicated outro clip with reverb air and a
+    /// fade, announced by a crash + downlifter.
+    private static func applyOutroShaping(
+        _ clipID: UUID,
+        analysis: SongAnalysis,
+        editor: inout TimelineEditor
+    ) {
+        guard let clip = editor.clip(clipID) else { return }
+        let clipEndSong = clip.songSeconds(atUnit: clip.start + clip.length)
+        let outroStartSong = min(
+            analysis.outroCandidate?.startSeconds ?? analysis.phraseFloor(of: clipEndSong),
+            analysis.phraseFloor(of: clipEndSong)
+        )
+        let splitUnit = clip.unit(forSongSeconds: outroStartSong)
+
+        if let (_, outroID) = editor.splitClip(clipID, atUnit: splitUnit) {
+            editor.setClipVolume(outroID, 0.85)
+            editor.setEffect(outroID, .reverb, level: 34)
+            editor.setReverbPreset(outroID, .ambient)
+            editor.setTransitionOut(outroID, ClipTransition(type: .fadeOut, duration: 8))
+            editor.addSFX("crash", atUnit: splitUnit)
+            editor.addSFX("downlifter", atUnit: splitUnit)
+        } else {
+            editor.setEffect(clipID, .reverb, level: 26)
+            editor.setReverbPreset(clipID, .ambient)
+            editor.setTransitionOut(clipID, ClipTransition(type: .fadeOut, duration: 8))
+        }
+    }
+
+    // MARK: - Trim helpers
+
+    /// Trims a clip's end down to the nearest phrase boundary (small,
+    /// shrink-only cleanup — neighbors never move).
+    private static func trimEndToPhrase(
+        _ clipID: UUID,
+        analysis: SongAnalysis,
+        maxTrimSeconds: Double,
+        editor: inout TimelineEditor
+    ) {
+        guard let clip = editor.clip(clipID) else { return }
+        let endSong = clip.songSeconds(atUnit: clip.start + clip.length)
+        let phrase = analysis.phraseFloor(of: endSong)
+        guard phrase > clip.sourceOffsetSeconds, endSong - phrase <= maxTrimSeconds else { return }
+        editor.trimClipEnd(clipID, toUnit: clip.unit(forSongSeconds: phrase))
+    }
+
+    /// Trims the outgoing clip to its best mix-out point: the latest
+    /// phrase-snapped, low-vocal-density point the analysis suggests,
+    /// without shortening the clip by more than ~16 s.
+    private static func trimEndToMixOut(
+        _ clipID: UUID,
+        analysis: SongAnalysis,
+        editor: inout TimelineEditor
+    ) {
+        guard let clip = editor.clip(clipID) else { return }
+        let endSong = clip.songSeconds(atUnit: clip.start + clip.length)
+        let mixOut = analysis.mixOutPoints
+            .filter { $0 < endSong && endSong - $0 <= 16 && $0 > clip.sourceOffsetSeconds }
+            .max()
+        guard let mixOut else {
+            trimEndToPhrase(clipID, analysis: analysis, maxTrimSeconds: 6, editor: &editor)
+            return
+        }
+        editor.trimClipEnd(clipID, toUnit: clip.unit(forSongSeconds: mixOut))
     }
 }
+

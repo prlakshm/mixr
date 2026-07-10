@@ -455,7 +455,11 @@ enum MixrTimeline {
             id: a2ID,
             start: clampedSplit + movingClip.length,
             length: rightLen,
-            playbackSpeed: targetClip.playbackSpeed
+            playbackSpeed: targetClip.playbackSpeed,
+            volume: targetClip.volume,
+            effects: targetClip.effects,
+            sourceOffsetSeconds: targetClip.sourceOffsetSeconds
+                + seconds(fromUnits: leftLen) * targetClip.playbackSpeed
         )
         a2.transitionIn = .none
         a2.transitionOut = savedTransitionOut

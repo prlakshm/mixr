@@ -147,7 +147,7 @@ private struct AutoScopeOptionCard: View {
 /// Mixr-branded "analyzing & arranging" overlay — pulsing waveform logo
 /// inside a shimmering ring. No generic spinner.
 struct MixrAutoLoadingOverlay: View {
-    var message: String = "Arranging your remix"
+    var message: String = "Analyzing songs & arranging your mashup"
 
     @State private var pulse = false
     @State private var ringAngle: Angle = .degrees(0)

@@ -986,15 +986,17 @@ private struct TLTrackArea: View {
         let inheritedSpeed = f.clip.playbackSpeed
         tracks[f.trackIdx].clips[f.clipIdx].length = leftLen
         tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
-        tracks[f.trackIdx].clips.insert(
-            MixrClip(
-                id: newID,
-                start: splitAt,
-                length: rightLen,
-                playbackSpeed: inheritedSpeed
-            ),
-            at: f.clipIdx + 1
+        let rightClip = MixrClip(
+            id: newID,
+            start: splitAt,
+            length: rightLen,
+            playbackSpeed: inheritedSpeed,
+            volume: f.clip.volume,
+            effects: f.clip.effects,
+            sourceOffsetSeconds: f.clip.sourceOffsetSeconds
+                + MixrTimeline.seconds(fromUnits: leftLen) * inheritedSpeed
         )
+        tracks[f.trackIdx].clips.insert(rightClip, at: f.clipIdx + 1)
         let contentUnits = MixrTimeline.contentUnits(for: tracks)
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID  = newID
@@ -1024,7 +1026,10 @@ private struct TLTrackArea: View {
                 id: newID,
                 start: newStart,
                 length: newLen,
-                playbackSpeed: f.clip.playbackSpeed
+                playbackSpeed: f.clip.playbackSpeed,
+                volume: f.clip.volume,
+                effects: f.clip.effects,
+                sourceOffsetSeconds: f.clip.sourceOffsetSeconds
             ),
             at: f.clipIdx + 1
         )
