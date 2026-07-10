@@ -5,6 +5,8 @@ import UIKit
 struct MixrSongColorChip: View {
     let color: MixrWaveformColor
     var artworkData: Data? = nil
+    /// Center glyph — the SFX track passes "sparkles".
+    var icon: String = "music.note"
 
     var body: some View {
         Group {
@@ -156,7 +158,7 @@ struct MixrSongColorChip: View {
                 .frame(width: 14, height: 14)
                 .blur(radius: 1.5)
 
-            Image(systemName: "music.note")
+            Image(systemName: icon)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color.white)
                 .shadow(color: bright.opacity(0.60), radius: 3)

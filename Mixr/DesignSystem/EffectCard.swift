@@ -6,6 +6,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
     case auto
     case reverb
     case echo
+    case filter
     case bassBoost
     case pitchUp
     case warmth
@@ -18,6 +19,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .auto: "Auto"
         case .reverb: "Reverb"
         case .echo: "Echo"
+        case .filter: "Filter"
         case .bassBoost: "Bass Boost"
         case .pitchUp: "Pitch Up"
         case .warmth: "Warmth"
@@ -36,6 +38,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .auto: MixrColors.primaryPurple
         case .reverb: Color(hex: "0EA5E9")
         case .echo: MixrColors.waveformPurple
+        case .filter: Color(hex: "2DD4BF")
         case .bassBoost: MixrColors.waveformYellow
         case .pitchUp: MixrColors.waveformPink
         case .warmth: MixrColors.waveformRed
@@ -48,12 +51,16 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .auto: "sparkles"
         case .reverb: "water.waves"
         case .echo: "wind"
+        case .filter: "camera.filters"
         case .bassBoost: "bolt.fill"
         case .pitchUp: "star.fill"
         case .warmth: "flame.fill"
         case .chorus: "drop.fill"
         }
     }
+
+    /// Non-Auto effects expose a 0–100 level slider per clip.
+    var isAdjustable: Bool { self != .auto }
 
     var iconScale: CGFloat {
         switch self {
@@ -78,6 +85,11 @@ enum MixrEffect: String, CaseIterable, Identifiable {
             EffectIconGlowLayout(
                 topCenter: UnitPoint(x: 0.64, y: -0.07),
                 bottomCenter: UnitPoint(x: 0.42, y: 1.04)
+            )
+        case .filter:
+            EffectIconGlowLayout(
+                topCenter: UnitPoint(x: 0.30, y: -0.08),
+                bottomCenter: UnitPoint(x: 0.55, y: 1.03)
             )
         case .bassBoost:
             EffectIconGlowLayout(
@@ -150,6 +162,7 @@ struct EffectLightingLayout {
     private static let tiers: [MixrEffect: Tier] = [
         .reverb:    Tier(cluster: CGPoint(x:  0.04, y:  0.02), blobSpreadX: -0.03, orbSpreadX:  0.02, dotSpreadX: 0.04),
         .echo:      Tier(cluster: CGPoint(x: -0.03, y:  0.05), blobSpreadX: -0.02, orbSpreadX:  0.04, dotSpreadX: 0.05),
+        .filter:    Tier(cluster: CGPoint(x:  0.02, y:  0.03), blobSpreadX: -0.01, orbSpreadX:  0.02, dotSpreadX: 0.05),
         .bassBoost: Tier(cluster: CGPoint(x: -0.05, y:  0.02), blobSpreadX:  0.03, orbSpreadX:  0.01, dotSpreadX: 0.07),
         .pitchUp:   Tier(cluster: CGPoint(x: -0.06, y:  0.03), blobSpreadX:  0.04, orbSpreadX:  0.03, dotSpreadX: 0.06),
         .warmth:    Tier(cluster: CGPoint(x:  0.01, y: -0.01), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
@@ -188,6 +201,7 @@ struct EffectLightingLayout {
         switch effect {
         case .reverb:    (25, 11,   3.8, 0.82)
         case .echo:      (22, 12,   4.2, 0.76)
+        case .filter:    (23, 11,   3.7, 0.76)
         case .bassBoost: (24, 10,   3.4, 0.74)
         case .pitchUp:   (23, 11,   3.7, 0.78)
         case .warmth:    (21, 10.5, 3.6, 0.72)

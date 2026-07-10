@@ -1061,7 +1061,9 @@ private struct TLSelectedSegmentTitleWidthKey: PreferenceKey {
     }
 }
 
-private struct TLTransitionSettingsSegmentedControl<
+/// Mixr's glass segmented control — shared by transition settings and
+/// effect preset pickers (pass the effect color as `trackColor` there).
+struct TLTransitionSettingsSegmentedControl<
     Option: Identifiable & Equatable
 >: View {
     private let controlHeight: CGFloat = 28

@@ -124,8 +124,13 @@ final class MixrPlaybackEngine: ObservableObject {
         if p.securityScoped { p.url.stopAccessingSecurityScopedResource() }
     }
 
+    /// Mute + solo aware: soloing any track silences all non-soloed tracks.
+    private func isAudible(_ track: MixrTrack) -> Bool {
+        TrackLibrary.isAudible(track, in: snapshot)
+    }
+
     private func applyVolume(for track: MixrTrack) {
-        players[track.id]?.node.volume = track.isMuted ? 0 : Float(track.volume)
+        players[track.id]?.node.volume = isAudible(track) ? Float(track.volume) : 0
     }
 
     // MARK: - Playback scheduling
@@ -156,7 +161,7 @@ final class MixrPlaybackEngine: ObservableObject {
 
         // ── 4. Schedule each track ──
         for track in snapshot {
-            guard !track.isMuted,
+            guard isAudible(track),
                   let p = players[track.id],
                   let clip = track.clips.first
             else { continue }
@@ -228,7 +233,7 @@ final class MixrPlaybackEngine: ObservableObject {
 
         // Only stop if every non-muted track has reached its clip end
         let anyLive = snapshot.contains { track in
-            guard !track.isMuted, let clip = track.clips.first else { return false }
+            guard isAudible(track), let clip = track.clips.first else { return false }
             return currentTimeSeconds < MixrTimeline.seconds(fromUnits: clip.start + clip.length)
         }
         if !anyLive { pause(); currentTimeSeconds = totalDurationSeconds }

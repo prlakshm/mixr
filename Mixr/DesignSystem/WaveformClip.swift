@@ -60,6 +60,7 @@ private extension MixrWaveformColor {
         case .red:    3
         case .yellow: 4
         case .blue:   5
+        case .silver: 6
         }
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct DesignSystemPreviewView: View {
     @State private var volumeSamples: [MixrWaveformColor: Double] = [
@@ -21,9 +22,15 @@ struct DesignSystemPreviewView: View {
                 songChipsSection
                 songRowsSection
                 trackControlsSection
+                soloMuteSection
                 volumeSlidersSection
                 waveformsSection
                 effectCardsSection
+                effectTraysSection
+                sfxSection
+                autoSection
+                toolbarHistorySection
+                projectDropdownSection
             }
             .padding(MixrSpacing.lg)
         }
@@ -412,6 +419,216 @@ struct DesignSystemPreviewView: View {
             }
         }
     }
+
+    // MARK: - Solo / Mute States
+
+    private var soloMuteSection: some View {
+        PreviewSection(title: "Solo & Mute States") {
+            HStack(spacing: MixrSpacing.xl) {
+                PreviewSubsection(title: "Solo · Inactive / Active") {
+                    HStack(spacing: MixrSpacing.sm) {
+                        TLTrackToggle(label: "S", isActive: false, accent: MixrColors.secondaryPurple) {}
+                        TLTrackToggle(label: "S", isActive: true, accent: MixrColors.secondaryPurple) {}
+                    }
+                }
+
+                PreviewSubsection(title: "Mute · Inactive / Active") {
+                    HStack(spacing: MixrSpacing.sm) {
+                        TLTrackToggle(label: "M", isActive: false, accent: MixrColors.primaryPurple) {}
+                        TLTrackToggle(label: "M", isActive: true, accent: MixrColors.primaryPurple) {}
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Effect Trays (expanded effect cards)
+
+    private var effectTraysSection: some View {
+        PreviewSection(title: "Expanded Effect Cards") {
+            VStack(alignment: .leading, spacing: MixrSpacing.lg) {
+                PreviewSubsection(title: "Slider at 0 · gray labels") {
+                    HStack(spacing: MixrSpacing.sm) {
+                        EffectCard(effect: .reverb, isSelected: true)
+                        EffectControlTray(effect: .reverb, level: 0)
+                    }
+                }
+
+                PreviewSubsection(title: "After drag · current value in white (64)") {
+                    HStack(spacing: MixrSpacing.sm) {
+                        EffectCard(effect: .echo, isSelected: true)
+                        EffectControlTray(effect: .echo, level: 64, echoPreset: .pingPong)
+                    }
+                }
+
+                PreviewSubsection(title: "Reverb presets · effect color accent") {
+                    EffectControlTray(effect: .reverb, level: 32, reverbPreset: .hall)
+                }
+
+                PreviewSubsection(title: "Echo presets · effect color accent") {
+                    EffectControlTray(effect: .echo, level: 48, echoPreset: .reverse)
+                }
+
+                PreviewSubsection(title: "Slider-only effects") {
+                    HStack(spacing: MixrSpacing.sm) {
+                        EffectControlTray(effect: .filter, level: 25)
+                        EffectControlTray(effect: .warmth, level: 80)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Sound Effects
+
+    private var sfxSection: some View {
+        PreviewSection(title: "Sound Effects") {
+            VStack(alignment: .leading, spacing: MixrSpacing.lg) {
+                PreviewSubsection(title: "SFX Button · closed / pressed–open") {
+                    HStack(spacing: MixrSpacing.md) {
+                        SFXTileMark(isActive: false)
+                        SFXTileMark(isActive: true)
+                    }
+                }
+
+                PreviewSubsection(title: "Import Songs + SFX footer layout") {
+                    HStack(spacing: 7) {
+                        Button {} label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 10, weight: .bold))
+                                Text("Import Songs")
+                                    .mixrFont(.button)
+                            }
+                            .foregroundStyle(MixrColors.textMuted.opacity(0.82))
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, MixrSpacing.sm)
+                            .padding(.vertical, MixrLayout.buttonPaddingV)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        SFXTileMark()
+                    }
+                    .frame(width: 184)
+                }
+
+                PreviewSubsection(title: "Silver SFX cards") {
+                    HStack(spacing: MixrSpacing.md) {
+                        ForEach(SoundEffectLibrary.all.prefix(5)) { effect in
+                            SFXCard(effect: effect)
+                        }
+                    }
+                }
+
+                PreviewSubsection(title: "Silver SFX track row") {
+                    HStack(spacing: 9) {
+                        MixrSongColorChip(color: .silver, icon: "sparkles")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sound Effects")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(MixrColors.textPrimary)
+                            Text("Built-in SFX · 3 clips")
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(MixrColors.textSecondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(width: 208, height: 46)
+                    .background(MixrColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
+                            .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+                    }
+                }
+
+                PreviewSubsection(title: "Silver SFX clips") {
+                    HStack(spacing: MixrSpacing.md) {
+                        WaveformClip(waveformColor: .silver, height: 34)
+                            .frame(width: 120)
+                        WaveformClip(waveformColor: .silver, height: 34)
+                            .frame(width: 64)
+                        WaveformClip(waveformColor: .silver, height: 34)
+                            .frame(width: 28)
+                    }
+                }
+
+                PreviewSubsection(title: "SFX library panel") {
+                    SFXLibraryPanel()
+                        .frame(width: 760, height: 340)
+                }
+            }
+        }
+    }
+
+    // MARK: - Auto
+
+    private var autoSection: some View {
+        PreviewSection(title: "Auto") {
+            VStack(alignment: .leading, spacing: MixrSpacing.lg) {
+                PreviewSubsection(title: "Scope dialog · clip selected") {
+                    AutoScopeDialog(hasSelectedClip: true)
+                }
+
+                PreviewSubsection(title: "Scope dialog · no selection (playhead)") {
+                    AutoScopeDialog(hasSelectedClip: false)
+                }
+
+                PreviewSubsection(title: "Loading overlay") {
+                    MixrAutoLoadingOverlay()
+                }
+            }
+        }
+    }
+
+    // MARK: - Undo / Redo
+
+    private var toolbarHistorySection: some View {
+        PreviewSection(title: "Undo & Redo") {
+            HStack(spacing: MixrSpacing.xl) {
+                PreviewSubsection(title: "Enabled") {
+                    HStack(spacing: 6) {
+                        TLToolbarHistoryButton(icon: "arrow.uturn.backward", isEnabled: true) {}
+                        TLToolbarHistoryButton(icon: "arrow.uturn.forward", isEnabled: true) {}
+                    }
+                }
+
+                PreviewSubsection(title: "Disabled") {
+                    HStack(spacing: 6) {
+                        TLToolbarHistoryButton(icon: "arrow.uturn.backward", isEnabled: false) {}
+                        TLToolbarHistoryButton(icon: "arrow.uturn.forward", isEnabled: false) {}
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Project Dropdown
+
+    private var projectDropdownSection: some View {
+        PreviewSection(title: "Project Dropdown") {
+            ProjectDropdownMenu(
+                projects: [
+                    ProjectSummary(id: DSPreviewIDs.projectA, name: "My Remix", modifiedAt: Date()),
+                    ProjectSummary(id: DSPreviewIDs.projectB, name: "Festival Set", modifiedAt: Date()),
+                    ProjectSummary(id: DSPreviewIDs.projectC, name: "Sunset Mix", modifiedAt: Date()),
+                ],
+                currentProjectID: DSPreviewIDs.projectA,
+                currentName: "My Remix"
+            )
+        }
+    }
+}
+
+private enum DSPreviewIDs {
+    static let projectA = UUID()
+    static let projectB = UUID()
+    static let projectC = UUID()
 }
 
 // MARK: - Preview Helpers
@@ -646,13 +863,18 @@ private struct DSPreviewTrackControlRow: View {
     let color: MixrWaveformColor
     @Binding var volume: Double
 
+    @State private var isSoloed = false
+    @State private var isMuted = false
+
     var body: some View {
         HStack(spacing: 5) {
-            Button("S") {}
-                .buttonStyle(.mixrCompactTrackToggle)
+            TLTrackToggle(label: "S", isActive: isSoloed, accent: MixrColors.secondaryPurple) {
+                isSoloed.toggle()
+            }
 
-            Button("M") {}
-                .buttonStyle(.mixrCompactTrackToggle)
+            TLTrackToggle(label: "M", isActive: isMuted, accent: MixrColors.primaryPurple) {
+                isMuted.toggle()
+            }
 
             HStack(spacing: 4) {
                 Image(systemName: volumeIcon)
@@ -690,10 +912,12 @@ private extension MixrWaveformColor {
         case .red: "Red"
         case .yellow: "Yellow"
         case .blue: "Blue"
+        case .silver: "Silver · SFX"
         }
     }
 }
 
 #Preview {
     DesignSystemPreviewView()
+        .modelContainer(for: MixrProjectRecord.self, inMemory: true)
 }

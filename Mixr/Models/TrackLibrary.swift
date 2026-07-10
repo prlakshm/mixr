@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AVFoundation
 import CoreMedia
+import SwiftData
 
 // MARK: - Track Library
 
@@ -10,6 +11,22 @@ final class TrackLibrary: ObservableObject {
     @Published var tracks: [MixrTrack] = []
     @Published var selectedTrackID: UUID?
     @Published private(set) var projectBPM: Int?
+
+    // Project state
+    @Published var projectName: String = "My Remix"
+    @Published private(set) var projects: [ProjectSummary] = []
+
+    // Undo / redo
+    @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
+    private var undoStack: [ProjectSnapshot] = []
+    private var redoStack: [ProjectSnapshot] = []
+    private let undoLimit = 50
+
+    // Persistence
+    private var modelContext: ModelContext?
+    private var currentProjectID: UUID?
+    private var autosaveTask: Task<Void, Never>?
 
     private let colorCycle: [MixrWaveformColor] = [.pink, .purple, .red, .yellow, .blue]
 
@@ -31,8 +48,12 @@ final class TrackLibrary: ObservableObject {
     /// Appends placeholder tracks immediately (preserving selection order and color assignment),
     /// then asynchronously patches embedded metadata, duration, and clip length per track by UUID.
     func addTracks(from urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        pushUndoSnapshot()
+
         for url in urls {
-            let color   = colorCycle[tracks.count % colorCycle.count]
+            let songCount = tracks.filter { !$0.isSFXTrack }.count
+            let color   = colorCycle[songCount % colorCycle.count]
             let trackID = UUID()
             let parsed  = Self.parsedFilenameMetadata(from: url)
             let title   = parsed.title ?? url.deletingPathExtension().lastPathComponent
@@ -52,7 +73,12 @@ final class TrackLibrary: ObservableObject {
                 artworkData: nil,
                 clips: [MixrClip(id: UUID(), start: 0, length: 48)]
             )
-            tracks.append(placeholder)
+            // Keep the SFX track pinned below all song tracks.
+            if let sfxIdx = tracks.firstIndex(where: { $0.isSFXTrack }) {
+                tracks.insert(placeholder, at: sfxIdx)
+            } else {
+                tracks.append(placeholder)
+            }
 
             if selectedTrackID == nil {
                 selectedTrackID = trackID
@@ -82,6 +108,7 @@ final class TrackLibrary: ObservableObject {
                     tracks[idx].durationSeconds = seconds
                     tracks[idx].clips[0].length = Self.clipUnits(for: seconds)
                 }
+                scheduleAutosave()
 
                 // ── Phase 2: on-device audio analysis when metadata is absent ──
                 let needsBPM = metadata.bpm == nil
@@ -108,6 +135,7 @@ final class TrackLibrary: ObservableObject {
                     tracks[idx2].key           = key
                     tracks[idx2].keyConfidence = conf
                 }
+                scheduleAutosave()
             }
         }
     }
@@ -129,6 +157,7 @@ final class TrackLibrary: ObservableObject {
     // MARK: - Delete
 
     func deleteTrack(id: UUID) {
+        pushUndoSnapshot()
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
             tracks.removeAll { $0.id == id }
         }
@@ -141,6 +170,264 @@ final class TrackLibrary: ObservableObject {
             selectedTrackID = nil
             projectBPM = nil
         }
+    }
+
+    // MARK: - Mix Controls (solo / mute / volume)
+
+    func toggleSolo(trackID: UUID) {
+        guard let idx = tracks.firstIndex(where: { $0.id == trackID }) else { return }
+        pushUndoSnapshot()
+        tracks[idx].isSoloed.toggle()
+    }
+
+    func toggleMute(trackID: UUID) {
+        guard let idx = tracks.firstIndex(where: { $0.id == trackID }) else { return }
+        pushUndoSnapshot()
+        tracks[idx].isMuted.toggle()
+    }
+
+    /// Whether a track is currently audible given mute and solo state.
+    static func isAudible(_ track: MixrTrack, in tracks: [MixrTrack]) -> Bool {
+        guard !track.isMuted else { return false }
+        let soloActive = tracks.contains { $0.isSoloed }
+        return !soloActive || track.isSoloed
+    }
+
+    // MARK: - Sound Effects
+
+    /// Index of the silver SFX track, creating it (pinned last) if needed.
+    @discardableResult
+    private func ensureSFXTrack() -> Int {
+        if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
+        let sfxTrack = MixrTrack(
+            id: UUID(),
+            title: "Sound Effects",
+            artist: "Built-in SFX",
+            duration: "",
+            durationSeconds: nil,
+            bpm: nil,
+            key: nil,
+            color: .silver,
+            volume: 0.85,
+            isMuted: false,
+            trackType: .soundEffect,
+            url: nil,
+            artworkData: nil,
+            clips: []
+        )
+        tracks.append(sfxTrack)
+        return tracks.count - 1
+    }
+
+    /// Adds an SFX clip at the playhead, sliding right past any overlapping
+    /// SFX clips (never overlapping, never negative). Returns the new clip id.
+    @discardableResult
+    func addSoundEffect(_ definition: SoundEffectDefinition, atPlayheadUnit unit: CGFloat) -> UUID {
+        pushUndoSnapshot()
+        let idx = withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            ensureSFXTrack()
+        }
+        let start = SoundEffectLibrary.nonOverlappingStart(
+            proposedStart: max(0, unit),
+            lengthUnits: definition.lengthUnits,
+            in: tracks[idx].clips
+        )
+        let clip = MixrClip(
+            id: UUID(),
+            start: start,
+            length: definition.lengthUnits,
+            soundEffectID: definition.id
+        )
+        tracks[idx].clips.append(clip)
+        tracks[idx].clips.sort { $0.start < $1.start }
+        return clip.id
+    }
+
+    // MARK: - Undo / Redo
+
+    private var currentSnapshot: ProjectSnapshot {
+        ProjectSnapshot(
+            name: projectName,
+            tracks: tracks,
+            selectedTrackID: selectedTrackID,
+            projectBPM: projectBPM
+        )
+    }
+
+    private func apply(_ snapshot: ProjectSnapshot) {
+        projectName = snapshot.name
+        tracks = snapshot.tracks
+        selectedTrackID = snapshot.selectedTrackID
+        projectBPM = snapshot.projectBPM
+    }
+
+    /// Call BEFORE any meaningful mutation. New edits clear the redo stack.
+    func pushUndoSnapshot() {
+        undoStack.append(currentSnapshot)
+        if undoStack.count > undoLimit { undoStack.removeFirst() }
+        redoStack.removeAll()
+        updateHistoryFlags()
+        scheduleAutosave()
+    }
+
+    func undo() {
+        guard let snapshot = undoStack.popLast() else { return }
+        redoStack.append(currentSnapshot)
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            apply(snapshot)
+        }
+        updateHistoryFlags()
+        scheduleAutosave()
+    }
+
+    func redo() {
+        guard let snapshot = redoStack.popLast() else { return }
+        undoStack.append(currentSnapshot)
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            apply(snapshot)
+        }
+        updateHistoryFlags()
+        scheduleAutosave()
+    }
+
+    private func updateHistoryFlags() {
+        canUndo = !undoStack.isEmpty
+        canRedo = !redoStack.isEmpty
+    }
+
+    // MARK: - Projects (SwiftData persistence)
+
+    func attachPersistence(context: ModelContext) {
+        guard modelContext == nil else { return }
+        modelContext = context
+        loadProjects()
+    }
+
+    private func fetchRecords() -> [MixrProjectRecord] {
+        guard let modelContext else { return [] }
+        let descriptor = FetchDescriptor<MixrProjectRecord>(
+            sortBy: [SortDescriptor(\.modifiedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func record(for id: UUID) -> MixrProjectRecord? {
+        fetchRecords().first { $0.id == id }
+    }
+
+    private func loadProjects() {
+        guard let modelContext else { return }
+        let records = fetchRecords()
+
+        if let latest = records.first {
+            currentProjectID = latest.id
+            if let snapshot = ProjectSnapshotCoder.decode(latest.snapshotData) {
+                apply(snapshot)
+            } else {
+                projectName = latest.name
+            }
+        } else {
+            let record = MixrProjectRecord(name: projectName)
+            modelContext.insert(record)
+            try? modelContext.save()
+            currentProjectID = record.id
+        }
+        refreshProjectSummaries()
+    }
+
+    private func refreshProjectSummaries() {
+        projects = fetchRecords().map {
+            ProjectSummary(id: $0.id, name: $0.name, modifiedAt: $0.modifiedAt)
+        }
+    }
+
+    var currentProjectSummaryID: UUID? { currentProjectID }
+
+    func saveCurrentProject() {
+        guard let modelContext, let id = currentProjectID,
+              let record = record(for: id)
+        else { return }
+        record.name = projectName
+        record.modifiedAt = Date()
+        if let data = ProjectSnapshotCoder.encode(currentSnapshot) {
+            record.snapshotData = data
+        }
+        try? modelContext.save()
+        refreshProjectSummaries()
+    }
+
+    /// Debounced autosave — call after any project mutation.
+    func scheduleAutosave() {
+        autosaveTask?.cancel()
+        autosaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            self?.saveCurrentProject()
+        }
+    }
+
+    func switchProject(to id: UUID) {
+        guard id != currentProjectID, let modelContext else { return }
+        saveCurrentProject()
+        guard let target = record(for: id) else { return }
+
+        currentProjectID = id
+        // History is per-project: switching starts a fresh history.
+        undoStack.removeAll()
+        redoStack.removeAll()
+        updateHistoryFlags()
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            if let snapshot = ProjectSnapshotCoder.decode(target.snapshotData) {
+                apply(snapshot)
+            } else {
+                projectName = target.name
+                tracks = []
+                selectedTrackID = nil
+                projectBPM = nil
+            }
+        }
+        try? modelContext.save()
+        refreshProjectSummaries()
+    }
+
+    func createProject() {
+        guard let modelContext else { return }
+        saveCurrentProject()
+
+        let name = uniqueProjectName(base: "My Remix")
+        let record = MixrProjectRecord(name: name)
+        modelContext.insert(record)
+        try? modelContext.save()
+
+        currentProjectID = record.id
+        undoStack.removeAll()
+        redoStack.removeAll()
+        updateHistoryFlags()
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            projectName = name
+            tracks = []
+            selectedTrackID = nil
+            projectBPM = nil
+        }
+        refreshProjectSummaries()
+    }
+
+    func renameCurrentProject(to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != projectName else { return }
+        pushUndoSnapshot()
+        projectName = trimmed
+        saveCurrentProject()
+    }
+
+    private func uniqueProjectName(base: String) -> String {
+        let existing = Set(fetchRecords().map(\.name))
+        guard existing.contains(base) else { return base }
+        var n = 2
+        while existing.contains("\(base) \(n)") { n += 1 }
+        return "\(base) \(n)"
     }
 
     // MARK: - Helpers

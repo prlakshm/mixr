@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 import UIKit
 
@@ -320,8 +321,18 @@ private struct ClipDragState {
 struct TimelineScreen: View {
     @StateObject private var library = TrackLibrary()
     @StateObject private var playback = MixrPlaybackEngine()
+    @Environment(\.modelContext) private var modelContext
     @State private var showFilePicker = false
     @State private var isEffectsCollapsed = false
+
+    // Selected clip — shared by the timeline, effects panel, and Auto.
+    @State private var selectedClipID: UUID?
+
+    // Floating panel / dialog state
+    @State private var showSFXPanel = false
+    @State private var showAutoDialog = false
+    @State private var isAutoRunning = false
+    @State private var showProjectMenu = false
 
     // Playhead drag state
     @State private var isPlayheadDragging = false
@@ -361,19 +372,31 @@ struct TimelineScreen: View {
                     TLTransportBar(
                         playback: playback,
                         library: library,
-                        displayTimeSeconds: displayTimeSeconds
+                        displayTimeSeconds: displayTimeSeconds,
+                        isProjectMenuOpen: showProjectMenu,
+                        onProjectTapped: {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                showProjectMenu.toggle()
+                            }
+                        }
                     )
                     .frame(height: TLK.transportHeight)
                     .zIndex(1)
 
                     TLTrackArea(
                         tracks: $library.tracks,
+                        selectedClipID: $selectedClipID,
                         selectedTrackID: library.selectedTrackID,
                         effectivePlayheadUnit: effectivePlayheadUnit,
                         maxPlayheadUnit: maxPlayheadUnit,
                         isPlayheadDragging: isPlayheadDragging,
                         bottomOverlayAllowance: effectsH,
                         showFilePicker: $showFilePicker,
+                        onOpenSFXLibrary: {
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                showSFXPanel = true
+                            }
+                        },
                         onImportURLs: { urls in
                             library.addTracks(from: urls)
                         },
@@ -386,8 +409,18 @@ struct TimelineScreen: View {
                         onSelectTrack: { id in
                             library.selectTrack(id: id)
                         },
+                        onToggleSolo: { id in
+                            library.toggleSolo(trackID: id)
+                        },
+                        onToggleMute: { id in
+                            library.toggleMute(trackID: id)
+                        },
+                        onPushUndo: {
+                            library.pushUndoSnapshot()
+                        },
                         onMixSettingsChanged: {
                             playback.applyMixSettings(from: library.tracks)
+                            library.scheduleAutosave()
                         },
                         onPlayheadDragStart: {
                             wasPlayingBeforeDrag = playback.isPlaying
@@ -412,14 +445,27 @@ struct TimelineScreen: View {
                     .layoutPriority(1)
                     .zIndex(20)
 
-                    TLEffectsPanel(isCollapsed: $isEffectsCollapsed)
-                        .frame(height: effectsH)
-                        .clipped()
-                        .zIndex(0)
+                    TLEffectsPanel(
+                        isCollapsed: $isEffectsCollapsed,
+                        tracks: $library.tracks,
+                        selectedClipID: selectedClipID,
+                        playheadUnit: effectivePlayheadUnit,
+                        onPushUndo: { library.pushUndoSnapshot() },
+                        onAutoTapped: {
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                showAutoDialog = true
+                            }
+                        }
+                    )
+                    .frame(height: effectsH)
+                    .clipped()
+                    .zIndex(0)
                 }
                 .animation(.spring(response: 0.34, dampingFraction: 0.86), value: isEffectsCollapsed)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .clipped()
+
+                floatingOverlays(screenSize: geo.size)
 
                 if isPortrait {
                     TLRotateOverlay()
@@ -430,6 +476,7 @@ struct TimelineScreen: View {
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .onAppear {
+            library.attachPersistence(context: modelContext)
             playback.syncTracks(library.tracks)
         }
         // Track list or clip geometry changed → full sync (may add/remove players)
@@ -437,10 +484,12 @@ struct TimelineScreen: View {
             track.clips.map { "\($0.start):\($0.length)" }.joined(separator: ",")
         }.joined(separator: "|")) { _, _ in
             playback.syncTracks(library.tracks)
+            library.scheduleAutosave()
         }
-        // Only volume/mute changed → lightweight update, does NOT restart engine
-        .onChange(of: library.tracks.map { "\($0.id):\($0.volume):\($0.isMuted)" }.joined()) { _, _ in
+        // Only volume/mute/solo changed → lightweight update, does NOT restart engine
+        .onChange(of: library.tracks.map { "\($0.id):\($0.volume):\($0.isMuted):\($0.isSoloed)" }.joined()) { _, _ in
             playback.applyMixSettings(from: library.tracks)
+            library.scheduleAutosave()
         }
         .fileImporter(
             isPresented: $showFilePicker,
@@ -449,6 +498,147 @@ struct TimelineScreen: View {
         ) { result in
             guard case .success(let urls) = result else { return }
             library.addTracks(from: urls)
+        }
+    }
+
+    // MARK: - Floating overlays (SFX library, Auto dialog/loading, project menu)
+
+    @ViewBuilder
+    private func floatingOverlays(screenSize: CGSize) -> some View {
+        // SFX library — large glass panel, like the import picker flow:
+        // opens over the timeline, closes after a selection.
+        if showSFXPanel {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissSFXPanel() }
+
+                SFXLibraryPanel(
+                    onSelect: { effect in
+                        library.addSoundEffect(effect, atPlayheadUnit: effectivePlayheadUnit)
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        dismissSFXPanel()
+                    },
+                    onClose: { dismissSFXPanel() }
+                )
+                .frame(
+                    width: screenSize.width * SFXMetrics.panelScreenFraction,
+                    height: screenSize.height * SFXMetrics.panelScreenFraction
+                )
+            }
+            .zIndex(60)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
+        // Auto scope dialog — nothing mutates until a scope is chosen;
+        // tapping outside dismisses with no timeline changes.
+        if showAutoDialog {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showAutoDialog = false
+                        }
+                    }
+
+                AutoScopeDialog(
+                    hasSelectedClip: selectedClipID != nil,
+                    onChooseFocused: {
+                        if let clipID = selectedClipID {
+                            runAuto(scope: .selectedClip(clipID))
+                        } else {
+                            runAuto(scope: .playheadClips)
+                        }
+                    },
+                    onChooseEntireProject: {
+                        runAuto(scope: .entireProject)
+                    }
+                )
+            }
+            .zIndex(70)
+            .transition(.opacity.combined(with: .scale(scale: 0.94)))
+        }
+
+        // Auto loading — Mixr-branded analyze/arrange moment.
+        if isAutoRunning {
+            ZStack {
+                Color.black.opacity(0.58).ignoresSafeArea()
+                MixrAutoLoadingOverlay()
+            }
+            .zIndex(80)
+            .transition(.opacity)
+        }
+
+        // Project dropdown — anchored under "My Remix" in the toolbar.
+        if showProjectMenu {
+            ZStack(alignment: .topLeading) {
+                Color.black.opacity(0.28)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissProjectMenu() }
+
+                ProjectDropdownMenu(
+                    projects: library.projects,
+                    currentProjectID: library.currentProjectSummaryID,
+                    currentName: library.projectName,
+                    onSelectProject: { id in
+                        selectedClipID = nil
+                        library.switchProject(to: id)
+                    },
+                    onCreateProject: {
+                        selectedClipID = nil
+                        library.createProject()
+                    },
+                    onRename: { name in
+                        library.renameCurrentProject(to: name)
+                    },
+                    onDismiss: { dismissProjectMenu() }
+                )
+                .offset(x: 96, y: TLK.transportHeight - 6)
+            }
+            .zIndex(90)
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
+        }
+    }
+
+    private func dismissSFXPanel() {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            showSFXPanel = false
+        }
+    }
+
+    private func dismissProjectMenu() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            showProjectMenu = false
+        }
+    }
+
+    // MARK: - Auto
+
+    /// Runs the local arrangement engine for the chosen scope. The whole
+    /// Auto pass is one undo action.
+    private func runAuto(scope: AutoScope) {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            showAutoDialog = false
+            isAutoRunning = true
+        }
+        let playheadUnit = effectivePlayheadUnit
+
+        Task { @MainActor in
+            // Brief branded "analyzing" beat so the arrangement lands as a moment.
+            try? await Task.sleep(for: .milliseconds(1600))
+
+            library.pushUndoSnapshot()
+            let arranged = AutoArrangementEngine.arrange(
+                tracks: library.tracks,
+                scope: scope,
+                playheadUnit: playheadUnit
+            )
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                library.tracks = arranged
+                isAutoRunning = false
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }
 }
@@ -479,10 +669,12 @@ private struct TLTransportBar: View {
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
     var displayTimeSeconds: Double = 0
+    var isProjectMenuOpen: Bool = false
+    var onProjectTapped: () -> Void = {}
 
     var body: some View {
         ZStack {
-            HStack(spacing: 24) {
+            HStack(spacing: 16) {
                 HStack(spacing: 7) {
                     Image(systemName: "waveform")
                         .font(.system(size: 16, weight: .bold))
@@ -491,13 +683,42 @@ private struct TLTransportBar: View {
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(MixrColors.textPrimary)
                 }
-                HStack(spacing: 4) {
-                    Text("My Remix")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(MixrColors.textPrimary)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(MixrColors.textSecondary)
+
+                // Project dropdown trigger — dark glass, opens the project menu.
+                Button(action: onProjectTapped) {
+                    HStack(spacing: 5) {
+                        Text(library.projectName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(MixrColors.textPrimary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(MixrColors.textSecondary)
+                            .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background {
+                        GlassBackground(level: isProjectMenuOpen ? .selected : .default, cornerRadius: 8)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
+
+                // Undo / redo — right of the project title.
+                HStack(spacing: 6) {
+                    TLToolbarHistoryButton(
+                        icon: "arrow.uturn.backward",
+                        isEnabled: library.canUndo,
+                        action: { library.undo() }
+                    )
+                    TLToolbarHistoryButton(
+                        icon: "arrow.uturn.forward",
+                        isEnabled: library.canRedo,
+                        action: { library.redo() }
+                    )
                 }
             }
             .padding(.leading, 14)
@@ -597,20 +818,61 @@ private struct TLTransportBar: View {
     }
 }
 
+// MARK: - Toolbar History Button (undo / redo)
+
+struct TLToolbarHistoryButton: View {
+    let icon: String
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(MixrColors.textSecondary)
+                .frame(width: 26, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(TLToolbarHistoryPressStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.32)
+        .animation(.easeOut(duration: 0.16), value: isEnabled)
+    }
+}
+
+private struct TLToolbarHistoryPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(configuration.isPressed ? Color.white.opacity(0.10) : Color.clear)
+            }
+            .offset(y: configuration.isPressed ? 1 : 0)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .animation(.spring(response: 0.17, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
 // MARK: - Track Area (unified three-column scrollable layout)
 
 private struct TLTrackArea: View {
     @Binding var tracks: [MixrTrack]
+    @Binding var selectedClipID: UUID?
     let selectedTrackID: UUID?
     let effectivePlayheadUnit: CGFloat
     let maxPlayheadUnit: CGFloat
     let isPlayheadDragging: Bool
     let bottomOverlayAllowance: CGFloat
     @Binding var showFilePicker: Bool
+    let onOpenSFXLibrary: () -> Void
     let onImportURLs: ([URL]) -> Void
     let onDeleteTrack: (UUID) -> Void
     let onReorder: (IndexSet, Int) -> Void
     let onSelectTrack: (UUID) -> Void
+    let onToggleSolo: (UUID) -> Void
+    let onToggleMute: (UUID) -> Void
+    /// Pushes an undo snapshot — call BEFORE mutating tracks/clips.
+    let onPushUndo: () -> Void
     let onMixSettingsChanged: () -> Void
     let onPlayheadDragStart: () -> Void
     let onPlayheadDragChanged: (CGFloat) -> Void
@@ -622,7 +884,6 @@ private struct TLTrackArea: View {
     @State private var isTimelineDropTarget     = false
 
     // Clip editing state
-    @State private var selectedClipID:   UUID?       = nil
     @State private var clipTapAnchorX:   CGFloat?    = nil
     @State private var activeGrip:       ActiveGrip? = nil
     @State private var isSpeedEditing:   Bool        = false
@@ -718,6 +979,7 @@ private struct TLTrackArea: View {
         let splitAt = inClip ? phUnit : f.clip.start + f.clip.length / 2
         guard splitAt - f.clip.start >= 2,
               f.clip.start + f.clip.length - splitAt >= 2 else { return }
+        onPushUndo()
         let leftLen  = splitAt - f.clip.start
         let rightLen = f.clip.length - leftLen
         let newID    = UUID()
@@ -744,6 +1006,7 @@ private struct TLTrackArea: View {
 
     private func duplicateClip(id: UUID) {
         guard let f = findClip(id) else { return }
+        onPushUndo()
         let newStart = f.clip.start + f.clip.length
         // Bug 1 fix: always copy the full source length, never truncate.
         let newLen = f.clip.length
@@ -794,10 +1057,12 @@ private struct TLTrackArea: View {
                 isSpeedEditing = false
                 clipTapAnchorX = nil
             }
+            // Track deletion pushes its own undo snapshot in TrackLibrary.
             onDeleteTrack(f.track.id)
             return
         }
 
+        onPushUndo()
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             tracks[f.trackIdx].clips.remove(at: f.clipIdx)
             selectedClipID = nil
@@ -815,6 +1080,9 @@ private struct TLTrackArea: View {
             TLClipEditingMetrics.maxPlaybackSpeed,
             max(TLClipEditingMetrics.minPlaybackSpeed, speed)
         )
+        if abs(clamped - f.clip.playbackSpeed) > 0.0001 {
+            onPushUndo()
+        }
         let currentSpeed = max(f.clip.playbackSpeed, 0.0001)
         let sourceLength = Double(f.clip.length) * currentSpeed
         let rawNewLength = sourceLength / clamped
@@ -859,6 +1127,7 @@ private struct TLTrackArea: View {
 
     private func setTransition(type: ClipTransitionType, grip: ActiveGrip) {
         guard let f = findClip(grip.clipID) else { return }
+        onPushUndo()
         var tx = ClipTransition()
         tx.type = type
         if grip.side == .leading {
@@ -874,6 +1143,10 @@ private struct TLTrackArea: View {
 
     private func updateTransition(_ transition: ClipTransition, grip: ActiveGrip) {
         guard let f = findClip(grip.clipID) else { return }
+        let current = grip.side == .leading ? f.clip.transitionIn : f.clip.transitionOut
+        if current != transition {
+            onPushUndo()
+        }
         if grip.side == .leading {
             tracks[f.trackIdx].clips[f.clipIdx].transitionIn = transition
         } else {
@@ -1088,6 +1361,13 @@ private struct TLTrackArea: View {
             moving: drag.clipID,
             in: tracks[ti].clips
         )
+        // Only a real move is undoable — a ghost-restore drop is a no-op.
+        if reflowedClips != tracks[ti].clips.sorted(by: { lhs, rhs in
+            if abs(lhs.start - rhs.start) > MixrTimeline.clipEdgeEpsilon { return lhs.start < rhs.start }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }) {
+            onPushUndo()
+        }
         let committedStart = reflowedClips.first(where: { $0.id == drag.clipID })?.start
             ?? MixrTimeline.insertionStart(for: result, movingClipLength: drag.originalClip.length)
         let committedEnd = reflowedClips
@@ -1519,6 +1799,7 @@ private struct TLTrackArea: View {
                         clipDragState:  isThisDragTrack ? clipDragState : nil,
                         isScrimmed:     isDraggingClip && !isThisDragTrack,
                         isActiveForDrag: isDraggingClip && isThisDragTrack,
+                        isInaudible:    !TrackLibrary.isAudible(track, in: tracks),
                         onClipTapped:   { clipID, tapX in
                             guard !isDraggingClip else { return }
                             let unit = (tapX / contentW) * contentUnits
@@ -1737,7 +2018,11 @@ private struct TLTrackArea: View {
                 TLTrackControlRow(
                     track: track,
                     volume: $tracks[idx].volume,
-                    isMuted: $tracks[idx].isMuted,
+                    onToggleSolo: { onToggleSolo(track.id) },
+                    onToggleMute: { onToggleMute(track.id) },
+                    onVolumeEditingChanged: { editing in
+                        if editing { onPushUndo() }
+                    },
                     onMixSettingsChanged: onMixSettingsChanged
                 )
                 .frame(height: TLK.trackRowHeight)
@@ -1786,29 +2071,52 @@ private struct TLTrackArea: View {
     }
 
     private var importButton: some View {
-        Button {
-            showFilePicker = true
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .bold))
-                Text("Import Songs")
-                    .mixrFont(.button)
+        // Import shortened ~30% so the FX button sits naturally beside it.
+        HStack(spacing: 7) {
+            Button {
+                showFilePicker = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Import Songs")
+                        .mixrFont(.button)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .foregroundStyle(MixrColors.textMuted.opacity(0.82))
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, MixrSpacing.sm)
+                .padding(.vertical, MixrLayout.buttonPaddingV)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+                }
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(MixrColors.textMuted.opacity(0.82))
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, MixrLayout.buttonPaddingH)
-            .padding(.vertical, MixrLayout.buttonPaddingV)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+            .buttonStyle(.plain)
+
+            Button {
+                onOpenSFXLibrary()
+            } label: {
+                SFXTileMark()
+                    .contentShape(RoundedRectangle(cornerRadius: SFXMetrics.markRadius, style: .continuous))
             }
+            .buttonStyle(TLSFXButtonPressStyle())
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, 12)
     }
 
     // MARK: Audio drop importing
+
+    fileprivate struct TLSFXButtonPressStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.94 : 1)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .animation(.spring(response: 0.17, dampingFraction: 0.82), value: configuration.isPressed)
+        }
+    }
 
     private func handleAudioDrop(_ providers: [NSItemProvider]) -> Bool {
         var didRequestImport = false
@@ -1931,7 +2239,11 @@ private struct TLSongRow: View {
                 onDragEnded: onDragEnded
             )
 
-            MixrSongColorChip(color: track.color, artworkData: track.artworkData)
+            MixrSongColorChip(
+                color: track.color,
+                artworkData: track.artworkData,
+                icon: track.isSFXTrack ? "sparkles" : "music.note"
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 titleRow
@@ -1967,7 +2279,9 @@ private struct TLSongRow: View {
                 .foregroundStyle(MixrColors.textSecondary)
                 .lineLimit(1)
             Spacer()
-            Text("\(track.bpmDisplay) BPM")
+            Text(track.isSFXTrack
+                ? "\(track.clips.count) clip\(track.clips.count == 1 ? "" : "s")"
+                : "\(track.bpmDisplay) BPM")
                 .font(.system(size: 10, weight: .regular))
                 .foregroundStyle(MixrColors.textSecondary)
         }
@@ -2473,6 +2787,8 @@ private struct TLTrackLane: View {
     var clipDragState:  ClipDragState? = nil
     var isScrimmed:     Bool           = false
     var isActiveForDrag: Bool          = false
+    /// Muted, or excluded by another track's solo — clips render dimmed.
+    var isInaudible:    Bool           = false
     var onClipTapped:   ((UUID, CGFloat) -> Void)?          = nil
     var onGripTapped:   ((ActiveGrip) -> Void)?             = nil
     var onClipDragArmed:   ((UUID, CGFloat, CGFloat) -> Void)?                     = nil
@@ -2607,7 +2923,8 @@ private struct TLTrackLane: View {
                     .position(x: origXOffset + origClipW / 2, y: TLK.trackRowHeight / 2)
                     .zIndex(isDraggingThis ? 3 : 0)
 
-                if !isDraggingThis && !isArmedThis {
+                // SFX clips have no transitions — no grips.
+                if !isDraggingThis && !isArmedThis && !clip.isSoundEffect {
                     clipGrips(for: clip, segments: clipSegments)
                 }
             }
@@ -2629,6 +2946,8 @@ private struct TLTrackLane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .opacity(isInaudible ? 0.42 : 1)
+        .animation(.easeOut(duration: 0.18), value: isInaudible)
         .overlay {
             if isScrimmed {
                 Color.black.opacity(TLK.clipDragScrimOpacity)
@@ -2909,25 +3228,32 @@ private struct TLPlayheadHandle: Shape {
 private struct TLTrackControlRow: View {
     let track: MixrTrack
     @Binding var volume: Double
-    @Binding var isMuted: Bool
+    var onToggleSolo: () -> Void = {}
+    var onToggleMute: () -> Void = {}
+    var onVolumeEditingChanged: (Bool) -> Void = { _ in }
     var onMixSettingsChanged: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 5) {
-            Button("S") { }.buttonStyle(.mixrCompactTrackToggle)
-            Button("M") {
-                isMuted.toggle()
-                onMixSettingsChanged()
-            }
-            .buttonStyle(.mixrCompactTrackToggle)
-                .opacity(isMuted ? 1 : 0.92)
-                .overlay {
-                    if isMuted {
-                        Circle()
-                            .strokeBorder(MixrColors.primaryPurple.opacity(0.55), lineWidth: 0.75)
-                            .frame(width: TLK.trackToggleSize, height: TLK.trackToggleSize)
-                    }
+            TLTrackToggle(
+                label: "S",
+                isActive: track.isSoloed,
+                accent: MixrColors.secondaryPurple,
+                action: {
+                    onToggleSolo()
+                    onMixSettingsChanged()
                 }
+            )
+
+            TLTrackToggle(
+                label: "M",
+                isActive: track.isMuted,
+                accent: MixrColors.primaryPurple,
+                action: {
+                    onToggleMute()
+                    onMixSettingsChanged()
+                }
+            )
 
             HStack(spacing: 4) {
                 Image(systemName: volumeIcon)
@@ -2938,7 +3264,8 @@ private struct TLTrackControlRow: View {
                 TLVolumeSlider(
                     value: $volume,
                     accentColor: track.color.peakColor,
-                    trackColor:  track.color.color
+                    trackColor:  track.color.color,
+                    onEditingChanged: onVolumeEditingChanged
                 )
                 .frame(maxWidth: .infinity)
                 .onChange(of: volume) { _, _ in
@@ -2958,11 +3285,67 @@ private struct TLTrackControlRow: View {
     }
 }
 
+/// Solo / Mute glass toggle — active state shows the Mixr accent ring
+/// and a lit label, matching the existing compact track toggle.
+struct TLTrackToggle: View {
+    let label: String
+    let isActive: Bool
+    let accent: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(label, action: action)
+            .buttonStyle(.mixrCompactTrackToggle)
+            .opacity(isActive ? 1 : 0.92)
+            .overlay {
+                if isActive {
+                    Circle()
+                        .strokeBorder(accent.opacity(0.62), lineWidth: 0.9)
+                        .frame(width: TLK.trackToggleSize, height: TLK.trackToggleSize)
+                        .shadow(color: accent.opacity(0.45), radius: 4)
+                }
+            }
+            .animation(.easeOut(duration: 0.14), value: isActive)
+    }
+}
+
 // MARK: - Effects Panel
 
 private struct TLEffectsPanel: View {
     @Binding var isCollapsed: Bool
+    @Binding var tracks: [MixrTrack]
+    let selectedClipID: UUID?
+    let playheadUnit: CGFloat
+    var onPushUndo: () -> Void = {}
+    var onAutoTapped: () -> Void = {}
+
     @State private var selectedEffect: MixrEffect?
+
+    // MARK: Targeting — selected clip first, else the clip under the playhead.
+
+    private var targetClipPath: (trackIdx: Int, clipIdx: Int)? {
+        if let id = selectedClipID {
+            for (ti, track) in tracks.enumerated() {
+                if let ci = track.clips.firstIndex(where: { $0.id == id }) {
+                    return (ti, ci)
+                }
+            }
+        }
+        for (ti, track) in tracks.enumerated() {
+            if let ci = track.clips.firstIndex(where: {
+                playheadUnit >= $0.start && playheadUnit <= $0.start + $0.length
+            }) {
+                return (ti, ci)
+            }
+        }
+        return nil
+    }
+
+    private var targetClip: MixrClip? {
+        targetClipPath.map { tracks[$0.trackIdx].clips[$0.clipIdx] }
+    }
+
+    private var hasTarget: Bool { targetClipPath != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2979,8 +3362,18 @@ private struct TLEffectsPanel: View {
                                     effect: effect,
                                     isSelected: selectedEffect == effect
                                 )
-                                .onTapGesture {
-                                    selectedEffect = selectedEffect == effect ? nil : effect
+                                .opacity(effect.isAdjustable && !hasTarget ? 0.55 : 1)
+                                .onTapGesture { handleCardTap(effect) }
+
+                                // Control tray slides open to the right of its card.
+                                if selectedEffect == effect,
+                                   effect.isAdjustable,
+                                   let path = targetClipPath {
+                                    effectTray(effect: effect, path: path)
+                                        .transition(.asymmetric(
+                                            insertion: .move(edge: .leading).combined(with: .opacity),
+                                            removal: .move(edge: .leading).combined(with: .opacity)
+                                        ))
                                 }
                             }
                         }
@@ -2988,6 +3381,10 @@ private struct TLEffectsPanel: View {
                         .padding(.trailing, 32)
                         .padding(.top, 6)
                         .padding(.bottom, 10)
+                        .animation(
+                            .spring(response: 0.34, dampingFraction: 0.86),
+                            value: selectedEffect
+                        )
                     }
                     .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 22)
                     .overlay(alignment: .trailing) {
@@ -3021,6 +3418,47 @@ private struct TLEffectsPanel: View {
         .gesture(effectsDragGesture)
     }
 
+    private func handleCardTap(_ effect: MixrEffect) {
+        if effect == .auto {
+            onAutoTapped()
+            return
+        }
+        guard hasTarget else { return }
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            selectedEffect = selectedEffect == effect ? nil : effect
+        }
+    }
+
+    @ViewBuilder
+    private func effectTray(effect: MixrEffect, path: (trackIdx: Int, clipIdx: Int)) -> some View {
+        let clip = tracks[path.trackIdx].clips[path.clipIdx]
+        EffectControlTray(
+            effect: effect,
+            level: clip.effects.level(for: effect.rawValue),
+            reverbPreset: clip.effects.reverbPreset,
+            echoPreset: clip.effects.echoPreset,
+            onLevelChanged: { value in
+                tracks[path.trackIdx].clips[path.clipIdx].effects
+                    .setLevel(value, for: effect.rawValue)
+            },
+            onEditingChanged: { editing in
+                // One undo snapshot per drag, committed at drag start.
+                if editing { onPushUndo() }
+            },
+            onReverbPreset: { preset in
+                guard clip.effects.reverbPreset != preset else { return }
+                onPushUndo()
+                tracks[path.trackIdx].clips[path.clipIdx].effects.reverbPreset = preset
+            },
+            onEchoPreset: { preset in
+                guard clip.effects.echoPreset != preset else { return }
+                onPushUndo()
+                tracks[path.trackIdx].clips[path.clipIdx].effects.echoPreset = preset
+            }
+        )
+        .id("\(effect.rawValue)-\(clip.id.uuidString)")
+    }
+
     private var effectsHeader: some View {
         VStack(spacing: 0) {
             Capsule()
@@ -3033,7 +3471,15 @@ private struct TLEffectsPanel: View {
                 Text("Effects")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
+
                 Spacer()
+
+                if !isCollapsed && !hasTarget {
+                    Text("Select a clip to shape its effects")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(MixrColors.textSecondary.opacity(0.75))
+                        .transition(.opacity)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 3)
@@ -3084,4 +3530,5 @@ private struct TLCompactEffectCard: View {
 #Preview("Timeline Screen — Landscape") {
     TimelineScreen()
         .frame(width: 932, height: 430)
+        .modelContainer(for: MixrProjectRecord.self, inMemory: true)
 }

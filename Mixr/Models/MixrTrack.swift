@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Clip Transition Types
 
-enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable {
+enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable, Codable {
     case none      = "None"
     case crossfade = "Crossfade"
     case fadeOut   = "Fade Out"
@@ -12,7 +12,7 @@ enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable
     var id: Self { self }
 }
 
-struct ClipTransition: Equatable, Sendable {
+struct ClipTransition: Equatable, Sendable, Codable {
     var type:     ClipTransitionType = .none
     var duration: Double = 0.5
     var curve:    String = "linear"
@@ -41,6 +41,13 @@ struct ActiveGrip: Equatable {
     let side:    GripSide
 }
 
+// MARK: - Track Type
+
+enum TrackType: String, Codable, Equatable, Sendable {
+    case song
+    case soundEffect
+}
+
 // MARK: - Track Model
 
 struct MixrTrack: Identifiable {
@@ -57,9 +64,13 @@ struct MixrTrack: Identifiable {
     var color: MixrWaveformColor
     var volume: Double
     var isMuted: Bool
+    var isSoloed: Bool = false
+    var trackType: TrackType = .song
     var url: URL?
     var artworkData: Data?
     var clips: [MixrClip]
+
+    var isSFXTrack: Bool { trackType == .soundEffect }
 
     /// Display BPM; shows "~N" when estimated with moderate confidence, "--" when unknown.
     var bpmDisplay: String {
@@ -102,7 +113,7 @@ struct MixrTrack: Identifiable {
     }
 }
 
-struct MixrClip: Identifiable {
+struct MixrClip: Identifiable, Equatable, Codable {
     let id: UUID
     var start:         CGFloat   // timeline units (0–totalUnits)
     var length:        CGFloat   // timeline units
@@ -110,4 +121,84 @@ struct MixrClip: Identifiable {
     var playbackSpeed: Double = 1.0
     var transitionIn:  ClipTransition = .none
     var transitionOut: ClipTransition = .none
+    /// Per-clip gain 0…1. AVAudioEngine integration point: apply as a sub-mix
+    /// gain when per-clip scheduling lands in MixrPlaybackEngine.
+    var volume:        Double = 1.0
+    /// Per-clip effect levels and presets (Reverb, Echo, Filter, …).
+    var effects:       ClipEffectSettings = ClipEffectSettings()
+    /// Non-nil when this clip is a built-in sound effect on the SFX track.
+    var soundEffectID: String? = nil
+
+    var isSoundEffect: Bool { soundEffectID != nil }
+}
+
+// MARK: - Codable track (URL persisted as a security-scoped bookmark)
+
+extension MixrTrack: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, title, artist, duration, durationSeconds
+        case bpm, bpmConfidence, key, keyConfidence
+        case color, volume, isMuted, isSoloed, trackType
+        case urlBookmark, urlPath, artworkData, clips
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        artist = try c.decode(String.self, forKey: .artist)
+        duration = try c.decode(String.self, forKey: .duration)
+        durationSeconds = try c.decodeIfPresent(Double.self, forKey: .durationSeconds)
+        bpm = try c.decodeIfPresent(Int.self, forKey: .bpm)
+        bpmConfidence = try c.decodeIfPresent(Double.self, forKey: .bpmConfidence)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+        keyConfidence = try c.decodeIfPresent(Double.self, forKey: .keyConfidence)
+        color = try c.decode(MixrWaveformColor.self, forKey: .color)
+        volume = try c.decode(Double.self, forKey: .volume)
+        isMuted = try c.decode(Bool.self, forKey: .isMuted)
+        isSoloed = try c.decodeIfPresent(Bool.self, forKey: .isSoloed) ?? false
+        trackType = try c.decodeIfPresent(TrackType.self, forKey: .trackType) ?? .song
+        artworkData = try c.decodeIfPresent(Data.self, forKey: .artworkData)
+        clips = try c.decode([MixrClip].self, forKey: .clips)
+
+        if let bookmark = try c.decodeIfPresent(Data.self, forKey: .urlBookmark) {
+            var isStale = false
+            url = try? URL(
+                resolvingBookmarkData: bookmark,
+                bookmarkDataIsStale: &isStale
+            )
+        }
+        if url == nil, let path = try c.decodeIfPresent(String.self, forKey: .urlPath) {
+            url = URL(fileURLWithPath: path)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(artist, forKey: .artist)
+        try c.encode(duration, forKey: .duration)
+        try c.encodeIfPresent(durationSeconds, forKey: .durationSeconds)
+        try c.encodeIfPresent(bpm, forKey: .bpm)
+        try c.encodeIfPresent(bpmConfidence, forKey: .bpmConfidence)
+        try c.encodeIfPresent(key, forKey: .key)
+        try c.encodeIfPresent(keyConfidence, forKey: .keyConfidence)
+        try c.encode(color, forKey: .color)
+        try c.encode(volume, forKey: .volume)
+        try c.encode(isMuted, forKey: .isMuted)
+        try c.encode(isSoloed, forKey: .isSoloed)
+        try c.encode(trackType, forKey: .trackType)
+        try c.encodeIfPresent(artworkData, forKey: .artworkData)
+        try c.encode(clips, forKey: .clips)
+
+        if let url {
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+            if let bookmark = try? url.bookmarkData() {
+                try c.encode(bookmark, forKey: .urlBookmark)
+            }
+            try c.encode(url.path, forKey: .urlPath)
+        }
+    }
 }

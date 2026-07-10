@@ -5,6 +5,11 @@ struct TLVolumeSlider: View {
     @Binding var value: Double
     let accentColor: Color
     let trackColor: Color
+    /// Called with `true` on the first drag event, `false` on release —
+    /// lets callers commit a single undo snapshot per drag.
+    var onEditingChanged: (Bool) -> Void = { _ in }
+
+    @State private var isEditing = false
 
     private let trackHeight: CGFloat = 2.5
     private let fillHeight: CGFloat = 5
@@ -33,8 +38,16 @@ struct TLVolumeSlider: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in
+                        if !isEditing {
+                            isEditing = true
+                            onEditingChanged(true)
+                        }
                         let x = min(max(gesture.location.x - thumbWidth * 0.5, 0), travel)
                         value = x / travel
+                    }
+                    .onEnded { _ in
+                        isEditing = false
+                        onEditingChanged(false)
                     }
             )
         }

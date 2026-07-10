@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct MixrApp: App {
@@ -13,5 +14,6 @@ struct MixrApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: MixrProjectRecord.self)
     }
 }

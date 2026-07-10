@@ -82,6 +82,8 @@ enum MixrColors {
     static let waveformRed = Color(hex: "EF4444")
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
+    /// Silver — reserved for the Sound Effects track and SFX clips.
+    static let waveformSilver = Color(hex: "A3AEBE")
 
     static let glassBorderDefault = Color.white.opacity(0.06)
     static let glassBorderElevated = Color.white.opacity(0.08)
@@ -100,12 +102,14 @@ enum MixrColors {
 
 // MARK: - Waveform Colors
 
-enum MixrWaveformColor: CaseIterable, Identifiable {
+enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
     case pink
     case purple
     case red
     case yellow
     case blue
+    /// Reserved for the Sound Effects track — not part of the song color cycle.
+    case silver
 
     var id: Self { self }
 
@@ -116,6 +120,7 @@ enum MixrWaveformColor: CaseIterable, Identifiable {
         case .red: MixrColors.waveformRed
         case .yellow: MixrColors.waveformYellow
         case .blue: MixrColors.waveformBlue
+        case .silver: MixrColors.waveformSilver
         }
     }
 
@@ -140,6 +145,7 @@ enum MixrWaveformColor: CaseIterable, Identifiable {
         case .red: Color(hex: "F87171")
         case .yellow: Color(hex: "FACC15")
         case .blue: Color(hex: "38BDF8")
+        case .silver: Color(hex: "DCE3ED")
         }
     }
 }
