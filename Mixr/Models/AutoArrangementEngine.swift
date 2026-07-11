@@ -508,7 +508,7 @@ enum AutoArrangementEngine {
 
     // MARK: - Scope: Single-Song Remix
 
-    /// One song → a remix, not a mashup: shaped intro, a ducked + hazed
+    /// One song → a remix, not a mashup: shaped intro, a ducked + blurred
     /// pre-drop "choke" into each chorus/drop candidate (riser or snare
     /// build into it, impact on it, air out after), and a shaped outro.
     /// Clip volumes carry the energy story — intro 0.85, choke 0.8,
@@ -543,12 +543,12 @@ enum AutoArrangementEngine {
             let dropUnit = body.unit(forSongSeconds: chorus.startSeconds)
             let chokeStart = dropUnit - chokeUnits
 
-            // Pre-drop choke: a short section that ducks and hazes so the
+            // Pre-drop choke: a short section that ducks and blurs so the
             // drop lands harder — the classic EDM pre-drop cut.
             if let (_, rest) = editor.splitClip(body.id, atUnit: chokeStart),
                let (chokeID, dropID) = editor.splitClip(rest, atUnit: dropUnit) {
                 editor.setClipVolume(chokeID, 0.8)
-                editor.setEffect(chokeID, .haze, level: k == 0 ? 42 : 30)
+                editor.setEffect(chokeID, .blur, level: k == 0 ? 42 : 30)
                 editor.setEffect(chokeID, .echo, level: 24)
                 editor.setEchoPreset(chokeID, .pingPong)
 
@@ -602,7 +602,7 @@ enum AutoArrangementEngine {
             editor.setEffect(outgoingID, .echo, level: 30)
             editor.setEchoPreset(outgoingID, .classic)
             editor.setTransitionIn(incomingID, ClipTransition(type: .crossfade, duration: 4))
-            editor.setEffect(incomingID, .haze, level: 12)
+            editor.setEffect(incomingID, .blur, level: 12)
             editor.addSFXEnding(variant % 2 == 0 ? "riser" : "snareBuild", atUnit: b.start)
             editor.addSFX("impact", atUnit: b.start)
             return
@@ -614,9 +614,9 @@ enum AutoArrangementEngine {
             editor.setClipVolume(tailID, 0.78)
             editor.setEffect(tailID, .echo, level: 32 + Double(variant % 3) * 5)
             editor.setEchoPreset(tailID, variant % 2 == 0 ? .pingPong : .classic)
-            editor.setEffect(tailID, .haze, level: 30 + Double(variant % 2) * 8)
+            editor.setEffect(tailID, .blur, level: 30 + Double(variant % 2) * 8)
             editor.setTransitionOut(tailID, ClipTransition(type: .fadeOut, duration: 8))
-            editor.setEffect(bodyID, .haze, level: 6)
+            editor.setEffect(bodyID, .blur, level: 6)
         } else {
             // Too short to split — fade the whole outgoing clip.
             editor.setClipVolume(outgoingID, 0.85)
@@ -629,13 +629,13 @@ enum AutoArrangementEngine {
         if let (headID, bodyID) = editor.splitClip(incomingID, atUnit: dropUnit) {
             editor.setClipVolume(headID, 0.88)
             editor.setTransitionIn(headID, ClipTransition(type: .crossfade, duration: 8))
-            editor.setEffect(headID, .haze, level: 16 + Double(variant % 2) * 6)
+            editor.setEffect(headID, .blur, level: 16 + Double(variant % 2) * 6)
             editor.setClipVolume(bodyID, 1.0)
             editor.setEffect(bodyID, .reverb, level: 14)
             editor.setReverbPreset(bodyID, .hall)
         } else {
             editor.setTransitionIn(incomingID, ClipTransition(type: .crossfade, duration: 8))
-            editor.setEffect(incomingID, .haze, level: 12)
+            editor.setEffect(incomingID, .blur, level: 12)
         }
 
         // SFX vocabulary — build into the drop, hit it, breathe out after.
@@ -676,8 +676,8 @@ enum AutoArrangementEngine {
            let (firstID, secondID) = editor.splitClip(clipID, atUnit: clip.unit(forSongSeconds: targetSong)) {
             let splitUnit = editor.clip(secondID)?.start ?? clip.unit(forSongSeconds: targetSong)
 
-            editor.setEffect(firstID, .haze, level: 10)
-            editor.setEffect(secondID, .haze, level: 24 + Double(variant % 2) * 6)
+            editor.setEffect(firstID, .blur, level: 10)
+            editor.setEffect(secondID, .blur, level: 24 + Double(variant % 2) * 6)
             editor.setEffect(secondID, .echo, level: 18)
             editor.setEffect(secondID, .reverb, level: 16)
             editor.setReverbPreset(secondID, .hall)
@@ -709,10 +709,10 @@ enum AutoArrangementEngine {
 
         if let (introID, _) = editor.splitClip(clipID, atUnit: splitUnit) {
             editor.setClipVolume(introID, 0.85)
-            editor.setEffect(introID, .haze, level: 24)
+            editor.setEffect(introID, .blur, level: 24)
             editor.addSFX("impact", atUnit: splitUnit)
         } else {
-            editor.setEffect(clipID, .haze, level: 14)
+            editor.setEffect(clipID, .blur, level: 14)
         }
     }
 

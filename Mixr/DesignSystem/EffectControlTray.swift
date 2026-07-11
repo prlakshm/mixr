@@ -159,7 +159,7 @@ struct EffectControlTray: View {
     VStack(spacing: 16) {
         EffectControlTray(effect: .reverb, level: 0)
         EffectControlTray(effect: .echo, level: 64, echoPreset: .pingPong)
-        EffectControlTray(effect: .haze, level: 32)
+        EffectControlTray(effect: .blur, level: 32)
     }
     .padding(24)
     .background {

@@ -30,6 +30,7 @@ struct DesignSystemPreviewView: View {
                 sfxSection
                 autoSection
                 toolbarHistorySection
+                toolbarHistoryIconOptionsSection
                 projectDropdownSection
             }
             .padding(MixrSpacing.lg)
@@ -471,7 +472,7 @@ struct DesignSystemPreviewView: View {
 
                 PreviewSubsection(title: "Slider-only effects") {
                     HStack(spacing: MixrSpacing.sm) {
-                        EffectControlTray(effect: .haze, level: 25)
+                        EffectControlTray(effect: .blur, level: 25)
                         EffectControlTray(effect: .pitchUp, level: 80)
                     }
                 }
@@ -589,22 +590,19 @@ struct DesignSystemPreviewView: View {
     // MARK: - Undo / Redo
 
     private var toolbarHistorySection: some View {
-        PreviewSection(title: "Undo & Redo") {
-            HStack(spacing: MixrSpacing.xl) {
-                PreviewSubsection(title: "Enabled") {
-                    HStack(spacing: 6) {
-                        TLToolbarHistoryButton(icon: "arrow.uturn.backward", isEnabled: true) {}
-                        TLToolbarHistoryButton(icon: "arrow.uturn.forward", isEnabled: true) {}
-                    }
-                }
+        PreviewSection(title: "Undo & Redo (Current)") {
+            ToolbarHistoryContextRow(
+                undoCustom: { TLHistoryActionIcon(kind: .undo) },
+                redoCustom: { TLHistoryActionIcon(kind: .redo) }
+            )
+        }
+    }
 
-                PreviewSubsection(title: "Disabled") {
-                    HStack(spacing: 6) {
-                        TLToolbarHistoryButton(icon: "arrow.uturn.backward", isEnabled: false) {}
-                        TLToolbarHistoryButton(icon: "arrow.uturn.forward", isEnabled: false) {}
-                    }
-                }
-            }
+    private var toolbarHistoryIconOptionsSection: some View {
+        PreviewSection(title: "Undo / Redo Icon Options") {
+            UndoRedoIconOptionsGallery()
+                .frame(height: 720)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 

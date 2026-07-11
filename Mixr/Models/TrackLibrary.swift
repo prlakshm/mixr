@@ -300,7 +300,12 @@ final class TrackLibrary: ObservableObject {
     func attachPersistence(context: ModelContext) {
         guard modelContext == nil else { return }
         modelContext = context
-        loadProjects()
+        // Yield so the first SwiftUI frame can paint before SwiftData I/O and
+        // audio graph setup (avoids a long black screen on launch).
+        Task { @MainActor in
+            await Task.yield()
+            loadProjects()
+        }
     }
 
     private func fetchRecords() -> [MixrProjectRecord] {

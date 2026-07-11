@@ -475,9 +475,8 @@ struct TimelineScreen: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
-        .onAppear {
+        .task {
             library.attachPersistence(context: modelContext)
-            playback.syncTracks(library.tracks)
         }
         // Track list or clip geometry changed → full sync (may add/remove players)
         .onChange(of: library.tracks.map { track in
@@ -665,6 +664,22 @@ private struct TLRotateOverlay: View {
 
 // MARK: - Transport Bar
 
+private enum TLTransportBarAnchor: Hashable {
+    case project
+    case rewind
+}
+
+private struct TLTransportBarAnchorKey: PreferenceKey {
+    static var defaultValue: [TLTransportBarAnchor: Anchor<CGRect>] = [:]
+
+    static func reduce(
+        value: inout [TLTransportBarAnchor: Anchor<CGRect>],
+        nextValue: () -> [TLTransportBarAnchor: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
 private struct TLTransportBar: View {
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
@@ -674,7 +689,7 @@ private struct TLTransportBar: View {
 
     var body: some View {
         ZStack {
-            HStack(spacing: 16) {
+            HStack(spacing: 24) {
                 HStack(spacing: 7) {
                     Image(systemName: "waveform")
                         .font(.system(size: 16, weight: .bold))
@@ -684,9 +699,9 @@ private struct TLTransportBar: View {
                         .foregroundStyle(MixrColors.textPrimary)
                 }
 
-                // Project dropdown trigger — dark glass, opens the project menu.
+                // Project dropdown trigger — plain label, no glass outline.
                 Button(action: onProjectTapped) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Text(library.projectName)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(MixrColors.textPrimary)
@@ -696,30 +711,11 @@ private struct TLTransportBar: View {
                             .foregroundStyle(MixrColors.textSecondary)
                             .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background {
-                        GlassBackground(level: isProjectMenuOpen ? .selected : .default, cornerRadius: 8)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
-
-                // Undo / redo — right of the project title.
-                HStack(spacing: 6) {
-                    TLToolbarHistoryButton(
-                        icon: "arrow.uturn.backward",
-                        isEnabled: library.canUndo,
-                        action: { library.undo() }
-                    )
-                    TLToolbarHistoryButton(
-                        icon: "arrow.uturn.forward",
-                        isEnabled: library.canRedo,
-                        action: { library.redo() }
-                    )
-                }
+                .anchorPreference(key: TLTransportBarAnchorKey.self, value: .bounds) { [.project: $0] }
             }
             .padding(.leading, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -746,6 +742,7 @@ private struct TLTransportBar: View {
                             .foregroundStyle(MixrColors.textSecondary)
                     }
                     .frame(width: 28, height: 40)
+                    .anchorPreference(key: TLTransportBarAnchorKey.self, value: .bounds) { [.rewind: $0] }
 
                     Button {
                         playback.togglePlayPause()
@@ -810,6 +807,44 @@ private struct TLTransportBar: View {
             }
             .offset(x: 60)
         }
+        .overlayPreferenceValue(TLTransportBarAnchorKey.self) { anchors in
+            GeometryReader { proxy in
+                if let projectAnchor = anchors[.project],
+                   let rewindAnchor = anchors[.rewind] {
+                    let projectRect = proxy[projectAnchor]
+                    let rewindRect = proxy[rewindAnchor]
+                    HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
+                        TLToolbarHistoryCustomButton(
+                            isEnabled: library.canUndo,
+                            action: { library.undo() }
+                        ) {
+                            MixrHistoryArrow(
+                                direction: .undo,
+                                width: TLToolbarHistoryMetrics.glyphWidth,
+                                height: TLToolbarHistoryMetrics.glyphHeight
+                            )
+                        }
+                        TLToolbarHistoryCustomButton(
+                            isEnabled: library.canRedo,
+                            action: { library.redo() }
+                        ) {
+                            MixrHistoryArrow(
+                                direction: .redo,
+                                width: TLToolbarHistoryMetrics.glyphWidth,
+                                height: TLToolbarHistoryMetrics.glyphHeight
+                            )
+                        }
+                    }
+                    .frame(height: TLToolbarHistoryMetrics.hitHeight)
+                    .position(
+                        x: (projectRect.maxX + rewindRect.minX) / 2,
+                        y: rewindRect.midY + TLToolbarHistoryMetrics.verticalCenterOffset
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(true)
+        }
         .frame(height: TLK.transportHeight)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .bottom) {
@@ -820,6 +855,79 @@ private struct TLTransportBar: View {
 
 // MARK: - Toolbar History Button (undo / redo)
 
+private enum TLToolbarHistoryMetrics {
+    static let iconSize:   CGFloat = 15.5
+    static let glyphWidth:  CGFloat = 26
+    static let glyphHeight: CGFloat = 15
+    static let hitWidth:   CGFloat = 29
+    static let hitHeight:  CGFloat = 40
+    static let buttonSpacing: CGFloat = 6.4   // 20% tighter than 8pt
+    /// Custom glyph sits optically high in the hit frame; nudge down to match rewind center.
+    static let verticalCenterOffset: CGFloat = -3
+    static let strokeWidth: CGFloat = 1.45
+}
+
+struct TLHistoryActionIcon: View {
+    enum Kind { case undo, redo }
+
+    let kind: Kind
+    var color: Color = MixrColors.textSecondary
+
+    var body: some View {
+        TLHistoryUndoShape()
+            .stroke(
+                color,
+                style: StrokeStyle(
+                    lineWidth: TLToolbarHistoryMetrics.strokeWidth,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+            .scaleEffect(x: kind == .redo ? -1 : 1, y: 1)
+            .frame(
+                width: TLToolbarHistoryMetrics.glyphWidth,
+                height: TLToolbarHistoryMetrics.glyphHeight
+            )
+    }
+}
+
+/// Undo arrow — long top stroke + chevron, short bottom tail on the right.
+private struct TLHistoryUndoShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+
+        // Short bottom tail (lower-right stub)
+        let tailTip  = CGPoint(x: w * 0.97, y: h * 0.88)
+        let tailRoot = CGPoint(x: w * 0.80, y: h * 0.76)
+        let topRight = CGPoint(x: w * 0.86, y: h * 0.18)
+        let topLeft  = CGPoint(x: w * 0.30, y: h * 0.14)
+        let arrowTip = CGPoint(x: w * 0.04, y: h * 0.44)
+        let arrowTop = CGPoint(x: w * 0.27, y: h * 0.04)
+        let arrowBottom = CGPoint(x: w * 0.27, y: h * 0.52)
+
+        path.move(to: tailTip)
+        path.addQuadCurve(
+            to: tailRoot,
+            control: CGPoint(x: w * 0.99, y: h * 0.70)
+        )
+        path.addCurve(
+            to: topRight,
+            control1: CGPoint(x: w * 0.74, y: h * 0.84),
+            control2: CGPoint(x: w * 0.94, y: h * 0.30)
+        )
+        path.addLine(to: topLeft)
+        path.addLine(to: arrowTip)
+        path.move(to: arrowTip)
+        path.addLine(to: arrowTop)
+        path.move(to: arrowTip)
+        path.addLine(to: arrowBottom)
+
+        return path
+    }
+}
+
 struct TLToolbarHistoryButton: View {
     let icon: String
     let isEnabled: Bool
@@ -828,15 +936,74 @@ struct TLToolbarHistoryButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.system(size: TLToolbarHistoryMetrics.iconSize, weight: .semibold))
                 .foregroundStyle(MixrColors.textSecondary)
-                .frame(width: 26, height: 28)
+                .scaleEffect(x: 1.28, y: 1.0)
+                .frame(
+                    width: TLToolbarHistoryMetrics.glyphWidth,
+                    height: TLToolbarHistoryMetrics.glyphHeight
+                )
+                .frame(
+                    width: TLToolbarHistoryMetrics.hitWidth,
+                    height: TLToolbarHistoryMetrics.hitHeight,
+                    alignment: .center
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(TLToolbarHistoryPressStyle())
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.32)
         .animation(.easeOut(duration: 0.16), value: isEnabled)
+    }
+}
+
+/// Same chrome as `TLToolbarHistoryButton`, for custom mock / preview icons.
+struct TLToolbarHistoryCustomButton<Icon: View>: View {
+    let isEnabled: Bool
+    let action: () -> Void
+    private let icon: () -> Icon
+
+    init(
+        isEnabled: Bool,
+        action: @escaping () -> Void = {},
+        @ViewBuilder icon: @escaping () -> Icon
+    ) {
+        self.isEnabled = isEnabled
+        self.action = action
+        self.icon = icon
+    }
+
+    var body: some View {
+        Button(action: action) {
+            icon()
+                .frame(
+                    width: TLToolbarHistoryMetrics.hitWidth,
+                    height: TLToolbarHistoryMetrics.hitHeight
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(TLToolbarHistoryPressStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.32)
+        .animation(.easeOut(duration: 0.16), value: isEnabled)
+    }
+}
+
+// MARK: - Wide history icons (legacy mock — option G)
+
+struct TLWideHistoryUndoIcon: View {
+    var color: Color = MixrColors.textSecondary
+
+    var body: some View {
+        TLHistoryActionIcon(kind: .undo, color: color)
+    }
+}
+
+struct TLWideHistoryRedoIcon: View {
+    var color: Color = MixrColors.textSecondary
+
+    var body: some View {
+        TLHistoryActionIcon(kind: .redo, color: color)
     }
 }
 

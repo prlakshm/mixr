@@ -5,7 +5,7 @@ import Combine
 //
 // Real DSP graph — every song track renders through its own effect chain:
 //
-//   player → timePitch → EQ (bass shelf + haze low-pass) → delay → reverb → mixer
+//   player → timePitch → EQ (bass shelf + blur low-pass) → delay → reverb → mixer
 //
 // All clips of a track are scheduled (not just the first), per-clip volume /
 // effect settings / transition envelopes are applied live by a 60 fps
@@ -81,14 +81,21 @@ final class MixrPlaybackEngine: ObservableObject {
             removeChain(id: id)
         }
 
-        // Add chains for new song tracks
-        for track in tracks where !track.isSFXTrack {
-            if chains[track.id] == nil { addChain(for: track) }
+        // Defer AVAudioEngine graph construction so launch UI can paint first.
+        let pendingAdds = tracks.filter { !$0.isSFXTrack && chains[$0.id] == nil }
+        guard !pendingAdds.isEmpty else {
+            if isPlaying { startPlayback(from: currentTimeSeconds) }
+            return
         }
 
-        // Playing through a structural change → reschedule from here.
-        if isPlaying {
-            startPlayback(from: currentTimeSeconds)
+        Task { @MainActor in
+            await Task.yield()
+            for track in pendingAdds where chains[track.id] == nil {
+                addChain(for: track)
+            }
+            if isPlaying {
+                startPlayback(from: currentTimeSeconds)
+            }
         }
     }
 
@@ -153,7 +160,7 @@ final class MixrPlaybackEngine: ObservableObject {
             let file = try AVAudioFile(forReading: url)
             let chain = TrackChain(file: file, url: url, securityScoped: scoped)
 
-            // Band 0: bass shelf (Bass Boost). Band 1: resonant low-pass (Haze).
+            // Band 0: bass shelf (Bass Boost). Band 1: resonant low-pass (Blur).
             let bass = chain.eq.bands[0]
             bass.filterType = .lowShelf
             bass.frequency = 110
@@ -444,12 +451,12 @@ final class MixrPlaybackEngine: ObservableObject {
         let clipChanged = chain.appliedClipID != clip.id || force
         let fx = clip.effects
 
-        // Haze — resonant low-pass rolling the top end off (20 kHz → ~350 Hz).
-        let haze = fx.level(for: MixrEffect.haze.rawValue)
+        // Blur — resonant low-pass rolling the top end off (20 kHz → ~350 Hz).
+        let blur = fx.level(for: MixrEffect.blur.rawValue)
         let lowPass = chain.eq.bands[1]
-        if haze > 0.5 {
+        if blur > 0.5 {
             lowPass.bypass = false
-            lowPass.frequency = Float(20000.0 * pow(350.0 / 20000.0, haze / 100.0))
+            lowPass.frequency = Float(20000.0 * pow(350.0 / 20000.0, blur / 100.0))
         } else {
             lowPass.bypass = true
         }

@@ -7,7 +7,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
     case reverb
     case echo
     case pitchUp
-    case haze
+    case blur
     case bassBoost
 
     var id: String { rawValue }
@@ -18,7 +18,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .reverb: "Reverb"
         case .echo: "Echo"
         case .pitchUp: "Pitch Up"
-        case .haze: "Haze"
+        case .blur: "Blur"
         case .bassBoost: "Bass Boost"
         }
     }
@@ -35,7 +35,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .reverb: Color(hex: "0EA5E9")
         case .echo: MixrColors.waveformPurple
         case .pitchUp: MixrColors.waveformPink
-        case .haze: MixrColors.waveformRed
+        case .blur: MixrColors.waveformRed
         case .bassBoost: MixrColors.waveformYellow
         }
     }
@@ -46,7 +46,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .reverb: "water.waves"
         case .echo: "wind"
         case .pitchUp: "star.fill"
-        case .haze: "smoke.fill"
+        case .blur: "drop.fill"
         case .bassBoost: "bolt.fill"
         }
     }
@@ -55,10 +55,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
     var isAdjustable: Bool { self != .auto }
 
     var iconScale: CGFloat {
-        switch self {
-        case .haze: 0.95
-        default: 1.0
-        }
+        1.0
     }
 
     var iconGlow: EffectIconGlowLayout {
@@ -83,7 +80,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
                 topCenter: UnitPoint(x: 0.36, y: -0.10),
                 bottomCenter: UnitPoint(x: 0.62, y: 1.00)
             )
-        case .haze:
+        case .blur:
             EffectIconGlowLayout(
                 topCenter: UnitPoint(x: 0.22, y: -0.08),
                 bottomCenter: UnitPoint(x: 0.56, y: 1.02)
@@ -145,7 +142,7 @@ struct EffectLightingLayout {
         .reverb:    Tier(cluster: CGPoint(x:  0.04, y:  0.02), blobSpreadX: -0.03, orbSpreadX:  0.02, dotSpreadX: 0.04),
         .echo:      Tier(cluster: CGPoint(x: -0.03, y:  0.05), blobSpreadX: -0.02, orbSpreadX:  0.04, dotSpreadX: 0.05),
         .pitchUp:   Tier(cluster: CGPoint(x: -0.06, y:  0.03), blobSpreadX:  0.04, orbSpreadX:  0.03, dotSpreadX: 0.06),
-        .haze:      Tier(cluster: CGPoint(x:  0.01, y: -0.01), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
+        .blur:      Tier(cluster: CGPoint(x:  0.01, y: -0.01), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
         .bassBoost: Tier(cluster: CGPoint(x: -0.05, y:  0.02), blobSpreadX:  0.03, orbSpreadX:  0.01, dotSpreadX: 0.07),
     ]
 
@@ -182,7 +179,7 @@ struct EffectLightingLayout {
         case .reverb:    (25, 11,   3.8, 0.82)
         case .echo:      (22, 12,   4.2, 0.76)
         case .pitchUp:   (23, 11,   3.7, 0.78)
-        case .haze:      (21, 10.5, 3.6, 0.72)
+        case .blur:      (21, 10.5, 3.6, 0.72)
         case .bassBoost: (24, 10,   3.4, 0.74)
         default:         (24, 11,   3.8, 0.76)
         }

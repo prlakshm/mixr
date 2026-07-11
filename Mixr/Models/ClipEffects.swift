@@ -37,21 +37,50 @@ enum EchoPreset: String, CaseIterable, Identifiable, Equatable, Sendable, Codabl
 // MARK: - Per-Clip Effect Settings
 
 /// Per-clip effect state. Levels are 0…100 keyed by `MixrEffect.rawValue`.
-/// AVAudioEngine integration point: map these levels/presets onto
-/// AVAudioUnitReverb / AVAudioUnitDelay / AVAudioUnitEQ nodes once
-/// per-clip audio routing exists in MixrPlaybackEngine.
+/// MixrPlaybackEngine maps these live onto each track's chain:
+/// Reverb → AVAudioUnitReverb, Echo → AVAudioUnitDelay,
+/// Blur/Bass Boost → AVAudioUnitEQ, Pitch Up → AVAudioUnitTimePitch.
 struct ClipEffectSettings: Equatable, Sendable, Codable {
     /// Effect level 0…100 per effect id (see MixrEffect.rawValue).
     var levels: [String: Double] = [:]
     var reverbPreset: ReverbPreset = .smallRoom
     var echoPreset: EchoPreset = .classic
 
+    /// Legacy effect ids → their current id, ordered newest generation
+    /// first so the most recent stored value wins when several coexist.
+    /// History of this slot: "filter" (teal Filter) → "warmth" (red Warmth)
+    /// → "haze" → "blur".
+    private static let legacyEffectKeyAliases: [(legacy: String, current: String)] = [
+        ("haze", "blur"),
+        ("warmth", "blur"),
+        ("filter", "blur"),
+    ]
+
     func level(for effectID: String) -> Double {
-        levels[effectID] ?? 0
+        levels[effectID] ?? legacyValue(for: effectID) ?? 0
     }
 
     mutating func setLevel(_ value: Double, for effectID: String) {
+        for alias in Self.legacyEffectKeyAliases where alias.current == effectID {
+            levels.removeValue(forKey: alias.legacy)
+        }
         levels[effectID] = min(100, max(0, value))
+    }
+
+    mutating func migrateLegacyEffectKeys() {
+        for (legacy, current) in Self.legacyEffectKeyAliases {
+            guard let value = levels.removeValue(forKey: legacy) else { continue }
+            if levels[current] == nil {
+                levels[current] = value
+            }
+        }
+    }
+
+    private func legacyValue(for effectID: String) -> Double? {
+        for alias in Self.legacyEffectKeyAliases where alias.current == effectID {
+            if let value = levels[alias.legacy] { return value }
+        }
+        return nil
     }
 
     var hasAnyActiveEffect: Bool {

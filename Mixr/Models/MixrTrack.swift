@@ -124,7 +124,7 @@ struct MixrClip: Identifiable, Equatable {
     /// Per-clip gain 0…1 — applied live by MixrPlaybackEngine
     /// (track volume × clip volume × transition envelope).
     var volume:        Double = 1.0
-    /// Per-clip effect levels and presets (Reverb, Echo, Filter, …).
+    /// Per-clip effect levels and presets (Reverb, Echo, Blur, …).
     var effects:       ClipEffectSettings = ClipEffectSettings()
     /// Non-nil when this clip is a built-in sound effect on the SFX track.
     var soundEffectID: String? = nil
@@ -162,6 +162,7 @@ extension MixrClip: Codable {
         transitionOut = try c.decodeIfPresent(ClipTransition.self, forKey: .transitionOut) ?? .none
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? 1.0
         effects = try c.decodeIfPresent(ClipEffectSettings.self, forKey: .effects) ?? ClipEffectSettings()
+        effects.migrateLegacyEffectKeys()
         soundEffectID = try c.decodeIfPresent(String.self, forKey: .soundEffectID)
         sourceOffsetSeconds = try c.decodeIfPresent(Double.self, forKey: .sourceOffsetSeconds) ?? 0
     }
