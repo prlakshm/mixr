@@ -808,42 +808,13 @@ private struct TLTransportBar: View {
             .offset(x: 60)
         }
         .overlayPreferenceValue(TLTransportBarAnchorKey.self) { anchors in
-            GeometryReader { proxy in
-                if let projectAnchor = anchors[.project],
-                   let rewindAnchor = anchors[.rewind] {
-                    let projectRect = proxy[projectAnchor]
-                    let rewindRect = proxy[rewindAnchor]
-                    HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
-                        TLToolbarHistoryCustomButton(
-                            isEnabled: library.canUndo,
-                            action: { library.undo() }
-                        ) {
-                            MixrHistoryArrow(
-                                direction: .undo,
-                                width: TLToolbarHistoryMetrics.glyphWidth,
-                                height: TLToolbarHistoryMetrics.glyphHeight
-                            )
-                        }
-                        TLToolbarHistoryCustomButton(
-                            isEnabled: library.canRedo,
-                            action: { library.redo() }
-                        ) {
-                            MixrHistoryArrow(
-                                direction: .redo,
-                                width: TLToolbarHistoryMetrics.glyphWidth,
-                                height: TLToolbarHistoryMetrics.glyphHeight
-                            )
-                        }
-                    }
-                    .frame(height: TLToolbarHistoryMetrics.hitHeight)
-                    .position(
-                        x: (projectRect.maxX + rewindRect.minX) / 2,
-                        y: rewindRect.midY + TLToolbarHistoryMetrics.verticalCenterOffset
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(true)
+            TLTransportBarHistoryOverlay(
+                anchors: anchors,
+                canUndo: library.canUndo,
+                canRedo: library.canRedo,
+                onUndo: { library.undo() },
+                onRedo: { library.redo() }
+            )
         }
         .frame(height: TLK.transportHeight)
         .background(MixrColors.backgroundSecondary)
@@ -853,17 +824,73 @@ private struct TLTransportBar: View {
     }
 }
 
+private struct TLTransportBarHistoryOverlay: View {
+    let anchors: [TLTransportBarAnchor: Anchor<CGRect>]
+    let canUndo: Bool
+    let canRedo: Bool
+    let onUndo: () -> Void
+    let onRedo: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let projectAnchor = anchors[.project],
+               let rewindAnchor = anchors[.rewind] {
+                TLTransportBarHistoryControls(
+                    midX: (proxy[projectAnchor].maxX + proxy[rewindAnchor].minX) / 2,
+                    midY: proxy[rewindAnchor].midY + TLToolbarHistoryMetrics.verticalCenterOffset,
+                    canUndo: canUndo,
+                    canRedo: canRedo,
+                    onUndo: onUndo,
+                    onRedo: onRedo
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(true)
+    }
+}
+
+private struct TLTransportBarHistoryControls: View {
+    let midX: CGFloat
+    let midY: CGFloat
+    let canUndo: Bool
+    let canRedo: Bool
+    let onUndo: () -> Void
+    let onRedo: () -> Void
+
+    var body: some View {
+        HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
+            TLToolbarHistoryCustomButton(isEnabled: canUndo, action: onUndo) {
+                MixrHistoryArrow(
+                    direction: .undo,
+                    width: TLToolbarHistoryMetrics.glyphWidth,
+                    height: TLToolbarHistoryMetrics.glyphHeight
+                )
+            }
+            TLToolbarHistoryCustomButton(isEnabled: canRedo, action: onRedo) {
+                MixrHistoryArrow(
+                    direction: .redo,
+                    width: TLToolbarHistoryMetrics.glyphWidth,
+                    height: TLToolbarHistoryMetrics.glyphHeight
+                )
+            }
+        }
+        .frame(height: TLToolbarHistoryMetrics.hitHeight)
+        .position(x: midX, y: midY)
+    }
+}
+
 // MARK: - Toolbar History Button (undo / redo)
 
 private enum TLToolbarHistoryMetrics {
     static let iconSize:   CGFloat = 15.5
-    static let glyphWidth:  CGFloat = 26
-    static let glyphHeight: CGFloat = 15
-    static let hitWidth:   CGFloat = 29
+    static let glyphWidth:  CGFloat = 20
+    static let glyphHeight: CGFloat = 16
+    static let hitWidth:   CGFloat = 34
     static let hitHeight:  CGFloat = 40
-    static let buttonSpacing: CGFloat = 6.4   // 20% tighter than 8pt
+    static let buttonSpacing: CGFloat = 4
     /// Custom glyph sits optically high in the hit frame; nudge down to match rewind center.
-    static let verticalCenterOffset: CGFloat = -3
+    static let verticalCenterOffset: CGFloat = -1
     static let strokeWidth: CGFloat = 1.45
 }
 

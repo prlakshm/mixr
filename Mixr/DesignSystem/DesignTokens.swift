@@ -65,11 +65,13 @@ struct MixrChevron: View {
 
 // MARK: - History Arrows (undo / redo)
 
-/// Custom rounded undo/redo mark — the ↶↷ metaphor redrawn to match the
-/// transport controls: thicker stroke, smoother curve, round caps, an open
-/// rounded arrowhead, and a stub tail that ends right after the U-turn
-/// (the SF Symbol's long descender is the reason this exists).
-/// Drawn in a 24×24 design grid and scaled to fit; redo mirrors undo.
+/// Custom rounded undo/redo mark (gallery Option 4): a long horizontal
+/// arrow with the head at the leading edge, whose trailing end wraps down
+/// through a perfectly circular rounded turn into a tiny tail.
+///
+/// The turn is a true arc computed in point space — never a unit-space
+/// curve squashed by the glyph's aspect ratio — so it stays smooth at any
+/// width/height. Redo is an exact mirror of undo.
 struct MixrHistoryArrowShape: Shape {
     enum Direction {
         case undo
@@ -79,39 +81,59 @@ struct MixrHistoryArrowShape: Shape {
     var direction: Direction
 
     func path(in rect: CGRect) -> Path {
+        // Inset so round stroke caps stay inside the frame.
+        let inset = min(rect.width, rect.height) * 0.08
+        let minX = rect.minX + inset
+        let maxX = rect.maxX - inset
+        let minY = rect.minY + inset
+        let drawW = max(1, rect.width - inset * 2)
+        let drawH = max(1, rect.height - inset * 2)
+
+        // Layout — long top bar, circular hook on the trailing side.
+        let yTop = minY + drawH * 0.18
+        let yBottom = minY + drawH * 0.82
+        let radius = (yBottom - yTop) / 2          // true circle, any aspect
+        let hookCenterX = maxX - radius
+        let tipX = minX + drawW * 0.03
+        let tailLength = radius * 0.45             // tiny tail
+        let headBack = drawH * 0.30
+        let headRise = drawH * 0.26
+
         var p = Path()
 
-        // Trunk: stub tail → 180° arc over the top → longer arrow leg.
-        // Bend radius 5.0 (up from 4.5) — more fluid, matches Mixr's
-        // continuous rounded rectangles.
-        p.move(to: CGPoint(x: 17.0, y: 13.2))
-        p.addLine(to: CGPoint(x: 17.0, y: 10.8))
+        // Continuous stroke: tip → long bar → circular turn → tiny tail.
+        // Every join is tangent-horizontal, so there are no kinks.
+        p.move(to: CGPoint(x: tipX, y: yTop))
+        p.addLine(to: CGPoint(x: hookCenterX, y: yTop))
         p.addArc(
-            center: CGPoint(x: 12, y: 10.8),
-            radius: 5.0,
-            startAngle: .degrees(0),
-            endAngle: .degrees(180),
-            clockwise: true
+            center: CGPoint(x: hookCenterX, y: (yTop + yBottom) / 2),
+            radius: radius,
+            startAngle: .degrees(-90),
+            endAngle: .degrees(90),
+            clockwise: false
         )
-        p.addLine(to: CGPoint(x: 7.0, y: 15.0))
+        p.addLine(to: CGPoint(x: hookCenterX - tailLength, y: yBottom))
 
-        // Open arrowhead — ~8% smaller than the bend so it tucks in and
-        // the curve stays the visually heaviest element. Round caps.
-        p.move(to: CGPoint(x: 4.6, y: 12.95))
-        p.addLine(to: CGPoint(x: 7.0, y: 15.5))
-        p.addLine(to: CGPoint(x: 9.4, y: 12.95))
+        // Open arrowhead at the leading tip.
+        p.move(to: CGPoint(x: tipX + headBack, y: yTop - headRise))
+        p.addLine(to: CGPoint(x: tipX, y: yTop))
+        p.addLine(to: CGPoint(x: tipX + headBack, y: yTop + headRise))
 
         if direction == .redo {
-            p = p.applying(CGAffineTransform(scaleX: -1, y: 1).translatedBy(x: 24, y: 0))
+            // Mirror about the rect's vertical center line.
+            p = p.applying(
+                CGAffineTransform(translationX: rect.midX * 2, y: 0)
+                    .scaledBy(x: -1, y: 1)
+            )
         }
 
-        // Fit the 24×24 design grid into rect (supports wider-than-tall frames).
-        let scaleX = rect.width / 24
-        let scaleY = rect.height / 24
-        let transform = CGAffineTransform(translationX: rect.minX, y: rect.minY)
-            .scaledBy(x: scaleX, y: scaleY)
-        return p.applying(transform)
+        return p
     }
+}
+
+enum MixrHistoryArrowMetrics {
+    static let transportGlyphWidth: CGFloat = 32
+    static let transportGlyphHeight: CGFloat = 14
 }
 
 struct MixrHistoryArrow: View {
@@ -122,7 +144,7 @@ struct MixrHistoryArrow: View {
 
     init(
         direction: MixrHistoryArrowShape.Direction,
-        size: CGFloat,
+        size: CGFloat = 14,
         color: Color = MixrColors.textSecondary
     ) {
         self.direction = direction
@@ -133,8 +155,8 @@ struct MixrHistoryArrow: View {
 
     init(
         direction: MixrHistoryArrowShape.Direction,
-        width: CGFloat,
-        height: CGFloat,
+        width: CGFloat = MixrHistoryArrowMetrics.transportGlyphWidth,
+        height: CGFloat = MixrHistoryArrowMetrics.transportGlyphHeight,
         color: Color = MixrColors.textSecondary
     ) {
         self.direction = direction
@@ -144,8 +166,9 @@ struct MixrHistoryArrow: View {
     }
 
     private var strokeWidth: CGFloat {
-        // Matched to prior SF Symbol weight at 15.5pt in a 26×15 frame.
-        height * (2.39 / 24) * (15.5 / 14)
+        // Scale stroke with the shorter axis so thinning height keeps
+        // weight. Option 4: slightly thicker than the earlier draft.
+        max(1.5, min(width, height) * 0.155)
     }
 
     var body: some View {
