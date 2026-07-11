@@ -471,8 +471,8 @@ struct DesignSystemPreviewView: View {
 
                 PreviewSubsection(title: "Slider-only effects") {
                     HStack(spacing: MixrSpacing.sm) {
-                        EffectControlTray(effect: .filter, level: 25)
-                        EffectControlTray(effect: .warmth, level: 80)
+                        EffectControlTray(effect: .haze, level: 25)
+                        EffectControlTray(effect: .pitchUp, level: 80)
                     }
                 }
             }

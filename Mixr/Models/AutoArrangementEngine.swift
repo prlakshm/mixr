@@ -159,6 +159,19 @@ private struct TimelineEditor {
         tracks[ti].clips[ci].playbackSpeed = min(4, max(0.25, speed))
     }
 
+    /// Beatmatching: sets a tempo ratio (playback speed) AND rescales the
+    /// clip's timeline length so the same source content occupies the right
+    /// number of timeline seconds at the new rate. Pitch preservation is the
+    /// playback engine's job (AVAudioUnitTimePitch).
+    mutating func setClipTempo(_ clipID: UUID, ratio: Double) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        let clip = tracks[ti].clips[ci]
+        let clamped = min(4, max(0.25, ratio))
+        let sourceUnits = Double(clip.length) * clip.playbackSpeed
+        tracks[ti].clips[ci].playbackSpeed = clamped
+        tracks[ti].clips[ci].length = max(minLen, CGFloat(sourceUnits / clamped))
+    }
+
     mutating func setEffect(_ clipID: UUID, _ effect: MixrEffect, level: Double) {
         guard let (ti, ci) = locate(clipID) else { return }
         tracks[ti].clips[ci].effects.setLevel(level, for: effect.rawValue)
@@ -368,12 +381,11 @@ enum AutoArrangementEngine {
             .min { abs($0.clip.start - playheadUnit) < abs($1.clip.start - playheadUnit) }
 
         if let outgoing, let incoming,
-           let analysisA = analyses[editor.tracks[outgoing.trackIdx].id],
            let analysisB = analyses[editor.tracks[incoming.trackIdx].id] {
             // Position the incoming song so the blend overlaps the outgoing
             // tail — a local move only (both clips are already near here).
             let aEnd = outgoing.clip.start + outgoing.clip.length
-            let blendUnits = blendLengthUnits(incoming: analysisB)
+            let blendUnits = blendLengthUnits(bpm: analysisB.bpm)
             let desiredStart = max(0, aEnd - blendUnits)
             let delta = desiredStart - incoming.clip.start
             // Local alignment only — enough budget to close a small gap
@@ -384,8 +396,7 @@ enum AutoArrangementEngine {
             applyBlend(
                 outgoing: outgoing.clip.id,
                 incoming: incoming.clip.id,
-                analysisA: analysisA,
-                analysisB: analysisB,
+                blendUnits: blendUnits,
                 variant: 0,
                 editor: &editor
             )
@@ -407,10 +418,15 @@ enum AutoArrangementEngine {
 
     // MARK: - Scope: Entire Project
 
-    /// Builds the full mashup: anchors the first song with an intro moment,
-    /// chains every following song through a phrase-aligned blend section
-    /// (outgoing trimmed to a low-vocal mix-out point, incoming moved to
-    /// overlap underneath), and releases with a shaped outro.
+    /// Maximum pitch-preserving tempo stretch for beatmatching (±8%).
+    private static let beatmatchTolerance = 0.08
+
+    /// Entire project is mode-aware:
+    /// - 1 song  → a REMIX of that song (intro shape, pre-drop chokes into
+    ///   the chorus/drop candidates, shaped outro, volume energy story).
+    /// - 2+ songs → a MASHUP: songs beatmatched toward the first song's BPM
+    ///   (within ±8%, pitch-preserving), chained through phrase-aligned
+    ///   blend sections, released with a shaped outro.
     private static func arrangeEntireProject(
         editor: inout TimelineEditor,
         analyses: [UUID: SongAnalysis]
@@ -423,7 +439,12 @@ enum AutoArrangementEngine {
             }
         guard let firstIdx = songTrackIdxs.first else { return }
 
-        // ── Intro: anchor the first song at 0 and shape its opening ──
+        if songTrackIdxs.count == 1 {
+            arrangeSingleSongRemix(trackIdx: firstIdx, editor: &editor, analyses: analyses)
+            return
+        }
+
+        // ── Mashup: anchor the first song at 0 and shape its opening ──
         let firstTrackID = editor.tracks[firstIdx].id
         guard let firstMain = editor.tracks[firstIdx].clips.min(by: { $0.start < $1.start }),
               let firstAnalysis = analyses[firstTrackID]
@@ -432,15 +453,32 @@ enum AutoArrangementEngine {
         editor.shiftTrackClips(trackIdx: firstIdx, byUnits: -firstMain.start)
         applyIntroShaping(firstMain.id, analysis: firstAnalysis, editor: &editor)
 
+        // The set's master tempo — every compatible song locks to it.
+        let masterBPM = firstAnalysis.bpm
+
         var outgoingID = editor.lastClipID(onTrack: firstIdx) ?? firstMain.id
         var outgoingAnalysis = firstAnalysis
 
-        // ── Chain: blend each following song under the previous one ──
+        // ── Chain: beatmatch + blend each following song under the previous ──
         for (k, ti) in songTrackIdxs.dropFirst().enumerated() {
-            guard let bMain = editor.tracks[ti].clips.min(by: { $0.start < $1.start }),
-                  let analysisB = analyses[editor.tracks[ti].id],
+            guard let analysisB = analyses[editor.tracks[ti].id],
                   let aClip = editor.clip(outgoingID)
             else { continue }
+
+            // Beatmatch: stretch the incoming song toward the master tempo
+            // when it's within ±8% — the difference between a loose collage
+            // and a locked DJ set. Outside the window, keep native tempo and
+            // let the phrase-cut fallback carry the transition.
+            let ratio = masterBPM / analysisB.bpm
+            let beatmatched = abs(ratio - 1) <= beatmatchTolerance && abs(ratio - 1) > 0.0001
+            if beatmatched {
+                for clipID in editor.tracks[ti].clips.map(\.id) {
+                    editor.setClipTempo(clipID, ratio: ratio)
+                }
+            }
+            let blendBPM = beatmatched || abs(ratio - 1) <= 0.0001 ? masterBPM : analysisB.bpm
+
+            guard let bMain = editor.tracks[ti].clips.min(by: { $0.start < $1.start }) else { continue }
 
             // Trim the outgoing clip to a phrase-snapped, low-vocal mix-out
             // point so the transition lands on a musical boundary.
@@ -448,15 +486,14 @@ enum AutoArrangementEngine {
             let aEnd = (editor.clip(outgoingID).map { $0.start + $0.length }) ?? (aClip.start + aClip.length)
 
             // Move the incoming song so it enters UNDER the outgoing tail.
-            let blendUnits = blendLengthUnits(incoming: analysisB)
+            let blendUnits = blendLengthUnits(bpm: blendBPM)
             let entry = max(0, aEnd - blendUnits)
             editor.shiftTrackClips(trackIdx: ti, byUnits: entry - bMain.start)
 
             applyBlend(
                 outgoing: outgoingID,
                 incoming: bMain.id,
-                analysisA: outgoingAnalysis,
-                analysisB: analysisB,
+                blendUnits: blendUnits,
                 variant: k,
                 editor: &editor
             )
@@ -469,11 +506,74 @@ enum AutoArrangementEngine {
         applyOutroShaping(outgoingID, analysis: outgoingAnalysis, editor: &editor)
     }
 
+    // MARK: - Scope: Single-Song Remix
+
+    /// One song → a remix, not a mashup: shaped intro, a ducked + hazed
+    /// pre-drop "choke" into each chorus/drop candidate (riser or snare
+    /// build into it, impact on it, air out after), and a shaped outro.
+    /// Clip volumes carry the energy story — intro 0.85, choke 0.8,
+    /// drop 1.0, outro 0.85 — stored on the model for per-clip gain.
+    private static func arrangeSingleSongRemix(
+        trackIdx: Int,
+        editor: inout TimelineEditor,
+        analyses: [UUID: SongAnalysis]
+    ) {
+        guard let analysis = analyses[editor.tracks[trackIdx].id],
+              let main = editor.tracks[trackIdx].clips.min(by: { $0.start < $1.start })
+        else { return }
+
+        // Anchor at 0 and shape the opening.
+        editor.shiftTrackClips(trackIdx: trackIdx, byUnits: -main.start)
+        applyIntroShaping(main.id, analysis: analysis, editor: &editor)
+
+        // Drop moments at the chorus candidates.
+        let barUnits = MixrTimeline.units(fromSeconds: analysis.barSeconds)
+        // The choke must satisfy the minimum clip length; widen from 2 bars
+        // if the song is fast.
+        let chokeUnits = max(barUnits * 2, MixrTimeline.minClipLengthUnits + 0.1)
+
+        for (k, chorus) in analysis.chorusOrDropCandidates.prefix(2).enumerated() {
+            // Find the (possibly already split) clip containing this drop.
+            guard let body = editor.tracks[trackIdx].clips.first(where: { clip in
+                !clip.isSoundEffect
+                    && chorus.startSeconds > clip.songSeconds(atUnit: clip.start)
+                    && chorus.startSeconds < clip.songSeconds(atUnit: clip.start + clip.length)
+            }) else { continue }
+
+            let dropUnit = body.unit(forSongSeconds: chorus.startSeconds)
+            let chokeStart = dropUnit - chokeUnits
+
+            // Pre-drop choke: a short section that ducks and hazes so the
+            // drop lands harder — the classic EDM pre-drop cut.
+            if let (_, rest) = editor.splitClip(body.id, atUnit: chokeStart),
+               let (chokeID, dropID) = editor.splitClip(rest, atUnit: dropUnit) {
+                editor.setClipVolume(chokeID, 0.8)
+                editor.setEffect(chokeID, .haze, level: k == 0 ? 42 : 30)
+                editor.setEffect(chokeID, .echo, level: 24)
+                editor.setEchoPreset(chokeID, .pingPong)
+
+                editor.setClipVolume(dropID, 1.0)
+                editor.setEffect(dropID, .reverb, level: 10)
+                editor.setReverbPreset(dropID, .hall)
+            }
+
+            editor.addSFXEnding(k == 0 ? "riser" : "snareBuild", atUnit: dropUnit)
+            editor.addSFX("impact", atUnit: dropUnit)
+            editor.addSFX(k == 0 ? "sweepDown" : "downlifter", atUnit: dropUnit)
+        }
+
+        // Shaped release.
+        if let lastID = editor.lastClipID(onTrack: trackIdx) {
+            applyOutroShaping(lastID, analysis: analysis, editor: &editor)
+        }
+    }
+
     // MARK: - Shared routines
 
-    /// Blend length: 4 bars of the incoming song, clamped 4–12 s.
-    private static func blendLengthUnits(incoming: SongAnalysis) -> CGFloat {
-        MixrTimeline.units(fromSeconds: min(12, max(4, incoming.barSeconds * 4)))
+    /// Blend length: 4 bars at the blend tempo, clamped 4–12 s.
+    private static func blendLengthUnits(bpm: Double) -> CGFloat {
+        let barSeconds = 240.0 / max(bpm, 40)
+        return MixrTimeline.units(fromSeconds: min(12, max(4, barSeconds * 4)))
     }
 
     /// A blend section between two songs: the outgoing tail becomes its own
@@ -486,15 +586,14 @@ enum AutoArrangementEngine {
     private static func applyBlend(
         outgoing outgoingID: UUID,
         incoming incomingID: UUID,
-        analysisA: SongAnalysis,
-        analysisB: SongAnalysis,
+        blendUnits: CGFloat,
         variant: Int,
         editor: inout TimelineEditor
     ) {
         guard let a = editor.clip(outgoingID), let b = editor.clip(incomingID) else { return }
         let aEnd = a.start + a.length
         let blendStart = max(a.start, b.start)
-        let dropUnit = min(aEnd, blendStart + blendLengthUnits(incoming: analysisB))
+        let dropUnit = min(aEnd, blendStart + blendUnits)
 
         guard dropUnit > blendStart + MixrTimeline.clipEdgeEpsilon else {
             // No usable overlap (the incoming song couldn't be moved) —
@@ -503,7 +602,7 @@ enum AutoArrangementEngine {
             editor.setEffect(outgoingID, .echo, level: 30)
             editor.setEchoPreset(outgoingID, .classic)
             editor.setTransitionIn(incomingID, ClipTransition(type: .crossfade, duration: 4))
-            editor.setEffect(incomingID, .warmth, level: 14)
+            editor.setEffect(incomingID, .haze, level: 12)
             editor.addSFXEnding(variant % 2 == 0 ? "riser" : "snareBuild", atUnit: b.start)
             editor.addSFX("impact", atUnit: b.start)
             return
@@ -515,9 +614,9 @@ enum AutoArrangementEngine {
             editor.setClipVolume(tailID, 0.78)
             editor.setEffect(tailID, .echo, level: 32 + Double(variant % 3) * 5)
             editor.setEchoPreset(tailID, variant % 2 == 0 ? .pingPong : .classic)
-            editor.setEffect(tailID, .filter, level: 26 + Double(variant % 2) * 8)
+            editor.setEffect(tailID, .haze, level: 30 + Double(variant % 2) * 8)
             editor.setTransitionOut(tailID, ClipTransition(type: .fadeOut, duration: 8))
-            editor.setEffect(bodyID, .warmth, level: 12)
+            editor.setEffect(bodyID, .haze, level: 6)
         } else {
             // Too short to split — fade the whole outgoing clip.
             editor.setClipVolume(outgoingID, 0.85)
@@ -530,14 +629,13 @@ enum AutoArrangementEngine {
         if let (headID, bodyID) = editor.splitClip(incomingID, atUnit: dropUnit) {
             editor.setClipVolume(headID, 0.88)
             editor.setTransitionIn(headID, ClipTransition(type: .crossfade, duration: 8))
-            editor.setEffect(headID, .warmth, level: 16)
-            editor.setEffect(headID, .filter, level: 10 + Double(variant % 2) * 6)
+            editor.setEffect(headID, .haze, level: 16 + Double(variant % 2) * 6)
             editor.setClipVolume(bodyID, 1.0)
             editor.setEffect(bodyID, .reverb, level: 14)
             editor.setReverbPreset(bodyID, .hall)
         } else {
             editor.setTransitionIn(incomingID, ClipTransition(type: .crossfade, duration: 8))
-            editor.setEffect(incomingID, .warmth, level: 14)
+            editor.setEffect(incomingID, .haze, level: 12)
         }
 
         // SFX vocabulary — build into the drop, hit it, breathe out after.
@@ -578,8 +676,8 @@ enum AutoArrangementEngine {
            let (firstID, secondID) = editor.splitClip(clipID, atUnit: clip.unit(forSongSeconds: targetSong)) {
             let splitUnit = editor.clip(secondID)?.start ?? clip.unit(forSongSeconds: targetSong)
 
-            editor.setEffect(firstID, .warmth, level: 14)
-            editor.setEffect(secondID, .filter, level: 24 + Double(variant % 2) * 6)
+            editor.setEffect(firstID, .haze, level: 10)
+            editor.setEffect(secondID, .haze, level: 24 + Double(variant % 2) * 6)
             editor.setEffect(secondID, .echo, level: 18)
             editor.setEffect(secondID, .reverb, level: 16)
             editor.setReverbPreset(secondID, .hall)
@@ -611,10 +709,10 @@ enum AutoArrangementEngine {
 
         if let (introID, _) = editor.splitClip(clipID, atUnit: splitUnit) {
             editor.setClipVolume(introID, 0.85)
-            editor.setEffect(introID, .filter, level: 24)
+            editor.setEffect(introID, .haze, level: 24)
             editor.addSFX("impact", atUnit: splitUnit)
         } else {
-            editor.setEffect(clipID, .filter, level: 14)
+            editor.setEffect(clipID, .haze, level: 14)
         }
     }
 

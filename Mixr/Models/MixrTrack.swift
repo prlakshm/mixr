@@ -121,8 +121,8 @@ struct MixrClip: Identifiable, Equatable {
     var playbackSpeed: Double = 1.0
     var transitionIn:  ClipTransition = .none
     var transitionOut: ClipTransition = .none
-    /// Per-clip gain 0…1. AVAudioEngine integration point: apply as a sub-mix
-    /// gain when per-clip scheduling lands in MixrPlaybackEngine.
+    /// Per-clip gain 0…1 — applied live by MixrPlaybackEngine
+    /// (track volume × clip volume × transition envelope).
     var volume:        Double = 1.0
     /// Per-clip effect levels and presets (Reverb, Echo, Filter, …).
     var effects:       ClipEffectSettings = ClipEffectSettings()

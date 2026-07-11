@@ -6,11 +6,9 @@ enum MixrEffect: String, CaseIterable, Identifiable {
     case auto
     case reverb
     case echo
-    case filter
-    case bassBoost
     case pitchUp
-    case warmth
-    case chorus
+    case haze
+    case bassBoost
 
     var id: String { rawValue }
 
@@ -19,11 +17,9 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .auto: "Auto"
         case .reverb: "Reverb"
         case .echo: "Echo"
-        case .filter: "Haze"
-        case .bassBoost: "Bass Boost"
         case .pitchUp: "Pitch Up"
-        case .warmth: "Warmth"
-        case .chorus: "Chorus"
+        case .haze: "Haze"
+        case .bassBoost: "Bass Boost"
         }
     }
 
@@ -38,11 +34,9 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .auto: MixrColors.primaryPurple
         case .reverb: Color(hex: "0EA5E9")
         case .echo: MixrColors.waveformPurple
-        case .filter: Color(hex: "2DD4BF")
-        case .bassBoost: MixrColors.waveformYellow
         case .pitchUp: MixrColors.waveformPink
-        case .warmth: MixrColors.waveformRed
-        case .chorus: Color(hex: "F97316")
+        case .haze: MixrColors.waveformRed
+        case .bassBoost: MixrColors.waveformYellow
         }
     }
 
@@ -51,11 +45,9 @@ enum MixrEffect: String, CaseIterable, Identifiable {
         case .auto: "sparkles"
         case .reverb: "water.waves"
         case .echo: "wind"
-        case .filter: "cloud.fill"
-        case .bassBoost: "bolt.fill"
         case .pitchUp: "star.fill"
-        case .warmth: "flame.fill"
-        case .chorus: "drop.fill"
+        case .haze: "smoke.fill"
+        case .bassBoost: "bolt.fill"
         }
     }
 
@@ -64,7 +56,7 @@ enum MixrEffect: String, CaseIterable, Identifiable {
 
     var iconScale: CGFloat {
         switch self {
-        case .warmth: 0.95
+        case .haze: 0.95
         default: 1.0
         }
     }
@@ -86,30 +78,20 @@ enum MixrEffect: String, CaseIterable, Identifiable {
                 topCenter: UnitPoint(x: 0.64, y: -0.07),
                 bottomCenter: UnitPoint(x: 0.42, y: 1.04)
             )
-        case .filter:
-            EffectIconGlowLayout(
-                topCenter: UnitPoint(x: 0.30, y: -0.08),
-                bottomCenter: UnitPoint(x: 0.55, y: 1.03)
-            )
-        case .bassBoost:
-            EffectIconGlowLayout(
-                topCenter: UnitPoint(x: 0.24, y: -0.06),
-                bottomCenter: UnitPoint(x: 0.42, y: 1.03)
-            )
         case .pitchUp:
             EffectIconGlowLayout(
                 topCenter: UnitPoint(x: 0.36, y: -0.10),
                 bottomCenter: UnitPoint(x: 0.62, y: 1.00)
             )
-        case .warmth:
+        case .haze:
             EffectIconGlowLayout(
                 topCenter: UnitPoint(x: 0.22, y: -0.08),
                 bottomCenter: UnitPoint(x: 0.56, y: 1.02)
             )
-        case .chorus:
+        case .bassBoost:
             EffectIconGlowLayout(
-                topCenter: UnitPoint(x: 0.22, y: -0.07),
-                bottomCenter: UnitPoint(x: 0.42, y: 1.04)
+                topCenter: UnitPoint(x: 0.24, y: -0.06),
+                bottomCenter: UnitPoint(x: 0.42, y: 1.03)
             )
         }
     }
@@ -162,11 +144,9 @@ struct EffectLightingLayout {
     private static let tiers: [MixrEffect: Tier] = [
         .reverb:    Tier(cluster: CGPoint(x:  0.04, y:  0.02), blobSpreadX: -0.03, orbSpreadX:  0.02, dotSpreadX: 0.04),
         .echo:      Tier(cluster: CGPoint(x: -0.03, y:  0.05), blobSpreadX: -0.02, orbSpreadX:  0.04, dotSpreadX: 0.05),
-        .filter:    Tier(cluster: CGPoint(x:  0.02, y:  0.03), blobSpreadX: -0.01, orbSpreadX:  0.02, dotSpreadX: 0.05),
-        .bassBoost: Tier(cluster: CGPoint(x: -0.05, y:  0.02), blobSpreadX:  0.03, orbSpreadX:  0.01, dotSpreadX: 0.07),
         .pitchUp:   Tier(cluster: CGPoint(x: -0.06, y:  0.03), blobSpreadX:  0.04, orbSpreadX:  0.03, dotSpreadX: 0.06),
-        .warmth:    Tier(cluster: CGPoint(x:  0.01, y: -0.01), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
-        .chorus:    Tier(cluster: CGPoint(x:  0.03, y:  0.03), blobSpreadX: -0.02, orbSpreadX: -0.03, dotSpreadX: 0.04),
+        .haze:      Tier(cluster: CGPoint(x:  0.01, y: -0.01), blobSpreadX:  0.02, orbSpreadX:  0.03, dotSpreadX: 0.04),
+        .bassBoost: Tier(cluster: CGPoint(x: -0.05, y:  0.02), blobSpreadX:  0.03, orbSpreadX:  0.01, dotSpreadX: 0.07),
     ]
 
     static func standard(for effect: MixrEffect) -> EffectLightingLayout {
@@ -201,11 +181,9 @@ struct EffectLightingLayout {
         switch effect {
         case .reverb:    (25, 11,   3.8, 0.82)
         case .echo:      (22, 12,   4.2, 0.76)
-        case .filter:    (23, 11,   3.7, 0.76)
-        case .bassBoost: (24, 10,   3.4, 0.74)
         case .pitchUp:   (23, 11,   3.7, 0.78)
-        case .warmth:    (21, 10.5, 3.6, 0.72)
-        case .chorus:    (24, 10,   3.5, 0.74)
+        case .haze:      (21, 10.5, 3.6, 0.72)
+        case .bassBoost: (24, 10,   3.4, 0.74)
         default:         (24, 11,   3.8, 0.76)
         }
     }
