@@ -492,6 +492,12 @@ struct DesignSystemPreviewView: View {
                     }
                 }
 
+                PreviewSubsection(title: "SFX Icon Options") {
+                    SFXIconOptionsGallery()
+                        .frame(height: 640)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
                 PreviewSubsection(title: "Import Songs + SFX footer layout") {
                     HStack(spacing: 7) {
                         Button {} label: {
@@ -512,9 +518,12 @@ struct DesignSystemPreviewView: View {
                         }
                         .buttonStyle(.plain)
 
-                        SFXTileMark()
+                        Button {} label: {
+                            MixrSFXOutlineButtonLabel(style: .d)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .frame(width: 184)
+                    .frame(width: 220)
                 }
 
                 PreviewSubsection(title: "Silver SFX cards") {

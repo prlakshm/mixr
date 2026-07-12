@@ -2213,7 +2213,6 @@ private struct TLTrackArea: View {
     }
 
     private var importButton: some View {
-        // Import shortened ~30% so the FX button sits naturally beside it.
         HStack(spacing: 7) {
             Button {
                 showFilePicker = true
@@ -2237,28 +2236,20 @@ private struct TLTrackArea: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .layoutPriority(1)
 
             Button {
                 onOpenSFXLibrary()
             } label: {
-                SFXTileMark()
-                    .contentShape(RoundedRectangle(cornerRadius: SFXMetrics.markRadius, style: .continuous))
+                MixrSFXOutlineButtonLabel(style: .d)
             }
-            .buttonStyle(TLSFXButtonPressStyle())
+            .buttonStyle(.plain)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 12)
     }
 
     // MARK: Audio drop importing
-
-    fileprivate struct TLSFXButtonPressStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .scaleEffect(configuration.isPressed ? 0.94 : 1)
-                .opacity(configuration.isPressed ? 0.85 : 1)
-                .animation(.spring(response: 0.17, dampingFraction: 0.82), value: configuration.isPressed)
-        }
-    }
 
     private func handleAudioDrop(_ providers: [NSItemProvider]) -> Bool {
         var didRequestImport = false
