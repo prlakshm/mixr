@@ -2404,7 +2404,8 @@ private struct TLSongRow: View {
             MixrSongColorChip(
                 color: track.color,
                 artworkData: track.artworkData,
-                icon: track.isSFXTrack ? "sparkles" : "music.note"
+                icon: "music.note",
+                usesSFXMark: track.isSFXTrack
             )
 
             VStack(alignment: .leading, spacing: 2) {

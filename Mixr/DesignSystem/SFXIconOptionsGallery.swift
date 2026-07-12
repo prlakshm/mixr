@@ -9,187 +9,111 @@ enum MixrSFXMarkStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .a: "A · Connected s–f–x"
-        case .b: "B · Separated s, connected fx"
-        case .c: "C · Heavier stroke"
-        case .d: "D · Tighter / compressed"
-        case .e: "E · Open counters, taller x"
-        case .f: "F · Soft rounded terminals"
+        case .a: "A · Connected s–fx (tight join)"
+        case .b: "B · Separated s + fx stencil"
+        case .c: "C · Heavier / larger s"
+        case .d: "D · Tighter / compressed (shipped)"
+        case .e: "E · Taller s optical match"
+        case .f: "F · Soft rounded s"
         }
     }
 
-    /// Whether the s joins the f crossbar.
-    var connectsS: Bool {
+    /// Gap between s and the fx stencil (negative = overlap).
+    var sGap: CGFloat {
         switch self {
-        case .a, .c, .d, .e, .f: true
-        case .b: false
+        case .a: -1.5
+        case .b: 2.0
+        case .c: 1.0
+        case .d: 0.5
+        case .e: 0.5
+        case .f: 1.0
         }
     }
 
-    var strokeWidthFactor: CGFloat {
+    /// Relative size of the leading s vs fx stencil height.
+    var sScale: CGFloat {
         switch self {
-        case .a, .b, .d, .e: 0.095
-        case .c: 0.125
-        case .f: 0.100
+        case .a, .b, .d: 0.78
+        case .c: 0.92
+        case .e: 0.88
+        case .f: 0.80
         }
     }
 
-    /// Horizontal compression (< 1 = tighter).
+    /// Overall horizontal compression (< 1 = tighter).
     var trackingScale: CGFloat {
         switch self {
-        case .a, .b, .c, .e, .f: 1.0
-        case .d: 0.86
+        case .d: 0.88
+        case .a: 0.94
+        default: 1.0
         }
     }
 
-    /// Relative x-letter height.
-    var xHeightScale: CGFloat {
+    var sWeight: Font.Weight {
         switch self {
-        case .a, .b, .c, .d, .f: 1.0
-        case .e: 1.14
+        case .c: .heavy
+        case .f: .semibold
+        default: .bold
         }
     }
 
-    var lineCap: CGLineCap {
+    var sDesign: Font.Design {
         switch self {
-        case .f: .round
-        default: .butt
-        }
-    }
-
-    var lineJoin: CGLineJoin {
-        switch self {
-        case .f: .round
-        default: .miter
+        case .f: .rounded
+        default: .default
         }
     }
 }
 
-// MARK: - Shape
+// MARK: - Mark View (reference stencil + leading s)
 
-/// After Effects–inspired lowercase **sfx** monogram: italic slant,
-/// uniform stroke, f→x connection; optional s→f join.
-struct MixrSFXMarkShape: Shape {
-    var style: MixrSFXMarkStyle = .d
-
-    func path(in rect: CGRect) -> Path {
-        let shear: CGFloat = 0.22
-        let track = style.trackingScale
-        let xScale = style.xHeightScale
-
-        // Design grid ~36×20, then fit into rect with shear.
-        let gw: CGFloat = 36 * track
-        let gh: CGFloat = 20
-
-        func map(_ u: CGFloat, _ v: CGFloat) -> CGPoint {
-            // Italic shear around vertical center, then fit to rect.
-            let sx = (u + (v - gh / 2) * shear) / gw
-            let sy = v / gh
-            return CGPoint(
-                x: rect.minX + sx * rect.width,
-                y: rect.minY + sy * rect.height
-            )
-        }
-
-        var p = Path()
-
-        // ── s ──────────────────────────────────────────────
-        // Top bowl → mid cross → bottom bowl (opening right then left).
-        let sLead: CGFloat = style.connectsS ? 0.2 : 0.0
-        p.move(to: map(2.2, 5.2))
-        p.addCurve(
-            to: map(7.4 + sLead, 4.0),
-            control1: map(3.0, 2.4),
-            control2: map(5.6, 2.2)
-        )
-        p.addCurve(
-            to: map(4.0, 10.0),
-            control1: map(9.0 + sLead, 5.6),
-            control2: map(8.6, 8.4)
-        )
-        p.addCurve(
-            to: map(8.2, 16.2),
-            control1: map(0.6, 11.4),
-            control2: map(1.4, 15.8)
-        )
-        p.addCurve(
-            to: map(2.8, 15.0),
-            control1: map(11.0, 16.5),
-            control2: map(9.4, 18.4)
-        )
-
-        // Optional bridge from s into f crossbar.
-        if style.connectsS {
-            p.move(to: map(7.4 + sLead, 4.0))
-            p.addLine(to: map(11.2, 9.6))
-        }
-
-        // ── f ──────────────────────────────────────────────
-        // Stem (slightly curved top, long descender).
-        let fStemX: CGFloat = 13.6
-        p.move(to: map(fStemX + 1.6, 2.4))
-        p.addQuadCurve(
-            to: map(fStemX, 4.2),
-            control: map(fStemX + 2.2, 2.6)
-        )
-        p.addLine(to: map(fStemX, 17.6))
-
-        // Crossbar — extends into the x’s upper-left arm when connected.
-        p.move(to: map(fStemX - 3.2, 9.6))
-        p.addLine(to: map(fStemX + 5.4, 9.6))
-
-        // ── x ──────────────────────────────────────────────
-        let xMidX: CGFloat = 22.4
-        let xMidY: CGFloat = 10.0
-        let xArm: CGFloat = 4.6 * xScale
-        let xVert: CGFloat = 5.4 * xScale
-
-        // Upper-left arm continues from f crossbar tip.
-        p.move(to: map(fStemX + 5.4, 9.6))
-        p.addLine(to: map(xMidX - xArm * 0.15, xMidY - xVert * 0.15))
-        p.addLine(to: map(xMidX - xArm, xMidY - xVert))
-
-        // Upper-right
-        p.move(to: map(xMidX, xMidY))
-        p.addLine(to: map(xMidX + xArm, xMidY - xVert))
-
-        // Lower-left
-        p.move(to: map(xMidX, xMidY))
-        p.addLine(to: map(xMidX - xArm, xMidY + xVert))
-
-        // Lower-right
-        p.move(to: map(xMidX, xMidY))
-        p.addLine(to: map(xMidX + xArm, xMidY + xVert))
-
-        return p
-    }
-}
-
-// MARK: - Mark View
-
+/// Lowercase **sfx** mark. The **fx** portion is the After Effects reference
+/// image used as a template stencil; a matching italic **s** is prefixed.
 struct MixrSFXMark: View {
     var style: MixrSFXMarkStyle = .d
     var width: CGFloat = 36
     var height: CGFloat = 16
     var color: Color = MixrColors.textMuted.opacity(0.92)
 
-    private var strokeWidth: CGFloat {
-        max(1.4, min(width, height * 2) * style.strokeWidthFactor)
+    var body: some View {
+        HStack(spacing: style.sGap) {
+            Text("s")
+                .font(.system(
+                    size: height * style.sScale,
+                    weight: style.sWeight,
+                    design: style.sDesign
+                ))
+                .italic()
+                .foregroundStyle(color)
+                // Optical baseline match to the stencil’s italic stem.
+                .offset(y: height * 0.02)
+
+            Image("SFXFXStencil")
+                .resizable()
+                .renderingMode(.template)
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .foregroundStyle(color)
+                .frame(height: height)
+        }
+        .scaleEffect(x: style.trackingScale, y: 1, anchor: .center)
+        .frame(width: width, height: height)
+        .accessibilityLabel("SFX")
     }
+}
+
+/// Compact mark for song chips / tight slots — fills the given square.
+struct MixrSFXMarkGlyph: View {
+    var size: CGFloat = 14
+    var color: Color = .white
 
     var body: some View {
-        MixrSFXMarkShape(style: style)
-            .stroke(
-                color,
-                style: StrokeStyle(
-                    lineWidth: strokeWidth,
-                    lineCap: style.lineCap,
-                    lineJoin: style.lineJoin,
-                    miterLimit: 4
-                )
-            )
-            .frame(width: width, height: height)
-            .accessibilityLabel("SFX")
+        MixrSFXMark(
+            style: .d,
+            width: size * 1.85,
+            height: size * 0.95,
+            color: color
+        )
     }
 }
 
@@ -214,7 +138,7 @@ struct MixrSFXOutlineButtonLabel: View {
 
 // MARK: - Gallery
 
-/// Side-by-side mockups of AE-style lowercase **sfx** monogram options (A–F).
+/// Side-by-side mockups of AE-stencil **sfx** options (A–F).
 struct SFXIconOptionsGallery: View {
     var body: some View {
         ScrollView {
@@ -223,7 +147,7 @@ struct SFXIconOptionsGallery: View {
                     Text("SFX Icon Options")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(MixrColors.textPrimary)
-                    Text("After Effects–inspired lowercase sfx — italic, uniform stroke, connected fx. Pick a letter to ship.")
+                    Text("fx is the After Effects reference stencil; s is prefixed to match. D is shipped.")
                         .font(.system(size: 11, weight: .regular))
                         .foregroundStyle(MixrColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -252,20 +176,18 @@ struct SFXIconOptionsGallery: View {
                 .foregroundStyle(MixrColors.textSecondary)
 
             HStack(spacing: 16) {
-                // Glyph alone on dark plate
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color(hex: "2D3136"))
                     MixrSFXMark(
                         style: style,
-                        width: 52,
-                        height: 22,
+                        width: 64,
+                        height: 28,
                         color: Color(hex: "CCCCCC")
                     )
                 }
-                .frame(width: 88, height: 52)
+                .frame(width: 100, height: 56)
 
-                // Footer context — Import Songs + SFX outline button
                 HStack(spacing: 7) {
                     HStack(spacing: 5) {
                         Image(systemName: "plus")

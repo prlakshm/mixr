@@ -5,8 +5,10 @@ import UIKit
 struct MixrSongColorChip: View {
     let color: MixrWaveformColor
     var artworkData: Data? = nil
-    /// Center glyph — the SFX track passes "sparkles".
+    /// Center SF Symbol — ignored when `usesSFXMark` is true.
     var icon: String = "music.note"
+    /// When true, shows the AE-stencil sfx monogram instead of `icon`.
+    var usesSFXMark: Bool = false
 
     var body: some View {
         Group {
@@ -158,11 +160,17 @@ struct MixrSongColorChip: View {
                 .frame(width: 14, height: 14)
                 .blur(radius: 1.5)
 
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.white)
-                .shadow(color: bright.opacity(0.60), radius: 3)
-                .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+            if usesSFXMark {
+                MixrSFXMarkGlyph(size: 13, color: .white)
+                    .shadow(color: bright.opacity(0.60), radius: 3)
+                    .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .shadow(color: bright.opacity(0.60), radius: 3)
+                    .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+            }
         }
     }
 }

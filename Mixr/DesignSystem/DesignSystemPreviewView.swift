@@ -536,7 +536,7 @@ struct DesignSystemPreviewView: View {
 
                 PreviewSubsection(title: "Silver SFX track row") {
                     HStack(spacing: 9) {
-                        MixrSongColorChip(color: .silver, icon: "sparkles")
+                        MixrSongColorChip(color: .silver, usesSFXMark: true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Sound Effects")
                                 .font(.system(size: 12, weight: .semibold))
