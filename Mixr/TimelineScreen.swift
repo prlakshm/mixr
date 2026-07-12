@@ -664,22 +664,6 @@ private struct TLRotateOverlay: View {
 
 // MARK: - Transport Bar
 
-private enum TLTransportBarAnchor: Hashable {
-    case project
-    case rewind
-}
-
-private struct TLTransportBarAnchorKey: PreferenceKey {
-    static var defaultValue: [TLTransportBarAnchor: Anchor<CGRect>] = [:]
-
-    static func reduce(
-        value: inout [TLTransportBarAnchor: Anchor<CGRect>],
-        nextValue: () -> [TLTransportBarAnchor: Anchor<CGRect>]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { $1 })
-    }
-}
-
 private struct TLTransportBar: View {
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
@@ -689,6 +673,7 @@ private struct TLTransportBar: View {
 
     var body: some View {
         ZStack {
+            // Home group — Mixr + project + undo/redo
             HStack(spacing: 24) {
                 HStack(spacing: 7) {
                     Image(systemName: "waveform")
@@ -699,23 +684,48 @@ private struct TLTransportBar: View {
                         .foregroundStyle(MixrColors.textPrimary)
                 }
 
-                // Project dropdown trigger — plain label, no glass outline.
-                Button(action: onProjectTapped) {
-                    HStack(spacing: 4) {
-                        Text(library.projectName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(MixrColors.textPrimary)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(MixrColors.textSecondary)
-                            .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
+                HStack(spacing: 18) {
+                    // Project dropdown trigger — plain label, no glass outline.
+                    Button(action: onProjectTapped) {
+                        HStack(spacing: 4) {
+                            Text(library.projectName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(MixrColors.textPrimary)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(MixrColors.textSecondary)
+                                .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
+
+                    // Undo / redo — part of the home group, next to the project name.
+                    HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
+                        TLToolbarHistoryCustomButton(isEnabled: library.canUndo) {
+                            library.undo()
+                        } icon: {
+                            MixrHistoryArrow(
+                                direction: .undo,
+                                width: TLToolbarHistoryMetrics.glyphWidth,
+                                height: TLToolbarHistoryMetrics.glyphHeight
+                            )
+                        }
+                        TLToolbarHistoryCustomButton(isEnabled: library.canRedo) {
+                            library.redo()
+                        } icon: {
+                            MixrHistoryArrow(
+                                direction: .redo,
+                                width: TLToolbarHistoryMetrics.glyphWidth,
+                                height: TLToolbarHistoryMetrics.glyphHeight
+                            )
+                        }
+                    }
+                    .frame(height: TLToolbarHistoryMetrics.hitHeight)
+                    .offset(y: -0.8)
                 }
-                .buttonStyle(.plain)
-                .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
-                .anchorPreference(key: TLTransportBarAnchorKey.self, value: .bounds) { [.project: $0] }
             }
             .padding(.leading, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -742,7 +752,6 @@ private struct TLTransportBar: View {
                             .foregroundStyle(MixrColors.textSecondary)
                     }
                     .frame(width: 28, height: 40)
-                    .anchorPreference(key: TLTransportBarAnchorKey.self, value: .bounds) { [.rewind: $0] }
 
                     Button {
                         playback.togglePlayPause()
@@ -805,16 +814,7 @@ private struct TLTransportBar: View {
                     .frame(width: 56, height: 40)
                 }
             }
-            .offset(x: 60)
-        }
-        .overlayPreferenceValue(TLTransportBarAnchorKey.self) { anchors in
-            TLTransportBarHistoryOverlay(
-                anchors: anchors,
-                canUndo: library.canUndo,
-                canRedo: library.canRedo,
-                onUndo: { library.undo() },
-                onRedo: { library.redo() }
-            )
+            .offset(x: 63)
         }
         .frame(height: TLK.transportHeight)
         .background(MixrColors.backgroundSecondary)
@@ -824,74 +824,16 @@ private struct TLTransportBar: View {
     }
 }
 
-private struct TLTransportBarHistoryOverlay: View {
-    let anchors: [TLTransportBarAnchor: Anchor<CGRect>]
-    let canUndo: Bool
-    let canRedo: Bool
-    let onUndo: () -> Void
-    let onRedo: () -> Void
-
-    var body: some View {
-        GeometryReader { proxy in
-            if let projectAnchor = anchors[.project],
-               let rewindAnchor = anchors[.rewind] {
-                TLTransportBarHistoryControls(
-                    midX: (proxy[projectAnchor].maxX + proxy[rewindAnchor].minX) / 2,
-                    midY: proxy[rewindAnchor].midY + TLToolbarHistoryMetrics.verticalCenterOffset,
-                    canUndo: canUndo,
-                    canRedo: canRedo,
-                    onUndo: onUndo,
-                    onRedo: onRedo
-                )
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .allowsHitTesting(true)
-    }
-}
-
-private struct TLTransportBarHistoryControls: View {
-    let midX: CGFloat
-    let midY: CGFloat
-    let canUndo: Bool
-    let canRedo: Bool
-    let onUndo: () -> Void
-    let onRedo: () -> Void
-
-    var body: some View {
-        HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
-            TLToolbarHistoryCustomButton(isEnabled: canUndo, action: onUndo) {
-                MixrHistoryArrow(
-                    direction: .undo,
-                    width: TLToolbarHistoryMetrics.glyphWidth,
-                    height: TLToolbarHistoryMetrics.glyphHeight
-                )
-            }
-            TLToolbarHistoryCustomButton(isEnabled: canRedo, action: onRedo) {
-                MixrHistoryArrow(
-                    direction: .redo,
-                    width: TLToolbarHistoryMetrics.glyphWidth,
-                    height: TLToolbarHistoryMetrics.glyphHeight
-                )
-            }
-        }
-        .frame(height: TLToolbarHistoryMetrics.hitHeight)
-        .position(x: midX, y: midY)
-    }
-}
-
 // MARK: - Toolbar History Button (undo / redo)
 
 private enum TLToolbarHistoryMetrics {
     static let iconSize:   CGFloat = 15.5
     static let glyphWidth:  CGFloat = 20
-    static let glyphHeight: CGFloat = 16
+    static let glyphHeight: CGFloat = 17
     static let hitWidth:   CGFloat = 34
     static let hitHeight:  CGFloat = 40
     static let buttonSpacing: CGFloat = 4
-    /// Custom glyph sits optically high in the hit frame; nudge down to match rewind center.
-    static let verticalCenterOffset: CGFloat = -1
-    static let strokeWidth: CGFloat = 1.45
+    static let strokeWidth: CGFloat = 0
 }
 
 struct TLHistoryActionIcon: View {
@@ -983,6 +925,7 @@ struct TLToolbarHistoryButton: View {
         .animation(.easeOut(duration: 0.16), value: isEnabled)
     }
 }
+
 
 /// Same chrome as `TLToolbarHistoryButton`, for custom mock / preview icons.
 struct TLToolbarHistoryCustomButton<Icon: View>: View {

@@ -96,8 +96,9 @@ struct MixrHistoryArrowShape: Shape {
         let hookCenterX = maxX - radius
         let tipX = minX + drawW * 0.03
         let tailLength = radius * 0.45             // tiny tail
-        let headBack = drawH * 0.30
-        let headRise = drawH * 0.26
+        // Slightly larger head keeps the arrow legible at the lighter stroke.
+        let headBack = drawH * 0.33
+        let headRise = drawH * 0.28
 
         var p = Path()
 
@@ -166,9 +167,8 @@ struct MixrHistoryArrow: View {
     }
 
     private var strokeWidth: CGFloat {
-        // Scale stroke with the shorter axis so thinning height keeps
-        // weight. Option 4: slightly thicker than the earlier draft.
-        max(1.5, min(width, height) * 0.155)
+        // Scale stroke with the shorter axis so thinning height keeps weight.
+        max(1.2, min(width, height) * 0.11)
     }
 
     var body: some View {
