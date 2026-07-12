@@ -322,6 +322,7 @@ struct TimelineScreen: View {
     @StateObject private var library = TrackLibrary()
     @StateObject private var playback = MixrPlaybackEngine()
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.undoManager) private var envUndoManager
     @State private var showFilePicker = false
     @State private var isEffectsCollapsed = false
 
@@ -415,8 +416,14 @@ struct TimelineScreen: View {
                         onToggleMute: { id in
                             library.toggleMute(trackID: id)
                         },
-                        onPushUndo: {
-                            library.pushUndoSnapshot()
+                        onEditBegin: { name, scope in
+                            library.beginGestureEdit(name, scope: scope)
+                        },
+                        onEditCommit: {
+                            library.commitGestureEdit()
+                        },
+                        onEditCancel: {
+                            library.cancelGestureEdit()
                         },
                         onMixSettingsChanged: {
                             playback.applyMixSettings(from: library.tracks)
@@ -450,7 +457,10 @@ struct TimelineScreen: View {
                         tracks: $library.tracks,
                         selectedClipID: selectedClipID,
                         playheadUnit: effectivePlayheadUnit,
-                        onPushUndo: { library.pushUndoSnapshot() },
+                        onEditBegin: { name, scope in
+                            library.beginGestureEdit(name, scope: scope)
+                        },
+                        onEditCommit: { library.commitGestureEdit() },
                         onAutoTapped: {
                             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                                 showAutoDialog = true
@@ -477,6 +487,11 @@ struct TimelineScreen: View {
         .preferredColorScheme(.dark)
         .task {
             library.attachPersistence(context: modelContext)
+            library.attachUndoManager(envUndoManager)
+        }
+        // The window's UndoManager can arrive/change after first render.
+        .onChange(of: envUndoManager.map(ObjectIdentifier.init)) { _, _ in
+            library.attachUndoManager(envUndoManager)
         }
         // Track list or clip geometry changed → full sync (may add/remove players)
         .onChange(of: library.tracks.map { track in
@@ -627,7 +642,8 @@ struct TimelineScreen: View {
             // Brief branded "analyzing" beat so the arrangement lands as a moment.
             try? await Task.sleep(for: .milliseconds(1600))
 
-            library.pushUndoSnapshot()
+            // The whole Auto pass is one atomic undo step.
+            library.beginGestureEdit("Auto Remix", scope: .tracks)
             let arranged = AutoArrangementEngine.arrange(
                 tracks: library.tracks,
                 scope: scope,
@@ -637,6 +653,7 @@ struct TimelineScreen: View {
                 library.tracks = arranged
                 isAutoRunning = false
             }
+            library.commitGestureEdit()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }
@@ -977,15 +994,18 @@ struct TLWideHistoryRedoIcon: View {
     }
 }
 
+/// Click state: the glyph brightens toward white, shrinks slightly, and a
+/// soft glass highlight blooms behind it — lit, not faded.
 private struct TLToolbarHistoryPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .brightness(configuration.isPressed ? 0.38 : 0)
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
             .background {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(configuration.isPressed ? Color.white.opacity(0.10) : Color.clear)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.10 : 0))
+                    .padding(.vertical, 8)
             }
-            .offset(y: configuration.isPressed ? 1 : 0)
-            .opacity(configuration.isPressed ? 0.72 : 1)
             .animation(.spring(response: 0.17, dampingFraction: 0.82), value: configuration.isPressed)
     }
 }
@@ -1008,8 +1028,12 @@ private struct TLTrackArea: View {
     let onSelectTrack: (UUID) -> Void
     let onToggleSolo: (UUID) -> Void
     let onToggleMute: (UUID) -> Void
-    /// Pushes an undo snapshot — call BEFORE mutating tracks/clips.
-    let onPushUndo: () -> Void
+    /// Undo bracketing — capture before mutating, register on commit.
+    /// Views never talk to UndoManager directly; TrackLibrary is the
+    /// single editing layer.
+    let onEditBegin: (String, TimelineEditScope) -> Void
+    let onEditCommit: () -> Void
+    let onEditCancel: () -> Void
     let onMixSettingsChanged: () -> Void
     let onPlayheadDragStart: () -> Void
     let onPlayheadDragChanged: (CGFloat) -> Void
@@ -1116,7 +1140,8 @@ private struct TLTrackArea: View {
         let splitAt = inClip ? phUnit : f.clip.start + f.clip.length / 2
         guard splitAt - f.clip.start >= 2,
               f.clip.start + f.clip.length - splitAt >= 2 else { return }
-        onPushUndo()
+        onEditBegin("Split Clip", .trackClips(f.track.id))
+        defer { onEditCommit() }
         let leftLen  = splitAt - f.clip.start
         let rightLen = f.clip.length - leftLen
         let newID    = UUID()
@@ -1145,7 +1170,8 @@ private struct TLTrackArea: View {
 
     private func duplicateClip(id: UUID) {
         guard let f = findClip(id) else { return }
-        onPushUndo()
+        onEditBegin("Duplicate Clip", .trackClips(f.track.id))
+        defer { onEditCommit() }
         let newStart = f.clip.start + f.clip.length
         // Bug 1 fix: always copy the full source length, never truncate.
         let newLen = f.clip.length
@@ -1199,12 +1225,13 @@ private struct TLTrackArea: View {
                 isSpeedEditing = false
                 clipTapAnchorX = nil
             }
-            // Track deletion pushes its own undo snapshot in TrackLibrary.
+            // Track deletion registers its own undo step in TrackLibrary.
             onDeleteTrack(f.track.id)
             return
         }
 
-        onPushUndo()
+        onEditBegin("Delete Clip", .trackClips(f.track.id))
+        defer { onEditCommit() }
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             tracks[f.trackIdx].clips.remove(at: f.clipIdx)
             selectedClipID = nil
@@ -1222,9 +1249,8 @@ private struct TLTrackArea: View {
             TLClipEditingMetrics.maxPlaybackSpeed,
             max(TLClipEditingMetrics.minPlaybackSpeed, speed)
         )
-        if abs(clamped - f.clip.playbackSpeed) > 0.0001 {
-            onPushUndo()
-        }
+        onEditBegin("Change Speed", .trackClips(f.track.id))
+        defer { onEditCommit() }
         let currentSpeed = max(f.clip.playbackSpeed, 0.0001)
         let sourceLength = Double(f.clip.length) * currentSpeed
         let rawNewLength = sourceLength / clamped
@@ -1269,7 +1295,8 @@ private struct TLTrackArea: View {
 
     private func setTransition(type: ClipTransitionType, grip: ActiveGrip) {
         guard let f = findClip(grip.clipID) else { return }
-        onPushUndo()
+        onEditBegin("Change Transition", .clip(grip.clipID))
+        defer { onEditCommit() }
         var tx = ClipTransition()
         tx.type = type
         if grip.side == .leading {
@@ -1285,10 +1312,8 @@ private struct TLTrackArea: View {
 
     private func updateTransition(_ transition: ClipTransition, grip: ActiveGrip) {
         guard let f = findClip(grip.clipID) else { return }
-        let current = grip.side == .leading ? f.clip.transitionIn : f.clip.transitionOut
-        if current != transition {
-            onPushUndo()
-        }
+        onEditBegin("Change Transition", .clip(grip.clipID))
+        defer { onEditCommit() }
         if grip.side == .leading {
             tracks[f.trackIdx].clips[f.clipIdx].transitionIn = transition
         } else {
@@ -1305,7 +1330,10 @@ private struct TLTrackArea: View {
 
     /// Long-press began — lift clip in place, show scrim, wait for settle before tracking movement.
     private func armClipDrag(clipID: UUID, areaX: CGFloat, areaY: CGFloat) {
-        guard clipDragState == nil, clipDragArmed == nil, findClip(clipID) != nil else { return }
+        guard clipDragState == nil, clipDragArmed == nil, let found = findClip(clipID) else { return }
+        // Capture the before-state now; exactly one undo step registers at
+        // drop commit (never per drag frame), and a cancel discards it.
+        onEditBegin("Move Clip", .trackClips(found.track.id))
         clipDragArmed = clipID
         clipDragArmedAt = Date()
         clipDragArmedAreaX = areaX
@@ -1503,13 +1531,6 @@ private struct TLTrackArea: View {
             moving: drag.clipID,
             in: tracks[ti].clips
         )
-        // Only a real move is undoable — a ghost-restore drop is a no-op.
-        if reflowedClips != tracks[ti].clips.sorted(by: { lhs, rhs in
-            if abs(lhs.start - rhs.start) > MixrTimeline.clipEdgeEpsilon { return lhs.start < rhs.start }
-            return lhs.id.uuidString < rhs.id.uuidString
-        }) {
-            onPushUndo()
-        }
         let committedStart = reflowedClips.first(where: { $0.id == drag.clipID })?.start
             ?? MixrTimeline.insertionStart(for: result, movingClipLength: drag.originalClip.length)
         let committedEnd = reflowedClips
@@ -1525,9 +1546,13 @@ private struct TLTrackArea: View {
             isDraggingClip = false
             selectedClipID = drag.clipID
         }
+        // One undo step per completed drag; ghost-restore drops register
+        // nothing because the captured state is unchanged.
+        onEditCommit()
     }
 
     private func cancelClipDrag() {
+        onEditCancel()
         clipDragScrollTask?.cancel()
         clipDragScrollTask = nil
         withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
@@ -2163,7 +2188,11 @@ private struct TLTrackArea: View {
                     onToggleSolo: { onToggleSolo(track.id) },
                     onToggleMute: { onToggleMute(track.id) },
                     onVolumeEditingChanged: { editing in
-                        if editing { onPushUndo() }
+                        if editing {
+                            onEditBegin("Change Volume", .trackMix(track.id))
+                        } else {
+                            onEditCommit()
+                        }
                     },
                     onMixSettingsChanged: onMixSettingsChanged
                 )
@@ -3449,7 +3478,8 @@ private struct TLEffectsPanel: View {
     @Binding var tracks: [MixrTrack]
     let selectedClipID: UUID?
     let playheadUnit: CGFloat
-    var onPushUndo: () -> Void = {}
+    var onEditBegin: (String, TimelineEditScope) -> Void = { _, _ in }
+    var onEditCommit: () -> Void = {}
     var onAutoTapped: () -> Void = {}
 
     @State private var selectedEffect: MixrEffect?
@@ -3575,18 +3605,24 @@ private struct TLEffectsPanel: View {
                     .setLevel(value, for: effect.rawValue)
             },
             onEditingChanged: { editing in
-                // One undo snapshot per drag, committed at drag start.
-                if editing { onPushUndo() }
+                // Capture at drag start; exactly one undo step at drag end.
+                if editing {
+                    onEditBegin("Change Effect", .clip(clip.id))
+                } else {
+                    onEditCommit()
+                }
             },
             onReverbPreset: { preset in
                 guard clip.effects.reverbPreset != preset else { return }
-                onPushUndo()
+                onEditBegin("Change Effect", .clip(clip.id))
                 tracks[path.trackIdx].clips[path.clipIdx].effects.reverbPreset = preset
+                onEditCommit()
             },
             onEchoPreset: { preset in
                 guard clip.effects.echoPreset != preset else { return }
-                onPushUndo()
+                onEditBegin("Change Effect", .clip(clip.id))
                 tracks[path.trackIdx].clips[path.clipIdx].effects.echoPreset = preset
+                onEditCommit()
             }
         )
         .id("\(effect.rawValue)-\(clip.id.uuidString)")

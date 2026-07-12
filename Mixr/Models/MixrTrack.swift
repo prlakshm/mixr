@@ -50,7 +50,7 @@ enum TrackType: String, Codable, Equatable, Sendable {
 
 // MARK: - Track Model
 
-struct MixrTrack: Identifiable {
+struct MixrTrack: Identifiable, Equatable {
     let id: UUID
     var title: String
     var artist: String

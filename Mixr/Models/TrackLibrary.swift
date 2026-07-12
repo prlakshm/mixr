@@ -4,6 +4,42 @@ import AVFoundation
 import CoreMedia
 import SwiftData
 
+// MARK: - Edit Scope
+
+/// What an undoable edit touches — captures stay scoped and lightweight
+/// (value-typed, copy-on-write) instead of snapshotting the whole app.
+enum TimelineEditScope {
+    /// One clip's properties (transitions, effects, volume, speed field).
+    case clip(UUID)
+    /// One track's entire clip array (structural edits + their ripple).
+    case trackClips(UUID)
+    /// One track's mix state (volume / mute / solo).
+    case trackMix(UUID)
+    /// Multi-track structure: import, track delete/reorder, Auto, SFX-track creation.
+    case tracks
+    /// The project's display name.
+    case projectName
+}
+
+/// Value-typed before/after capture for one scope — small, CoW-backed.
+enum TimelineEditState: Equatable {
+    case clip(MixrClip)
+    case trackClips(trackID: UUID, clips: [MixrClip])
+    case trackMix(trackID: UUID, volume: Double, isMuted: Bool, isSoloed: Bool)
+    case tracks([MixrTrack], selectedTrackID: UUID?, projectBPM: Int?)
+    case projectName(String)
+
+    var scope: TimelineEditScope {
+        switch self {
+        case .clip(let clip): .clip(clip.id)
+        case .trackClips(let trackID, _): .trackClips(trackID)
+        case .trackMix(let trackID, _, _, _): .trackMix(trackID)
+        case .tracks: .tracks
+        case .projectName: .projectName
+        }
+    }
+}
+
 // MARK: - Track Library
 
 @MainActor
@@ -16,12 +52,13 @@ final class TrackLibrary: ObservableObject {
     @Published var projectName: String = "My Remix"
     @Published private(set) var projects: [ProjectSummary] = []
 
-    // Undo / redo
+    // Undo / redo — Foundation UndoManager (window-provided, session-only).
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
-    private var undoStack: [ProjectSnapshot] = []
-    private var redoStack: [ProjectSnapshot] = []
-    private let undoLimit = 50
+    private weak var undoManager: UndoManager?
+    private var undoObservers: [NSObjectProtocol] = []
+    /// In-flight gesture capture (clip drag, slider drag) — registered on commit.
+    private var pendingEdit: (name: String, before: TimelineEditState)?
 
     // Persistence
     private var modelContext: ModelContext?
@@ -49,7 +86,10 @@ final class TrackLibrary: ObservableObject {
     /// then asynchronously patches embedded metadata, duration, and clip length per track by UUID.
     func addTracks(from urls: [URL]) {
         guard !urls.isEmpty else { return }
-        pushUndoSnapshot()
+        // Register only the synchronous placeholder insertion; the async
+        // metadata patches that follow are not user edits.
+        beginGestureEdit("Import Songs", scope: .tracks)
+        defer { commitGestureEdit() }
 
         for url in urls {
             let songCount = tracks.filter { !$0.isSFXTrack }.count
@@ -149,26 +189,29 @@ final class TrackLibrary: ObservableObject {
     // MARK: - Reorder
 
     func reorder(from source: IndexSet, to destination: Int) {
-        withAnimation(.easeOut(duration: 0.22)) {
-            tracks.move(fromOffsets: source, toOffset: destination)
+        performEdit("Reorder Tracks", scope: .tracks) {
+            withAnimation(.easeOut(duration: 0.22)) {
+                tracks.move(fromOffsets: source, toOffset: destination)
+            }
         }
     }
 
     // MARK: - Delete
 
     func deleteTrack(id: UUID) {
-        pushUndoSnapshot()
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-            tracks.removeAll { $0.id == id }
-        }
+        performEdit("Delete Track", scope: .tracks) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                tracks.removeAll { $0.id == id }
+            }
 
-        if selectedTrackID == id {
-            selectedTrackID = tracks.first?.id
-        }
+            if selectedTrackID == id {
+                selectedTrackID = tracks.first?.id
+            }
 
-        if tracks.isEmpty {
-            selectedTrackID = nil
-            projectBPM = nil
+            if tracks.isEmpty {
+                selectedTrackID = nil
+                projectBPM = nil
+            }
         }
     }
 
@@ -176,14 +219,16 @@ final class TrackLibrary: ObservableObject {
 
     func toggleSolo(trackID: UUID) {
         guard let idx = tracks.firstIndex(where: { $0.id == trackID }) else { return }
-        pushUndoSnapshot()
-        tracks[idx].isSoloed.toggle()
+        performEdit("Solo Track", scope: .trackMix(trackID)) {
+            tracks[idx].isSoloed.toggle()
+        }
     }
 
     func toggleMute(trackID: UUID) {
         guard let idx = tracks.firstIndex(where: { $0.id == trackID }) else { return }
-        pushUndoSnapshot()
-        tracks[idx].isMuted.toggle()
+        performEdit("Mute Track", scope: .trackMix(trackID)) {
+            tracks[idx].isMuted.toggle()
+        }
     }
 
     /// Whether a track is currently audible given mute and solo state.
@@ -223,27 +268,35 @@ final class TrackLibrary: ObservableObject {
     /// SFX clips (never overlapping, never negative). Returns the new clip id.
     @discardableResult
     func addSoundEffect(_ definition: SoundEffectDefinition, atPlayheadUnit unit: CGFloat) -> UUID {
-        pushUndoSnapshot()
-        let idx = withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-            ensureSFXTrack()
+        // Scope to the SFX track's clips when it exists; creating the track
+        // is a structural edit.
+        let existingSFXTrackID = tracks.first(where: { $0.isSFXTrack })?.id
+        let scope: TimelineEditScope = existingSFXTrackID.map { .trackClips($0) } ?? .tracks
+
+        var newClipID = UUID()
+        performEdit("Add Sound Effect", scope: scope) {
+            let idx = withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                ensureSFXTrack()
+            }
+            let start = SoundEffectLibrary.nonOverlappingStart(
+                proposedStart: max(0, unit),
+                lengthUnits: definition.lengthUnits,
+                in: tracks[idx].clips
+            )
+            let clip = MixrClip(
+                id: newClipID,
+                start: start,
+                length: definition.lengthUnits,
+                soundEffectID: definition.id
+            )
+            tracks[idx].clips.append(clip)
+            tracks[idx].clips.sort { $0.start < $1.start }
+            newClipID = clip.id
         }
-        let start = SoundEffectLibrary.nonOverlappingStart(
-            proposedStart: max(0, unit),
-            lengthUnits: definition.lengthUnits,
-            in: tracks[idx].clips
-        )
-        let clip = MixrClip(
-            id: UUID(),
-            start: start,
-            length: definition.lengthUnits,
-            soundEffectID: definition.id
-        )
-        tracks[idx].clips.append(clip)
-        tracks[idx].clips.sort { $0.start < $1.start }
-        return clip.id
+        return newClipID
     }
 
-    // MARK: - Undo / Redo
+    // MARK: - Undo / Redo (Foundation UndoManager)
 
     private var currentSnapshot: ProjectSnapshot {
         ProjectSnapshot(
@@ -261,38 +314,173 @@ final class TrackLibrary: ObservableObject {
         projectBPM = snapshot.projectBPM
     }
 
-    /// Call BEFORE any meaningful mutation. New edits clear the redo stack.
-    func pushUndoSnapshot() {
-        undoStack.append(currentSnapshot)
-        if undoStack.count > undoLimit { undoStack.removeFirst() }
-        redoStack.removeAll()
+    /// Connects the window's UndoManager (from @Environment(\.undoManager)).
+    /// History is session-only; SwiftData persists only the latest state.
+    /// SwiftData's ModelContext undo is deliberately NOT connected — the
+    /// debounced snapshot autosave would otherwise pollute the stack.
+    func attachUndoManager(_ manager: UndoManager?) {
+        guard manager !== undoManager else { return }
+        for observer in undoObservers { NotificationCenter.default.removeObserver(observer) }
+        undoObservers.removeAll()
+        undoManager = manager
+        pendingEdit = nil
+
+        if let manager {
+            manager.levelsOfUndo = 60
+            let events: [Notification.Name] = [
+                .NSUndoManagerDidCloseUndoGroup,
+                .NSUndoManagerDidUndoChange,
+                .NSUndoManagerDidRedoChange,
+                .NSUndoManagerCheckpoint,
+            ]
+            for name in events {
+                undoObservers.append(
+                    NotificationCenter.default.addObserver(
+                        forName: name, object: manager, queue: .main
+                    ) { [weak self] _ in
+                        MainActor.assumeIsolated {
+                            self?.updateHistoryFlags()
+                        }
+                    }
+                )
+            }
+        }
         updateHistoryFlags()
-        scheduleAutosave()
     }
 
     func undo() {
-        guard let snapshot = undoStack.popLast() else { return }
-        redoStack.append(currentSnapshot)
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-            apply(snapshot)
-        }
+        guard undoManager?.canUndo == true else { return }
+        undoManager?.undo()
         updateHistoryFlags()
-        scheduleAutosave()
     }
 
     func redo() {
-        guard let snapshot = redoStack.popLast() else { return }
-        undoStack.append(currentSnapshot)
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-            apply(snapshot)
+        guard undoManager?.canRedo == true else { return }
+        undoManager?.redo()
+        updateHistoryFlags()
+    }
+
+    private func updateHistoryFlags() {
+        canUndo = undoManager?.canUndo ?? false
+        canRedo = undoManager?.canRedo ?? false
+    }
+
+    // MARK: Scoped capture / restore
+
+    /// Current state for a scope, or nil when the scope's target is gone.
+    private func captureState(for scope: TimelineEditScope) -> TimelineEditState? {
+        switch scope {
+        case .clip(let clipID):
+            for track in tracks {
+                if let clip = track.clips.first(where: { $0.id == clipID }) {
+                    return .clip(clip)
+                }
+            }
+            return nil
+        case .trackClips(let trackID):
+            guard let track = tracks.first(where: { $0.id == trackID }) else { return nil }
+            return .trackClips(trackID: trackID, clips: track.clips)
+        case .trackMix(let trackID):
+            guard let track = tracks.first(where: { $0.id == trackID }) else { return nil }
+            return .trackMix(
+                trackID: trackID,
+                volume: track.volume,
+                isMuted: track.isMuted,
+                isSoloed: track.isSoloed
+            )
+        case .tracks:
+            return .tracks(tracks, selectedTrackID: selectedTrackID, projectBPM: projectBPM)
+        case .projectName:
+            return .projectName(projectName)
         }
+    }
+
+    /// Restores a captured state in place. Clip/track identity is matched by
+    /// UUID — restored clips keep their original ids, effects, transitions,
+    /// speeds, and source offsets (they're value copies, never re-created).
+    private func restore(_ state: TimelineEditState) {
+        switch state {
+        case .clip(let clip):
+            for ti in tracks.indices {
+                if let ci = tracks[ti].clips.firstIndex(where: { $0.id == clip.id }) {
+                    tracks[ti].clips[ci] = clip
+                    return
+                }
+            }
+        case .trackClips(let trackID, let clips):
+            if let ti = tracks.firstIndex(where: { $0.id == trackID }) {
+                tracks[ti].clips = clips
+            }
+        case .trackMix(let trackID, let volume, let isMuted, let isSoloed):
+            if let ti = tracks.firstIndex(where: { $0.id == trackID }) {
+                tracks[ti].volume = volume
+                tracks[ti].isMuted = isMuted
+                tracks[ti].isSoloed = isSoloed
+            }
+        case .tracks(let all, let selected, let bpm):
+            tracks = all
+            selectedTrackID = selected
+            projectBPM = bpm
+        case .projectName(let name):
+            projectName = name
+        }
+    }
+
+    /// Registers one atomic undo step. The undo handler captures the
+    /// then-current state and re-registers it, which UndoManager routes to
+    /// the redo stack — redo reproduces the exact resulting arrangement,
+    /// and a fresh edit clears redo via standard UndoManager behavior.
+    private func registerEdit(named name: String, before: TimelineEditState) {
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { library in
+            MainActor.assumeIsolated {
+                let current = library.captureState(for: before.scope)
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    library.restore(before)
+                }
+                if let current {
+                    library.registerEdit(named: name, before: current)
+                }
+                library.scheduleAutosave()
+            }
+        }
+        undoManager.setActionName(name)
         updateHistoryFlags()
         scheduleAutosave()
     }
 
-    private func updateHistoryFlags() {
-        canUndo = !undoStack.isEmpty
-        canRedo = !redoStack.isEmpty
+    // MARK: Edit API — views call these; no undo registration in views.
+
+    /// One-shot edit: capture → mutate → register (skipped when nothing changed).
+    func performEdit(_ name: String, scope: TimelineEditScope, _ mutate: () -> Void) {
+        let before = captureState(for: scope)
+        mutate()
+        guard let before,
+              let after = captureState(for: before.scope),
+              after != before
+        else { return }
+        registerEdit(named: name, before: before)
+    }
+
+    /// Gesture edits (clip drag, sliders): capture when the gesture begins…
+    func beginGestureEdit(_ name: String, scope: TimelineEditScope) {
+        guard pendingEdit == nil, let before = captureState(for: scope) else { return }
+        pendingEdit = (name, before)
+    }
+
+    /// …register exactly one undo step when it commits (nothing per-frame)…
+    func commitGestureEdit() {
+        guard let pending = pendingEdit else { return }
+        pendingEdit = nil
+        guard let after = captureState(for: pending.before.scope),
+              after != pending.before
+        else { return }
+        registerEdit(named: pending.name, before: pending.before)
+    }
+
+    /// …or drop the capture when the gesture cancels.
+    func cancelGestureEdit() {
+        pendingEdit = nil
     }
 
     // MARK: - Projects (SwiftData persistence)
@@ -377,9 +565,9 @@ final class TrackLibrary: ObservableObject {
         guard let target = record(for: id) else { return }
 
         currentProjectID = id
-        // History is per-project: switching starts a fresh history.
-        undoStack.removeAll()
-        redoStack.removeAll()
+        // History is per-project and session-only: switching starts fresh.
+        undoManager?.removeAllActions()
+        pendingEdit = nil
         updateHistoryFlags()
 
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
@@ -406,8 +594,8 @@ final class TrackLibrary: ObservableObject {
         try? modelContext.save()
 
         currentProjectID = record.id
-        undoStack.removeAll()
-        redoStack.removeAll()
+        undoManager?.removeAllActions()
+        pendingEdit = nil
         updateHistoryFlags()
 
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
@@ -422,8 +610,9 @@ final class TrackLibrary: ObservableObject {
     func renameCurrentProject(to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != projectName else { return }
-        pushUndoSnapshot()
-        projectName = trimmed
+        performEdit("Rename Project", scope: .projectName) {
+            projectName = trimmed
+        }
         saveCurrentProject()
     }
 
