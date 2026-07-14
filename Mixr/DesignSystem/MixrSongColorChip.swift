@@ -31,10 +31,39 @@ struct MixrSongColorChip: View {
         .clipShape(shape)
         .overlay {
             if isReducedGlowChip {
-                shape.strokeBorder(
-                    MixrColors.sfxOutline.opacity(0.58),
-                    lineWidth: 0.65
-                )
+                // Slight bevel rim — lit top-left, shaded bottom-right
+                ZStack {
+                    shape.strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                MixrColors.sfxOutline.opacity(0.82),
+                                MixrColors.sfxOutline.opacity(0.40),
+                                MixrColors.sfxSecondary.opacity(0.48),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.7
+                    )
+                    shape
+                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.45)
+                        .mask {
+                            LinearGradient(
+                                colors: [Color.white, Color.clear],
+                                startPoint: .topLeading,
+                                endPoint: UnitPoint(x: 0.55, y: 0.55)
+                            )
+                        }
+                    shape
+                        .strokeBorder(Color.black.opacity(0.30), lineWidth: 0.5)
+                        .mask {
+                            LinearGradient(
+                                colors: [Color.clear, Color.black.opacity(0.85)],
+                                startPoint: UnitPoint(x: 0.4, y: 0.4),
+                                endPoint: .bottomTrailing
+                            )
+                        }
+                }
             } else {
                 shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
             }
@@ -59,9 +88,9 @@ struct MixrSongColorChip: View {
         let bright = color.peakColor
         let base = color.color
         // Dim highlights ~10% and deepen shadows ~20% so the white icon reads clearer.
-        // SFX: light +10% twice; dark +10% twice for dimension.
-        let light: CGFloat = isReducedGlowChip ? 0.90 * 1.10 * 1.10 : 0.90
-        let dark: CGFloat = isReducedGlowChip ? 1.20 * 1.10 * 1.10 : 1.20
+        // SFX: prior stack, then +40% extremes; then light +20% / dark +10%.
+        let light: CGFloat = isReducedGlowChip ? 0.90 * 1.10 * 1.10 * 1.40 * 1.20 : 0.90
+        let dark: CGFloat = isReducedGlowChip ? 1.20 * 1.10 * 1.10 * 1.40 * 1.10 : 1.20
         // SFX option D — pull back body bloom so edges read crisp, not hazy.
         let bloomScale: CGFloat = isReducedGlowChip ? 0.72 : 1.0
 

@@ -70,11 +70,17 @@ struct MixrSFXMarkGlyph: View {
 
 struct MixrSFXOutlineButtonLabel: View {
     var style: MixrSFXMarkStyle = .d
-    var markWidth: CGFloat = 22 * 0.95
-    var markHeight: CGFloat = 15 * 0.95
+    /// Layout slot — keeps the button chrome size stable.
+    private let layoutMarkWidth: CGFloat = 22 * 0.95
+    private let layoutMarkHeight: CGFloat = 15 * 0.95
+    /// Drawn mark is 10% smaller than the original layout slot, then +5%.
+    private var markWidth: CGFloat { layoutMarkWidth * 0.90 * 1.05 }
+    private var markHeight: CGFloat { layoutMarkHeight * 0.90 * 1.05 }
 
     var body: some View {
         MixrSFXMark(style: style, width: markWidth, height: markHeight)
+            // Button chrome 10% wider; icon stays the same drawn size.
+            .frame(width: layoutMarkWidth * 1.10, height: layoutMarkHeight)
             .padding(.horizontal, 5)
             .padding(.vertical, MixrLayout.buttonPaddingV)
             .overlay {
@@ -84,7 +90,6 @@ struct MixrSFXOutlineButtonLabel: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
-
 // MARK: - Gallery
 
 /// Preview of the shipped connected **sfx** stencil in chip + footer chrome.
