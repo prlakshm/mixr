@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - SFX Monogram Style (mock options A–F)
+// MARK: - SFX Monogram Style (legacy A–F; production uses the connected stencil)
 
 enum MixrSFXMarkStyle: String, CaseIterable, Identifiable {
     case a, b, c, d, e, f
@@ -12,97 +12,38 @@ enum MixrSFXMarkStyle: String, CaseIterable, Identifiable {
         case .a: "A · Connected s–fx (tight join)"
         case .b: "B · Separated s + fx stencil"
         case .c: "C · Heavier / larger s"
-        case .d: "D · Tighter / compressed (shipped)"
+        case .d: "D · Connected cursive stencil (shipped)"
         case .e: "E · Taller s optical match"
         case .f: "F · Soft rounded s"
         }
     }
-
-    /// Gap between s and the fx stencil (negative = overlap).
-    var sGap: CGFloat {
-        switch self {
-        case .a: -1.5
-        case .b: 2.0
-        case .c: 1.0
-        case .d: 0.5
-        case .e: 0.5
-        case .f: 1.0
-        }
-    }
-
-    /// Relative size of the leading s vs fx stencil height.
-    var sScale: CGFloat {
-        switch self {
-        case .a, .b, .d: 0.78
-        case .c: 0.92
-        case .e: 0.88
-        case .f: 0.80
-        }
-    }
-
-    /// Overall horizontal compression (< 1 = tighter).
-    var trackingScale: CGFloat {
-        switch self {
-        case .d: 0.88
-        case .a: 0.94
-        default: 1.0
-        }
-    }
-
-    var sWeight: Font.Weight {
-        switch self {
-        case .c: .heavy
-        case .f: .semibold
-        default: .bold
-        }
-    }
-
-    var sDesign: Font.Design {
-        switch self {
-        case .f: .rounded
-        default: .default
-        }
-    }
 }
 
-// MARK: - Mark View (reference stencil + leading s)
+// MARK: - Mark View (full connected sfx template)
 
-/// Lowercase **sfx** mark. The **fx** portion is the After Effects reference
-/// image used as a template stencil; a matching italic **s** is prefixed.
+/// Lowercase **sfx** mark from the connected cursive reference stencil.
+/// Asset is template-rendered so `.foregroundStyle` tints hover / chip states.
 struct MixrSFXMark: View {
     var style: MixrSFXMarkStyle = .d
-    var width: CGFloat = 36
-    var height: CGFloat = 16
+    var width: CGFloat = 32
+    var height: CGFloat = 22
     var color: Color = MixrColors.textMuted.opacity(0.92)
+    /// Horizontal squeeze at constant height (connector length keeps the asset a bit wide).
+    var widthScale: CGFloat = 0.95
 
     var body: some View {
-        HStack(spacing: style.sGap) {
-            Text("s")
-                .font(.system(
-                    size: height * style.sScale,
-                    weight: style.sWeight,
-                    design: style.sDesign
-                ))
-                .italic()
-                .foregroundStyle(color)
-                // Optical baseline match to the stencil’s italic stem.
-                .offset(y: height * 0.02)
-
-            Image("SFXFXStencil")
-                .resizable()
-                .renderingMode(.template)
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .foregroundStyle(color)
-                .frame(height: height)
-        }
-        .scaleEffect(x: style.trackingScale, y: 1, anchor: .center)
-        .frame(width: width, height: height)
-        .accessibilityLabel("SFX")
+        Image("SFXMarkStencil")
+            .resizable()
+            .renderingMode(.template)
+            .interpolation(.high)
+            .foregroundStyle(color)
+            // Same height; 5% narrower than the natural aspect so the mark doesn’t read too wide.
+            .frame(width: width * widthScale, height: height)
+            .accessibilityLabel("SFX")
     }
 }
 
-/// Compact mark for song chips / tight slots — fills the given square.
+/// Compact mark for song chips / tight slots — 10% larger overall than `size`.
 struct MixrSFXMarkGlyph: View {
     var size: CGFloat = 14
     var color: Color = .white
@@ -110,8 +51,8 @@ struct MixrSFXMarkGlyph: View {
     var body: some View {
         MixrSFXMark(
             style: .d,
-            width: size * 1.85,
-            height: size * 0.95,
+            width: size * 1.45 * 1.10,
+            height: size * 1.10,
             color: color
         )
     }
@@ -121,8 +62,8 @@ struct MixrSFXMarkGlyph: View {
 
 struct MixrSFXOutlineButtonLabel: View {
     var style: MixrSFXMarkStyle = .d
-    var markWidth: CGFloat = 28
-    var markHeight: CGFloat = 13
+    var markWidth: CGFloat = 22 * 0.95
+    var markHeight: CGFloat = 15 * 0.95
 
     var body: some View {
         MixrSFXMark(style: style, width: markWidth, height: markHeight)
@@ -138,24 +79,22 @@ struct MixrSFXOutlineButtonLabel: View {
 
 // MARK: - Gallery
 
-/// Side-by-side mockups of AE-stencil **sfx** options (A–F).
+/// Preview of the shipped connected **sfx** stencil in chip + footer chrome.
 struct SFXIconOptionsGallery: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("SFX Icon Options")
+                    Text("SFX Icon")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(MixrColors.textPrimary)
-                    Text("fx is the After Effects reference stencil; s is prefixed to match. D is shipped.")
+                    Text("Connected cursive sfx stencil — template-tintable for footer and song chips.")
                         .font(.system(size: 11, weight: .regular))
                         .foregroundStyle(MixrColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                ForEach(MixrSFXMarkStyle.allCases) { style in
-                    optionRow(style: style)
-                }
+                shippedRow
             }
             .padding(20)
         }
@@ -169,9 +108,9 @@ struct SFXIconOptionsGallery: View {
         .preferredColorScheme(.dark)
     }
 
-    private func optionRow(style: MixrSFXMarkStyle) -> some View {
+    private var shippedRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(style.title)
+            Text(MixrSFXMarkStyle.d.title)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(MixrColors.textSecondary)
 
@@ -180,9 +119,9 @@ struct SFXIconOptionsGallery: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color(hex: "2D3136"))
                     MixrSFXMark(
-                        style: style,
-                        width: 64,
-                        height: 28,
+                        style: .d,
+                        width: 72,
+                        height: 48,
                         color: Color(hex: "CCCCCC")
                     )
                 }
@@ -206,9 +145,11 @@ struct SFXIconOptionsGallery: View {
                             .strokeBorder(MixrColors.divider, lineWidth: 0.5)
                     }
 
-                    MixrSFXOutlineButtonLabel(style: style)
+                    MixrSFXOutlineButtonLabel(style: .d)
+
+                    MixrSongColorChip(color: .silver, usesSFXMark: true)
                 }
-                .frame(width: 200)
+                .frame(width: 240)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)

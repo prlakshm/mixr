@@ -129,8 +129,9 @@ struct SFXCard: View {
         RoundedRectangle(cornerRadius: SFXMetrics.cardRadius, style: .continuous)
     }
 
-    private var silver: Color { MixrColors.waveformSilver }
-    private var silverPeak: Color { MixrWaveformColor.silver.peakColor }
+    private var silver: Color { MixrColors.sfxPrimary }
+    private var silverSoft: Color { MixrColors.sfxSecondary }
+    private var silverPeak: Color { MixrColors.sfxHighlight }
 
     var body: some View {
         VStack(spacing: MixrSpacing.sm) {
@@ -189,7 +190,7 @@ struct SFXCard: View {
                     LinearGradient(
                         colors: [
                             Color.white.opacity(0.085),
-                            silver.opacity(0.028),
+                            silverSoft.opacity(0.04),
                             Color.black.opacity(0.16),
                         ],
                         startPoint: .top,
@@ -201,7 +202,7 @@ struct SFXCard: View {
                 shape.fill(
                     RadialGradient(
                         colors: [
-                            silver.opacity(0.10),
+                            silverSoft.opacity(0.12),
                             Color.clear,
                         ],
                         center: UnitPoint(x: 0.5, y: 0.30),
@@ -220,7 +221,7 @@ struct SFXCard: View {
                     colors: [
                         Color.white.opacity(0.22),
                         silver.opacity(0.30),
-                        silver.opacity(0.10),
+                        silverSoft.opacity(0.14),
                         Color.clear,
                     ],
                     startPoint: .topLeading,
@@ -232,7 +233,7 @@ struct SFXCard: View {
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        silver.opacity(0.24),
+                        silverSoft.opacity(0.28),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -282,7 +283,7 @@ struct SFXLibraryPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous)
-                .strokeBorder(MixrColors.waveformSilver.opacity(0.16), lineWidth: 0.6)
+                .strokeBorder(MixrColors.sfxSecondary.opacity(0.22), lineWidth: 0.6)
         }
         .mixrShadow(.glassStrong)
         .mixrGlow(.glassAmbientStrong)

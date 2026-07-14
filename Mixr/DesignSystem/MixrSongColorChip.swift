@@ -33,6 +33,7 @@ struct MixrSongColorChip: View {
     private var defaultChipContent: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         let bright = color.peakColor
+        let base = color == .silver ? color.secondaryColor : color.color
 
         return ZStack {
             shape
@@ -43,7 +44,7 @@ struct MixrSongColorChip: View {
                             colors: [
                                 bright.opacity(0.96),
                                 bright.opacity(0.88),
-                                color.color.opacity(0.76),
+                                base.opacity(0.76),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -55,7 +56,7 @@ struct MixrSongColorChip: View {
                         RadialGradient(
                             colors: [
                                 bright.opacity(0.68),
-                                color.color.opacity(0.32),
+                                base.opacity(0.32),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.42, y: 0.38),

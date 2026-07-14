@@ -4,6 +4,8 @@ struct WaveformClip: View {
     let waveformColor: MixrWaveformColor
     var amplitudes: [CGFloat]?
     var height: CGFloat = WaveformMetrics.height
+    /// Selection only affects SFX specular intensity; song tracks ignore this.
+    var isSelected: Bool = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -11,9 +13,13 @@ struct WaveformClip: View {
             let samples = resolvedAmplitudes(for: size.width)
             let shape   = WaveformClipShape(tailWidth: WaveformMetrics.tailWidth)
             let wedge   = WaveformWedgeShape(tailWidth: WaveformMetrics.tailWidth)
+            let isSFX   = waveformColor == .silver
 
             ZStack {
-                WaveformClipBackground(waveformColor: waveformColor)
+                WaveformClipBackground(
+                    waveformColor: waveformColor,
+                    isSelected: isSelected
+                )
                 WaveformSilhouetteCanvas(waveformColor: waveformColor, amplitudes: samples)
             }
             .clipShape(shape)
@@ -21,18 +27,32 @@ struct WaveformClip: View {
             // Subtle tail guide lines inside the rounded clip.
             .overlay {
                 wedge
-                    .stroke(waveformColor.color.opacity(0.34), lineWidth: 0.75)
+                    .stroke(
+                        isSFX
+                            ? MixrColors.sfxSecondary.opacity(0.42)
+                            : waveformColor.color.opacity(0.34),
+                        lineWidth: 0.75
+                    )
             }
-            // Main clip border
+            // Outer rim — metallic gradient for SFX; flat color for songs.
             .overlay {
-                shape.stroke(
-                    waveformColor.color.opacity(0.38),
-                    lineWidth: MixrLayout.glassBorderWidth
-                )
+                if isSFX {
+                    shape.stroke(
+                        isSelected
+                            ? MixrWaveformColor.sfxMetallicOutlineSelected
+                            : MixrWaveformColor.sfxMetallicOutline,
+                        lineWidth: isSelected ? 1.05 : 0.9
+                    )
+                } else {
+                    shape.stroke(
+                        waveformColor.outlineColor,
+                        lineWidth: MixrLayout.glassBorderWidth
+                    )
+                }
             }
         }
         .frame(height: height)
-        // Tight, restrained glow — close to clip surface only
+        // Tight, restrained glow — same affordance for every track color.
         .shadow(
             color: WaveformSilhouetteStyle.glowColor(for: waveformColor),
             radius: 4,
@@ -72,6 +92,11 @@ private extension MixrWaveformColor {
                 WaveformClip(waveformColor: color)
                     .frame(maxWidth: .infinity)
             }
+            Text("SFX selected")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary)
+            WaveformClip(waveformColor: .silver, isSelected: true)
+                .frame(maxWidth: .infinity)
         }
         .padding(MixrSpacing.lg)
     }

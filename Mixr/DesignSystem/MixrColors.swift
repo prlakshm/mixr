@@ -82,8 +82,17 @@ enum MixrColors {
     static let waveformRed = Color(hex: "EF4444")
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
-    /// Silver — reserved for the Sound Effects track and SFX clips.
-    static let waveformSilver = Color(hex: "A3AEBE")
+
+    /// Polished metallic SFX lane — highlight catch light.
+    static let sfxHighlight = Color(hex: "F7F9FC")
+    /// Metallic SFX primary (outlines, grips, ambient silver).
+    static let sfxPrimary = Color(hex: "E7ECF3")
+    /// Mid silver for bands, fills, softer geometry.
+    static let sfxSecondary = Color(hex: "8A95A5")
+    /// Dark silver for machined depth / lower edges.
+    static let sfxShadow = Color(hex: "303741")
+    /// Alias for the Sound Effects track color (`sfxPrimary`).
+    static let waveformSilver = sfxPrimary
 
     static let glassBorderDefault = Color.white.opacity(0.06)
     static let glassBorderElevated = Color.white.opacity(0.08)
@@ -120,7 +129,15 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
         case .red: MixrColors.waveformRed
         case .yellow: MixrColors.waveformYellow
         case .blue: MixrColors.waveformBlue
-        case .silver: MixrColors.waveformSilver
+        case .silver: MixrColors.sfxPrimary
+        }
+    }
+
+    /// Softer companion — SFX uses blue-cast secondary for fills / transitions.
+    var secondaryColor: Color {
+        switch self {
+        case .silver: MixrColors.sfxSecondary
+        default: color
         }
     }
 
@@ -129,12 +146,39 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
         case .pink:
             MixrColors.waveformPink.opacity(0.20)
         default:
+            // Match song-track resting glow affordance (including SFX).
             color.opacity(0.20)
         }
     }
 
+    /// Clip body tint / track wash fill.
     var tintColor: Color {
-        color.opacity(0.18)
+        switch self {
+        case .silver:
+            MixrColors.sfxSecondary.opacity(0.18)
+        default:
+            color.opacity(0.18)
+        }
+    }
+
+    /// Resting clip outline (flat fallback; SFX uses metallic gradient stroke).
+    var outlineColor: Color {
+        switch self {
+        case .silver:
+            MixrColors.sfxPrimary.opacity(0.72)
+        default:
+            color.opacity(0.45)
+        }
+    }
+
+    /// Selected clip outline.
+    var selectedOutlineColor: Color {
+        switch self {
+        case .silver:
+            MixrColors.sfxHighlight.opacity(0.92)
+        default:
+            color.opacity(1.0)
+        }
     }
 
     /// Brighter peak color for waveform silhouette — dominant over clip tint.
@@ -145,8 +189,41 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
         case .red: Color(hex: "F87171")
         case .yellow: Color(hex: "FACC15")
         case .blue: Color(hex: "38BDF8")
-        case .silver: Color(hex: "DCE3ED")
+        case .silver: MixrColors.sfxHighlight
         }
+    }
+
+    /// Waveform silhouette opacity multiplier.
+    var waveformOpacity: CGFloat {
+        1.0
+    }
+
+    /// Metallic outline gradient for SFX clips (upper-left catches light).
+    static var sfxMetallicOutline: LinearGradient {
+        LinearGradient(
+            colors: [
+                MixrColors.sfxHighlight.opacity(0.88),
+                MixrColors.sfxSecondary.opacity(0.52),
+                MixrColors.sfxShadow.opacity(0.56),
+                MixrColors.sfxPrimary.opacity(0.72),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    /// Selected metallic outline — same structure, slightly brighter catch light.
+    static var sfxMetallicOutlineSelected: LinearGradient {
+        LinearGradient(
+            colors: [
+                MixrColors.sfxHighlight.opacity(0.96),
+                MixrColors.sfxPrimary.opacity(0.78),
+                MixrColors.sfxSecondary.opacity(0.58),
+                MixrColors.sfxShadow.opacity(0.50),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 

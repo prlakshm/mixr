@@ -3028,7 +3028,9 @@ private struct TLTrackLane: View {
         let frames = resolvedPreviewFrames()
 
         ZStack(alignment: .leading) {
-            track.color.color.opacity(0.025)
+            track.color == .silver
+                ? MixrColors.sfxShadow.opacity(0.10)
+                : track.color.color.opacity(0.025)
             MixrColors.divider
                 .frame(height: 0.5)
                 .frame(maxHeight: .infinity, alignment: .bottom)
@@ -3139,29 +3141,34 @@ private struct TLTrackLane: View {
     ) -> some View {
         let selectedBorderHeight = TLK.trackRowHeight - 2
 
-        WaveformClip(waveformColor: track.color)
+        WaveformClip(waveformColor: track.color, isSelected: isSel && !isDraggingThis)
             .frame(height: TLK.waveformHeight)
             .frame(width: clipW)
             .overlay {
                 if isSel && !isDraggingThis {
+                    // Same selection affordance for every track — only the accent hue changes.
+                    let accent = track.color.color
+                    let rimHighlight = track.color == .silver
+                        ? MixrColors.sfxHighlight.opacity(0.14)
+                        : Color.white.opacity(0.14)
                     ZStack {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(track.color.color.opacity(0.88), lineWidth: 8.2)
+                            .stroke(accent.opacity(0.88), lineWidth: 8.2)
                             .blur(radius: 5.6)
                             .opacity(0.7)
                             .padding(-3.0)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(track.color.color.opacity(0.38), lineWidth: 8.5)
+                            .strokeBorder(accent.opacity(0.38), lineWidth: 8.5)
                             .blur(radius: 3.2)
                             .opacity(0.82)
                             .padding(1.0)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(track.color.color.opacity(1.0), lineWidth: 2.4)
-                            .shadow(color: track.color.color.opacity(0.88), radius: 7)
-                            .shadow(color: track.color.color.opacity(0.5), radius: 15)
+                            .stroke(accent.opacity(1.0), lineWidth: 2.4)
+                            .shadow(color: accent.opacity(0.88), radius: 7)
+                            .shadow(color: accent.opacity(0.5), radius: 15)
                             .padding(-0.35)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
+                            .stroke(rimHighlight, lineWidth: 0.5)
                             .padding(1.2)
                     }
                     .frame(width: clipW, height: selectedBorderHeight)
@@ -3646,7 +3653,7 @@ private struct TLEffectsPanel: View {
 
                 if !isCollapsed && !hasTarget {
                     Text("Select a clip to shape its effects")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: EffectCardMetrics.titleFontSize, weight: .semibold))
                         .foregroundStyle(MixrColors.textSecondary.opacity(0.75))
                         .transition(.opacity)
                 }
