@@ -31,34 +31,50 @@ struct MixrSongColorChip: View {
         .clipShape(shape)
         .overlay {
             if isReducedGlowChip {
-                // Slight bevel rim — lit top-left, shaded bottom-right
+                // Liquid-glass edge highlights — bright top-left lip, soft secondary rim
                 ZStack {
                     shape.strokeBorder(
                         LinearGradient(
                             colors: [
-                                MixrColors.sfxOutline.opacity(0.82),
-                                MixrColors.sfxOutline.opacity(0.40),
+                                MixrColors.sfxOutline.opacity(0.88),
+                                MixrColors.sfxOutline.opacity(0.38),
                                 MixrColors.sfxSecondary.opacity(0.48),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 0.7
+                        lineWidth: 0.75
                     )
+                    // Primary catch — sharp top-left inner rim
                     shape
-                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.45)
+                        .strokeBorder(Color.white.opacity(0.58), lineWidth: 0.65)
                         .mask {
                             LinearGradient(
-                                colors: [Color.white, Color.clear],
+                                colors: [
+                                    Color.white,
+                                    Color.white.opacity(0.55),
+                                    Color.clear,
+                                ],
                                 startPoint: .topLeading,
-                                endPoint: UnitPoint(x: 0.55, y: 0.55)
+                                endPoint: UnitPoint(x: 0.58, y: 0.52)
                             )
                         }
+                    // Soft secondary lip — bottom-right (convex glass feel)
                     shape
-                        .strokeBorder(Color.black.opacity(0.30), lineWidth: 0.5)
+                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.8)
                         .mask {
                             LinearGradient(
-                                colors: [Color.clear, Color.black.opacity(0.85)],
+                                colors: [Color.clear, Color.white.opacity(0.85)],
+                                startPoint: UnitPoint(x: 0.38, y: 0.38),
+                                endPoint: .bottomTrailing
+                            )
+                        }
+                    // Darker bottom-right rim catch
+                    shape
+                        .strokeBorder(Color.black.opacity(0.34), lineWidth: 0.55)
+                        .mask {
+                            LinearGradient(
+                                colors: [Color.clear, Color.black.opacity(0.92)],
                                 startPoint: UnitPoint(x: 0.4, y: 0.4),
                                 endPoint: .bottomTrailing
                             )
@@ -88,9 +104,9 @@ struct MixrSongColorChip: View {
         let bright = color.peakColor
         let base = color.color
         // Dim highlights ~10% and deepen shadows ~20% so the white icon reads clearer.
-        // SFX: prior stack, then +40% extremes; then light +20% / dark +10%.
-        let light: CGFloat = isReducedGlowChip ? 0.90 * 1.10 * 1.10 * 1.40 * 1.20 : 0.90
-        let dark: CGFloat = isReducedGlowChip ? 1.20 * 1.10 * 1.10 * 1.40 * 1.10 : 1.20
+        // SFX: prior stack + light +15% for liquid edge; dark +10% for deeper BR rim.
+        let light: CGFloat = isReducedGlowChip ? 0.90 * 1.10 * 1.10 * 1.40 * 1.20 * 1.15 : 0.90
+        let dark: CGFloat = isReducedGlowChip ? 1.20 * 1.10 * 1.10 * 1.40 * 1.10 * 1.10 : 1.20
         // SFX option D — pull back body bloom so edges read crisp, not hazy.
         let bloomScale: CGFloat = isReducedGlowChip ? 0.72 : 1.0
 
@@ -128,8 +144,8 @@ struct MixrSongColorChip: View {
                     shape.fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.15 * light),
-                                Color.white.opacity(0.06 * light),
+                                Color.white.opacity((isReducedGlowChip ? 0.20 : 0.15) * light),
+                                Color.white.opacity((isReducedGlowChip ? 0.09 : 0.06) * light),
                                 Color.clear,
                                 Color.clear,
                             ],
@@ -153,15 +169,34 @@ struct MixrSongColorChip: View {
                     shape.fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(0.18 * light),
-                                bright.opacity(0.10 * light),
+                                Color.white.opacity((isReducedGlowChip ? 0.28 : 0.18) * light),
+                                bright.opacity((isReducedGlowChip ? 0.14 : 0.10) * light),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.18, y: 0.14),
                             startRadius: 0,
-                            endRadius: 10
+                            endRadius: isReducedGlowChip ? 9 : 10
                         )
                     )
+                }
+                .overlay {
+                    if isReducedGlowChip {
+                        // Narrow liquid edge sheen — restrained, not frosted
+                        shape.fill(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0.30),
+                                    .init(color: Color.white.opacity(0.05), location: 0.38),
+                                    .init(color: Color.white.opacity(0.18), location: 0.44),
+                                    .init(color: Color.white.opacity(0.05), location: 0.50),
+                                    .init(color: .clear, location: 0.60),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.screen)
+                    }
                 }
                 .overlay {
                     shape.fill(
@@ -177,12 +212,15 @@ struct MixrSongColorChip: View {
                 }
                 .overlay(alignment: .topLeading) {
                     shape
-                        .strokeBorder(Color.white.opacity(0.14 * light), lineWidth: 0.5)
+                        .strokeBorder(
+                            Color.white.opacity((isReducedGlowChip ? 0.28 : 0.14) * light),
+                            lineWidth: isReducedGlowChip ? 0.65 : 0.5
+                        )
                         .mask {
                             LinearGradient(
                                 colors: [
                                     Color.white,
-                                    Color.white.opacity(0.18),
+                                    Color.white.opacity(isReducedGlowChip ? 0.35 : 0.18),
                                     Color.clear,
                                 ],
                                 startPoint: .topLeading,
@@ -192,12 +230,15 @@ struct MixrSongColorChip: View {
                 }
                 .overlay(alignment: .bottomTrailing) {
                     shape
-                        .strokeBorder(Color.black.opacity(min(1, 0.18 * dark)), lineWidth: 0.45)
+                        .strokeBorder(
+                            Color.black.opacity(min(1, (isReducedGlowChip ? 0.22 : 0.18) * dark)),
+                            lineWidth: isReducedGlowChip ? 0.55 : 0.45
+                        )
                         .mask {
                             LinearGradient(
                                 colors: [
                                     Color.clear,
-                                    Color.black.opacity(min(1, 0.65 * dark)),
+                                    Color.black.opacity(min(1, (isReducedGlowChip ? 0.78 : 0.65) * dark)),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
