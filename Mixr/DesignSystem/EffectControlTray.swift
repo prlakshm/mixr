@@ -8,8 +8,11 @@ enum EffectTrayMetrics {
     static let presetWidth: CGFloat = 236
     static let height: CGFloat = EffectCardMetrics.height
     static let cornerRadius: CGFloat = EffectCardMetrics.cornerRadius
-    /// Expanded tray target fraction of the effects section content width.
-    static let expandedSectionWidthFraction: CGFloat = 0.75
+    /// Expanded tray fills remaining panel width after the focused card.
+    /// (Legacy fraction kept only as documentation — tray uses leftover space.)
+    static let expandedSectionWidthFraction: CGFloat = 1.0
+    /// Slider row occupies this fraction of the tray content width, centered.
+    static let sliderRowWidthFraction: CGFloat = 0.75
     /// Preset track width — transition Duration width × 1.10.
     /// Pill widths stay content-measured; only the outer track grows.
     static let presetSegmentedWidth: CGFloat =
@@ -17,6 +20,8 @@ enum EffectTrayMetrics {
     static let presetSegmentedHeight: CGFloat = 28
     /// Nudge slider + presets slightly lower in the tray.
     static let presetContentDownshift: CGFloat = 3.5
+    /// Slow ease for card slide / tray grow / sibling push (+10% from 0.62).
+    static let expandAnimationDuration: Double = 0.682
 
     static func width(for effect: MixrEffect) -> CGFloat {
         effect == .reverb || effect == .echo ? presetWidth : sliderOnlyWidth
@@ -47,32 +52,38 @@ struct EffectControlTray: View {
     private var showsCurrentValue: Bool { hasDragged || level > 0.5 }
 
     var body: some View {
-        VStack(spacing: hasPresets ? 7 : 0) {
-            sliderRow
-                .frame(maxHeight: hasPresets ? nil : .infinity)
+        GeometryReader { geo in
+            let contentWidth = max(0, geo.size.width)
+            let sliderWidth = contentWidth * EffectTrayMetrics.sliderRowWidthFraction
 
-            if hasPresets {
-                presetControl
-                    .frame(
-                        width: EffectTrayMetrics.presetSegmentedWidth,
-                        height: EffectTrayMetrics.presetSegmentedHeight
-                    )
+            VStack(spacing: hasPresets ? 7 : 0) {
+                sliderRow
+                    .frame(width: sliderWidth)
                     .frame(maxWidth: .infinity, alignment: .center)
+
+                if hasPresets {
+                    presetControl
+                        .frame(
+                            width: EffectTrayMetrics.presetSegmentedWidth,
+                            height: EffectTrayMetrics.presetSegmentedHeight
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
+            .padding(
+                .top,
+                hasPresets ? 8 + EffectTrayMetrics.presetContentDownshift : 0
+            )
+            .padding(
+                .bottom,
+                hasPresets ? max(0, 8 - EffectTrayMetrics.presetContentDownshift) : 0
+            )
+            .frame(
+                width: contentWidth,
+                height: EffectTrayMetrics.height,
+                alignment: hasPresets ? .top : .center
+            )
         }
-        .padding(.horizontal, MixrSpacing.md)
-        .padding(
-            .top,
-            hasPresets
-                ? 8 + EffectTrayMetrics.presetContentDownshift
-                : MixrSpacing.md
-        )
-        .padding(
-            .bottom,
-            hasPresets
-                ? max(0, 8 - EffectTrayMetrics.presetContentDownshift)
-                : MixrSpacing.md
-        )
         .frame(maxWidth: .infinity)
         .frame(height: EffectTrayMetrics.height)
         .background { trayGlass }
@@ -90,7 +101,7 @@ struct EffectControlTray: View {
     private var sliderRow: some View {
         HStack(spacing: 8) {
             Text("0")
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(MixrColors.textSecondary)
 
             TLVolumeSlider(
@@ -108,7 +119,7 @@ struct EffectControlTray: View {
             .frame(maxWidth: .infinity)
 
             Text(showsCurrentValue ? "\(Int(level.rounded()))" : "100")
-                .font(.system(size: 9, weight: showsCurrentValue ? .semibold : .medium))
+                .font(.system(size: 9.5, weight: showsCurrentValue ? .semibold : .medium))
                 .foregroundStyle(showsCurrentValue ? MixrColors.textPrimary : MixrColors.textSecondary)
                 .frame(width: 22, alignment: .trailing)
         }

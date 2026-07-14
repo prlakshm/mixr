@@ -3543,7 +3543,19 @@ private struct TLEffectsPanel: View {
     private var hasTarget: Bool { targetClipPath != nil }
 
     private var expandAnimation: Animation {
-        .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)
+        .easeInOut(duration: EffectTrayMetrics.expandAnimationDuration)
+    }
+
+    /// Sibling cards stay solid for the first 3/4 of the push, then fade in the last quarter.
+    private var siblingFadeOutAnimation: Animation {
+        let total = EffectTrayMetrics.expandAnimationDuration
+        return .easeInOut(duration: total * 0.25).delay(total * 0.75)
+    }
+
+    /// On close, fade siblings back in during the first quarter of the reverse push.
+    private var siblingFadeInAnimation: Animation {
+        let total = EffectTrayMetrics.expandAnimationDuration
+        return .easeInOut(duration: total * 0.25)
     }
 
     var body: some View {
@@ -3581,94 +3593,101 @@ private struct TLEffectsPanel: View {
     @ViewBuilder
     private var effectsContent: some View {
         GeometryReader { geo in
+            // Match effectsHeader title inset so the focused card lines up with "Effects".
             let leadingPad: CGFloat = 16
             let trailingPad: CGFloat = 16
             let gap: CGFloat = 8
             let contentWidth = max(0, geo.size.width - leadingPad - trailingPad)
             let cardWidth = TLK.compactEffectCardWidth
-            let preferredTray = contentWidth * EffectTrayMetrics.expandedSectionWidthFraction
-            let trayWidth = max(
-                EffectTrayMetrics.sliderOnlyWidth,
-                min(preferredTray, contentWidth - cardWidth - gap)
-            )
+            let trayWidth = max(0, contentWidth - cardWidth - gap)
+            let isExpanded = selectedEffect?.isAdjustable == true && targetClipPath != nil
+            let focusIndex = selectedEffect.flatMap { MixrEffect.allCases.firstIndex(of: $0) } ?? 0
+            // Push: slide focused card under "Effects"; left cards exit left.
+            let rowOffset: CGFloat = isExpanded
+                ? -CGFloat(focusIndex) * (cardWidth + gap)
+                : 0
 
-            Group {
-                if let selected = selectedEffect,
-                   selected.isAdjustable,
-                   let path = targetClipPath {
-                    expandedRow(
-                        effect: selected,
-                        path: path,
-                        trayWidth: trayWidth,
-                        gap: gap
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: gap) {
+                    ForEach(MixrEffect.allCases) { effect in
+                        let isFocus = selectedEffect == effect
+                        let isAway = isExpanded && !isFocus
+                        let restingOpacity: Double =
+                            effect.isAdjustable && !hasTarget ? 0.55 : 1
+
+                        // Keep every card in-layout so open/close is a push, not a fade.
+                        HStack(spacing: gap) {
+                            TLCompactEffectCard(
+                                effect: effect,
+                                isSelected: isFocus
+                            )
+                            .frame(width: cardWidth, alignment: .leading)
+                            .opacity(isAway ? 0 : restingOpacity)
+                            .animation(
+                                isAway ? siblingFadeOutAnimation : siblingFadeInAnimation,
+                                value: isAway
+                            )
+                            .onTapGesture { handleCardTap(effect) }
+
+                            // Only on the focused card — grows right and pushes trailing cards out.
+                            if isFocus, effect.isAdjustable {
+                                traySlot(
+                                    effect: effect,
+                                    width: isExpanded ? trayWidth : 0,
+                                    visible: isExpanded
+                                )
+                            }
+                        }
+                        .allowsHitTesting(!isExpanded || isFocus)
+                    }
+                }
+                .padding(.leading, leadingPad)
+                .padding(.trailing, isExpanded ? trailingPad : 32)
+                .padding(.top, 6)
+                .padding(.bottom, 10)
+                .offset(x: rowOffset)
+                .animation(expandAnimation, value: selectedEffect)
+            }
+            .scrollDisabled(isExpanded)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .trailing) {
+                if !isExpanded {
+                    LinearGradient(
+                        colors: [
+                            Color.clear,
+                            MixrColors.backgroundSecondary.opacity(0.46),
+                            MixrColors.backgroundSecondary.opacity(0.74),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
-                    .padding(.leading, leadingPad)
-                    .padding(.trailing, trailingPad)
+                    .frame(width: 34)
+                    .allowsHitTesting(false)
                     .transition(.opacity)
-                } else {
-                    idleCardScroll
-                        .transition(.opacity)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .animation(expandAnimation, value: selectedEffect)
+            .clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 22)
     }
 
-    private var idleCardScroll: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(MixrEffect.allCases) { effect in
-                    TLCompactEffectCard(
-                        effect: effect,
-                        isSelected: selectedEffect == effect
-                    )
-                    .opacity(effect.isAdjustable && !hasTarget ? 0.55 : 1)
-                    .onTapGesture { handleCardTap(effect) }
-                }
-            }
-            .padding(.leading, 16)
-            .padding(.trailing, 32)
-            .padding(.top, 6)
-            .padding(.bottom, 10)
-        }
-        .overlay(alignment: .trailing) {
-            LinearGradient(
-                colors: [
-                    Color.clear,
-                    MixrColors.backgroundSecondary.opacity(0.46),
-                    MixrColors.backgroundSecondary.opacity(0.74),
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: 34)
-            .allowsHitTesting(false)
-        }
-    }
-
-    private func expandedRow(
+    @ViewBuilder
+    private func traySlot(
         effect: MixrEffect,
-        path: (trackIdx: Int, clipIdx: Int),
-        trayWidth: CGFloat,
-        gap: CGFloat
+        width: CGFloat,
+        visible: Bool
     ) -> some View {
-        HStack(alignment: .top, spacing: gap) {
-            TLCompactEffectCard(effect: effect, isSelected: true)
-                .onTapGesture { handleCardTap(effect) }
-
-            effectTray(effect: effect, path: path)
-                .frame(width: trayWidth)
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    )
-                )
+        Group {
+            if visible, let path = targetClipPath {
+                effectTray(effect: effect, path: path)
+            } else {
+                Color.clear
+            }
         }
-        .padding(.top, 6)
-        .padding(.bottom, 10)
+        .frame(width: width, alignment: .leading)
+        .clipped()
+        .opacity(visible ? 1 : 0)
+        .allowsHitTesting(visible)
     }
 
     private func handleCardTap(_ effect: MixrEffect) {
