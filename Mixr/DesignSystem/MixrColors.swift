@@ -94,16 +94,6 @@ enum MixrColors {
     static let sfxOutline = Color(hex: "DDE5F0")
     /// Resting clip ambient glow.
     static let sfxGlow = Color(hex: "E7EDF5")
-    /// SFX song-chip vertical gradient — top catch light.
-    static let sfxChipTop = Color(hex: "D9E1EB")
-    /// SFX song-chip vertical gradient — darker graphite center (icon contrast).
-    static let sfxChipCenter = Color(hex: "8F98A6")
-    /// SFX song-chip vertical gradient — lower silver.
-    static let sfxChipBottom = Color(hex: "C6CFDA")
-    /// SFX song-chip bright rim.
-    static let sfxChipOutline = Color(hex: "E5EBF3")
-    /// Soft localized backdrop behind the white sfx mark.
-    static let sfxChipIconBackdrop = Color(hex: "5F6875")
     /// Alias for the Sound Effects track color (`sfxPrimary`).
     static let waveformSilver = sfxPrimary
 

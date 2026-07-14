@@ -28,8 +28,9 @@ struct MixrSFXMark: View {
     var width: CGFloat = 32
     var height: CGFloat = 22
     var color: Color = MixrColors.textMuted.opacity(0.92)
-    /// Horizontal squeeze at constant height (connector length keeps the asset a bit wide).
-    var widthScale: CGFloat = 0.95
+    /// Horizontal squeeze at constant height — another 5% narrower so the mark
+    /// doesn’t read stretched (chip + footer button share this).
+    var widthScale: CGFloat = 0.95 * 0.95
 
     var body: some View {
         Image("SFXMarkStencil")
@@ -37,22 +38,29 @@ struct MixrSFXMark: View {
             .renderingMode(.template)
             .interpolation(.high)
             .foregroundStyle(color)
-            // Same height; 5% narrower than the natural aspect so the mark doesn’t read too wide.
+            // Same height; narrower frame so the stencil isn’t horizontally stretched.
             .frame(width: width * widthScale, height: height)
             .accessibilityLabel("SFX")
     }
 }
 
-/// Compact mark for song chips / tight slots — 10% larger overall than `size`.
+/// Compact mark for song chips / tight slots.
+/// Taller than before; width∶height matches the footer SFX button (22∶15).
 struct MixrSFXMarkGlyph: View {
     var size: CGFloat = 14
     var color: Color = .white
 
+    /// Same aspect as `MixrSFXOutlineButtonLabel` (`markWidth` 22 / `markHeight` 15).
+    private static let buttonMarkAspect: CGFloat = 22.0 / 15.0
+
     var body: some View {
+        // Raise height vs the old `size * 1.10`; width follows the button aspect.
+        let height = size * 1.22
+        let width = height * Self.buttonMarkAspect
         MixrSFXMark(
             style: .d,
-            width: size * 1.45 * 1.10,
-            height: size * 1.10,
+            width: width,
+            height: height,
             color: color
         )
     }

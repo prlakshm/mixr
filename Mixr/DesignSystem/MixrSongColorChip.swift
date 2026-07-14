@@ -14,57 +14,67 @@ struct MixrSongColorChip: View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
     }
 
+    /// Option D — reduced outer glow, crisp edges (SFX chip only).
+    private var isReducedGlowChip: Bool { color == .silver }
+
     var body: some View {
         Group {
             if let artworkData, let image = UIImage(data: artworkData) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-            } else if color == .silver {
-                silverChipContent
             } else {
-                songChipContent
+                defaultChipContent
             }
         }
         .frame(width: 34, height: 34)
         .clipShape(shape)
         .overlay {
-            if color == .silver {
+            if isReducedGlowChip {
                 shape.strokeBorder(
-                    MixrColors.sfxChipOutline.opacity(0.72),
+                    MixrColors.sfxOutline.opacity(0.58),
                     lineWidth: 0.65
                 )
             } else {
                 shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
             }
         }
-        .shadow(color: .black.opacity(0.24), radius: 3, x: 0, y: 1.5)
         .shadow(
-            color: color == .silver
-                ? MixrColors.sfxChipOutline.opacity(0.12)
+            color: .black.opacity(isReducedGlowChip ? 0.30 : 0.24),
+            radius: isReducedGlowChip ? 2 : 3,
+            x: 0,
+            y: isReducedGlowChip ? 1 : 1.5
+        )
+        .shadow(
+            color: isReducedGlowChip
+                ? MixrColors.sfxGlow.opacity(0.10)
                 : color.color.opacity(0.28),
-            radius: color == .silver ? 3 : 5,
+            radius: isReducedGlowChip ? 2 : 5,
             x: 0,
             y: 0
         )
     }
 
-    // MARK: - Song colors (unchanged)
-
-    private var songChipContent: some View {
+    private var defaultChipContent: some View {
         let bright = color.peakColor
         let base = color.color
+        // Dim highlights ~10% and deepen shadows ~20% so the white icon reads clearer.
+        // SFX: light +10% twice; dark +10% twice for dimension.
+        let light: CGFloat = isReducedGlowChip ? 0.90 * 1.10 * 1.10 : 0.90
+        let dark: CGFloat = isReducedGlowChip ? 1.20 * 1.10 * 1.10 : 1.20
+        // SFX option D — pull back body bloom so edges read crisp, not hazy.
+        let bloomScale: CGFloat = isReducedGlowChip ? 0.72 : 1.0
 
         return ZStack {
             shape
-                .fill(bright.opacity(0.80))
+                .fill(bright.opacity(0.80 * light))
                 .overlay {
                     shape.fill(
                         LinearGradient(
                             colors: [
-                                bright.opacity(0.96),
-                                bright.opacity(0.88),
-                                base.opacity(0.76),
+                                bright.opacity(0.96 * light),
+                                bright.opacity(0.88 * light),
+                                base.opacity(0.76 * light),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -75,13 +85,13 @@ struct MixrSongColorChip: View {
                     shape.fill(
                         RadialGradient(
                             colors: [
-                                bright.opacity(0.68),
-                                base.opacity(0.32),
+                                bright.opacity(0.68 * light * bloomScale),
+                                base.opacity(0.32 * light * bloomScale),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.42, y: 0.38),
                             startRadius: 0,
-                            endRadius: 22
+                            endRadius: isReducedGlowChip ? 16 : 22
                         )
                     )
                 }
@@ -89,8 +99,8 @@ struct MixrSongColorChip: View {
                     shape.fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.15),
-                                Color.white.opacity(0.06),
+                                Color.white.opacity(0.15 * light),
+                                Color.white.opacity(0.06 * light),
                                 Color.clear,
                                 Color.clear,
                             ],
@@ -114,8 +124,8 @@ struct MixrSongColorChip: View {
                     shape.fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(0.18),
-                                bright.opacity(0.10),
+                                Color.white.opacity(0.18 * light),
+                                bright.opacity(0.10 * light),
                                 Color.clear,
                             ],
                             center: UnitPoint(x: 0.18, y: 0.14),
@@ -129,7 +139,7 @@ struct MixrSongColorChip: View {
                         LinearGradient(
                             colors: [
                                 Color.clear,
-                                Color.black.opacity(0.12),
+                                Color.black.opacity(min(1, 0.12 * dark)),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -138,7 +148,7 @@ struct MixrSongColorChip: View {
                 }
                 .overlay(alignment: .topLeading) {
                     shape
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                        .strokeBorder(Color.white.opacity(0.14 * light), lineWidth: 0.5)
                         .mask {
                             LinearGradient(
                                 colors: [
@@ -153,12 +163,12 @@ struct MixrSongColorChip: View {
                 }
                 .overlay(alignment: .bottomTrailing) {
                     shape
-                        .strokeBorder(Color.black.opacity(0.18), lineWidth: 0.45)
+                        .strokeBorder(Color.black.opacity(min(1, 0.18 * dark)), lineWidth: 0.45)
                         .mask {
                             LinearGradient(
                                 colors: [
                                     Color.clear,
-                                    Color.black.opacity(0.65),
+                                    Color.black.opacity(min(1, 0.65 * dark)),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -166,111 +176,38 @@ struct MixrSongColorChip: View {
                         }
                 }
 
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            bright.opacity(0.50),
-                            Color.clear,
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 8
+            if !isReducedGlowChip {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                bright.opacity(0.50 * light),
+                                Color.clear,
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 8
+                        )
                     )
-                )
-                .frame(width: 14, height: 14)
-                .blur(radius: 1.5)
-
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.white)
-                .shadow(color: bright.opacity(0.60), radius: 3)
-                .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
-        }
-    }
-
-    // MARK: - SFX silver — dimensional metallic, darker center for white icon
-
-    private var silverChipContent: some View {
-        ZStack {
-            // Vertical 3-stop metallic body — light / graphite / light
-            shape.fill(
-                LinearGradient(
-                    colors: [
-                        MixrColors.sfxChipTop.opacity(0.92),
-                        MixrColors.sfxChipCenter.opacity(0.88),
-                        MixrColors.sfxChipBottom.opacity(0.90),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-
-            // Soft top specular — edges stay brighter than center
-            shape.fill(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.22),
-                        Color.white.opacity(0.06),
-                        Color.clear,
-                    ],
-                    startPoint: .top,
-                    endPoint: UnitPoint(x: 0.5, y: 0.42)
-                )
-            )
-
-            // Inner shadow for machined depth
-            shape
-                .strokeBorder(Color.black.opacity(0.28), lineWidth: 1.1)
-                .blur(radius: 1.2)
-                .offset(y: 0.8)
-                .mask(shape)
-
-            // Top-edge rim catch
-            shape
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            MixrColors.sfxChipOutline.opacity(0.55),
-                            MixrColors.sfxChipOutline.opacity(0.08),
-                            Color.clear,
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 0.55
-                )
-                .mask {
-                    LinearGradient(
-                        colors: [Color.white, Color.clear],
-                        startPoint: .top,
-                        endPoint: .center
-                    )
-                }
-
-            // Soft darker localized backdrop behind the icon (no hard shape)
-            RadialGradient(
-                colors: [
-                    MixrColors.sfxChipIconBackdrop.opacity(0.55),
-                    MixrColors.sfxChipIconBackdrop.opacity(0.18),
-                    Color.clear,
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 13
-            )
-            .frame(width: 26, height: 26)
-            .blur(radius: 2.2)
-            .allowsHitTesting(false)
+                    .frame(width: 14, height: 14)
+                    .blur(radius: 1.5)
+            }
 
             if usesSFXMark {
-                MixrSFXMarkGlyph(size: 13, color: .white)
-                    .shadow(color: .black.opacity(0.35), radius: 1.2, y: 0.6)
+                MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95, color: .white)
+                    .shadow(
+                        color: isReducedGlowChip
+                            ? .clear
+                            : bright.opacity(0.60 * light),
+                        radius: isReducedGlowChip ? 0 : 3
+                    )
+                    .shadow(color: .black.opacity(min(1, 0.18 * dark)), radius: 0.5, x: 0, y: 0.5)
             } else {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color.white)
-                    .shadow(color: .black.opacity(0.35), radius: 1.2, y: 0.6)
+                    .shadow(color: bright.opacity(0.60 * light), radius: 3)
+                    .shadow(color: .black.opacity(min(1, 0.18 * dark)), radius: 0.5, x: 0, y: 0.5)
             }
         }
     }
