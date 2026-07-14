@@ -3,10 +3,20 @@ import SwiftUI
 // MARK: - Effect Control Tray
 
 enum EffectTrayMetrics {
+    /// Fallback width for previews / compact contexts.
     static let sliderOnlyWidth: CGFloat = 190
     static let presetWidth: CGFloat = 236
     static let height: CGFloat = EffectCardMetrics.height
     static let cornerRadius: CGFloat = EffectCardMetrics.cornerRadius
+    /// Expanded tray target fraction of the effects section content width.
+    static let expandedSectionWidthFraction: CGFloat = 0.75
+    /// Preset track width — transition Duration width × 1.10.
+    /// Pill widths stay content-measured; only the outer track grows.
+    static let presetSegmentedWidth: CGFloat =
+        TLClipEditingMetrics.menuSettingsDurationSegmentedWidth * 1.10
+    static let presetSegmentedHeight: CGFloat = 28
+    /// Nudge slider + presets slightly lower in the tray.
+    static let presetContentDownshift: CGFloat = 3.5
 
     static func width(for effect: MixrEffect) -> CGFloat {
         effect == .reverb || effect == .echo ? presetWidth : sliderOnlyWidth
@@ -43,12 +53,28 @@ struct EffectControlTray: View {
 
             if hasPresets {
                 presetControl
-                    .frame(height: 28)
+                    .frame(
+                        width: EffectTrayMetrics.presetSegmentedWidth,
+                        height: EffectTrayMetrics.presetSegmentedHeight
+                    )
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .padding(.horizontal, MixrSpacing.md)
-        .padding(.vertical, hasPresets ? 8 : MixrSpacing.md)
-        .frame(width: EffectTrayMetrics.width(for: effect), height: EffectTrayMetrics.height)
+        .padding(
+            .top,
+            hasPresets
+                ? 8 + EffectTrayMetrics.presetContentDownshift
+                : MixrSpacing.md
+        )
+        .padding(
+            .bottom,
+            hasPresets
+                ? max(0, 8 - EffectTrayMetrics.presetContentDownshift)
+                : MixrSpacing.md
+        )
+        .frame(maxWidth: .infinity)
+        .frame(height: EffectTrayMetrics.height)
         .background { trayGlass }
         .clipShape(RoundedRectangle(cornerRadius: EffectTrayMetrics.cornerRadius, style: .continuous))
         .overlay {
@@ -64,7 +90,7 @@ struct EffectControlTray: View {
     private var sliderRow: some View {
         HStack(spacing: 8) {
             Text("0")
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(MixrColors.textSecondary)
 
             TLVolumeSlider(
@@ -82,7 +108,7 @@ struct EffectControlTray: View {
             .frame(maxWidth: .infinity)
 
             Text(showsCurrentValue ? "\(Int(level.rounded()))" : "100")
-                .font(.system(size: 9, weight: showsCurrentValue ? .semibold : .medium, design: .monospaced))
+                .font(.system(size: 9, weight: showsCurrentValue ? .semibold : .medium))
                 .foregroundStyle(showsCurrentValue ? MixrColors.textPrimary : MixrColors.textSecondary)
                 .frame(width: 22, alignment: .trailing)
         }
@@ -158,8 +184,11 @@ struct EffectControlTray: View {
 #Preview("Effect Trays") {
     VStack(spacing: 16) {
         EffectControlTray(effect: .reverb, level: 0)
+            .frame(width: EffectTrayMetrics.presetWidth)
         EffectControlTray(effect: .echo, level: 64, echoPreset: .pingPong)
+            .frame(width: EffectTrayMetrics.presetWidth)
         EffectControlTray(effect: .blur, level: 32)
+            .frame(width: EffectTrayMetrics.sliderOnlyWidth)
     }
     .padding(24)
     .background {

@@ -264,6 +264,42 @@ private enum EffectSelectedGlow {
     }
 }
 
+/// Softens resting (unselected) glow for effects that read too bright at idle.
+private enum EffectUnselectedGlow {
+    static func multiplier(for effect: MixrEffect) -> Double {
+        switch effect {
+        case .pitchUp: 0.855
+        case .bassBoost: 0.7695 // −5% then −10% then −10%
+        case .blur: 0.9025 // −5% then −5%
+        default: 1.0
+        }
+    }
+}
+
+/// Extra pullback on the symbol bloom inside the icon tile.
+private enum EffectIconGlow {
+    static func multiplier(for effect: MixrEffect) -> Double {
+        switch effect {
+        case .pitchUp: 0.90
+        case .blur: 0.95
+        case .bassBoost: 0.95
+        default: 1.0
+        }
+    }
+}
+
+/// Colored card-rim intensity (yellow / red / pink outlines).
+private enum EffectRimGlow {
+    static func multiplier(for effect: MixrEffect) -> Double {
+        switch effect {
+        case .bassBoost: 0.855 // −10% then −5%
+        case .blur: 0.95
+        case .pitchUp: 0.95
+        default: 1.0
+        }
+    }
+}
+
 // MARK: - Effect Card
 
 struct EffectCard: View {
@@ -308,7 +344,9 @@ struct EffectCard: View {
     }
 
     private var activeShadowOpacity: Double {
-        guard isActive else { return isAuto ? 0.08 : 0.07 }
+        guard isActive else {
+            return (isAuto ? 0.08 : 0.07) * EffectUnselectedGlow.multiplier(for: effect)
+        }
 
         let boost = EffectSelectedGlow.multiplier(for: effect)
         switch effect {
@@ -364,7 +402,9 @@ struct EffectCard: View {
     }
 
     private var cardBloomOpacity: Double {
-        guard isActive else { return 0.045 }
+        guard isActive else {
+            return 0.045 * EffectUnselectedGlow.multiplier(for: effect)
+        }
 
         let boost = EffectSelectedGlow.multiplier(for: effect)
         switch effect {
@@ -594,7 +634,7 @@ private struct EffectCardGlassBackground: View {
                     shape.fill(
                         LinearGradient(
                             colors: [
-                                effect.color.opacity(isSelected ? 0.10 : 0.035),
+                                effect.color.opacity(isSelected ? 0.10 : 0.035 * EffectUnselectedGlow.multiplier(for: effect)),
                                 Color.clear,
                             ],
                             startPoint: .bottomLeading,
@@ -673,7 +713,7 @@ private struct EffectCardBorderGlow: View {
     var isSelected: Bool
 
     private var selectedBoost: Double {
-        guard isSelected else { return 1.0 }
+        guard isSelected else { return EffectUnselectedGlow.multiplier(for: effect) }
 
         switch effect {
         case .auto:
@@ -689,6 +729,7 @@ private struct EffectCardBorderGlow: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius, style: .continuous)
+        let rimScale = EffectRimGlow.multiplier(for: effect)
 
         ZStack {
             // Fine perimeter rim: every card should read as polished glass, not a flat pane.
@@ -761,7 +802,7 @@ private struct EffectCardBorderGlow: View {
 	                        colors: [
 	                            Color.clear,
 	                            Color.white.opacity(isSelected ? 0.055 : 0.04),
-	                            effect.color.opacity(isSelected ? (effect == .auto ? 0.20 : 0.34 * selectedBoost) : 0.16),
+	                            effect.color.opacity((isSelected ? (effect == .auto ? 0.20 : 0.34 * selectedBoost) : 0.16 * selectedBoost) * rimScale),
 	                        ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -773,9 +814,9 @@ private struct EffectCardBorderGlow: View {
             shape.strokeBorder(
                 LinearGradient(
 	                    colors: [
-	                        effect.color.opacity(isSelected ? (effect == .auto ? 0.24 : 0.72 * selectedBoost) : 0.32),
-	                        effect.color.opacity(isSelected ? (effect == .auto ? 0.20 : 0.44 * selectedBoost) : 0.16),
-	                        effect.color.opacity(isSelected ? (effect == .auto ? 0.09 : 0.12 * selectedBoost) : 0.04),
+	                        effect.color.opacity((isSelected ? (effect == .auto ? 0.24 : 0.72 * selectedBoost) : 0.32 * selectedBoost) * rimScale),
+	                        effect.color.opacity((isSelected ? (effect == .auto ? 0.20 : 0.44 * selectedBoost) : 0.16 * selectedBoost) * rimScale),
+	                        effect.color.opacity((isSelected ? (effect == .auto ? 0.09 : 0.12 * selectedBoost) : 0.04 * selectedBoost) * rimScale),
 	                        Color.clear,
 	                    ],
                     startPoint: .bottomLeading,
@@ -785,7 +826,7 @@ private struct EffectCardBorderGlow: View {
             )
 
             // Thin full outline keeps selection legible without flattening the glass edge.
-	            shape.strokeBorder(effect.color.opacity(isSelected ? (effect == .auto ? 0.18 : 0.24 * selectedBoost) : 0.10), lineWidth: isSelected ? 0.64 : 0.48)
+	            shape.strokeBorder(effect.color.opacity((isSelected ? (effect == .auto ? 0.18 : 0.24 * selectedBoost) : 0.10 * selectedBoost) * rimScale), lineWidth: isSelected ? 0.64 : 0.48)
 
             if isSelected, effect == .echo {
                 shape.strokeBorder(effect.color.opacity(0.34 * EffectSelectedGlow.multiplier(for: .echo)), lineWidth: 0.92)
@@ -804,7 +845,7 @@ private struct EffectCardBorderGlow: View {
             }
 
             // Soft halo concentrated where the glass catches color most strongly.
-	            shape.strokeBorder(effect.color.opacity(isSelected ? (effect == .auto ? 0.42 : 0.55 * selectedBoost) : 0.14), lineWidth: isSelected ? 1.45 : 1.05)
+	            shape.strokeBorder(effect.color.opacity((isSelected ? (effect == .auto ? 0.42 : 0.55 * selectedBoost) : 0.14 * selectedBoost) * rimScale), lineWidth: isSelected ? 1.45 : 1.05)
                 .blur(radius: isSelected ? 1.25 : 0.9)
                 .mask {
                     RadialGradient(
@@ -833,9 +874,11 @@ private struct GlassIconTile: View {
         let shape = RoundedRectangle(cornerRadius: r, style: .continuous)
         let size  = EffectCardMetrics.iconTileSize
         let glow  = effect.iconGlow
-        let glowScale = effect == .auto
+        let iconGlow = isSelected ? 1.0 : EffectIconGlow.multiplier(for: effect)
+        let glowScale = (effect == .auto
             ? (isSelected ? 1.25 * EffectSelectedGlow.multiplier(for: .auto) : 1.13)
-            : (isSelected ? EffectSelectedGlow.multiplier(for: effect) : 1.0)
+            : (isSelected ? EffectSelectedGlow.multiplier(for: effect) : EffectUnselectedGlow.multiplier(for: effect)))
+            * iconGlow
         let autoAccentScale = effect == .auto && isSelected
             ? 1.16 * EffectSelectedGlow.multiplier(for: .auto)
             : 1.0
@@ -983,8 +1026,20 @@ private struct GlassIconTile: View {
                 .font(.system(size: EffectCardMetrics.iconSize, weight: .semibold))
                 .scaleEffect(effect.iconScale)
                 .foregroundStyle(effect == .auto ? Color.white : effect.color)
-                .shadow(color: (effect == .auto ? Color(hex: "F5D0FE") : effect.color).opacity(1.0), radius: effect == .auto ? (isSelected ? 5.4 * EffectSelectedGlow.multiplier(for: .auto) : 4.6) : 4)
-                .shadow(color: (effect == .auto ? Color(hex: "C084FC") : effect.color).opacity(effect == .auto ? (isSelected ? 0.76 * EffectSelectedGlow.multiplier(for: .auto) : 0.64) : 0.55), radius: effect == .auto ? (isSelected ? 12 * EffectSelectedGlow.multiplier(for: .auto) : 10) : 9)
+                .shadow(
+                    color: (effect == .auto ? Color(hex: "F5D0FE") : effect.color)
+                        .opacity(1.0 * (effect == .auto ? 1.0 : iconGlow)),
+                    radius: effect == .auto ? (isSelected ? 5.4 * EffectSelectedGlow.multiplier(for: .auto) : 4.6) : 4
+                )
+                .shadow(
+                    color: (effect == .auto ? Color(hex: "C084FC") : effect.color)
+                        .opacity(
+                            (effect == .auto
+                                ? (isSelected ? 0.76 * EffectSelectedGlow.multiplier(for: .auto) : 0.64)
+                                : 0.55) * (effect == .auto ? 1.0 : iconGlow)
+                        ),
+                    radius: effect == .auto ? (isSelected ? 12 * EffectSelectedGlow.multiplier(for: .auto) : 10) : 9
+                )
         }
         .frame(width: size, height: size)
     }
@@ -1079,7 +1134,10 @@ private struct EffectLightingLayer: View {
         }
     }
 
-    private var boost: Double { (isSelected ? selectedBoost : 0.82) * layout.intensity }
+    private var boost: Double {
+        let resting = 0.82 * EffectUnselectedGlow.multiplier(for: effect)
+        return (isSelected ? selectedBoost : resting) * layout.intensity
+    }
 
     @ViewBuilder
     var body: some View {
