@@ -131,7 +131,7 @@ struct SFXCard: View {
 
     private var silver: Color { MixrColors.sfxPrimary }
     private var silverSoft: Color { MixrColors.sfxSecondary }
-    private var silverPeak: Color { MixrColors.sfxHighlight }
+    private var silverPeak: Color { MixrWaveformColor.silver.peakColor }
 
     var body: some View {
         VStack(spacing: MixrSpacing.sm) {

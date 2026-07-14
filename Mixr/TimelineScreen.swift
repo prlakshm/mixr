@@ -1242,7 +1242,7 @@ private struct TLTrackArea: View {
     }
 
     /// Applies a playback-speed multiplier, rescales clip length from the implied
-    /// source duration, and ripples following clips only when the new end overlaps.
+    /// source duration, and ripples following clips: right on grow, left on shrink.
     private func applyClipSpeed(id: UUID, speed: Double) {
         guard let f = findClip(id) else { return }
         let clamped = min(
@@ -1282,7 +1282,14 @@ private struct TLTrackArea: View {
             }
             tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
         } else if delta < -0.001 {
-            // Shrink: keep gaps; only clear a stale outgoing transition.
+            // Shrink: scoot every following clip left by the same amount so no
+            // gap opens after this clip (mirrors grow pushing right).
+            for i in (f.clipIdx + 1)..<tracks[f.trackIdx].clips.count {
+                tracks[f.trackIdx].clips[i].start = max(
+                    0,
+                    tracks[f.trackIdx].clips[i].start + delta
+                )
+            }
             tracks[f.trackIdx].clips[f.clipIdx].transitionOut = .none
         }
 
@@ -3028,9 +3035,10 @@ private struct TLTrackLane: View {
         let frames = resolvedPreviewFrames()
 
         ZStack(alignment: .leading) {
-            track.color == .silver
-                ? MixrColors.sfxShadow.opacity(0.10)
-                : track.color.color.opacity(0.025)
+            // Faint wash of the track's own color; the SFX lane sits 5%
+            // lower than the standard 0.025 so its silver tint reads a
+            // touch quieter than the song lanes.
+            track.color.color.opacity(track.isSFXTrack ? 0.018 : 0.025)
             MixrColors.divider
                 .frame(height: 0.5)
                 .frame(maxHeight: .infinity, alignment: .bottom)
@@ -3141,34 +3149,50 @@ private struct TLTrackLane: View {
     ) -> some View {
         let selectedBorderHeight = TLK.trackRowHeight - 2
 
-        WaveformClip(waveformColor: track.color, isSelected: isSel && !isDraggingThis)
+        WaveformClip(waveformColor: track.color)
             .frame(height: TLK.waveformHeight)
             .frame(width: clipW)
             .overlay {
                 if isSel && !isDraggingThis {
-                    // Same selection affordance for every track — only the accent hue changes.
                     let accent = track.color.color
-                    let rimHighlight = track.color == .silver
-                        ? MixrColors.sfxHighlight.opacity(0.14)
-                        : Color.white.opacity(0.14)
+                    let selectedOutline = track.color.selectedOutlineColor
+                    let selectedGlow = track.color.glowColor
                     ZStack {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(accent.opacity(0.88), lineWidth: 8.2)
+                            .stroke(
+                                track.color == .silver
+                                    ? selectedGlow
+                                    : accent.opacity(0.88),
+                                lineWidth: 8.2
+                            )
                             .blur(radius: 5.6)
-                            .opacity(0.7)
+                            .opacity(track.color == .silver ? 1.0 : 0.7)
                             .padding(-3.0)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(accent.opacity(0.38), lineWidth: 8.5)
+                            .strokeBorder(
+                                track.color == .silver
+                                    ? selectedOutline.opacity(0.55)
+                                    : accent.opacity(0.38),
+                                lineWidth: 8.5
+                            )
                             .blur(radius: 3.2)
                             .opacity(0.82)
                             .padding(1.0)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(accent.opacity(1.0), lineWidth: 2.4)
-                            .shadow(color: accent.opacity(0.88), radius: 7)
-                            .shadow(color: accent.opacity(0.5), radius: 15)
+                            .stroke(selectedOutline, lineWidth: 2.4)
+                            .shadow(
+                                color: track.color == .silver ? selectedGlow : accent.opacity(0.88),
+                                radius: 7
+                            )
+                            .shadow(
+                                color: track.color == .silver
+                                    ? MixrColors.sfxGlow.opacity(0.10)
+                                    : accent.opacity(0.5),
+                                radius: 15
+                            )
                             .padding(-0.35)
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(rimHighlight, lineWidth: 0.5)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
                             .padding(1.2)
                     }
                     .frame(width: clipW, height: selectedBorderHeight)

@@ -176,22 +176,11 @@ struct WaveformClipBackground: View {
     let waveformColor: MixrWaveformColor
     var cornerRadius: CGFloat = WaveformMetrics.cornerRadius
     var tailWidth: CGFloat = WaveformMetrics.tailWidth
-    /// Brightens the narrow specular streak slightly when the clip is selected.
-    var isSelected: Bool = false
 
     var body: some View {
         let shape = WaveformClipShape(cornerRadius: cornerRadius, tailWidth: tailWidth)
 
-        if waveformColor == .silver {
-            metallicSFXBody(shape: shape)
-        } else {
-            songTrackBody(shape: shape)
-        }
-    }
-
-    // MARK: Song tracks (unchanged glass + tint)
-
-    private func songTrackBody(shape: WaveformClipShape) -> some View {
+        // Layer 1 — dark navy base through material
         shape
             .fill(MixrColors.glassClipNavy)
             .background {
@@ -200,18 +189,22 @@ struct WaveformClipBackground: View {
                     .opacity(0.22)
                     .environment(\.colorScheme, .dark)
             }
+            // Layer 2 — strong color tint (this is the primary background hue)
             .overlay {
                 shape.fill(
                     LinearGradient(
                         colors: [
                             waveformColor.tintColor,
-                            waveformColor.color.opacity(0.10),
+                            waveformColor == .silver
+                                ? MixrColors.sfxFill.opacity(0.14)
+                                : waveformColor.color.opacity(0.10),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
             }
+            // Layer 3 — slight top-down depth darkening
             .overlay {
                 shape.fill(
                     LinearGradient(
@@ -229,69 +222,13 @@ struct WaveformClipBackground: View {
                 WaveformClipGridLines()
                     .clipShape(shape)
             }
+            // Border — color-matched
             .overlay {
                 shape.stroke(
                     waveformColor.outlineColor,
                     lineWidth: MixrLayout.glassBorderWidth
                 )
             }
-    }
-
-    // MARK: SFX — polished metallic aluminum
-
-    private func metallicSFXBody(shape: WaveformClipShape) -> some View {
-        let specularPeak = isSelected ? 0.36 : 0.30
-
-        return shape
-            .fill(MixrColors.sfxShadow.opacity(0.55))
-            // Directional dark / mid / bright silver bands
-            .overlay {
-                shape.fill(
-                    LinearGradient(
-                        colors: [
-                            MixrColors.sfxShadow.opacity(0.42),
-                            MixrColors.sfxSecondary.opacity(0.30),
-                            MixrColors.sfxPrimary.opacity(0.22),
-                            MixrColors.sfxHighlight.opacity(0.18),
-                            MixrColors.sfxSecondary.opacity(0.26),
-                            MixrColors.sfxShadow.opacity(0.38),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            }
-            // Narrow diagonal specular streak (not broad frosted glass)
-            .overlay {
-                shape.fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.34),
-                            .init(color: Color.white.opacity(0.05), location: 0.42),
-                            .init(color: Color.white.opacity(specularPeak), location: 0.49),
-                            .init(color: Color.white.opacity(0.08), location: 0.56),
-                            .init(color: .clear, location: 0.65),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .blendMode(.screen)
-            }
-            .overlay {
-                WaveformClipGridLines()
-                    .opacity(0.55)
-                    .clipShape(shape)
-            }
-            // Subtle dark inner edge — machined depth
-            .overlay {
-                shape
-                    .stroke(Color.black.opacity(0.26), lineWidth: 0.45)
-                    .blur(radius: 0.25)
-                    .offset(y: 0.6)
-                    .mask(shape)
-            }
-            // Outer metallic rim is drawn by WaveformClip so selection can brighten it.
     }
 }
 
@@ -330,36 +267,22 @@ struct WaveformSilhouetteCanvas: View {
                 size: size,
                 tailWidth: tailWidth
             )
-            let peakColor = waveformColor == .silver
-                ? MixrColors.sfxHighlight.opacity(0.90)
-                : waveformColor.peakColor
-            let baseColor = waveformColor == .silver
-                ? MixrColors.sfxPrimary.opacity(0.68)
-                : waveformColor.color
+            let peakColor = waveformColor.peakColor
+            let baseColor = waveformColor.color
 
             context.fill(silhouette, with: .linearGradient(
                 Gradient(colors: [
-                    peakColor,
-                    baseColor,
-                    peakColor,
+                    peakColor.opacity(0.94),
+                    baseColor.opacity(waveformColor == .silver ? 0.88 : 1.0),
+                    peakColor.opacity(waveformColor == .silver ? 0.88 : 1.0),
                 ]),
                 startPoint: CGPoint(x: size.width / 2, y: 0),
                 endPoint: CGPoint(x: size.width / 2, y: size.height)
             ))
 
             context.drawLayer { layer in
-                let shadowTone = waveformColor == .silver
-                    ? MixrColors.sfxShadow.opacity(0.35)
-                    : baseColor.opacity(0.38)
-                layer.addFilter(.shadow(color: shadowTone, radius: 2.5, x: 0, y: 0))
-                layer.fill(
-                    silhouette,
-                    with: .color(
-                        waveformColor == .silver
-                            ? MixrColors.sfxHighlight.opacity(0.18)
-                            : peakColor.opacity(0.20)
-                    )
-                )
+                layer.addFilter(.shadow(color: baseColor.opacity(0.38), radius: 2.5, x: 0, y: 0))
+                layer.fill(silhouette, with: .color(peakColor.opacity(0.20)))
             }
         }
         .opacity(WaveformMetrics.waveformOpacity * waveformColor.waveformOpacity)

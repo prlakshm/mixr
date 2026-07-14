@@ -83,14 +83,27 @@ enum MixrColors {
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
 
-    /// Polished metallic SFX lane — highlight catch light.
-    static let sfxHighlight = Color(hex: "F7F9FC")
-    /// Metallic SFX primary (outlines, grips, ambient silver).
-    static let sfxPrimary = Color(hex: "E7ECF3")
-    /// Mid silver for bands, fills, softer geometry.
-    static let sfxSecondary = Color(hex: "8A95A5")
-    /// Dark silver for machined depth / lower edges.
-    static let sfxShadow = Color(hex: "303741")
+    /// Cool silver with a slight blue cast — SFX lane primary
+    /// (waveform, grips, selected accents).
+    static let sfxPrimary = Color(hex: "D2D8E2")
+    /// Softer SFX secondary (cards, softer reflections).
+    static let sfxSecondary = Color(hex: "8C97A8")
+    /// Clip body fill — intensity closer to pink/yellow track tints.
+    static let sfxFill = Color(hex: "C9D2DE")
+    /// Clip outline / stroke.
+    static let sfxOutline = Color(hex: "DDE5F0")
+    /// Resting clip ambient glow.
+    static let sfxGlow = Color(hex: "E7EDF5")
+    /// SFX song-chip vertical gradient — top catch light.
+    static let sfxChipTop = Color(hex: "D9E1EB")
+    /// SFX song-chip vertical gradient — darker graphite center (icon contrast).
+    static let sfxChipCenter = Color(hex: "8F98A6")
+    /// SFX song-chip vertical gradient — lower silver.
+    static let sfxChipBottom = Color(hex: "C6CFDA")
+    /// SFX song-chip bright rim.
+    static let sfxChipOutline = Color(hex: "E5EBF3")
+    /// Soft localized backdrop behind the white sfx mark.
+    static let sfxChipIconBackdrop = Color(hex: "5F6875")
     /// Alias for the Sound Effects track color (`sfxPrimary`).
     static let waveformSilver = sfxPrimary
 
@@ -145,8 +158,9 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .pink:
             MixrColors.waveformPink.opacity(0.20)
+        case .silver:
+            MixrColors.sfxGlow.opacity(0.12)
         default:
-            // Match song-track resting glow affordance (including SFX).
             color.opacity(0.20)
         }
     }
@@ -155,17 +169,17 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
     var tintColor: Color {
         switch self {
         case .silver:
-            MixrColors.sfxSecondary.opacity(0.18)
+            MixrColors.sfxFill.opacity(0.22)
         default:
             color.opacity(0.18)
         }
     }
 
-    /// Resting clip outline (flat fallback; SFX uses metallic gradient stroke).
+    /// Resting clip outline.
     var outlineColor: Color {
         switch self {
         case .silver:
-            MixrColors.sfxPrimary.opacity(0.72)
+            MixrColors.sfxOutline.opacity(0.40)
         default:
             color.opacity(0.45)
         }
@@ -175,9 +189,17 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
     var selectedOutlineColor: Color {
         switch self {
         case .silver:
-            MixrColors.sfxHighlight.opacity(0.92)
+            MixrColors.sfxOutline.opacity(0.82)
         default:
             color.opacity(1.0)
+        }
+    }
+
+    /// Resting clip glow blur — SFX stays tighter than song tracks.
+    var clipGlowRadius: CGFloat {
+        switch self {
+        case .silver: 2.5
+        default: 4
         }
     }
 
@@ -189,41 +211,16 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
         case .red: Color(hex: "F87171")
         case .yellow: Color(hex: "FACC15")
         case .blue: Color(hex: "38BDF8")
-        case .silver: MixrColors.sfxHighlight
+        case .silver: MixrColors.sfxPrimary
         }
     }
 
     /// Waveform silhouette opacity multiplier.
     var waveformOpacity: CGFloat {
-        1.0
-    }
-
-    /// Metallic outline gradient for SFX clips (upper-left catches light).
-    static var sfxMetallicOutline: LinearGradient {
-        LinearGradient(
-            colors: [
-                MixrColors.sfxHighlight.opacity(0.88),
-                MixrColors.sfxSecondary.opacity(0.52),
-                MixrColors.sfxShadow.opacity(0.56),
-                MixrColors.sfxPrimary.opacity(0.72),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    /// Selected metallic outline — same structure, slightly brighter catch light.
-    static var sfxMetallicOutlineSelected: LinearGradient {
-        LinearGradient(
-            colors: [
-                MixrColors.sfxHighlight.opacity(0.96),
-                MixrColors.sfxPrimary.opacity(0.78),
-                MixrColors.sfxSecondary.opacity(0.58),
-                MixrColors.sfxShadow.opacity(0.50),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        switch self {
+        case .silver: 0.88
+        default: 1.0
+        }
     }
 }
 

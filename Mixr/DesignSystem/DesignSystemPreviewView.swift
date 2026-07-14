@@ -110,10 +110,10 @@ struct DesignSystemPreviewView: View {
                         ForEach(MixrWaveformColor.allCases) { color in
                             ColorSwatch(name: color.label, color: color.color)
                         }
-                        ColorSwatch(name: "SFX Highlight", color: MixrColors.sfxHighlight)
-                        ColorSwatch(name: "SFX Primary", color: MixrColors.sfxPrimary)
+                        ColorSwatch(name: "SFX Fill", color: MixrColors.sfxFill)
+                        ColorSwatch(name: "SFX Outline", color: MixrColors.sfxOutline)
+                        ColorSwatch(name: "SFX Glow", color: MixrColors.sfxGlow)
                         ColorSwatch(name: "SFX Secondary", color: MixrColors.sfxSecondary)
-                        ColorSwatch(name: "SFX Shadow", color: MixrColors.sfxShadow)
                     }
                 }
 
@@ -923,7 +923,7 @@ private extension MixrWaveformColor {
         case .red: "Red"
         case .yellow: "Yellow"
         case .blue: "Blue"
-        case .silver: "SFX · Metallic Silver"
+        case .silver: "SFX · Cool Silver"
         }
     }
 }

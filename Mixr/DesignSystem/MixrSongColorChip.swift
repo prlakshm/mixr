@@ -10,30 +10,50 @@ struct MixrSongColorChip: View {
     /// When true, shows the AE-stencil sfx monogram instead of `icon`.
     var usesSFXMark: Bool = false
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+    }
+
     var body: some View {
         Group {
             if let artworkData, let image = UIImage(data: artworkData) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+            } else if color == .silver {
+                silverChipContent
             } else {
-                defaultChipContent
+                songChipContent
             }
         }
         .frame(width: 34, height: 34)
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .clipShape(shape)
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+            if color == .silver {
+                shape.strokeBorder(
+                    MixrColors.sfxChipOutline.opacity(0.72),
+                    lineWidth: 0.65
+                )
+            } else {
+                shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+            }
         }
         .shadow(color: .black.opacity(0.24), radius: 3, x: 0, y: 1.5)
-        .shadow(color: color.color.opacity(0.28), radius: 5, x: 0, y: 0)
+        .shadow(
+            color: color == .silver
+                ? MixrColors.sfxChipOutline.opacity(0.12)
+                : color.color.opacity(0.28),
+            radius: color == .silver ? 3 : 5,
+            x: 0,
+            y: 0
+        )
     }
 
-    private var defaultChipContent: some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+    // MARK: - Song colors (unchanged)
+
+    private var songChipContent: some View {
         let bright = color.peakColor
-        let base = color == .silver ? color.secondaryColor : color.color
+        let base = color.color
 
         return ZStack {
             shape
@@ -161,16 +181,96 @@ struct MixrSongColorChip: View {
                 .frame(width: 14, height: 14)
                 .blur(radius: 1.5)
 
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color.white)
+                .shadow(color: bright.opacity(0.60), radius: 3)
+                .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+        }
+    }
+
+    // MARK: - SFX silver — dimensional metallic, darker center for white icon
+
+    private var silverChipContent: some View {
+        ZStack {
+            // Vertical 3-stop metallic body — light / graphite / light
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        MixrColors.sfxChipTop.opacity(0.92),
+                        MixrColors.sfxChipCenter.opacity(0.88),
+                        MixrColors.sfxChipBottom.opacity(0.90),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+
+            // Soft top specular — edges stay brighter than center
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.22),
+                        Color.white.opacity(0.06),
+                        Color.clear,
+                    ],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.42)
+                )
+            )
+
+            // Inner shadow for machined depth
+            shape
+                .strokeBorder(Color.black.opacity(0.28), lineWidth: 1.1)
+                .blur(radius: 1.2)
+                .offset(y: 0.8)
+                .mask(shape)
+
+            // Top-edge rim catch
+            shape
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            MixrColors.sfxChipOutline.opacity(0.55),
+                            MixrColors.sfxChipOutline.opacity(0.08),
+                            Color.clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.55
+                )
+                .mask {
+                    LinearGradient(
+                        colors: [Color.white, Color.clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                }
+
+            // Soft darker localized backdrop behind the icon (no hard shape)
+            RadialGradient(
+                colors: [
+                    MixrColors.sfxChipIconBackdrop.opacity(0.55),
+                    MixrColors.sfxChipIconBackdrop.opacity(0.18),
+                    Color.clear,
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: 13
+            )
+            .frame(width: 26, height: 26)
+            .blur(radius: 2.2)
+            .allowsHitTesting(false)
+
             if usesSFXMark {
                 MixrSFXMarkGlyph(size: 13, color: .white)
-                    .shadow(color: bright.opacity(0.60), radius: 3)
-                    .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+                    .shadow(color: .black.opacity(0.35), radius: 1.2, y: 0.6)
             } else {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color.white)
-                    .shadow(color: bright.opacity(0.60), radius: 3)
-                    .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+                    .shadow(color: .black.opacity(0.35), radius: 1.2, y: 0.6)
             }
         }
     }
