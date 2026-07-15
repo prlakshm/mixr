@@ -36,11 +36,20 @@ enum EchoPreset: String, CaseIterable, Identifiable, Equatable, Sendable, Codabl
 
 // MARK: - Per-Clip Effect Settings
 
-/// Per-clip effect state. Levels are 0…100 keyed by `MixrEffect.rawValue`.
-/// MixrPlaybackEngine maps these live onto each track's chain:
+/// Per-clip effect state — STORED on `MixrClip.effects`, so effects follow
+/// the clip through moves, splits, duplication, trims, undo/redo, and
+/// persist inside the project snapshot (ProjectSnapshot → SwiftData).
+///
+/// Levels are 0…100 keyed by `MixrEffect.rawValue`; 0 = true bypass.
+/// The slider→parameter mapping lives in `ClipEffectDSP.targets(for:...)`
+/// and is shared by live playback (MixrPlaybackEngine) and export
+/// (MixrExportRenderer) so both sound identical:
 /// Reverb → AVAudioUnitReverb, Echo → AVAudioUnitDelay,
-/// Blur/Bass Boost → AVAudioUnitEQ, Pitch Up → AVAudioUnitTimePitch.
-struct ClipEffectSettings: Equatable, Sendable, Codable {
+/// Blur → EQ low-pass, Bass Boost → multi-band EQ + subtle saturation,
+/// Pitch Up → AVAudioUnitTimePitch.
+///
+/// nonisolated: pure value type, read by the background export renderer.
+nonisolated struct ClipEffectSettings: Equatable, Sendable, Codable {
     /// Effect level 0…100 per effect id (see MixrEffect.rawValue).
     var levels: [String: Double] = [:]
     var reverbPreset: ReverbPreset = .smallRoom

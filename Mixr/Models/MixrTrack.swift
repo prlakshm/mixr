@@ -70,7 +70,7 @@ struct MixrTrack: Identifiable, Equatable {
     var artworkData: Data?
     var clips: [MixrClip]
 
-    var isSFXTrack: Bool { trackType == .soundEffect }
+    nonisolated var isSFXTrack: Bool { trackType == .soundEffect }
 
     /// Display BPM; shows "~N" when estimated with moderate confidence, "--" when unknown.
     var bpmDisplay: String {
@@ -132,7 +132,7 @@ struct MixrClip: Identifiable, Equatable {
     /// set by splits/trims so each segment plays the right part of the song.
     var sourceOffsetSeconds: Double = 0
 
-    var isSoundEffect: Bool { soundEffectID != nil }
+    nonisolated var isSoundEffect: Bool { soundEffectID != nil }
 
     /// Song-time (seconds into the source) at a timeline unit inside this clip.
     func songSeconds(atUnit unit: CGFloat) -> Double {

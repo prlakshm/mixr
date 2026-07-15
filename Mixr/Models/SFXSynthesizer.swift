@@ -6,7 +6,10 @@ import Foundation
 /// Procedurally regenerates any SFX whose bundled asset is missing, using
 /// the same sound designs as Scripts/generate_sfx_assets.py — so playback
 /// never fails silently. Deterministic (seeded PRNG), mono float32.
-enum SFXSynthesizer {
+///
+/// nonisolated: pure DSP math — also called from the export renderer's
+/// background render loop.
+nonisolated enum SFXSynthesizer {
 
     // MARK: Entry point
 

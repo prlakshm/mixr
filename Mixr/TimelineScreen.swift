@@ -505,6 +505,25 @@ struct TimelineScreen: View {
             playback.applyMixSettings(from: library.tracks)
             library.scheduleAutosave()
         }
+        // Per-clip settings changed (effect levels/presets, clip volume,
+        // transitions) → lightweight update; the engine's 60 fps tick ramps
+        // the new parameters live, so slider moves are audible mid-playback
+        // without a reschedule.
+        .onChange(of: library.tracks.map { track in
+            track.clips.map { clip in
+                let fx = clip.effects
+                let levels = fx.levels
+                    .sorted { $0.key < $1.key }
+                    .map { "\($0.key)=\($0.value)" }
+                    .joined(separator: ";")
+                return "\(clip.id):\(clip.volume):\(levels):\(fx.reverbPreset.rawValue):\(fx.echoPreset.rawValue):"
+                    + "\(clip.transitionIn.type.rawValue)@\(clip.transitionIn.duration):"
+                    + "\(clip.transitionOut.type.rawValue)@\(clip.transitionOut.duration)"
+            }.joined(separator: ",")
+        }.joined(separator: "|")) { _, _ in
+            playback.applyMixSettings(from: library.tracks)
+            library.scheduleAutosave()
+        }
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [.mp3, .wav, .mpeg4Audio, .aiff, .audio],
@@ -688,6 +707,11 @@ private struct TLTransportBar: View {
     var isProjectMenuOpen: Bool = false
     var onProjectTapped: () -> Void = {}
 
+    // Export — offline render (MixrExportRenderer) then share sheet.
+    @State private var isExporting = false
+    @State private var exportedFile: TLExportedFile?
+    @State private var exportErrorMessage: String?
+
     var body: some View {
         ZStack {
             // Home group — Mixr + project + undo/redo
@@ -749,15 +773,39 @@ private struct TLTransportBar: View {
 
             HStack {
                 Spacer()
-                Button { } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                        .frame(minWidth: 74)
+                Button { startExport() } label: {
+                    HStack(spacing: 6) {
+                        if isExporting {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(MixrColors.textSecondary)
+                            Text("Exporting…")
+                        } else {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    .frame(minWidth: 74)
                 }
                 .buttonStyle(MixrSecondaryGlassButtonStyle())
                 .fixedSize(horizontal: true, vertical: false)
+                .disabled(isExporting)
                 .padding(.trailing, 14)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
+            .sheet(item: $exportedFile) { file in
+                TLShareSheet(items: [file.url])
+            }
+            .alert(
+                "Export Failed",
+                isPresented: Binding(
+                    get: { exportErrorMessage != nil },
+                    set: { if !$0 { exportErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(exportErrorMessage ?? "")
+            }
 
             HStack(alignment: .center, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
@@ -839,6 +887,46 @@ private struct TLTransportBar: View {
             MixrColors.divider.frame(height: 0.5)
         }
     }
+
+    /// Bounces the project offline with the exact per-clip effect settings
+    /// used in live playback (see MixrExportRenderer), then shares the file.
+    private func startExport() {
+        guard !isExporting else { return }
+        isExporting = true
+        let tracks = library.tracks
+        let name = library.projectName
+
+        Task.detached(priority: .userInitiated) {
+            let result = Result { try MixrExportRenderer.export(tracks: tracks, projectName: name) }
+            await MainActor.run {
+                isExporting = false
+                switch result {
+                case .success(let url):
+                    exportedFile = TLExportedFile(url: url)
+                case .failure(let error):
+                    exportErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+/// Identifiable wrapper so the share sheet can present via .sheet(item:).
+private struct TLExportedFile: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+/// UIKit share sheet — used to hand the exported mix off to Files,
+/// Messages, AirDrop, etc.
+private struct TLShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Toolbar History Button (undo / redo)

@@ -45,7 +45,7 @@ struct SoundEffectDefinition: Identifiable, Equatable, Sendable {
 // MARK: - Library
 
 enum SoundEffectLibrary {
-    static let all: [SoundEffectDefinition] = [
+    nonisolated static let all: [SoundEffectDefinition] = [
         SoundEffectDefinition(id: "riser",          title: "Riser",          icon: "chart.line.uptrend.xyaxis",   durationSeconds: 4.0, assetName: "riser.wav",          synthesisType: .riser),
         SoundEffectDefinition(id: "downlifter",     title: "Downlifter",     icon: "chart.line.downtrend.xyaxis", durationSeconds: 2.0, assetName: "downlifter.wav",     synthesisType: .downlifter),
         SoundEffectDefinition(id: "impact",         title: "Impact",         icon: "burst.fill",                  durationSeconds: 1.0, assetName: "impact.wav",         synthesisType: .impact),
@@ -60,7 +60,8 @@ enum SoundEffectLibrary {
         SoundEffectDefinition(id: "airSweep",       title: "Air Sweep",      icon: "wind",                        durationSeconds: 2.0, assetName: "air_sweep.wav",      synthesisType: .airSweep),
     ]
 
-    static func definition(for id: String) -> SoundEffectDefinition? {
+    /// nonisolated: looked up by the background export renderer too.
+    nonisolated static func definition(for id: String) -> SoundEffectDefinition? {
         all.first { $0.id == id }
     }
 
