@@ -13,10 +13,23 @@ enum EffectTrayMetrics {
     static let expandedSectionWidthFraction: CGFloat = 1.0
     /// Slider row occupies this fraction of the tray content width, centered.
     static let sliderRowWidthFraction: CGFloat = 0.75
-    /// Preset track width — transition Duration width × 1.10.
-    /// Pill widths stay content-measured; only the outer track grows.
-    static let presetSegmentedWidth: CGFloat =
+    /// Preset track width — scaled by option count so Pitch (2) and
+    /// Reverb/Echo (3) keep similar per-segment spacing. Pill widths stay
+    /// content-measured; only the outer track grows.
+    /// Baseline: transition Duration width × 1.10 for a 3-option control.
+    private static let presetSegmentedWidth3: CGFloat =
         TLClipEditingMetrics.menuSettingsDurationSegmentedWidth * 1.10
+
+    static func presetSegmentedWidth(for effect: MixrEffect) -> CGFloat {
+        switch effect {
+        case .pitchUp:
+            // 2 options — narrower so gaps match the 3-option controls.
+            presetSegmentedWidth3 * (2.0 / 3.0)
+        default:
+            presetSegmentedWidth3
+        }
+    }
+
     static let presetSegmentedHeight: CGFloat = 28
     /// Nudge slider + presets slightly lower in the tray.
     static let presetContentDownshift: CGFloat = 3.5
@@ -24,28 +37,41 @@ enum EffectTrayMetrics {
     static let expandAnimationDuration: Double = 0.682
 
     static func width(for effect: MixrEffect) -> CGFloat {
-        effect == .reverb || effect == .echo ? presetWidth : sliderOnlyWidth
+        switch effect {
+        case .reverb, .echo, .pitchUp:
+            presetWidth
+        default:
+            sliderOnlyWidth
+        }
     }
 }
 
 /// The control tray revealed when an effect card slides open — a 0…100
-/// level slider, plus the preset segmented control for Reverb and Echo.
-/// Values are per selected clip and persist on the clip model.
+/// level slider, plus preset segmented controls for Reverb, Echo, Pitch.
+/// Flanger and Blur are intensity-slider-only. Values are per selected
+/// clip and persist on the clip model.
 struct EffectControlTray: View {
     let effect: MixrEffect
     /// 0…100 effect level for the targeted clip.
     var level: Double
     var reverbPreset: ReverbPreset = .smallRoom
     var echoPreset: EchoPreset = .classic
+    var pitchDirection: PitchDirection = .up
     var onLevelChanged: (Double) -> Void = { _ in }
     /// true on drag start, false on drag end — for undo commits.
     var onEditingChanged: (Bool) -> Void = { _ in }
     var onReverbPreset: (ReverbPreset) -> Void = { _ in }
     var onEchoPreset: (EchoPreset) -> Void = { _ in }
+    var onPitchDirection: (PitchDirection) -> Void = { _ in }
 
     @State private var hasDragged = false
 
-    private var hasPresets: Bool { effect == .reverb || effect == .echo }
+    private var hasPresets: Bool {
+        switch effect {
+        case .reverb, .echo, .pitchUp: true
+        default: false
+        }
+    }
 
     /// Right label shows gray "100" until the user drags (or a stored
     /// value exists), then the current value in white.
@@ -55,21 +81,26 @@ struct EffectControlTray: View {
         GeometryReader { geo in
             let contentWidth = max(0, geo.size.width)
             let sliderWidth = contentWidth * EffectTrayMetrics.sliderRowWidthFraction
+            // Never wider than the tray — keeps preset tracks centered.
+            let presetWidth = min(
+                EffectTrayMetrics.presetSegmentedWidth(for: effect),
+                max(0, contentWidth - 16)
+            )
 
             VStack(spacing: hasPresets ? 7 : 0) {
                 sliderRow
                     .frame(width: sliderWidth)
-                    .frame(maxWidth: .infinity, alignment: .center)
 
                 if hasPresets {
                     presetControl
                         .frame(
-                            width: EffectTrayMetrics.presetSegmentedWidth,
+                            width: presetWidth,
                             height: EffectTrayMetrics.presetSegmentedHeight
                         )
-                        .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
+            // Always center slider + presets horizontally in the settings glass.
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(
                 .top,
                 hasPresets ? 8 + EffectTrayMetrics.presetContentDownshift : 0
@@ -80,7 +111,7 @@ struct EffectControlTray: View {
             )
             .frame(
                 width: contentWidth,
-                height: EffectTrayMetrics.height,
+                height: geo.size.height,
                 alignment: hasPresets ? .top : .center
             )
         }
@@ -149,6 +180,17 @@ struct EffectControlTray: View {
                 title: { option, _ in option.title },
                 onSelect: onEchoPreset
             )
+        } else if effect == .pitchUp {
+            // Duration-style labels: only the selected side says "Pitch …".
+            TLTransitionSettingsSegmentedControl(
+                options: PitchDirection.allCases,
+                selected: pitchDirection,
+                trackColor: effect.color,
+                fontSize: 9.5,
+                selectionSpringResponse: 0.30,
+                title: { option, isSelected in option.label(isSelected: isSelected) },
+                onSelect: onPitchDirection
+            )
         }
     }
 
@@ -196,8 +238,12 @@ struct EffectControlTray: View {
     VStack(spacing: 16) {
         EffectControlTray(effect: .reverb, level: 0)
             .frame(width: EffectTrayMetrics.presetWidth)
+        EffectControlTray(effect: .pitchUp, level: 80, pitchDirection: .up)
+            .frame(width: EffectTrayMetrics.presetWidth)
         EffectControlTray(effect: .echo, level: 64, echoPreset: .pingPong)
             .frame(width: EffectTrayMetrics.presetWidth)
+        EffectControlTray(effect: .flanger, level: 55)
+            .frame(width: EffectTrayMetrics.sliderOnlyWidth)
         EffectControlTray(effect: .blur, level: 32)
             .frame(width: EffectTrayMetrics.sliderOnlyWidth)
     }

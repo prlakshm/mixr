@@ -426,7 +426,7 @@ struct TimelineScreen: View {
                             library.cancelGestureEdit()
                         },
                         onMixSettingsChanged: {
-                            playback.applyMixSettings(from: library.tracks)
+                            playback.applyMixSettings(from: library.tracks, projectBPM: library.projectBPM)
                             library.scheduleAutosave()
                         },
                         onPlayheadDragStart: {
@@ -497,18 +497,18 @@ struct TimelineScreen: View {
         .onChange(of: library.tracks.map { track in
             track.clips.map { "\($0.start):\($0.length)" }.joined(separator: ",")
         }.joined(separator: "|")) { _, _ in
-            playback.syncTracks(library.tracks)
+            playback.syncTracks(library.tracks, projectBPM: library.projectBPM)
             library.scheduleAutosave()
         }
         // Only volume/mute/solo changed → lightweight update, does NOT restart engine
         .onChange(of: library.tracks.map { "\($0.id):\($0.volume):\($0.isMuted):\($0.isSoloed)" }.joined()) { _, _ in
-            playback.applyMixSettings(from: library.tracks)
+            playback.applyMixSettings(from: library.tracks, projectBPM: library.projectBPM)
             library.scheduleAutosave()
         }
         // Per-clip settings changed (effect levels/presets, clip volume,
-        // transitions) → lightweight update; the engine's 60 fps tick ramps
-        // the new parameters live, so slider moves are audible mid-playback
-        // without a reschedule.
+        // transitions). Every effect is live-ramped on the running graph
+        // (the flanger kernel smooths its own parameters), so a lightweight
+        // snapshot update is enough — no reschedule, no playback restart.
         .onChange(of: library.tracks.map { track in
             track.clips.map { clip in
                 let fx = clip.effects
@@ -516,12 +516,12 @@ struct TimelineScreen: View {
                     .sorted { $0.key < $1.key }
                     .map { "\($0.key)=\($0.value)" }
                     .joined(separator: ";")
-                return "\(clip.id):\(clip.volume):\(levels):\(fx.reverbPreset.rawValue):\(fx.echoPreset.rawValue):"
+                return "\(clip.id):\(clip.volume):\(levels):\(fx.reverbPreset.rawValue):\(fx.echoPreset.rawValue):\(fx.pitchDirection.rawValue):"
                     + "\(clip.transitionIn.type.rawValue)@\(clip.transitionIn.duration):"
                     + "\(clip.transitionOut.type.rawValue)@\(clip.transitionOut.duration)"
             }.joined(separator: ",")
         }.joined(separator: "|")) { _, _ in
-            playback.applyMixSettings(from: library.tracks)
+            playback.applyMixSettings(from: library.tracks, projectBPM: library.projectBPM)
             library.scheduleAutosave()
         }
         .fileImporter(
@@ -895,9 +895,16 @@ private struct TLTransportBar: View {
         isExporting = true
         let tracks = library.tracks
         let name = library.projectName
+        let projectBPM = library.projectBPM
 
         Task.detached(priority: .userInitiated) {
-            let result = Result { try MixrExportRenderer.export(tracks: tracks, projectName: name) }
+            let result = Result {
+                try MixrExportRenderer.export(
+                    tracks: tracks,
+                    projectName: name,
+                    projectBPM: projectBPM
+                )
+            }
             await MainActor.run {
                 isExporting = false
                 switch result {
@@ -3772,7 +3779,7 @@ private struct TLEffectsPanel: View {
                 Color.clear
             }
         }
-        .frame(width: width, alignment: .leading)
+        .frame(width: width, alignment: .center)
         .clipped()
         .opacity(visible ? 1 : 0)
         .allowsHitTesting(visible)
@@ -3797,6 +3804,7 @@ private struct TLEffectsPanel: View {
             level: clip.effects.level(for: effect.rawValue),
             reverbPreset: clip.effects.reverbPreset,
             echoPreset: clip.effects.echoPreset,
+            pitchDirection: clip.effects.pitchDirection,
             onLevelChanged: { value in
                 tracks[path.trackIdx].clips[path.clipIdx].effects
                     .setLevel(value, for: effect.rawValue)
@@ -3819,6 +3827,12 @@ private struct TLEffectsPanel: View {
                 guard clip.effects.echoPreset != preset else { return }
                 onEditBegin("Change Effect", .clip(clip.id))
                 tracks[path.trackIdx].clips[path.clipIdx].effects.echoPreset = preset
+                onEditCommit()
+            },
+            onPitchDirection: { direction in
+                guard clip.effects.pitchDirection != direction else { return }
+                onEditBegin("Change Effect", .clip(clip.id))
+                tracks[path.trackIdx].clips[path.clipIdx].effects.pitchDirection = direction
                 onEditCommit()
             }
         )

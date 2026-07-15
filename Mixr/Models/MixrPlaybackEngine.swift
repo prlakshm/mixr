@@ -5,8 +5,12 @@ import Combine
 //
 // Real DSP graph — every song track renders through its own effect chain:
 //
-//   player → timePitch → EQ (bass multi-band + blur LPF) → bass sat
-//          → delay → reverb → mainMixer → peak limiter → output
+//   player → timePitch → EQ (blur LPF) → flanger → delay → reverb
+//          → mainMixer → peak limiter → output
+//
+// The flanger is a custom modulated fractional-delay unit (ClipFlanger);
+// its parameters ramp inside the kernel, and its LFO phase is pinned to
+// the project timeline every tick so sweeps are deterministic.
 //
 // All clips of a track are scheduled (not just the first). Per-clip volume,
 // effect settings (MixrClip.effects — see ClipEffectSettings), and transition
@@ -19,9 +23,8 @@ import Combine
 //   • Smoothable parameters (wet mixes, EQ gain/frequency, pitch, volume)
 //     are RAMPED toward their targets instead of jumped, so live slider
 //     moves are click-free and clip boundaries don't pop.
-//   • Effects at 0 resolve to true bypasses (EQ band/vocoder/sat bypass,
-//     0 wet) so untouched clips pay no processing cost and sound
-//     bit-identical.
+//   • Effects at 0 resolve to true bypasses (EQ band/vocoder bypass, 0 wet)
+//     so untouched clips pay no processing cost and sound bit-identical.
 //   • The SFX track plays real audio buffers (bundled generated assets,
 //     procedurally synthesized as a fallback).
 //
@@ -47,6 +50,8 @@ final class MixrPlaybackEngine: ObservableObject {
     private var anchor: (timeline: Double, wall: Double)?
     private var ticker: Timer?
     private var snapshot: [MixrTrack] = []
+    /// Project tempo for echo sync + flanger sweep rate (fallback 124).
+    private var projectBPM: Double = 124
     private var audioSessionReady = false
 
     // MARK: - Per-track effect chain
@@ -54,10 +59,11 @@ final class MixrPlaybackEngine: ObservableObject {
     private final class TrackChain {
         let player = AVAudioPlayerNode()
         let timePitch = AVAudioUnitTimePitch()
-        /// 4 bands: 0 shelf · 1 punch bell · 2 mud cut · 3 Blur LPF.
-        let eq = AVAudioUnitEQ(numberOfBands: 4)
-        /// Subtle harmonic stage for Bass Boost (upper slider half).
-        let bassSat = ClipEffectDSP.makeBassSaturator()
+        /// Single band: Blur low-pass.
+        let eq = AVAudioUnitEQ(numberOfBands: 1)
+        /// Custom modulated fractional-delay flanger (nil if instantiation failed).
+        let flangerNode: AVAudioUnit?
+        let flangerKernel: FlangerKernel?
         let delay = AVAudioUnitDelay()
         let reverb = AVAudioUnitReverb()
         let file: AVAudioFile
@@ -73,10 +79,6 @@ final class MixrPlaybackEngine: ObservableObject {
         var smoothedVolume: Float = 0
         var smoothedPitch: Float = 0
         var smoothedLowPassFreq: Float = 20000
-        var smoothedBassShelf: Float = 0
-        var smoothedBassPunch: Float = 0
-        var smoothedBassMud: Float = 0
-        var smoothedBassSatWet: Float = 0
         var smoothedDelayWet: Float = 0
         var smoothedDelayFeedback: Float = 0
         var smoothedReverbWet: Float = 0
@@ -85,9 +87,17 @@ final class MixrPlaybackEngine: ObservableObject {
             self.file = file
             self.url = url
             self.securityScoped = securityScoped
+            let node = ClipFlanger.makeNode()
+            flangerNode = node
+            flangerKernel = ClipFlanger.kernel(of: node)
         }
 
-        var allNodes: [AVAudioNode] { [player, timePitch, eq, bassSat, delay, reverb] }
+        var allNodes: [AVAudioNode] {
+            var nodes: [AVAudioNode] = [player, timePitch, eq]
+            if let flangerNode { nodes.append(flangerNode) }
+            nodes.append(contentsOf: [delay, reverb])
+            return nodes
+        }
     }
 
     private final class SFXChain {
@@ -99,8 +109,9 @@ final class MixrPlaybackEngine: ObservableObject {
     // MARK: - Public API
 
     /// Full sync: called when tracks are added, removed, or clip geometry changes.
-    func syncTracks(_ tracks: [MixrTrack]) {
+    func syncTracks(_ tracks: [MixrTrack], projectBPM: Int? = nil) {
         snapshot = tracks
+        if let projectBPM { self.projectBPM = Double(projectBPM) }
         totalDurationSeconds = MixrTimeline.remixDurationSeconds(tracks: tracks)
 
         if tracks.isEmpty && isPlaying { pause() }
@@ -139,8 +150,9 @@ final class MixrPlaybackEngine: ObservableObject {
     /// changed. No reschedule needed — while playing the 60 fps tick
     /// picks the new snapshot up and ramps parameters live, so effect
     /// slider moves are audible immediately without restarting playback.
-    func applyMixSettings(from tracks: [MixrTrack]) {
+    func applyMixSettings(from tracks: [MixrTrack], projectBPM: Int? = nil) {
         snapshot = tracks
+        if let projectBPM { self.projectBPM = Double(projectBPM) }
         if !isPlaying {
             // Keep node parameters current so play() starts correct.
             applyTickParameters(at: currentTimeSeconds, force: true)
@@ -216,7 +228,7 @@ final class MixrPlaybackEngine: ObservableObject {
             ClipEffectDSP.configureRestState(
                 timePitch: chain.timePitch,
                 eq: chain.eq,
-                bassSat: chain.bassSat,
+                flanger: chain.flangerKernel,
                 delay: chain.delay,
                 reverb: chain.reverb
             )
@@ -226,8 +238,12 @@ final class MixrPlaybackEngine: ObservableObject {
             let fmt = file.processingFormat
             engine.connect(chain.player, to: chain.timePitch, format: fmt)
             engine.connect(chain.timePitch, to: chain.eq, format: fmt)
-            engine.connect(chain.eq, to: chain.bassSat, format: fmt)
-            engine.connect(chain.bassSat, to: chain.delay, format: fmt)
+            if let flangerNode = chain.flangerNode {
+                engine.connect(chain.eq, to: flangerNode, format: fmt)
+                engine.connect(flangerNode, to: chain.delay, format: fmt)
+            } else {
+                engine.connect(chain.eq, to: chain.delay, format: fmt)
+            }
             engine.connect(chain.delay, to: chain.reverb, format: fmt)
             engine.connect(chain.reverb, to: engine.mainMixerNode, format: fmt)
 
@@ -339,37 +355,15 @@ final class MixrPlaybackEngine: ObservableObject {
             var trackHasAudio = false
 
             for clip in track.clips.sorted(by: { $0.start < $1.start }) {
-                let clipStart = MixrTimeline.seconds(fromUnits: clip.start)
-                let clipEnd = MixrTimeline.seconds(fromUnits: clip.start + clip.length)
-                guard timelineSeconds < clipEnd else { continue }
-
-                let speed = max(clip.playbackSpeed, 0.0001)
-                let intoClipSec = max(0, timelineSeconds - clipStart)
-                let sourceStartSec = clip.sourceOffsetSeconds + intoClipSec * speed
-                let timelinePlayableSec = clipEnd - max(timelineSeconds, clipStart)
-                var sourceSec = timelinePlayableSec * speed
-
-                let startFrame = AVAudioFramePosition(sourceStartSec * sr)
-                guard startFrame < fileFrames else { continue }
-                sourceSec = min(sourceSec, Double(fileFrames - startFrame) / sr)
-                let frames = AVAudioFrameCount(max(0, sourceSec * sr))
-                guard frames > 0 else { continue }
-
-                // Downstream timePitch stretches output by 1/rate — schedule
-                // delays in the player's INPUT timeline (delay × rate).
-                // Exact for uniform-rate tracks (imports and beatmatched
-                // songs); mixed per-clip speeds drift slightly — accepted V1
-                // limitation until per-clip sub-chains land.
-                let delaySec = max(0, clipStart - timelineSeconds) * speed
-                let nodeTime = AVAudioTime(hostTime: syncTicks + AVAudioTime.hostTime(forSeconds: delaySec))
-
-                chain.player.scheduleSegment(
-                    chain.file,
-                    startingFrame: startFrame,
-                    frameCount: frames,
-                    at: nodeTime
+                let scheduled = scheduleSongClip(
+                    clip,
+                    chain: chain,
+                    timelineSeconds: timelineSeconds,
+                    syncTicks: syncTicks,
+                    sampleRate: sr,
+                    fileFrames: fileFrames
                 )
-                trackHasAudio = true
+                if scheduled { trackHasAudio = true }
             }
 
             if trackHasAudio {
@@ -451,6 +445,46 @@ final class MixrPlaybackEngine: ObservableObject {
         startTicker()
     }
 
+    /// Schedules one song clip as a single dry segment (trim/offset/speed
+    /// aware). Returns true if any audio was queued.
+    @discardableResult
+    private func scheduleSongClip(
+        _ clip: MixrClip,
+        chain: TrackChain,
+        timelineSeconds: Double,
+        syncTicks: UInt64,
+        sampleRate sr: Double,
+        fileFrames: AVAudioFramePosition
+    ) -> Bool {
+        let clipStart = MixrTimeline.seconds(fromUnits: clip.start)
+        let clipEnd = MixrTimeline.seconds(fromUnits: clip.start + clip.length)
+        guard timelineSeconds < clipEnd else { return false }
+
+        let speed = max(clip.playbackSpeed, 0.0001)
+        let playStart = max(clipStart, timelineSeconds)
+        let dur = clipEnd - playStart
+        guard dur > 0.001 else { return false }
+
+        let into = playStart - clipStart
+        let srcStart = clip.sourceOffsetSeconds + into * speed
+        var srcDur = dur * speed
+        let startFrame = AVAudioFramePosition(srcStart * sr)
+        guard startFrame < fileFrames else { return false }
+        srcDur = min(srcDur, Double(fileFrames - startFrame) / sr)
+        let frames = AVAudioFrameCount(max(0, srcDur * sr))
+        guard frames > 0 else { return false }
+
+        let delaySec = max(0, playStart - timelineSeconds) * speed
+        let nodeTime = AVAudioTime(hostTime: syncTicks + AVAudioTime.hostTime(forSeconds: delaySec))
+        chain.player.scheduleSegment(
+            chain.file,
+            startingFrame: startFrame,
+            frameCount: frames,
+            at: nodeTime
+        )
+        return true
+    }
+
     private func stopAllNodes() {
         for chain in chains.values { chain.player.stop() }
         sfxChain?.player.stop()
@@ -468,7 +502,7 @@ final class MixrPlaybackEngine: ObservableObject {
         for track in snapshot where !track.isSFXTrack {
             guard let chain = chains[track.id] else { continue }
             let audible = TrackLibrary.isAudible(track, in: soloAware)
-            let bpm = Double(track.bpm ?? 124)
+            let bpm = Double(track.bpm ?? Int(projectBPM))
 
             let clip = track.clips.first { clip in
                 !clip.isSoundEffect
@@ -479,13 +513,16 @@ final class MixrPlaybackEngine: ObservableObject {
             var targetVolume: Float = 0
             if let clip, audible {
                 let envelope = ClipEffectDSP.transitionEnvelope(for: clip, at: t, bpm: bpm)
-                // Bass Boost pulls the clip level down slightly so the
-                // shelf adds low-end weight rather than raw loudness.
-                let compensation = ClipEffectDSP.outputCompensation(for: clip.effects)
-                targetVolume = Float(track.volume * clip.volume * envelope.gain * compensation)
-                applyEffects(clip: clip, chain: chain, bpm: bpm, echoBoost: envelope.echoBoost, force: force)
+                targetVolume = Float(track.volume * clip.volume * envelope.gain)
+                applyEffects(clip: clip, chain: chain, at: t, bpm: bpm, echoBoost: envelope.echoBoost, force: force)
             } else if audible {
                 // Between clips: silent input, but let delay/reverb tails ring.
+                // The flanger has no tail — release it so it never stays
+                // active on the shared track chain after a clip ends.
+                chain.flangerKernel?.setTargets(
+                    wet: 0, feedback: 0, depthSeconds: 0,
+                    baseDelaySeconds: 0.0006, lfoFrequency: 0.25, phase: 0
+                )
                 chain.appliedClipID = nil
             }
 
@@ -518,6 +555,7 @@ final class MixrPlaybackEngine: ObservableObject {
     private func applyEffects(
         clip: MixrClip,
         chain: TrackChain,
+        at timelineSeconds: Double,
         bpm: Double,
         echoBoost: Double,
         force: Bool
@@ -530,8 +568,9 @@ final class MixrPlaybackEngine: ObservableObject {
         )
         let coeff: Float = force ? 1.0 : 0.28
 
-        // ── Pitch Up (AVAudioUnitTimePitch) ──
-        // Pitch ramps in cents → smooth glide between slider values.
+        // ── Pitch (AVAudioUnitTimePitch) ──
+        // Pitch ramps in cents → smooth glide between slider values and
+        // when flipping Up ↔ Down (signed cents).
         chain.smoothedPitch += (t.pitchCents - chain.smoothedPitch) * coeff
         if abs(t.pitchCents - chain.smoothedPitch) < 0.5 { chain.smoothedPitch = t.pitchCents }
         chain.timePitch.pitch = chain.smoothedPitch
@@ -539,15 +578,15 @@ final class MixrPlaybackEngine: ObservableObject {
         // Bypassing the phase vocoder changes its latency, so only
         // re-engage the bypass on force applies (start/seek) — engaging
         // it mid-stream would cause an audible timing jump.
-        let pitchAtRest = t.timePitchBypass && chain.smoothedPitch == 0
+        let pitchAtRest = t.timePitchBypass && abs(chain.smoothedPitch) < 0.5
         if !pitchAtRest {
             chain.timePitch.bypass = false
         } else if force {
             chain.timePitch.bypass = true
         }
 
-        // ── Blur (EQ band 3 low-pass) — ramp the cutoff in the log domain ──
-        let lowPass = chain.eq.bands[3]
+        // ── Blur (EQ low-pass) — ramp the cutoff in the log domain ──
+        let lowPass = chain.eq.bands[0]
         if chain.smoothedLowPassFreq > 0 {
             chain.smoothedLowPassFreq *= pow(t.lowPassFrequency / chain.smoothedLowPassFreq, coeff)
         } else {
@@ -559,47 +598,11 @@ final class MixrPlaybackEngine: ObservableObject {
         lowPass.frequency = chain.smoothedLowPassFreq
         lowPass.bypass = t.lowPassBypass && chain.smoothedLowPassFreq >= 19_999
 
-        // ── Bass Boost (multi-band EQ + subtle sat) ──
-        chain.smoothedBassShelf += (t.bassShelfGainDB - chain.smoothedBassShelf) * coeff
-        if abs(t.bassShelfGainDB - chain.smoothedBassShelf) < 0.02 {
-            chain.smoothedBassShelf = t.bassShelfGainDB
-        }
-        chain.smoothedBassPunch += (t.bassPunchGainDB - chain.smoothedBassPunch) * coeff
-        if abs(t.bassPunchGainDB - chain.smoothedBassPunch) < 0.02 {
-            chain.smoothedBassPunch = t.bassPunchGainDB
-        }
-        chain.smoothedBassMud += (t.bassMudGainDB - chain.smoothedBassMud) * coeff
-        if abs(t.bassMudGainDB - chain.smoothedBassMud) < 0.02 {
-            chain.smoothedBassMud = t.bassMudGainDB
-        }
-        chain.smoothedBassSatWet += (t.bassSaturationWet - chain.smoothedBassSatWet) * coeff
-        if abs(t.bassSaturationWet - chain.smoothedBassSatWet) < 0.05 {
-            chain.smoothedBassSatWet = t.bassSaturationWet
-        }
-
-        let bassAtRest = t.bassBypass
-            && chain.smoothedBassShelf == 0
-            && chain.smoothedBassPunch == 0
-            && abs(chain.smoothedBassMud) < 0.02
-
-        let shelf = chain.eq.bands[0]
-        shelf.gain = chain.smoothedBassShelf
-        shelf.bypass = bassAtRest
-
-        let punch = chain.eq.bands[1]
-        punch.gain = chain.smoothedBassPunch
-        punch.bypass = bassAtRest
-
-        let mud = chain.eq.bands[2]
-        mud.gain = chain.smoothedBassMud
-        mud.bypass = bassAtRest
-
-        chain.bassSat.wetDryMix = chain.smoothedBassSatWet
-        if chain.smoothedBassSatWet > 0.05 {
-            chain.bassSat.bypass = false
-        } else if force || t.bassSaturationBypass {
-            chain.bassSat.bypass = true
-        }
+        // ── Flanger (custom modulated fractional delay) ──
+        // Targets go straight to the kernel — it ramps wet/feedback/depth
+        // per sample itself, and the timeline-derived phase keeps the sweep
+        // deterministic across seeks, restarts, and export.
+        ClipEffectDSP.applyFlanger(t, kernel: chain.flangerKernel, timelineSeconds: timelineSeconds)
 
         // ── Echo (AVAudioUnitDelay) ──
         // Wet mix and feedback ramp; delay TIME is set only when the

@@ -149,7 +149,7 @@ struct DesignSystemPreviewView: View {
                     Text("Effect Title · 11pt Semibold")
                         .mixrFont(.caption)
                         .foregroundStyle(MixrColors.textTertiary)
-                    Text("Bass Boost")
+                    Text("Flanger")
                         .font(.system(size: EffectCardMetrics.titleFontSize, weight: .semibold))
                         .foregroundStyle(MixrColors.textPrimary)
                 }
@@ -477,7 +477,7 @@ struct DesignSystemPreviewView: View {
                 PreviewSubsection(title: "Slider-only effects") {
                     HStack(spacing: MixrSpacing.sm) {
                         EffectControlTray(effect: .blur, level: 25)
-                        EffectControlTray(effect: .pitchUp, level: 80)
+                        EffectControlTray(effect: .flanger, level: 80)
                     }
                 }
             }

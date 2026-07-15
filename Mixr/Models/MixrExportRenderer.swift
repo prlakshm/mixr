@@ -6,7 +6,7 @@ import Foundation
 // Offline bounce of the project using AVAudioEngine manual rendering.
 // The graph is a mirror of MixrPlaybackEngine's live graph:
 //
-//   per song track: player → timePitch → EQ → bass sat → delay → reverb → mainMixer
+//   per song track: player → timePitch → EQ → flanger → delay → reverb → mainMixer
 //   SFX track:      player → mainMixer
 //   master:         mainMixer → peak limiter → output
 //
@@ -41,17 +41,28 @@ nonisolated enum MixrExportRenderer {
     private final class ExportChain {
         let player = AVAudioPlayerNode()
         let timePitch = AVAudioUnitTimePitch()
-        let eq = AVAudioUnitEQ(numberOfBands: 4)
-        let bassSat = ClipEffectDSP.makeBassSaturator()
+        let eq = AVAudioUnitEQ(numberOfBands: 1)
+        let flangerNode: AVAudioUnit?
+        let flangerKernel: FlangerKernel?
         let delay = AVAudioUnitDelay()
         let reverb = AVAudioUnitReverb()
         let file: AVAudioFile
         var appliedReverbPreset: ReverbPreset?
         var appliedDelayTime: TimeInterval = 0
 
-        init(file: AVAudioFile) { self.file = file }
+        init(file: AVAudioFile) {
+            self.file = file
+            let node = ClipFlanger.makeNode()
+            flangerNode = node
+            flangerKernel = ClipFlanger.kernel(of: node)
+        }
 
-        var allNodes: [AVAudioNode] { [player, timePitch, eq, bassSat, delay, reverb] }
+        var allNodes: [AVAudioNode] {
+            var nodes: [AVAudioNode] = [player, timePitch, eq]
+            if let flangerNode { nodes.append(flangerNode) }
+            nodes.append(contentsOf: [delay, reverb])
+            return nodes
+        }
     }
 
     /// Renders the project to an AAC (.m4a) file and returns its URL.
@@ -60,6 +71,7 @@ nonisolated enum MixrExportRenderer {
     static func export(
         tracks: [MixrTrack],
         projectName: String,
+        projectBPM: Int? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) throws -> URL {
         let contentSeconds = MixrTimeline.remixDurationSeconds(tracks: tracks)
@@ -85,7 +97,7 @@ nonisolated enum MixrExportRenderer {
             ClipEffectDSP.configureRestState(
                 timePitch: chain.timePitch,
                 eq: chain.eq,
-                bassSat: chain.bassSat,
+                flanger: chain.flangerKernel,
                 delay: chain.delay,
                 reverb: chain.reverb
             )
@@ -95,8 +107,12 @@ nonisolated enum MixrExportRenderer {
             let fmt = file.processingFormat
             engine.connect(chain.player, to: chain.timePitch, format: fmt)
             engine.connect(chain.timePitch, to: chain.eq, format: fmt)
-            engine.connect(chain.eq, to: chain.bassSat, format: fmt)
-            engine.connect(chain.bassSat, to: chain.delay, format: fmt)
+            if let flangerNode = chain.flangerNode {
+                engine.connect(chain.eq, to: flangerNode, format: fmt)
+                engine.connect(flangerNode, to: chain.delay, format: fmt)
+            } else {
+                engine.connect(chain.eq, to: chain.delay, format: fmt)
+            }
             engine.connect(chain.delay, to: chain.reverb, format: fmt)
             engine.connect(chain.reverb, to: engine.mainMixerNode, format: fmt)
             chains.append((track, chain))
@@ -231,7 +247,11 @@ nonisolated enum MixrExportRenderer {
 
     // MARK: - Scheduling (same trim/offset/speed math as live playback)
 
-    private static func scheduleClips(for track: MixrTrack, chain: ExportChain, timelineSeconds: Double) {
+    private static func scheduleClips(
+        for track: MixrTrack,
+        chain: ExportChain,
+        timelineSeconds: Double
+    ) {
         let sr = chain.file.processingFormat.sampleRate
         let fileFrames = chain.file.length
 
@@ -241,20 +261,20 @@ nonisolated enum MixrExportRenderer {
             guard timelineSeconds < clipEnd else { continue }
 
             let speed = max(clip.playbackSpeed, 0.0001)
-            let intoClipSec = max(0, timelineSeconds - clipStart)
-            let sourceStartSec = clip.sourceOffsetSeconds + intoClipSec * speed
-            let timelinePlayableSec = clipEnd - max(timelineSeconds, clipStart)
-            var sourceSec = timelinePlayableSec * speed
+            let playStart = max(clipStart, timelineSeconds)
+            let dur = clipEnd - playStart
+            guard dur > 0.001 else { continue }
 
-            let startFrame = AVAudioFramePosition(sourceStartSec * sr)
+            let into = playStart - clipStart
+            let srcStart = clip.sourceOffsetSeconds + into * speed
+            var srcDur = dur * speed
+            let startFrame = AVAudioFramePosition(srcStart * sr)
             guard startFrame < fileFrames else { continue }
-            sourceSec = min(sourceSec, Double(fileFrames - startFrame) / sr)
-            let frames = AVAudioFrameCount(max(0, sourceSec * sr))
+            srcDur = min(srcDur, Double(fileFrames - startFrame) / sr)
+            let frames = AVAudioFrameCount(max(0, srcDur * sr))
             guard frames > 0 else { continue }
 
-            // Downstream timePitch stretches output by 1/rate — schedule
-            // delays in the player's INPUT timeline (delay × rate).
-            let delaySec = max(0, clipStart - timelineSeconds) * speed
+            let delaySec = max(0, playStart - timelineSeconds) * speed
             chain.player.scheduleSegment(
                 chain.file,
                 startingFrame: startFrame,
@@ -287,10 +307,8 @@ nonisolated enum MixrExportRenderer {
             var volume: Float = 0
             if let clip, audible {
                 let envelope = ClipEffectDSP.transitionEnvelope(for: clip, at: t, bpm: bpm)
-                let compensation = ClipEffectDSP.outputCompensation(for: clip.effects)
-                volume = Float(track.volume * clip.volume * envelope.gain * compensation)
+                volume = Float(track.volume * clip.volume * envelope.gain)
 
-                // Same slider→parameter mapping as live playback.
                 let targets = ClipEffectDSP.targets(
                     for: clip.effects,
                     playbackSpeed: clip.playbackSpeed,
@@ -301,15 +319,21 @@ nonisolated enum MixrExportRenderer {
                     targets,
                     timePitch: chain.timePitch,
                     eq: chain.eq,
-                    bassSat: chain.bassSat,
+                    flanger: chain.flangerKernel,
                     delay: chain.delay,
                     reverb: chain.reverb,
+                    timelineSeconds: t,
                     appliedReverbPreset: &chain.appliedReverbPreset,
                     appliedDelayTime: &chain.appliedDelayTime
                 )
+            } else {
+                // No clip under this block — make sure the flanger never
+                // lingers on the shared track chain.
+                chain.flangerKernel?.setTargets(
+                    wet: 0, feedback: 0, depthSeconds: 0,
+                    baseDelaySeconds: 0.0006, lfoFrequency: 0.25, phase: 0
+                )
             }
-            // Between clips the last effect state persists (volume = 0) so
-            // delay/reverb tails ring out — same behavior as live playback.
             chain.player.volume = volume
         }
 

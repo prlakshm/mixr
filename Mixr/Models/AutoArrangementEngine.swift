@@ -187,6 +187,11 @@ private struct TimelineEditor {
         tracks[ti].clips[ci].effects.echoPreset = preset
     }
 
+    mutating func setPitchDirection(_ clipID: UUID, _ direction: PitchDirection) {
+        guard let (ti, ci) = locate(clipID) else { return }
+        tracks[ti].clips[ci].effects.pitchDirection = direction
+    }
+
     mutating func setTransitionIn(_ clipID: UUID, _ transition: ClipTransition) {
         guard let (ti, ci) = locate(clipID) else { return }
         tracks[ti].clips[ci].transitionIn = transition
