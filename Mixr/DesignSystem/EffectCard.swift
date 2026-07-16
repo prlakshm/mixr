@@ -293,7 +293,7 @@ private enum EffectIconGlow {
 private enum EffectRimGlow {
     static func multiplier(for effect: MixrEffect) -> Double {
         switch effect {
-        case .blur: 0.81225 // yellow rim pullback
+        case .blur: 0.71225 // yellow rim pullback
         case .flanger: 0.9025 // red rim pullback
         case .pitchUp: 0.9025 // −5% then −5%
         default: 1.0

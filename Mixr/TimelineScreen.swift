@@ -3610,6 +3610,10 @@ private struct TLEffectsPanel: View {
     var onAutoTapped: () -> Void = {}
 
     @State private var selectedEffect: MixrEffect?
+    /// Current horizontal content offset of the cards row — the open/close
+    /// slide compensates for it so the focused card always lands flush with
+    /// the "Effects" header, no matter where the row is scrolled.
+    @State private var rowScrollOffset: CGFloat = 0
 
     // MARK: Targeting — selected clip first, else the clip under the playhead.
 
@@ -3641,16 +3645,18 @@ private struct TLEffectsPanel: View {
         .easeInOut(duration: EffectTrayMetrics.expandAnimationDuration)
     }
 
-    /// Sibling cards stay solid for the first 3/4 of the push, then fade in the last quarter.
+    /// Siblings dissolve WHILE the focused card slides — a concurrent
+    /// crossfade, so no card text ever overlaps mid-push.
     private var siblingFadeOutAnimation: Animation {
         let total = EffectTrayMetrics.expandAnimationDuration
-        return .easeInOut(duration: total * 0.25).delay(total * 0.75)
+        return .easeInOut(duration: total * 0.45)
     }
 
-    /// On close, fade siblings back in during the first quarter of the reverse push.
+    /// On close, siblings reappear only as the reverse push settles, so the
+    /// focused card never slides across visible neighbors.
     private var siblingFadeInAnimation: Animation {
         let total = EffectTrayMetrics.expandAnimationDuration
-        return .easeInOut(duration: total * 0.25)
+        return .easeInOut(duration: total * 0.40).delay(total * 0.45)
     }
 
     var body: some View {
@@ -3698,8 +3704,10 @@ private struct TLEffectsPanel: View {
             let isExpanded = selectedEffect?.isAdjustable == true && targetClipPath != nil
             let focusIndex = selectedEffect.flatMap { MixrEffect.allCases.firstIndex(of: $0) } ?? 0
             // Push: slide focused card under "Effects"; left cards exit left.
+            // Adding the live scroll offset keeps the landing spot pinned to
+            // the header inset even when the row is scrolled (Flanger/Blur).
             let rowOffset: CGFloat = isExpanded
-                ? -CGFloat(focusIndex) * (cardWidth + gap)
+                ? rowScrollOffset - CGFloat(focusIndex) * (cardWidth + gap)
                 : 0
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -3733,6 +3741,8 @@ private struct TLEffectsPanel: View {
                                 )
                             }
                         }
+                        // Focused card + tray render above dissolving siblings.
+                        .zIndex(isFocus ? 1 : 0)
                         .allowsHitTesting(!isExpanded || isFocus)
                     }
                 }
@@ -3742,6 +3752,11 @@ private struct TLEffectsPanel: View {
                 .padding(.bottom, 10)
                 .offset(x: rowOffset)
                 .animation(expandAnimation, value: selectedEffect)
+            }
+            .onScrollGeometryChange(for: CGFloat.self, of: {
+                $0.contentOffset.x + $0.contentInsets.leading
+            }) { _, new in
+                rowScrollOffset = new
             }
             .scrollDisabled(isExpanded)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -3772,6 +3787,8 @@ private struct TLEffectsPanel: View {
         width: CGFloat,
         visible: Bool
     ) -> some View {
+        let total = EffectTrayMetrics.expandAnimationDuration
+
         Group {
             if visible, let path = targetClipPath {
                 effectTray(effect: effect, path: path)
@@ -3782,6 +3799,16 @@ private struct TLEffectsPanel: View {
         .frame(width: width, alignment: .center)
         .clipped()
         .opacity(visible ? 1 : 0)
+        // Fade the tray in as siblings dissolve (never a flash over them);
+        // on close it clears quickly before cards slide back.
+        .transition(
+            .asymmetric(
+                insertion: .opacity.animation(
+                    .easeInOut(duration: total * 0.5).delay(total * 0.22)
+                ),
+                removal: .opacity.animation(.easeOut(duration: total * 0.3))
+            )
+        )
         .allowsHitTesting(visible)
     }
 

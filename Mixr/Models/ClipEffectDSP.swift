@@ -86,21 +86,22 @@ nonisolated enum ClipEffectDSP {
         let lowPassFrequency = Float(20000.0 * pow(650.0 / 20000.0, eased))
 
         // ── FLANGER ──
-        // Shaped response: controllable low range, dramatic top end.
-        // The slider drives a coordinated group — wet mix, modulation
-        // depth, feedback, sweep prominence — never just wet volume.
+        // The slider drives a coordinated group — wet mix, feedback,
+        // sweep depth, and sweep rate — never just wet volume. An eased
+        // curve (x^0.65) front-loads the response so 25/50 are clearly
+        // audible, and 100 is a full jet sweep on par with the other
+        // effects at max (ceilings sit just under the kernel clamps).
         let flangerAmount = min(max(settings.flangerAmount, 0), 1)
-        // Mild shaping so mid-slider values stay audible while 100 stays dramatic.
-        let flangerShaped = pow(flangerAmount, 1.1)
         let flangerBypass = flangerAmount <= 0.001
-        //   25% → wet ≈ 0.14, fb ≈ 0.17, swing ≈ 0.6–3.0 ms
-        //   50% → wet ≈ 0.30, fb ≈ 0.37, swing ≈ 0.6–5.2 ms
-        //   75% → wet ≈ 0.47, fb ≈ 0.58, swing ≈ 0.6–7.4 ms
-        //  100% → wet ≈ 0.65, fb ≈ 0.80, swing ≈ 0.6–9.1 ms (jet, still safe)
-        let flangerWet = Float(0.65 * flangerShaped)
-        let flangerFeedback = Float(0.80 * flangerShaped)
-        let flangerBase: Float = 0.0006
-        let flangerDepth = Float(flangerBypass ? 0 : 0.0003 + 0.0082 * flangerShaped)
+        let flangerShaped = pow(flangerAmount, 0.65)
+        //   25% → wet ≈ 0.29, fb ≈ 0.34, swing ≈ 0.9–4.4 ms
+        //   50% → wet ≈ 0.46, fb ≈ 0.54, swing ≈ 0.9–6.3 ms
+        //   75% → wet ≈ 0.60, fb ≈ 0.70, swing ≈ 0.9–8.0 ms
+        //  100% → wet ≈ 0.72, fb ≈ 0.84, swing ≈ 0.9–9.4 ms (jet, kernel-safe)
+        let flangerWet = Float(0.72 * flangerShaped)
+        let flangerFeedback = Float(0.84 * flangerShaped)
+        let flangerBase: Float = 0.0009
+        let flangerDepth = Float(flangerBypass ? 0 : 0.0085 * flangerShaped)
 
         // ── ECHO (tempo-synced delay) ──
         let beat = 60.0 / max(bpm, 1)
@@ -144,7 +145,7 @@ nonisolated enum ClipEffectDSP {
             flangerFeedback: flangerFeedback,
             flangerDepthSeconds: flangerDepth,
             flangerBaseDelaySeconds: flangerBase,
-            flangerLFOFrequency: flangerLFOFrequency(bpm: bpm),
+            flangerLFOFrequency: flangerLFOFrequency(bpm: bpm, amount: flangerAmount),
             flangerBypass: flangerBypass,
             delayTime: delayTime,
             delayFeedback: delayFeedback,
@@ -157,14 +158,17 @@ nonisolated enum ClipEffectDSP {
 
     // MARK: - Flanger sweep (tempo-synced, deterministic phase)
 
-    /// One complete LFO sweep every TWO BARS of the project tempo (4/4) —
-    /// smooth, professional movement. Falls back to a stable 0.25 Hz when
-    /// the BPM is unavailable or invalid.
-    static func flangerLFOFrequency(bpm: Double) -> Float {
-        guard bpm.isFinite, bpm >= 30, bpm <= 300 else { return 0.25 }
-        let secondsPerBeat = 60.0 / bpm
-        let twoBarSweepDuration = secondsPerBeat * 4.0 * 2.0
-        return Float(1.0 / twoBarSweepDuration)
+    /// Tempo-synced LFO (4/4): one complete sweep every TWO BARS at low
+    /// intensity — smooth, professional movement — tightening linearly to
+    /// ONE BAR at 100%, so max intensity also sweeps noticeably faster.
+    /// Falls back to a stable equivalent rate when the BPM is invalid.
+    static func flangerLFOFrequency(bpm: Double, amount: Double = 1) -> Float {
+        let sweepBars = 2.0 - min(max(amount, 0), 1)
+        guard bpm.isFinite, bpm >= 30, bpm <= 300 else {
+            return Float(0.5 / sweepBars) // 0.25 Hz at 2 bars, 0.5 Hz at 1
+        }
+        let secondsPerBar = (60.0 / bpm) * 4.0
+        return Float(1.0 / (secondsPerBar * sweepBars))
     }
 
     /// LFO phase 0…1 derived from the PROJECT TIMELINE position — never
