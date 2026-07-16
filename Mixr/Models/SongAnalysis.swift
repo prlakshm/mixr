@@ -7,6 +7,7 @@ struct SongSection: Equatable, Sendable {
     enum Kind: String, Sendable {
         case intro
         case verse
+        case build       // pre-chorus / riser bars leading into a chorus
         case chorus      // chorus or drop
         case bridge
         case instrumental
@@ -45,7 +46,11 @@ struct SongAnalysis: Sendable {
     var bpm: Double
     /// True when bpm came from metadata/analysis rather than the default.
     var bpmIsReal: Bool
+    /// nil = trusted (metadata); 0…1 when estimated on-device.
+    var bpmConfidence: Double?
     var key: String?
+    /// nil = trusted (metadata); 0…1 when estimated on-device.
+    var keyConfidence: Double?
     var durationSeconds: Double
 
     var beatGrid: [Double]
@@ -57,6 +62,8 @@ struct SongAnalysis: Sendable {
     var introCandidate: SongSection?
     var verseCandidates: [SongSection]
     var chorusOrDropCandidates: [SongSection]
+    /// Pre-chorus bars leading into each chorus/drop — riser real estate.
+    var buildCandidates: [SongSection]
     var bridgeCandidate: SongSection?
     var outroCandidate: SongSection?
     var instrumentalCandidates: [SongSection]
@@ -74,6 +81,18 @@ struct SongAnalysis: Sendable {
     /// Salient vocal/lyric moments. Empty in V1 — requires vocal detection
     /// or lyric alignment (integration point above).
     var lyricOrVocalMoments: [Double]
+
+    /// Song times where a recognizable hook most likely starts (chorus/drop
+    /// entrances) — used for teasers and "lead with the hook" placement.
+    var hookMoments: [Double]
+
+    /// 0…1 estimate of drum/transient strength (rhythmic reliability).
+    var drumStrength: Double
+    /// 0…1 estimate of low-end density (drop-vs-drop clash avoidance).
+    var bassDensity: Double
+    /// 0…1 overall trust in this analysis (beat grid + key + duration).
+    /// Below ~0.5 the Auto planner switches to its safe fallback behavior.
+    var analysisConfidence: Double
 
     // MARK: Derived musical units
 
@@ -101,6 +120,26 @@ struct SongAnalysis: Sendable {
     /// Sampled energy at a song time, 0…1.
     func energy(at seconds: Double) -> Double {
         sample(energyCurve, at: seconds)
+    }
+
+    /// Mean energy over a source range, 0…1.
+    func meanEnergy(from start: Double, to end: Double) -> Double {
+        meanSample(energyCurve, from: start, to: end)
+    }
+
+    /// Mean vocal density over a source range, 0…1.
+    func meanVocalDensity(from start: Double, to end: Double) -> Double {
+        meanSample(vocalDensityCurve, from: start, to: end)
+    }
+
+    private func meanSample(_ curve: [Double], from start: Double, to end: Double) -> Double {
+        guard end > start else { return sample(curve, at: start) }
+        let steps = 8
+        var total = 0.0
+        for i in 0...steps {
+            total += sample(curve, at: start + (end - start) * Double(i) / Double(steps))
+        }
+        return total / Double(steps + 1)
     }
 
     private func sample(_ curve: [Double], at seconds: Double) -> Double {
@@ -181,6 +220,13 @@ enum SongAnalyzer {
             instrumentals.append(SongSection(kind: .instrumental, startSeconds: bridge.startSeconds, endSeconds: bridge.endSeconds))
         }
 
+        // Pre-chorus builds: the 4 bars leading into each chorus entrance.
+        let builds: [SongSection] = [chorus1, chorus2].compactMap { chorus in
+            let start = chorus.startSeconds - bar * 4
+            guard start >= intro.endSeconds - 0.01 else { return nil }
+            return SongSection(kind: .build, startSeconds: start, endSeconds: chorus.startSeconds)
+        }
+
         var sections: [SongSection] = [intro] + verses + [chorus1, chorus2] + (bridge.map { [$0] } ?? []) + [outro]
         sections.sort { $0.startSeconds < $1.startSeconds }
 
@@ -218,10 +264,26 @@ enum SongAnalyzer {
         mixOut = mixOut.filter { $0 > 0 }
         if mixOut.isEmpty { mixOut = [max(0, duration - phrase)] }
 
+        // ── Trust estimates ──
+        // BPM/key from metadata are fully trusted (confidence nil → 1.0);
+        // on-device estimates carry their own confidence; a default BPM
+        // means the beat grid is a guess and Auto must stay conservative.
+        let bpmTrust: Double = track.bpm == nil ? 0.15 : (track.bpmConfidence ?? 1.0)
+        let keyTrust: Double = track.key == nil ? 0.2 : (track.keyConfidence ?? 1.0)
+        let durationTrust: Double = track.durationSeconds == nil ? 0.4 : 1.0
+        let confidence = min(1, max(0, bpmTrust * 0.55 + keyTrust * 0.20 + durationTrust * 0.25))
+
+        // Deterministic per-song texture estimates (integration point:
+        // replace with real transient/low-band analysis).
+        let drumStrength = min(1, max(0, 0.62 + 0.25 * pseudoNoise(index: 7, seed: seed)))
+        let bassDensity = min(1, max(0, 0.58 + 0.28 * pseudoNoise(index: 13, seed: seed)))
+
         return SongAnalysis(
             bpm: bpm,
             bpmIsReal: track.bpm != nil,
+            bpmConfidence: track.bpmConfidence,
             key: track.key,
+            keyConfidence: track.keyConfidence,
             durationSeconds: duration,
             beatGrid: beatGrid,
             downbeats: downbeats,
@@ -230,6 +292,7 @@ enum SongAnalyzer {
             introCandidate: intro,
             verseCandidates: verses,
             chorusOrDropCandidates: [chorus1, chorus2],
+            buildCandidates: builds,
             bridgeCandidate: bridge,
             outroCandidate: outro,
             instrumentalCandidates: instrumentals,
@@ -237,7 +300,11 @@ enum SongAnalyzer {
             vocalDensityCurve: vocals,
             mixInPoints: mixIn.sorted(),
             mixOutPoints: mixOut.sorted(),
-            lyricOrVocalMoments: []   // integration point: vocal/lyric detection
+            lyricOrVocalMoments: [],   // integration point: vocal/lyric detection
+            hookMoments: [chorus1.startSeconds, chorus2.startSeconds],
+            drumStrength: drumStrength,
+            bassDensity: bassDensity,
+            analysisConfidence: confidence
         )
     }
 

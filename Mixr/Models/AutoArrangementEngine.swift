@@ -288,6 +288,8 @@ enum AutoArrangementEngine {
         case .playheadClips:
             arrangePlayheadRegion(around: playheadUnit, editor: &editor, analyses: analyses)
         case .entireProject:
+            // Entire Project Auto in the UI uses AutoRemixRunner (plan pipeline).
+            // This path remains for focused tooling / legacy callers only.
             arrangeEntireProject(editor: &editor, analyses: analyses)
         }
 

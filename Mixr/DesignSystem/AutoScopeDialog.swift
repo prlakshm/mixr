@@ -2,143 +2,108 @@ import SwiftUI
 
 // MARK: - Auto Scope Dialog
 
-/// Centered Apple-style scope dialog shown before Auto touches the timeline.
+/// Compact Apple-style alert shown before Auto touches the timeline.
 /// The presenter dims the background and dismisses on outside taps.
 struct AutoScopeDialog: View {
-    /// When a clip is selected the left card targets it; otherwise it
+    /// When a clip is selected the left action targets it; otherwise it
     /// targets the clips around the playhead.
     var hasSelectedClip: Bool
     var onChooseFocused: () -> Void = {}
     var onChooseEntireProject: () -> Void = {}
 
+    private let cornerRadius: CGFloat = 14
+    private let alertWidth: CGFloat = 300
+
+    private var focusedTitle: String {
+        hasSelectedClip ? "Selected Clip" : "Playhead Clips"
+    }
+
     var body: some View {
-        VStack(spacing: MixrSpacing.lg) {
-            VStack(spacing: MixrSpacing.xs) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(MixrColors.secondaryPurple)
-                    .shadow(color: MixrColors.primaryPurple.opacity(0.75), radius: 7)
+        VStack(spacing: 0) {
+            Text("What should Auto remix?")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(MixrColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 22)
+                .frame(maxWidth: .infinity)
 
-                Text("What should Auto remix?")
-                    .mixrFont(.sectionTitle)
-                    .foregroundStyle(MixrColors.textPrimary)
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .frame(height: 0.5)
 
-                Text("Auto adds transitions, sound effects, and per-clip effects")
-                    .mixrFont(.metadata)
-                    .foregroundStyle(MixrColors.textSecondary)
+            HStack(spacing: 0) {
+                Button(focusedTitle, action: onChooseFocused)
+                    .buttonStyle(AutoScopeAlertActionStyle())
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: 0.5)
+
+                Button("Entire Project", action: onChooseEntireProject)
+                    .buttonStyle(AutoScopeAlertActionStyle())
             }
+            .frame(height: 44)
+        }
+        .frame(width: alertWidth)
+        .background { alertBackground }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
+        .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("What should Auto remix?")
+    }
 
-            HStack(spacing: MixrSpacing.md) {
-                AutoScopeOptionCard(
-                    icon: hasSelectedClip ? "scope" : "timeline.selection",
-                    title: hasSelectedClip ? "Selected Clip" : "Playhead Clips",
-                    subtitle: hasSelectedClip
-                        ? "A focused edit inside the clip you selected"
-                        : "A focused edit around the playhead",
-                    badge: "Recommended",
-                    accent: MixrColors.secondaryPurple,
-                    action: onChooseFocused
-                )
-
-                AutoScopeOptionCard(
-                    icon: "rectangle.grid.1x2",
-                    title: "Entire Project",
-                    subtitle: "A full build, drop, and release arrangement across the timeline",
-                    badge: nil,
-                    accent: MixrColors.waveformPink,
-                    action: onChooseEntireProject
-                )
+    private var alertBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return shape
+            .fill(Color(hex: "050810").opacity(0.68))
+            .background {
+                shape
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.10)
+                    .environment(\.colorScheme, .dark)
             }
-        }
-        .padding(MixrSpacing.xl)
-        .frame(width: 520)
-        .background {
-            GlassBackground(level: .strong, cornerRadius: MixrRadius.glass)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
-        .mixrShadow(.glassStrong)
-        .mixrGlow(.glassAmbientStrong)
+            .overlay {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.045),
+                                Color.clear,
+                            ],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0.5, y: 0.35)
+                        )
+                    )
+            }
+            .overlay {
+                shape.strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+            }
     }
 }
 
-// MARK: - Option Card
+// MARK: - Action Style
 
-private struct AutoScopeOptionCard: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    let badge: String?
-    let accent: Color
-    let action: () -> Void
-
-    @GestureState private var isPressed = false
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
-    }
-
-    var body: some View {
-        VStack(spacing: MixrSpacing.sm) {
-            Image(systemName: icon)
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(accent)
-                .shadow(color: accent.opacity(0.70), radius: 6)
-                .frame(height: 26)
-
-            VStack(spacing: 3) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(MixrColors.textPrimary)
-
-                Text(subtitle)
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(MixrColors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let badge {
-                Text(badge)
-                    .font(.system(size: 8.5, weight: .semibold))
-                    .kerning(0.4)
-                    .foregroundStyle(accent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background {
-                        Capsule(style: .continuous)
-                            .fill(accent.opacity(0.13))
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .strokeBorder(accent.opacity(0.38), lineWidth: 0.5)
-                            }
-                    }
-            } else {
-                // Keeps both cards the same height.
-                Color.clear.frame(height: 18)
-            }
-        }
-        .padding(.horizontal, MixrSpacing.md)
-        .padding(.vertical, MixrSpacing.lg)
-        .frame(maxWidth: .infinity, minHeight: 138, alignment: .top)
-        .background {
-            GlassBackground(level: .elevated, cornerRadius: MixrRadius.button)
-        }
-        .clipShape(shape)
-        .overlay {
-            shape.strokeBorder(
-                accent.opacity(isPressed ? 0.60 : 0.22),
-                lineWidth: isPressed ? 1 : 0.6
+/// Light-gray label that darkens and dips on press — same press language as
+/// the clip toolbar actions.
+private struct AutoScopeAlertActionStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .regular))
+            .foregroundStyle(
+                configuration.isPressed
+                    ? MixrColors.textTertiary
+                    : MixrColors.textSecondary
             )
-        }
-        .shadow(color: accent.opacity(isPressed ? 0.28 : 0.08), radius: isPressed ? 12 : 6)
-        .scaleEffect(isPressed ? 0.97 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isPressed)
-        .contentShape(shape)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .updating($isPressed) { _, state, _ in state = true }
-                .onEnded { _ in action() }
-        )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .offset(y: configuration.isPressed ? 1.25 : 0)
+            .opacity(configuration.isPressed ? 0.92 : 1)
+            .animation(
+                .spring(response: 0.17, dampingFraction: 0.82),
+                value: configuration.isPressed
+            )
     }
 }
 

@@ -333,6 +333,8 @@ struct TimelineScreen: View {
     @State private var showSFXPanel = false
     @State private var showAutoDialog = false
     @State private var isAutoRunning = false
+    @State private var autoSummary: AutoRemixSummary?
+    @State private var autoErrorMessage: String?
     @State private var showProjectMenu = false
 
     // Playhead drag state
@@ -603,6 +605,38 @@ struct TimelineScreen: View {
             .transition(.opacity)
         }
 
+        // Entire Project Auto result summary (from the applied plan).
+        if let summary = autoSummary {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissAutoSummary() }
+
+                AutoRemixSummarySheet(
+                    summary: summary,
+                    onDone: { dismissAutoSummary() },
+                    onUndoAuto: { undoAutoAndDismiss() }
+                )
+            }
+            .zIndex(85)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
+        // Entire Project Auto failure — timeline unchanged, no undo entry.
+        if let message = autoErrorMessage {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture { autoErrorMessage = nil }
+
+                AutoRemixErrorSheet(message: message) {
+                    autoErrorMessage = nil
+                }
+            }
+            .zIndex(86)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
         // Project dropdown — anchored under "My Remix" in the toolbar.
         if showProjectMenu {
             ZStack(alignment: .topLeading) {
@@ -648,12 +682,15 @@ struct TimelineScreen: View {
 
     // MARK: - Auto
 
-    /// Runs the local arrangement engine for the chosen scope. The whole
-    /// Auto pass is one undo action.
+    /// Runs Auto for the chosen scope.
+    /// Entire Project → plan pipeline (validate → apply → summary).
+    /// Selected Clip / Playhead → AutoArrangementEngine (unchanged).
     private func runAuto(scope: AutoScope) {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             showAutoDialog = false
             isAutoRunning = true
+            autoSummary = nil
+            autoErrorMessage = nil
         }
         let playheadUnit = effectivePlayheadUnit
 
@@ -661,20 +698,73 @@ struct TimelineScreen: View {
             // Brief branded "analyzing" beat so the arrangement lands as a moment.
             try? await Task.sleep(for: .milliseconds(1600))
 
-            // The whole Auto pass is one atomic undo step.
+            switch AutoRemixRunner.engine(for: scope) {
+            case .planPipeline:
+                runEntireProjectAuto()
+            case .arrangementEngine:
+                // Focused scopes: one atomic undo via the arrangement engine.
+                library.beginGestureEdit("Auto Remix", scope: .tracks)
+                let arranged = AutoArrangementEngine.arrange(
+                    tracks: library.tracks,
+                    scope: scope,
+                    playheadUnit: playheadUnit
+                )
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    library.tracks = arranged
+                    isAutoRunning = false
+                }
+                library.commitGestureEdit()
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        }
+    }
+
+    /// Entire Project: draft → validate → apply → summary from applied plan.
+    /// Commits undo only after a successful apply; failures leave the timeline
+    /// untouched and show an error sheet instead of the success summary.
+    private func runEntireProjectAuto() {
+        let originalTracks = library.tracks
+        let seed = UInt64(Date().timeIntervalSince1970)
+        let outcome = AutoRemixRunner.runEntireProject(tracks: originalTracks, seed: seed)
+
+        switch outcome {
+        case .success(let tracks, _, let summary):
             library.beginGestureEdit("Auto Remix", scope: .tracks)
-            let arranged = AutoArrangementEngine.arrange(
-                tracks: library.tracks,
-                scope: scope,
-                playheadUnit: playheadUnit
-            )
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                library.tracks = arranged
+                library.tracks = tracks
                 isAutoRunning = false
+                autoSummary = summary
             }
             library.commitGestureEdit()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        case .failure(let message):
+            // Never leave a partial apply; never commit an undo entry.
+            library.tracks = originalTracks
+            library.cancelGestureEdit()
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                isAutoRunning = false
+                autoErrorMessage = message
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
+    }
+
+    private func dismissAutoSummary() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            autoSummary = nil
+        }
+    }
+
+    /// Undoes the Entire Project Auto pass and dismisses the summary sheet.
+    private func undoAutoAndDismiss() {
+        guard library.canUndo else {
+            dismissAutoSummary()
+            return
+        }
+        library.undo()
+        dismissAutoSummary()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }
 
