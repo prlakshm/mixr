@@ -333,9 +333,10 @@ struct TimelineScreen: View {
     @State private var showSFXPanel = false
     @State private var showAutoDialog = false
     @State private var isAutoRunning = false
-    @State private var autoSummary: AutoRemixSummary?
     @State private var autoErrorMessage: String?
     @State private var showProjectMenu = false
+    @State private var projectTitleFrame: CGRect = .zero
+    @State private var showDeleteProjectConfirm = false
 
     // Playhead drag state
     @State private var isPlayheadDragging = false
@@ -381,6 +382,9 @@ struct TimelineScreen: View {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 showProjectMenu.toggle()
                             }
+                        },
+                        onProjectRenameBegan: {
+                            dismissProjectMenu()
                         }
                     )
                     .frame(height: TLK.transportHeight)
@@ -484,6 +488,8 @@ struct TimelineScreen: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .coordinateSpace(name: "timelineScreen")
+            .onPreferenceChange(ProjectTitleFrameKey.self) { projectTitleFrame = $0 }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
@@ -595,31 +601,11 @@ struct TimelineScreen: View {
             .transition(.opacity.combined(with: .scale(scale: 0.94)))
         }
 
-        // Auto loading — Mixr-branded analyze/arrange moment.
+        // Auto loading — simple spinner on a black screen.
         if isAutoRunning {
-            ZStack {
-                Color.black.opacity(0.58).ignoresSafeArea()
-                MixrAutoLoadingOverlay()
-            }
-            .zIndex(80)
-            .transition(.opacity)
-        }
-
-        // Entire Project Auto result summary (from the applied plan).
-        if let summary = autoSummary {
-            ZStack {
-                Color.black.opacity(0.52)
-                    .ignoresSafeArea()
-                    .onTapGesture { dismissAutoSummary() }
-
-                AutoRemixSummarySheet(
-                    summary: summary,
-                    onDone: { dismissAutoSummary() },
-                    onUndoAuto: { undoAutoAndDismiss() }
-                )
-            }
-            .zIndex(85)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            MixrAutoLoadingOverlay()
+                .zIndex(80)
+                .transition(.opacity)
         }
 
         // Entire Project Auto failure — timeline unchanged, no undo entry.
@@ -637,8 +623,14 @@ struct TimelineScreen: View {
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
 
-        // Project dropdown — anchored under "My Remix" in the toolbar.
+        // Project dropdown — aligned so menu labels share the nav title’s leading edge.
         if showProjectMenu {
+            let menuX = max(
+                8,
+                (projectTitleFrame.minX > 0
+                    ? projectTitleFrame.minX
+                    : 96) - ProjectDropdownMenu.horizontalPadding
+            )
             ZStack(alignment: .topLeading) {
                 Color.black.opacity(0.28)
                     .ignoresSafeArea()
@@ -656,15 +648,47 @@ struct TimelineScreen: View {
                         selectedClipID = nil
                         library.createProject()
                     },
-                    onRename: { name in
-                        library.renameCurrentProject(to: name)
+                    onDeleteProject: {
+                        dismissProjectMenu()
+                        showDeleteProjectConfirm = true
                     },
                     onDismiss: { dismissProjectMenu() }
                 )
-                .offset(x: 96, y: TLK.transportHeight - 6)
+                .offset(x: menuX, y: TLK.transportHeight - 4)
             }
             .zIndex(90)
             .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
+        }
+
+        // Delete project confirm — same chrome as Auto scope dialog.
+        if showDeleteProjectConfirm {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeleteProjectConfirm = false
+                        }
+                    }
+
+                DeleteProjectConfirmDialog(
+                    projectName: library.projectName,
+                    onCancel: {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeleteProjectConfirm = false
+                        }
+                    },
+                    onDelete: {
+                        selectedClipID = nil
+                        library.deleteCurrentProject()
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeleteProjectConfirm = false
+                        }
+                    }
+                )
+            }
+            .zIndex(95)
+            .transition(.opacity.combined(with: .scale(scale: 0.94)))
         }
     }
 
@@ -683,26 +707,24 @@ struct TimelineScreen: View {
     // MARK: - Auto
 
     /// Runs Auto for the chosen scope.
-    /// Entire Project → plan pipeline (validate → apply → summary).
-    /// Selected Clip / Playhead → AutoArrangementEngine (unchanged).
+    /// Entire Project → plan pipeline (validate → apply).
+    /// Selected Clip / Playhead → AutoArrangementEngine.
+    /// Success lands directly on the timeline (same one-step feel as focused scopes).
     private func runAuto(scope: AutoScope) {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             showAutoDialog = false
             isAutoRunning = true
-            autoSummary = nil
             autoErrorMessage = nil
         }
         let playheadUnit = effectivePlayheadUnit
 
         Task { @MainActor in
-            // Brief branded "analyzing" beat so the arrangement lands as a moment.
             try? await Task.sleep(for: .milliseconds(1600))
 
             switch AutoRemixRunner.engine(for: scope) {
             case .planPipeline:
                 runEntireProjectAuto()
             case .arrangementEngine:
-                // Focused scopes: one atomic undo via the arrangement engine.
                 library.beginGestureEdit("Auto Remix", scope: .tracks)
                 let arranged = AutoArrangementEngine.arrange(
                     tracks: library.tracks,
@@ -719,27 +741,25 @@ struct TimelineScreen: View {
         }
     }
 
-    /// Entire Project: draft → validate → apply → summary from applied plan.
+    /// Entire Project: draft → validate → apply.
     /// Commits undo only after a successful apply; failures leave the timeline
-    /// untouched and show an error sheet instead of the success summary.
+    /// untouched and show an error sheet.
     private func runEntireProjectAuto() {
         let originalTracks = library.tracks
         let seed = UInt64(Date().timeIntervalSince1970)
         let outcome = AutoRemixRunner.runEntireProject(tracks: originalTracks, seed: seed)
 
         switch outcome {
-        case .success(let tracks, _, let summary):
+        case .success(let tracks, _, _):
             library.beginGestureEdit("Auto Remix", scope: .tracks)
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                 library.tracks = tracks
                 isAutoRunning = false
-                autoSummary = summary
             }
             library.commitGestureEdit()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         case .failure(let message):
-            // Never leave a partial apply; never commit an undo entry.
             library.tracks = originalTracks
             library.cancelGestureEdit()
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
@@ -748,23 +768,6 @@ struct TimelineScreen: View {
             }
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
-    }
-
-    private func dismissAutoSummary() {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-            autoSummary = nil
-        }
-    }
-
-    /// Undoes the Entire Project Auto pass and dismisses the summary sheet.
-    private func undoAutoAndDismiss() {
-        guard library.canUndo else {
-            dismissAutoSummary()
-            return
-        }
-        library.undo()
-        dismissAutoSummary()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }
 
@@ -788,6 +791,15 @@ private struct TLRotateOverlay: View {
     }
 }
 
+// MARK: - Project Title Frame
+
+private struct ProjectTitleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Transport Bar
 
 private struct TLTransportBar: View {
@@ -796,11 +808,16 @@ private struct TLTransportBar: View {
     var displayTimeSeconds: Double = 0
     var isProjectMenuOpen: Bool = false
     var onProjectTapped: () -> Void = {}
+    var onProjectRenameBegan: () -> Void = {}
 
     // Export — offline render (MixrExportRenderer) then share sheet.
     @State private var isExporting = false
     @State private var exportedFile: TLExportedFile?
     @State private var exportErrorMessage: String?
+
+    @State private var isRenamingProject = false
+    @State private var renameText = ""
+    @FocusState private var renameFieldFocused: Bool
 
     var body: some View {
         ZStack {
@@ -816,22 +833,7 @@ private struct TLTransportBar: View {
                 }
 
                 HStack(spacing: 18) {
-                    // Project dropdown trigger — plain label, no glass outline.
-                    Button(action: onProjectTapped) {
-                        HStack(spacing: 4) {
-                            Text(library.projectName)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(MixrColors.textPrimary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(MixrColors.textSecondary)
-                                .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
+                    projectTitleControl
 
                     // Undo / redo — part of the home group, next to the project name.
                     HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
@@ -976,6 +978,86 @@ private struct TLTransportBar: View {
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
         }
+    }
+
+    // MARK: - Project title
+
+    @ViewBuilder
+    private var projectTitleControl: some View {
+        if isRenamingProject {
+            TextField("Project name", text: $renameText)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MixrColors.textPrimary)
+                .textFieldStyle(.plain)
+                .focused($renameFieldFocused)
+                .submitLabel(.done)
+                .onSubmit { commitProjectRename() }
+                .frame(maxWidth: 168)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                        }
+                }
+                .background {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ProjectTitleFrameKey.self,
+                            value: geo.frame(in: .named("timelineScreen"))
+                        )
+                    }
+                }
+                .onChange(of: renameFieldFocused) { _, focused in
+                    if !focused { commitProjectRename() }
+                }
+        } else {
+            HStack(spacing: 4) {
+                Text(library.projectName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(MixrColors.textPrimary)
+                    .lineLimit(1)
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: ProjectTitleFrameKey.self,
+                                value: geo.frame(in: .named("timelineScreen"))
+                            )
+                        }
+                    }
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(MixrColors.textSecondary)
+                    .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onProjectTapped() }
+            .onLongPressGesture(minimumDuration: 0.45) {
+                beginProjectRename()
+            }
+            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
+        }
+    }
+
+    private func beginProjectRename() {
+        onProjectRenameBegan()
+        renameText = library.projectName
+        isRenamingProject = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        DispatchQueue.main.async {
+            renameFieldFocused = true
+        }
+    }
+
+    private func commitProjectRename() {
+        guard isRenamingProject else { return }
+        library.renameCurrentProject(to: renameText)
+        isRenamingProject = false
+        renameFieldFocused = false
     }
 
     /// Bounces the project offline with the exact per-clip effect settings

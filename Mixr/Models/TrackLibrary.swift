@@ -616,6 +616,50 @@ final class TrackLibrary: ObservableObject {
         saveCurrentProject()
     }
 
+    /// Deletes the current project. Switches to the next most-recent project,
+    /// or creates a fresh empty "My Remix" when it was the last one.
+    func deleteCurrentProject() {
+        guard let modelContext, let id = currentProjectID,
+              let record = record(for: id)
+        else { return }
+
+        modelContext.delete(record)
+        try? modelContext.save()
+
+        undoManager?.removeAllActions()
+        pendingEdit = nil
+        updateHistoryFlags()
+
+        let remaining = fetchRecords()
+        if let next = remaining.first {
+            currentProjectID = next.id
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                if let snapshot = ProjectSnapshotCoder.decode(next.snapshotData) {
+                    apply(snapshot)
+                } else {
+                    projectName = next.name
+                    tracks = []
+                    selectedTrackID = nil
+                    projectBPM = nil
+                }
+            }
+            refreshProjectSummaries()
+        } else {
+            let name = uniqueProjectName(base: "My Remix")
+            let fresh = MixrProjectRecord(name: name)
+            modelContext.insert(fresh)
+            try? modelContext.save()
+            currentProjectID = fresh.id
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                projectName = name
+                tracks = []
+                selectedTrackID = nil
+                projectBPM = nil
+            }
+            refreshProjectSummaries()
+        }
+    }
+
     private func uniqueProjectName(base: String) -> String {
         let existing = Set(fetchRecords().map(\.name))
         guard existing.contains(base) else { return base }

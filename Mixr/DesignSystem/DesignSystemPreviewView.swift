@@ -628,9 +628,12 @@ struct DesignSystemPreviewView: View {
                     ProjectSummary(id: DSPreviewIDs.projectA, name: "My Remix", modifiedAt: Date()),
                     ProjectSummary(id: DSPreviewIDs.projectB, name: "Festival Set", modifiedAt: Date()),
                     ProjectSummary(id: DSPreviewIDs.projectC, name: "Sunset Mix", modifiedAt: Date()),
+                    ProjectSummary(id: DSPreviewIDs.projectD, name: "Club Night", modifiedAt: Date()),
+                    ProjectSummary(id: DSPreviewIDs.projectE, name: "Demo Reel", modifiedAt: Date()),
                 ],
                 currentProjectID: DSPreviewIDs.projectA,
-                currentName: "My Remix"
+                currentName: "My Remix",
+                onDeleteProject: {}
             )
         }
     }
@@ -640,6 +643,8 @@ private enum DSPreviewIDs {
     static let projectA = UUID()
     static let projectB = UUID()
     static let projectC = UUID()
+    static let projectD = UUID()
+    static let projectE = UUID()
 }
 
 // MARK: - Preview Helpers
