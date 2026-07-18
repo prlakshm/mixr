@@ -6,33 +6,26 @@ import UIKit
 enum TLClipEditingMetrics {
     static let toolbarHorizontalPadding: CGFloat = 10
     static let toolbarTrailingPadding: CGFloat = 2.5
-    /// Edge-to-edge gap between Split and Speed.
+    /// Edge-to-edge gap between neighbouring labels within a half
+    /// (Split↔Speed and Duplicate↔Delete).
     static let toolbarActionSpacing: CGFloat = 24
-    /// Tighter gap before Delete — its red label recedes optically against
-    /// the dark pane, so a smaller gap reads as equal to the others.
-    static let toolbarDeleteActionSpacing: CGFloat = 17
     /// Speed↔Duplicate gap — wider so the playhead pointer sits inside it.
     static let toolbarCenterGap: CGFloat = 22
-    /// The action row is two content-hugging halves flanking the center gap:
-    /// Split+Speed right-aligned in the left half, Duplicate+Delete
-    /// left-aligned in the right half. Each half is sized to its own labels
-    /// so dead space stays balanced; the right half carries ~2pt extra
-    /// breathing room past Delete.
-    static let toolbarLeftHalfWidth: CGFloat = 81
-    static let toolbarRightHalfWidth: CGFloat = 101
+    /// Pane-edge padding outside Split and Delete — 3/4 of the action gap,
+    /// identical on both sides.
+    static let toolbarOuterPadding: CGFloat = toolbarActionSpacing * 0.75
+    /// Pre-measurement estimates of each half's label run (Split+Speed /
+    /// Duplicate+Delete). The pane measures the real widths at layout time
+    /// and sizes itself exactly; these only seed the first frame.
+    static let toolbarLeftHalfEstimate: CGFloat = 77
+    static let toolbarRightHalfEstimate: CGFloat = 103
+    /// Estimated actions-pane width for the presenting overlay's frame.
+    /// The playhead anchoring is measurement-based and exact regardless.
     static let toolbarWidth: CGFloat =
-        toolbarHorizontalPadding * 2
-        + toolbarLeftHalfWidth
+        toolbarOuterPadding * 2
+        + toolbarLeftHalfEstimate
         + toolbarCenterGap
-        + toolbarRightHalfWidth
-    /// Sideways pane shift in actions mode so the center gap's midpoint —
-    /// where the playhead and pointer sit — lands on the frame center even
-    /// though the halves have different widths.
-    static let toolbarActionsBodyOffset: CGFloat =
-        toolbarWidth / 2
-        - toolbarHorizontalPadding
-        - toolbarLeftHalfWidth
-        - toolbarCenterGap / 2
+        + toolbarRightHalfEstimate
     static let toolbarSpeedWidth: CGFloat = 168
     static let toolbarBodyHeight: CGFloat = 50
     static let toolbarBodyHorizontalOffset: CGFloat = 12
@@ -491,6 +484,18 @@ struct TLToolbarPointer: Shape {
 
 // MARK: - Clip Context Toolbar
 
+/// Measured widths of the two action-label halves, keyed "left" / "right".
+private struct TLToolbarHalfWidthKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(
+        value: inout [String: CGFloat],
+        nextValue: () -> [String: CGFloat]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 struct TLClipContextToolbar: View {
     enum Mode: Equatable {
         case actions
@@ -509,10 +514,23 @@ struct TLClipContextToolbar: View {
 
     @State private var speedText: String = "1.0"
     @FocusState private var isSpeedFieldFocused: Bool
+    @State private var actionHalfWidths: [String: CGFloat] = [:]
+
+    private var actionsLeftWidth: CGFloat {
+        actionHalfWidths["left"] ?? TLClipEditingMetrics.toolbarLeftHalfEstimate
+    }
+
+    private var actionsRightWidth: CGFloat {
+        actionHalfWidths["right"] ?? TLClipEditingMetrics.toolbarRightHalfEstimate
+    }
 
     private var bodyWidth: CGFloat {
         switch mode {
-        case .actions: TLClipEditingMetrics.toolbarWidth
+        case .actions:
+            TLClipEditingMetrics.toolbarOuterPadding * 2
+                + actionsLeftWidth
+                + TLClipEditingMetrics.toolbarCenterGap
+                + actionsRightWidth
         case .speed: TLClipEditingMetrics.toolbarSpeedWidth
         }
     }
@@ -577,10 +595,11 @@ struct TLClipContextToolbar: View {
             .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
             .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
             // Actions mode shifts the pane so the playhead pointer stays at
-            // the center-gap midpoint; the speed editor keeps its own shift.
+            // the center-gap midpoint even though the halves differ in
+            // width; the speed editor keeps its own tuned shift.
             .offset(
                 x: mode == .actions
-                    ? TLClipEditingMetrics.toolbarActionsBodyOffset
+                    ? (actionsRightWidth - actionsLeftWidth) / 2
                     : TLClipEditingMetrics.toolbarBodyHorizontalOffset
             )
 
@@ -604,6 +623,9 @@ struct TLClipContextToolbar: View {
             .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration),
             value: mode
         )
+        .onPreferenceChange(TLToolbarHalfWidthKey.self) { widths in
+            actionHalfWidths = widths
+        }
         .onAppear {
             speedText = Self.formattedSpeed(speedValue)
             if mode == .speed {
@@ -640,12 +662,16 @@ struct TLClipContextToolbar: View {
                     action: onSpeed
                 )
             }
-            .frame(
-                width: TLClipEditingMetrics.toolbarLeftHalfWidth,
-                alignment: .trailing
-            )
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: TLToolbarHalfWidthKey.self,
+                        value: ["left": proxy.size.width]
+                    )
+                }
+            }
 
-            HStack(spacing: TLClipEditingMetrics.toolbarDeleteActionSpacing) {
+            HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
                 TLClipToolbarAction(
                     icon: "doc.on.doc",
                     label: "Duplicate",
@@ -659,16 +685,26 @@ struct TLClipContextToolbar: View {
                     action: onDelete
                 )
             }
-            .frame(
-                width: TLClipEditingMetrics.toolbarRightHalfWidth,
-                alignment: .leading
-            )
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: TLToolbarHalfWidthKey.self,
+                        value: ["right": proxy.size.width]
+                    )
+                }
+            }
         }
-        // Equalize the pane's asymmetric content padding so the center gap
-        // sits exactly at the pane's horizontal center.
+        // The pane's shared paddings are asymmetric (leading 10 /
+        // trailing 2.5); top both sides up so Split and Delete sit exactly
+        // toolbarOuterPadding from the pane edges.
+        .padding(
+            .leading,
+            TLClipEditingMetrics.toolbarOuterPadding
+                - TLClipEditingMetrics.toolbarHorizontalPadding
+        )
         .padding(
             .trailing,
-            TLClipEditingMetrics.toolbarHorizontalPadding
+            TLClipEditingMetrics.toolbarOuterPadding
                 - TLClipEditingMetrics.toolbarTrailingPadding
         )
     }
