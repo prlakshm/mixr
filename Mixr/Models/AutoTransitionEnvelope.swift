@@ -134,4 +134,67 @@ nonisolated enum AutoTransitionEnvelope {
 
         return Value(gain: gain, echoBoost: echoBoost)
     }
+
+    // MARK: Clip-level helpers (timeline units → seconds via MixrTimeline)
+
+    /// Source seconds where a clip's audio ends.
+    static func sourceEndSeconds(of clip: MixrClip) -> Double {
+        clip.sourceOffsetSeconds
+            + MixrTimeline.seconds(fromUnits: clip.length) * clip.playbackSpeed
+    }
+
+    /// Continuity of `clip` against its neighbors on the same track:
+    /// an edge is continuous when the adjacent clip abuts it on the
+    /// timeline AND continues the same source material at the same rate —
+    /// a segment split for effects, not a musical boundary.
+    static func continuity(for clip: MixrClip, in clips: [MixrClip]) -> Continuity {
+        let epsilon = 0.02
+        let clipStart = MixrTimeline.seconds(fromUnits: clip.start)
+        let clipEnd = MixrTimeline.seconds(fromUnits: clip.start + clip.length)
+
+        var previous = false
+        var next = false
+        for other in clips where other.id != clip.id && !other.isSoundEffect {
+            let otherStart = MixrTimeline.seconds(fromUnits: other.start)
+            let otherEnd = MixrTimeline.seconds(fromUnits: other.start + other.length)
+            if abs(otherEnd - clipStart) <= epsilon,
+               abs(sourceEndSeconds(of: other) - clip.sourceOffsetSeconds) <= 0.05,
+               abs(other.playbackSpeed - clip.playbackSpeed) <= 0.001 {
+                previous = true
+            }
+            if abs(otherStart - clipEnd) <= epsilon,
+               abs(sourceEndSeconds(of: clip) - other.sourceOffsetSeconds) <= 0.05,
+               abs(other.playbackSpeed - clip.playbackSpeed) <= 0.001 {
+                next = true
+            }
+        }
+        return Continuity(previous: previous, next: next)
+    }
+
+    /// Splits a track's song clips onto two player lanes so overlapping
+    /// clips (true crossfades) can sound simultaneously with independent
+    /// gains. Non-overlapping clips stay on lane 0.
+    static func playerLanes(for clips: [MixrClip]) -> [UUID: Int] {
+        let songClips = clips
+            .filter { !$0.isSoundEffect }
+            .sorted { $0.start < $1.start }
+        var lanes: [UUID: Int] = [:]
+        var previous: MixrClip?
+        var previousLane = 1   // first clip lands on lane 0
+        for clip in songClips {
+            var lane = 0
+            if let prev = previous, clip.start < prev.start + prev.length - 0.001 {
+                lane = previousLane == 0 ? 1 : 0
+            }
+            lanes[clip.id] = lane
+            // Track the clip that ends LAST as the overlap reference.
+            if let prev = previous, prev.start + prev.length > clip.start + clip.length {
+                // previous still the longest-running; keep its lane
+            } else {
+                previous = clip
+                previousLane = lane
+            }
+        }
+        return lanes
+    }
 }

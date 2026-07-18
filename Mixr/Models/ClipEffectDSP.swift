@@ -274,50 +274,38 @@ nonisolated enum ClipEffectDSP {
     }
 
     // MARK: - Transition envelope
+    //
+    // Delegates to AutoTransitionEnvelope — the ONE model shared by live
+    // playback, offline export, and the portable test mixdown. Callers
+    // that know the clip's neighbors pass continuity so source-continuous
+    // segment splits get no fades and hard edges get anti-click
+    // microfades.
 
     static func transitionEnvelope(
         for clip: MixrClip,
         at t: Double,
-        bpm: Double
+        bpm: Double,
+        continuity: AutoTransitionEnvelope.Continuity = .isolated
     ) -> (gain: Double, echoBoost: Double) {
-        let clipStart = MixrTimeline.seconds(fromUnits: clip.start)
-        let clipEnd = MixrTimeline.seconds(fromUnits: clip.start + clip.length)
-        let clipLen = max(0.01, clipEnd - clipStart)
-        let beat = 60.0 / bpm
-
-        var gain = 1.0
-        var echoBoost = 0.0
-
-        switch clip.transitionIn.type {
-        case .crossfade, .auto:
-            let dur = min(clip.transitionIn.duration * beat, clipLen * 0.5)
-            if dur > 0.01 {
-                gain *= min(1.0, max(0.0, (t - clipStart) / dur))
-            }
-        case .none, .fadeOut, .echoOut:
-            break
-        }
-
-        let outDur = min(clip.transitionOut.duration * beat, clipLen * 0.5)
-        switch clip.transitionOut.type {
-        case .fadeOut, .crossfade, .auto:
-            if outDur > 0.01 {
-                gain *= min(1.0, max(0.0, (clipEnd - t) / outDur))
-            }
-        case .echoOut:
-            if outDur > 0.01 {
-                let k = min(1.0, max(0.0, 1.0 - (clipEnd - t) / outDur))
-                echoBoost = k * 32.0
-                gain *= 1.0 - 0.30 * k
-            }
-        case .none:
-            break
-        }
-
-        return (gain, echoBoost)
+        let value = AutoTransitionEnvelope.envelope(
+            transitionIn: clip.transitionIn,
+            transitionOut: clip.transitionOut,
+            clipStart: MixrTimeline.seconds(fromUnits: clip.start),
+            clipEnd: MixrTimeline.seconds(fromUnits: clip.start + clip.length),
+            at: t,
+            bpm: bpm,
+            continuity: continuity
+        )
+        return (value.gain, value.echoBoost)
     }
 
     // MARK: - Master output protection
+    //
+    // The limiter is the FINAL SAFETY layer. Gain staging (AutoGainPolicy)
+    // is what makes the mix fit; sustained reduction beyond
+    // AutoGainPolicy.maxSustainedLimiterReductionDB means the mix failed
+    // upstream. Parameters are configured explicitly, never left to
+    // whatever the component default happens to be.
 
     static func makePeakLimiter() -> AVAudioUnitEffect {
         let desc = AudioComponentDescription(
@@ -327,7 +315,19 @@ nonisolated enum ClipEffectDSP {
             componentFlags: 0,
             componentFlagsMask: 0
         )
-        return AVAudioUnitEffect(audioComponentDescription: desc)
+        let limiter = AVAudioUnitEffect(audioComponentDescription: desc)
+        // Fast, transparent safety settings: short attack/decay, no
+        // added gain (the limiter must never be used to "make it loud").
+        AudioUnitSetParameter(
+            limiter.audioUnit, kLimiterParam_AttackTime, kAudioUnitScope_Global, 0, 0.008, 0
+        )
+        AudioUnitSetParameter(
+            limiter.audioUnit, kLimiterParam_DecayTime, kAudioUnitScope_Global, 0, 0.05, 0
+        )
+        AudioUnitSetParameter(
+            limiter.audioUnit, kLimiterParam_PreGain, kAudioUnitScope_Global, 0, 0, 0
+        )
+        return limiter
     }
 
     // MARK: - Export tail

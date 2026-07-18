@@ -593,5 +593,22 @@ do {
     }
 }
 
+// MARK: - Diagnostics evidence (printed, not asserted)
+
+if let plan = confidentPlan, let song = confidentSong {
+    let source = AutoOfflineMixdown.Source(
+        samples: syntheticSong(durationSeconds: song.durationSeconds ?? 160),
+        sampleRate: SR
+    )
+    let result = AutoOfflineMixdown.render(plan: plan, sources: [song.id: source], sampleRate: SR)
+    let report = AutoRemixDiagnostics.qualityReport(
+        plan: plan,
+        pcm: result.mix,
+        sampleRate: SR,
+        limiterGainReductionDB: result.limiterGainReductionDB
+    )
+    print("\n" + report.text)
+}
+
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")
 exit(failures == 0 ? 0 : 1)

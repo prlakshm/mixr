@@ -57,7 +57,12 @@ final class MixrPlaybackEngine: ObservableObject {
     // MARK: - Per-track effect chain
 
     private final class TrackChain {
-        let player = AVAudioPlayerNode()
+        /// TWO clip players summed by `head` so adjacent same-song clips
+        /// can OVERLAP with independently controlled gains — a true
+        /// equal-power crossfade instead of a sequential fade hole.
+        let playerA = AVAudioPlayerNode()
+        let playerB = AVAudioPlayerNode()
+        let head = AVAudioMixerNode()
         let timePitch = AVAudioUnitTimePitch()
         /// Single band: Blur low-pass.
         let eq = AVAudioUnitEQ(numberOfBands: 1)
@@ -76,7 +81,8 @@ final class MixrPlaybackEngine: ObservableObject {
         var appliedClipID: UUID?
         var appliedReverbPreset: ReverbPreset?
         var appliedDelayTime: TimeInterval = 0
-        var smoothedVolume: Float = 0
+        var smoothedVolumeA: Float = 0
+        var smoothedVolumeB: Float = 0
         var smoothedPitch: Float = 0
         var smoothedLowPassFreq: Float = 20000
         var smoothedDelayWet: Float = 0
@@ -92,8 +98,14 @@ final class MixrPlaybackEngine: ObservableObject {
             flangerKernel = ClipFlanger.kernel(of: node)
         }
 
+        var players: [AVAudioPlayerNode] { [playerA, playerB] }
+
+        func player(forLane lane: Int) -> AVAudioPlayerNode {
+            lane == 1 ? playerB : playerA
+        }
+
         var allNodes: [AVAudioNode] {
-            var nodes: [AVAudioNode] = [player, timePitch, eq]
+            var nodes: [AVAudioNode] = [playerA, playerB, head, timePitch, eq]
             if let flangerNode { nodes.append(flangerNode) }
             nodes.append(contentsOf: [delay, reverb])
             return nodes
@@ -236,7 +248,9 @@ final class MixrPlaybackEngine: ObservableObject {
 
             for node in chain.allNodes { engine.attach(node) }
             let fmt = file.processingFormat
-            engine.connect(chain.player, to: chain.timePitch, format: fmt)
+            engine.connect(chain.playerA, to: chain.head, format: fmt)
+            engine.connect(chain.playerB, to: chain.head, format: fmt)
+            engine.connect(chain.head, to: chain.timePitch, format: fmt)
             engine.connect(chain.timePitch, to: chain.eq, format: fmt)
             if let flangerNode = chain.flangerNode {
                 engine.connect(chain.eq, to: flangerNode, format: fmt)
@@ -256,7 +270,7 @@ final class MixrPlaybackEngine: ObservableObject {
 
     private func removeChain(id: UUID) {
         guard let chain = chains.removeValue(forKey: id) else { return }
-        chain.player.stop()
+        for player in chain.players { player.stop() }
         for node in chain.allNodes { engine.detach(node) }
         if chain.securityScoped { chain.url.stopAccessingSecurityScopedResource() }
     }
@@ -297,6 +311,11 @@ final class MixrPlaybackEngine: ObservableObject {
         } else {
             // Asset missing — regenerate procedurally so SFX never fail silently.
             buffer = SFXSynthesizer.buffer(for: definition)
+        }
+
+        // Calibrated per-asset gain (AutoGainPolicy) — identical in export.
+        if let buffer {
+            MixrExportRenderer.applyNominalGain(to: buffer, sfxID: definition.id)
         }
 
         sfxBufferCache[definition.id] = buffer
@@ -347,29 +366,33 @@ final class MixrPlaybackEngine: ObservableObject {
         let syncWall   = CACurrentMediaTime() + bufferSec
         var scheduled  = false
 
-        // ── 4. Song tracks: schedule EVERY clip as a segment ──
+        // ── 4. Song tracks: schedule EVERY clip as a segment, split onto
+        // two player lanes so overlapping clips (true crossfades) sound
+        // simultaneously with independent gains ──
         for track in snapshot where !track.isSFXTrack {
             guard let chain = chains[track.id] else { continue }
             let sr = chain.file.processingFormat.sampleRate
             let fileFrames = chain.file.length
-            var trackHasAudio = false
+            let lanes = AutoTransitionEnvelope.playerLanes(for: track.clips)
+            var laneHasAudio = [false, false]
 
             for clip in track.clips.sorted(by: { $0.start < $1.start }) {
+                let lane = lanes[clip.id] ?? 0
                 let scheduled = scheduleSongClip(
                     clip,
+                    player: chain.player(forLane: lane),
                     chain: chain,
                     timelineSeconds: timelineSeconds,
                     syncTicks: syncTicks,
                     sampleRate: sr,
                     fileFrames: fileFrames
                 )
-                if scheduled { trackHasAudio = true }
+                if scheduled { laneHasAudio[lane] = true }
             }
 
-            if trackHasAudio {
-                chain.player.play()
-                scheduled = true
-            }
+            if laneHasAudio[0] { chain.playerA.play() }
+            if laneHasAudio[1] { chain.playerB.play() }
+            if laneHasAudio[0] || laneHasAudio[1] { scheduled = true }
         }
 
         // ── 5. SFX track: schedule each clip's buffer at its host time ──
@@ -446,10 +469,11 @@ final class MixrPlaybackEngine: ObservableObject {
     }
 
     /// Schedules one song clip as a single dry segment (trim/offset/speed
-    /// aware). Returns true if any audio was queued.
+    /// aware) on the given player lane. Returns true if any audio was queued.
     @discardableResult
     private func scheduleSongClip(
         _ clip: MixrClip,
+        player: AVAudioPlayerNode,
         chain: TrackChain,
         timelineSeconds: Double,
         syncTicks: UInt64,
@@ -476,7 +500,7 @@ final class MixrPlaybackEngine: ObservableObject {
 
         let delaySec = max(0, playStart - timelineSeconds) * speed
         let nodeTime = AVAudioTime(hostTime: syncTicks + AVAudioTime.hostTime(forSeconds: delaySec))
-        chain.player.scheduleSegment(
+        player.scheduleSegment(
             chain.file,
             startingFrame: startFrame,
             frameCount: frames,
@@ -486,7 +510,9 @@ final class MixrPlaybackEngine: ObservableObject {
     }
 
     private func stopAllNodes() {
-        for chain in chains.values { chain.player.stop() }
+        for chain in chains.values {
+            for player in chain.players { player.stop() }
+        }
         sfxChain?.player.stop()
     }
 
@@ -499,22 +525,57 @@ final class MixrPlaybackEngine: ObservableObject {
     private func applyTickParameters(at t: Double, force: Bool = false) {
         let soloAware = snapshot
 
+        // Policy ducking: the song bus dips smoothly under major SFX hits.
+        var duckGain = 1.0
+        if let sfxTrack = snapshot.first(where: { $0.isSFXTrack }),
+           TrackLibrary.isAudible(sfxTrack, in: soloAware) {
+            let events = sfxTrack.clips.compactMap { clip -> AutoSFXEvent? in
+                guard let id = clip.soundEffectID else { return nil }
+                return AutoSFXEvent(
+                    assetID: id,
+                    timelineStart: MixrTimeline.seconds(fromUnits: clip.start),
+                    purpose: ""
+                )
+            }
+            duckGain = AutoGainPolicy.duckGain(at: t, sfxEvents: events)
+        }
+
         for track in snapshot where !track.isSFXTrack {
             guard let chain = chains[track.id] else { continue }
             let audible = TrackLibrary.isAudible(track, in: soloAware)
             let bpm = Double(track.bpm ?? Int(projectBPM))
 
-            let clip = track.clips.first { clip in
-                !clip.isSoundEffect
-                    && t >= MixrTimeline.seconds(fromUnits: clip.start)
+            let songClips = track.clips.filter { !$0.isSoundEffect }
+            let lanes = AutoTransitionEnvelope.playerLanes(for: songClips)
+            let active = songClips.filter { clip in
+                t >= MixrTimeline.seconds(fromUnits: clip.start)
                     && t < MixrTimeline.seconds(fromUnits: clip.start + clip.length)
             }
 
-            var targetVolume: Float = 0
-            if let clip, audible {
-                let envelope = ClipEffectDSP.transitionEnvelope(for: clip, at: t, bpm: bpm)
-                targetVolume = Float(track.volume * clip.volume * envelope.gain)
-                applyEffects(clip: clip, chain: chain, at: t, bpm: bpm, echoBoost: envelope.echoBoost, force: force)
+            // Per-lane gains: during a crossfade BOTH clips sound, each on
+            // its own player, each with its own (equal-power) envelope.
+            var laneTargets: [Float] = [0, 0]
+            var effectsClip: MixrClip?
+            var effectsBoost = 0.0
+            if audible {
+                for clip in active {
+                    let continuity = AutoTransitionEnvelope.continuity(for: clip, in: songClips)
+                    let envelope = ClipEffectDSP.transitionEnvelope(
+                        for: clip, at: t, bpm: bpm, continuity: continuity
+                    )
+                    let volume = Float(track.volume * clip.volume * envelope.gain * duckGain)
+                    let lane = lanes[clip.id] ?? 0
+                    laneTargets[lane] = max(laneTargets[lane], volume)
+                    // Effects follow the incoming clip during an overlap.
+                    if effectsClip == nil || clip.start > effectsClip!.start {
+                        effectsClip = clip
+                        effectsBoost = envelope.echoBoost
+                    }
+                }
+            }
+
+            if let clip = effectsClip, audible {
+                applyEffects(clip: clip, chain: chain, at: t, bpm: bpm, echoBoost: effectsBoost, force: force)
             } else if audible {
                 // Between clips: silent input, but let delay/reverb tails ring.
                 // The flanger has no tail — release it so it never stays
@@ -527,11 +588,14 @@ final class MixrPlaybackEngine: ObservableObject {
             }
 
             if force {
-                chain.smoothedVolume = targetVolume
+                chain.smoothedVolumeA = laneTargets[0]
+                chain.smoothedVolumeB = laneTargets[1]
             } else {
-                chain.smoothedVolume += (targetVolume - chain.smoothedVolume) * 0.45
+                chain.smoothedVolumeA += (laneTargets[0] - chain.smoothedVolumeA) * 0.45
+                chain.smoothedVolumeB += (laneTargets[1] - chain.smoothedVolumeB) * 0.45
             }
-            chain.player.volume = chain.smoothedVolume
+            chain.playerA.volume = chain.smoothedVolumeA
+            chain.playerB.volume = chain.smoothedVolumeB
         }
 
         if let sfxTrack = snapshot.first(where: { $0.isSFXTrack }), let sfxChain {

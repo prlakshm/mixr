@@ -222,6 +222,109 @@ nonisolated enum AutoRemixDiagnostics {
         )
     }
 
+    // MARK: Quality report (debug-only)
+
+    struct CutReportEntry {
+        var timelineAt: Double
+        var reason: String
+        var masking: String
+        var confidence: Double
+        var expectedEnergyDeltaDB: Double
+    }
+
+    /// Objective per-render report: what was kept, what was cut and why,
+    /// how every transition measures, and where the levels landed.
+    /// Debug/diagnostic surface only — never shown in the normal UI.
+    struct QualityReport {
+        var usableSourceRange: ClosedRange<Double>?
+        var internalCuts: [CutReportEntry]
+        var transitions: [BoundaryLoudness]
+        var integratedLoudnessDB: Double
+        var samplePeakDB: Double
+        var truePeakDB: Double
+        var limiterGainReductionDB: Double
+        var detectedSilences: [SignalRegion]
+        var analysisConfidence: Double
+        var repairsAndWarnings: [String]
+
+        nonisolated var text: String {
+            var lines: [String] = ["── Auto Remix quality report ──"]
+            if let range = usableSourceRange {
+                lines.append(String(format: "usable source: %.2fs – %.2fs", range.lowerBound, range.upperBound))
+            }
+            lines.append("internal cuts: \(internalCuts.count)")
+            for cut in internalCuts {
+                lines.append(String(
+                    format: "  cut @%.2fs  reason=%@ masking=%@ conf=%.2f Δ=%.1f dB",
+                    cut.timelineAt, cut.reason, cut.masking, cut.confidence, cut.expectedEnergyDeltaDB
+                ))
+            }
+            for b in transitions {
+                lines.append(String(
+                    format: "  boundary @%.2fs  before=%.1f center=%.1f after=%.1f dBFS (trough %.1f, jump %.1f)",
+                    b.boundarySeconds, b.beforeDB, b.centerDB, b.afterDB, b.centerTroughDB, b.jumpDB
+                ))
+            }
+            lines.append(String(format: "integrated ≈ %.1f dB   sample peak %.2f dBFS   true peak %.2f dBTP",
+                                integratedLoudnessDB, samplePeakDB, truePeakDB))
+            lines.append(String(format: "limiter reduction %.1f dB", limiterGainReductionDB))
+            for s in detectedSilences {
+                lines.append(String(format: "  silence %.2f–%.2fs", s.start, s.end))
+            }
+            lines.append(String(format: "analysis confidence %.2f", analysisConfidence))
+            for r in repairsAndWarnings { lines.append("  note: \(r)") }
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    static func maskingDescription(_ masking: AutoCutMasking) -> String {
+        switch masking {
+        case .equalPowerCrossfade(let seconds):
+            String(format: "equal-power crossfade %.2fs", seconds)
+        case .sfx(let assetID):
+            "sfx:\(assetID)"
+        case .effectTail:
+            "effect tail"
+        case .alignedHardCut:
+            "aligned hard cut"
+        }
+    }
+
+    /// Builds the report for a plan and its rendered PCM.
+    static func qualityReport(
+        plan: AutoRemixPlan,
+        pcm: [Float],
+        sampleRate: Double,
+        limiterGainReductionDB: Double = 0
+    ) -> QualityReport {
+        let boundaries = internalCutBoundaries(placements: plan.placements)
+        let contentStart = plan.placements.map(\.timelineStart).min() ?? 0
+        let contentEnd = plan.placements.map(\.timelineEnd).max() ?? 0
+        return QualityReport(
+            usableSourceRange: plan.usableSourceRange,
+            internalCuts: plan.cutRecords.map {
+                CutReportEntry(
+                    timelineAt: $0.timelineAt,
+                    reason: $0.reason.rawValue,
+                    masking: maskingDescription($0.masking),
+                    confidence: $0.confidence,
+                    expectedEnergyDeltaDB: $0.expectedEnergyDeltaDB
+                )
+            },
+            transitions: boundaries.map {
+                boundaryLoudness(samples: pcm, sampleRate: sampleRate, boundarySeconds: $0)
+            },
+            integratedLoudnessDB: integratedLoudnessApproxDB(samples: pcm, sampleRate: sampleRate),
+            samplePeakDB: 20 * log10(max(Double(samplePeak(pcm)), 1e-12)),
+            truePeakDB: truePeakDB(samples: pcm, sampleRate: sampleRate),
+            limiterGainReductionDB: limiterGainReductionDB,
+            detectedSilences: silenceRuns(samples: pcm, sampleRate: sampleRate)
+                .filter { $0.start > contentStart + 0.5 && $0.end < contentEnd - 0.5 },
+            analysisConfidence: plan.confidence,
+            repairsAndWarnings: plan.warnings
+        )
+    }
+
     // MARK: Source-order checks (plan-level)
 
     /// Timeline boundaries between consecutive DOMINANT placements of the

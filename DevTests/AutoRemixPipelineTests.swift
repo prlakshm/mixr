@@ -180,7 +180,7 @@ do {
     }
 }
 
-// MARK: - 6. Remix SFX denser than Mashup
+// MARK: - 6. One-song remix keeps SFX sparse (preservation-first)
 
 do {
     let remixTracks = [makeSong(title: "Solo Remix", bpm: 128, key: "G")]
@@ -192,26 +192,29 @@ do {
     let mashup = AutoRemixRunner.runEntireProject(tracks: mashupTracks, seed: 55)
     switch (remix, mashup) {
     case (.success(_, let rp, _), .success(_, let mp, _)):
-        let rDur = max(rp.targetDuration, 1)
-        let mDur = max(mp.targetDuration, 1)
-        let rDensity = Double(rp.sfxEvents.count) / rDur
-        let mDensity = Double(mp.sfxEvents.count) / mDur
+        // SFX density is bounded by musical need — a one-song remix is
+        // NOT required to be denser than a mashup (the opposite of the
+        // old montage contract).
+        let rMinutes = max(rp.targetDuration / 60, 0.01)
         check(
-            "Remix SFX density ≥ Mashup SFX density",
-            rDensity + 0.0001 >= mDensity,
-            String(format: "remix %.3f/s vs mashup %.3f/s", rDensity, mDensity)
+            "One-song remix SFX ≤ 3 events/min",
+            Double(rp.sfxEvents.count) / rMinutes <= 3.0 + 0.0001,
+            String(format: "%.2f events/min", Double(rp.sfxEvents.count) / rMinutes)
         )
-        check("Remix has SFX", !rp.sfxEvents.isEmpty)
+        check("Mashup still coordinates SFX moments", !mp.sfxEvents.isEmpty)
     default:
-        check("Remix vs Mashup density comparison runs", false)
+        check("Remix vs Mashup SFX comparison runs", false)
     }
 }
 
-// MARK: - 7. Gap repair
+// MARK: - 7. Gap repair (mashup path — multiple placements)
 
 do {
-    let song = makeSong(title: "Gap Song", bpm: 120, key: "C")
-    if let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [song], seed: 12) {
+    let songs = [
+        makeSong(title: "Gap Song A", bpm: 120, key: "C", color: .pink),
+        makeSong(title: "Gap Song B", bpm: 120, key: "Am", color: .blue),
+    ]
+    if let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: songs, seed: 12) {
         var broken = draft
         // Inject an accidental 1-second gap between the first two dominant placements.
         let dominants = broken.placements

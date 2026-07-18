@@ -45,7 +45,9 @@ nonisolated enum AutoRemixValidator {
             return p
         }
 
-        // ── 2. Same-song (same-track) placements must never overlap ──
+        // ── 2. Same-song placements may overlap ONLY for a declared
+        // equal-power crossfade (true temporal overlap). Undeclared
+        // overlap is trimmed away as before.
         var bySong: [UUID: [Int]] = [:]
         for (i, p) in plan.placements.enumerated() {
             bySong[p.songID, default: []].append(i)
@@ -56,8 +58,13 @@ nonisolated enum AutoRemixValidator {
             }
             for pair in zip(sorted, sorted.dropFirst()) {
                 let overlap = plan.placements[pair.0].timelineEnd - plan.placements[pair.1].timelineStart
+                let declared = plan.placements[pair.1].overlapsPreviousSeconds
                 if overlap > 0.005 {
-                    plan.placements[pair.0].timelineDuration -= overlap
+                    if declared > 0.005, overlap <= declared + 0.05 {
+                        continue   // sanctioned crossfade overlap
+                    }
+                    let excess = overlap - max(0, declared)
+                    plan.placements[pair.0].timelineDuration -= excess
                     if plan.placements[pair.0].timelineDuration < minLen {
                         plan.placements[pair.0].timelineDuration = 0
                         warnings.append(
@@ -68,6 +75,20 @@ nonisolated enum AutoRemixValidator {
             }
         }
         plan.placements.removeAll { $0.timelineDuration < minLen }
+
+        // ── 2b. One-song remix: every internal cut must be reasoned,
+        // confident, and masked; source order must stay monotonic unless
+        // an explicit hook return justifies the rewind; and no boundary
+        // may fade BOTH neighbors toward silence (level hole).
+        if plan.mode == .remix {
+            repairRemixCuts(
+                &plan,
+                profiles: profiles,
+                warnings: &warnings,
+                decisions: &decisions,
+                minLen: minLen
+            )
+        }
 
         // ── 3. No more than two full-song sources at once ──
         let dominants = plan.placements.filter { $0.role == .dominant }
@@ -278,15 +299,191 @@ nonisolated enum AutoRemixValidator {
         in intentional: [AutoIntentionalGap],
         maxPause: Double
     ) -> Bool {
+        // Silence is intentional ONLY when an explicit marker covers it —
+        // unmarked gaps are defects to close, never blessed by size.
         for g in intentional {
             let overlap = min(gap.end, g.end) - max(gap.start, g.start)
             if overlap > gap.length * 0.5, gap.length <= maxPause + 0.02 {
                 return true
             }
         }
-        // Hard-cut micro-pauses ≤ quarter beat are treated as intentional
-        // even without an explicit marker (applier / planner may omit them).
-        return gap.length <= maxPause + 0.005
+        return false
+    }
+
+    // MARK: - Remix cut integrity
+
+    /// One-song preservation rules:
+    ///  • a source discontinuity between timeline-adjacent placements is
+    ///    an internal cut and must carry a confident AutoCutRecord;
+    ///    unreasoned cuts are repaired back to source continuity (or the
+    ///    offending placement is dropped when the source has no room);
+    ///  • a cut masked by an equal-power crossfade must actually OVERLAP;
+    ///  • source-continuous splits get their inner fades cleared so no
+    ///    boundary fades both neighbors toward silence;
+    ///  • source order stays monotonic unless a hookReturn record
+    ///    justifies the rewind.
+    private static func repairRemixCuts(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        warnings: inout [String],
+        decisions: inout [AutoDecision],
+        minLen: Double
+    ) {
+        // ── Monotonic source order ──
+        var toRemove = Set<UUID>()
+        var lastStartBySong: [UUID: Double] = [:]
+        let timelineOrder = plan.placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        for p in timelineOrder {
+            if let last = lastStartBySong[p.songID], p.sourceStart < last - 0.05 {
+                let justified = plan.cutRecords.contains {
+                    $0.reason == .hookReturn && abs($0.timelineAt - p.timelineStart) < 0.1
+                }
+                if !justified {
+                    toRemove.insert(idFor(p))
+                    warnings.append(
+                        "Removed a section that rewound the song without a justified hook return."
+                    )
+                    continue
+                }
+            }
+            lastStartBySong[p.songID] = max(lastStartBySong[p.songID] ?? -1, p.sourceStart)
+        }
+        if !toRemove.isEmpty {
+            plan.placements.removeAll { toRemove.contains(idFor($0)) }
+        }
+
+        // ── Cut integrity on timeline-adjacent same-song pairs ──
+        let order = plan.placements.indices
+            .filter { plan.placements[$0].role == .dominant }
+            .sorted { plan.placements[$0].timelineStart < plan.placements[$1].timelineStart }
+        var dropAfterRepair = Set<Int>()
+
+        for pair in zip(order, order.dropFirst()) {
+            let prev = plan.placements[pair.0]
+            let next = plan.placements[pair.1]
+            guard prev.songID == next.songID else { continue }
+            let overlapping = next.timelineStart < prev.timelineEnd - 0.005
+            let sequential = abs(next.timelineStart - prev.timelineEnd) <= 0.05
+            guard overlapping || sequential else { continue }
+            let songDuration = profiles[next.songID]?.analysis.durationSeconds ?? .infinity
+
+            if next.continuesPrevious {
+                // Declared continuity must be sample-true.
+                if abs(next.sourceStart - prev.sourceEnd) > 0.05 {
+                    plan.placements[pair.1].sourceStart = prev.sourceEnd
+                }
+                continue
+            }
+
+            let discontinuity = abs(next.sourceStart - prev.sourceEnd) > 0.05
+            if !discontinuity {
+                if sequential {
+                    // Contiguous source split — continuity, no fades.
+                    plan.placements[pair.1].continuesPrevious = true
+                    plan.placements[pair.0].fadeOut = .none
+                    plan.placements[pair.1].fadeIn = .none
+                }
+                continue
+            }
+
+            let record = plan.cutRecords.first {
+                abs($0.timelineAt - next.timelineStart) < 0.1
+            }
+
+            if let record, record.confidence >= 0.5 {
+                // A crossfade-masked cut requires REAL temporal overlap.
+                if case .equalPowerCrossfade(let seconds) = record.masking,
+                   next.overlapsPreviousSeconds <= 0.005,
+                   sequential,
+                   seconds > 0.01,
+                   prev.sourceEnd + seconds * prev.tempoRatio <= songDuration - 0.05 {
+                    let beats = seconds / max(plan.beatSeconds, 0.001)
+                    plan.placements[pair.0].timelineDuration += seconds
+                    plan.placements[pair.0].fadeOut = ClipTransition(
+                        type: .crossfade,
+                        duration: beats,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName
+                    )
+                    plan.placements[pair.1].overlapsPreviousSeconds = seconds
+                    plan.placements[pair.1].fadeIn = ClipTransition(
+                        type: .crossfade,
+                        duration: beats,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName
+                    )
+                } else if !isCrossfadeMasking(record.masking), sequential {
+                    // Hard/SFX/tail-masked cut: never fade both sides to
+                    // silence — the masking layer carries the join.
+                    if fadesTowardSilence(prev.fadeOut), fadesIn(next.fadeIn) {
+                        plan.placements[pair.0].fadeOut = .none
+                        plan.placements[pair.1].fadeIn = .none
+                    }
+                }
+            } else {
+                // Unreasoned / low-confidence cut → keep the song
+                // continuous when the source allows, else drop the tail.
+                if prev.sourceEnd + next.sourceDuration <= songDuration - 0.05 {
+                    plan.placements[pair.1].sourceStart = prev.sourceEnd
+                    plan.placements[pair.1].continuesPrevious = true
+                    plan.placements[pair.0].fadeOut = .none
+                    plan.placements[pair.1].fadeIn = .none
+                    warnings.append(
+                        "Removed an unjustified internal cut — kept the song continuous."
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .repairedTimelineGap,
+                            songTitle: nil,
+                            detail: "removed an unjustified cut"
+                        )
+                    )
+                } else {
+                    dropAfterRepair.insert(pair.1)
+                    warnings.append(
+                        "Dropped a section whose cut had no reason and no masking."
+                    )
+                }
+            }
+        }
+
+        if !dropAfterRepair.isEmpty {
+            let ids = dropAfterRepair.map { idFor(plan.placements[$0]) }
+            plan.placements.removeAll { ids.contains(idFor($0)) }
+        }
+    }
+
+    /// Stable identity for a placement (no stored id on the struct).
+    private static func idFor(_ p: AutoClipPlacement) -> UUID {
+        // Derive a deterministic pseudo-identity from immutable fields.
+        // Placements are unique by (song, slot, timelineStart) in practice.
+        var hasher = Hasher()
+        hasher.combine(p.songID)
+        hasher.combine(p.slotIndex)
+        hasher.combine(Int((p.timelineStart * 1000).rounded()))
+        let h = hasher.finalize()
+        return UUID(
+            uuid: (
+                UInt8(truncatingIfNeeded: h >> 56), UInt8(truncatingIfNeeded: h >> 48),
+                UInt8(truncatingIfNeeded: h >> 40), UInt8(truncatingIfNeeded: h >> 32),
+                UInt8(truncatingIfNeeded: h >> 24), UInt8(truncatingIfNeeded: h >> 16),
+                UInt8(truncatingIfNeeded: h >> 8), UInt8(truncatingIfNeeded: h),
+                0, 0, 0, 0, 0, 0, 0, 0
+            )
+        )
+    }
+
+    private static func isCrossfadeMasking(_ masking: AutoCutMasking) -> Bool {
+        if case .equalPowerCrossfade = masking { return true }
+        return false
+    }
+
+    private static func fadesTowardSilence(_ t: ClipTransition) -> Bool {
+        [.fadeOut, .crossfade, .auto].contains(t.type) && t.duration > 0.5
+    }
+
+    private static func fadesIn(_ t: ClipTransition) -> Bool {
+        [.crossfade, .auto].contains(t.type) && t.duration > 0.5
     }
 
     private static func recomputedHandoffs(_ placements: [AutoClipPlacement]) -> Int {

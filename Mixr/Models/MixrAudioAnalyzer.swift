@@ -31,6 +31,21 @@ enum MixrAudioAnalyzer {
         await Task.detached(priority: .utility) { analyzeSync(url: url) }.value
     }
 
+    /// Full signal-feature extraction (RMS/onset curves, beat phase, edge
+    /// silence, band energies) for Auto editing decisions. Reads up to
+    /// 7 minutes of audio; returns nil when the file cannot be decoded.
+    nonisolated static func extractSignalFeatures(
+        url: URL,
+        bpmHint: Double? = nil
+    ) async -> SongSignalFeatures? {
+        await Task.detached(priority: .utility) { () -> SongSignalFeatures? in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let (samples, sr) = readMono(url: url, maxSeconds: 420) else { return nil }
+            return SongSignalAnalyzer.extract(samples: samples, sampleRate: sr, bpmHint: bpmHint)
+        }.value
+    }
+
     // MARK: – Top-level sync entry (background thread)
 
     nonisolated private static func analyzeSync(url: URL) -> Result {
