@@ -4,20 +4,22 @@ import UIKit
 // MARK: - Metrics
 
 enum TLClipEditingMetrics {
-    static let toolbarLegacyWidth: CGFloat = 202
     static let toolbarHorizontalPadding: CGFloat = 10
     static let toolbarTrailingPadding: CGFloat = 2.5
-    static let toolbarLegacyActionSpacing: CGFloat = 6
-    static let toolbarActionCellSpacing: CGFloat = 2.5
+    /// Edge-to-edge gap between action labels.
     static let toolbarActionSpacing: CGFloat = 24
-    /// Per-action cell width from the original 3-action toolbar.
-    static let toolbarActionWidth: CGFloat = (toolbarLegacyWidth - toolbarHorizontalPadding * 2 - toolbarLegacyActionSpacing * 2) / 3
+    /// Tighter gap before Delete — its red label recedes optically against
+    /// the dark pane, so a smaller gap reads as equal to the others.
+    static let toolbarDeleteActionSpacing: CGFloat = 19
+    /// The action row is two equal halves flanking the center gap
+    /// (Split+Speed right-aligned, Duplicate+Delete left-aligned), so the
+    /// Speed↔Duplicate midpoint is the exact pane center — which the
+    /// presenting overlay pins to the playhead.
+    static let toolbarActionHalfWidth: CGFloat = 104
     static let toolbarWidth: CGFloat =
-        toolbarHorizontalPadding
-        + toolbarTrailingPadding
-        + toolbarActionWidth * 4
-        + toolbarActionCellSpacing * 3
-        - 2
+        toolbarHorizontalPadding * 2
+        + toolbarActionHalfWidth * 2
+        + toolbarActionSpacing
     static let toolbarSpeedWidth: CGFloat = 168
     static let toolbarBodyHeight: CGFloat = 50
     static let toolbarBodyHorizontalOffset: CGFloat = 12
@@ -561,7 +563,13 @@ struct TLClipContextToolbar: View {
             )
             .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
             .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
-            .offset(x: TLClipEditingMetrics.toolbarBodyHorizontalOffset)
+            // Actions mode is symmetric about the playhead pointer; only the
+            // speed editor keeps its tuned sideways shift.
+            .offset(
+                x: mode == .actions
+                    ? 0
+                    : TLClipEditingMetrics.toolbarBodyHorizontalOffset
+            )
 
             TLToolbarPointer()
                 .fill(Color(hex: "050810").opacity(0.68))
@@ -606,32 +614,51 @@ struct TLClipContextToolbar: View {
 
     private var actionsContent: some View {
         HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
-            TLClipToolbarAction(
-                icon: "scissors",
-                label: "Split",
-                action: onSplit
+            HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
+                TLClipToolbarAction(
+                    icon: "scissors",
+                    label: "Split",
+                    action: onSplit
+                )
+
+                TLClipToolbarAction(
+                    icon: "gauge.with.dots.needle.67percent",
+                    label: "Speed",
+                    action: onSpeed
+                )
+            }
+            .frame(
+                width: TLClipEditingMetrics.toolbarActionHalfWidth,
+                alignment: .trailing
             )
 
-            TLClipToolbarAction(
-                icon: "gauge.with.dots.needle.67percent",
-                label: "Speed",
-                action: onSpeed
-            )
+            HStack(spacing: TLClipEditingMetrics.toolbarDeleteActionSpacing) {
+                TLClipToolbarAction(
+                    icon: "doc.on.doc",
+                    label: "Duplicate",
+                    action: onDuplicate
+                )
 
-            TLClipToolbarAction(
-                icon: "doc.on.doc",
-                label: "Duplicate",
-                action: onDuplicate
-            )
-
-            TLClipToolbarAction(
-                icon: "trash",
-                label: "Delete",
-                isDestructive: true,
-                action: onDelete
+                TLClipToolbarAction(
+                    icon: "trash",
+                    label: "Delete",
+                    isDestructive: true,
+                    action: onDelete
+                )
+            }
+            .frame(
+                width: TLClipEditingMetrics.toolbarActionHalfWidth,
+                alignment: .leading
             )
             .padding(.leading, -2)
         }
+        // Equalize the pane's asymmetric content padding so the center gap
+        // sits exactly at the pane's horizontal center.
+        .padding(
+            .trailing,
+            TLClipEditingMetrics.toolbarHorizontalPadding
+                - TLClipEditingMetrics.toolbarTrailingPadding
+        )
     }
 
     private var speedContent: some View {
