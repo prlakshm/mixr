@@ -7,25 +7,26 @@ enum TLClipEditingMetrics {
     static let toolbarHorizontalPadding: CGFloat = 10
     static let toolbarTrailingPadding: CGFloat = 2.5
     /// Edge-to-edge gap between Split and Speed.
-    static let toolbarActionSpacing: CGFloat = 22
+    static let toolbarActionSpacing: CGFloat = 24
     /// Optical Duplicate↔Delete gap. Mathematically equal gaps read wider
     /// here: both labels are long with small icons centered above them, so
     /// the icon row is much sparser than Split↔Speed's, and Delete's red
     /// recedes against the dark pane. Narrower metric, equal optics.
-    static let toolbarDeleteGap: CGFloat = 18
+    static let toolbarDeleteGap: CGFloat = 19.5
     /// Speed↔Duplicate gap — wider so the playhead pointer sits inside it.
-    static let toolbarCenterGap: CGFloat = 22
+    static let toolbarCenterGap: CGFloat = 24
     /// Pane-edge padding — benchmark is 3/4 of the Split↔Speed gap. The
     /// leading side carries a small optical bump: Split's bright leading
     /// cap (and its inset scissors icon) makes equal padding read tighter
     /// than the trailing side next to Delete's receding red tail.
-    static let toolbarOuterPaddingTrailing: CGFloat = 18
-    static let toolbarOuterPaddingLeading: CGFloat = toolbarOuterPaddingTrailing + 3
+    static let toolbarOuterPaddingTrailing: CGFloat = 19
+
+    static let toolbarOuterPaddingLeading: CGFloat = 23
     /// Pre-measurement estimates of each half's label run (Split+Speed /
     /// Duplicate+Delete). The pane measures the real widths at layout time
     /// and sizes itself exactly; these only seed the first frame.
-    static let toolbarLeftHalfEstimate: CGFloat = 78
-    static let toolbarRightHalfEstimate: CGFloat = 100
+    static let toolbarLeftHalfEstimate: CGFloat = 80
+    static let toolbarRightHalfEstimate: CGFloat = 101.5
     /// Estimated actions-pane width for the presenting overlay's frame.
     /// The playhead anchoring is measurement-based and exact regardless.
     static let toolbarWidth: CGFloat =
@@ -53,7 +54,7 @@ enum TLClipEditingMetrics {
     static let menuSettingsHeaderChevronTitleGap: CGFloat = 9
     static let menuSettingsHeaderLeadingOffset: CGFloat = -0.75
     static let menuSettingsHorizontalPadding: CGFloat = 20
-    static let menuSettingsTopPadding: CGFloat = 8
+    static let menuSettingsTopPadding: CGFloat = 8.5
     static let menuSettingsBottomPadding: CGFloat = 8
     static let menuSlideDuration: Double = 0.30
     static var menuEstimatedHeight: CGFloat {
@@ -1053,7 +1054,7 @@ struct TLTransitionMenu: View {
                 .buttonStyle(.plain)
 
                 Text(txType.rawValue)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
             }
             .offset(x: TLClipEditingMetrics.menuSettingsHeaderLeadingOffset)
