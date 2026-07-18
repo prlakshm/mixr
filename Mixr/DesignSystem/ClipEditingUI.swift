@@ -6,20 +6,33 @@ import UIKit
 enum TLClipEditingMetrics {
     static let toolbarHorizontalPadding: CGFloat = 10
     static let toolbarTrailingPadding: CGFloat = 2.5
-    /// Edge-to-edge gap between action labels.
+    /// Edge-to-edge gap between Split and Speed.
     static let toolbarActionSpacing: CGFloat = 24
     /// Tighter gap before Delete — its red label recedes optically against
     /// the dark pane, so a smaller gap reads as equal to the others.
-    static let toolbarDeleteActionSpacing: CGFloat = 19
-    /// The action row is two equal halves flanking the center gap
-    /// (Split+Speed right-aligned, Duplicate+Delete left-aligned), so the
-    /// Speed↔Duplicate midpoint is the exact pane center — which the
-    /// presenting overlay pins to the playhead.
-    static let toolbarActionHalfWidth: CGFloat = 104
+    static let toolbarDeleteActionSpacing: CGFloat = 17
+    /// Speed↔Duplicate gap — wider so the playhead pointer sits inside it.
+    static let toolbarCenterGap: CGFloat = 22
+    /// The action row is two content-hugging halves flanking the center gap:
+    /// Split+Speed right-aligned in the left half, Duplicate+Delete
+    /// left-aligned in the right half. Each half is sized to its own labels
+    /// so dead space stays balanced; the right half carries ~2pt extra
+    /// breathing room past Delete.
+    static let toolbarLeftHalfWidth: CGFloat = 81
+    static let toolbarRightHalfWidth: CGFloat = 101
     static let toolbarWidth: CGFloat =
         toolbarHorizontalPadding * 2
-        + toolbarActionHalfWidth * 2
-        + toolbarActionSpacing
+        + toolbarLeftHalfWidth
+        + toolbarCenterGap
+        + toolbarRightHalfWidth
+    /// Sideways pane shift in actions mode so the center gap's midpoint —
+    /// where the playhead and pointer sit — lands on the frame center even
+    /// though the halves have different widths.
+    static let toolbarActionsBodyOffset: CGFloat =
+        toolbarWidth / 2
+        - toolbarHorizontalPadding
+        - toolbarLeftHalfWidth
+        - toolbarCenterGap / 2
     static let toolbarSpeedWidth: CGFloat = 168
     static let toolbarBodyHeight: CGFloat = 50
     static let toolbarBodyHorizontalOffset: CGFloat = 12
@@ -563,11 +576,11 @@ struct TLClipContextToolbar: View {
             )
             .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
             .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
-            // Actions mode is symmetric about the playhead pointer; only the
-            // speed editor keeps its tuned sideways shift.
+            // Actions mode shifts the pane so the playhead pointer stays at
+            // the center-gap midpoint; the speed editor keeps its own shift.
             .offset(
                 x: mode == .actions
-                    ? 0
+                    ? TLClipEditingMetrics.toolbarActionsBodyOffset
                     : TLClipEditingMetrics.toolbarBodyHorizontalOffset
             )
 
@@ -613,7 +626,7 @@ struct TLClipContextToolbar: View {
     }
 
     private var actionsContent: some View {
-        HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
+        HStack(spacing: TLClipEditingMetrics.toolbarCenterGap) {
             HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
                 TLClipToolbarAction(
                     icon: "scissors",
@@ -628,7 +641,7 @@ struct TLClipContextToolbar: View {
                 )
             }
             .frame(
-                width: TLClipEditingMetrics.toolbarActionHalfWidth,
+                width: TLClipEditingMetrics.toolbarLeftHalfWidth,
                 alignment: .trailing
             )
 
@@ -647,10 +660,9 @@ struct TLClipContextToolbar: View {
                 )
             }
             .frame(
-                width: TLClipEditingMetrics.toolbarActionHalfWidth,
+                width: TLClipEditingMetrics.toolbarRightHalfWidth,
                 alignment: .leading
             )
-            .padding(.leading, -2)
         }
         // Equalize the pane's asymmetric content padding so the center gap
         // sits exactly at the pane's horizontal center.
