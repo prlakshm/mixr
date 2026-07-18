@@ -49,12 +49,15 @@ enum AutoRemixPlanner {
     static func makePlan(
         tracks: [MixrTrack],
         tuning: AutoTuning = .standard,
-        seed: UInt64 = UInt64(Date().timeIntervalSince1970)
+        seed: UInt64 = UInt64(Date().timeIntervalSince1970),
+        signals: [UUID: SongSignalFeatures] = [:]
     ) -> (plan: AutoRemixPlan, profiles: [UUID: AutoSongProfile])? {
         let songTracks = tracks.filter { !$0.isSFXTrack && !$0.clips.isEmpty }
         guard !songTracks.isEmpty else { return nil }
 
-        let profiles = songTracks.map { AutoSectionCatalog.profile(track: $0, tuning: tuning) }
+        let profiles = songTracks.map {
+            AutoSectionCatalog.profile(track: $0, tuning: tuning, signal: signals[$0.id])
+        }
         var rng = AutoRandom(seed: seed)
 
         let plan: AutoRemixPlan?
@@ -73,9 +76,12 @@ enum AutoRemixPlanner {
     static func makeValidatedPlan(
         tracks: [MixrTrack],
         tuning: AutoTuning = .standard,
-        seed: UInt64 = UInt64(Date().timeIntervalSince1970)
+        seed: UInt64 = UInt64(Date().timeIntervalSince1970),
+        signals: [UUID: SongSignalFeatures] = [:]
     ) -> AutoRemixPlan? {
-        guard let (plan, profiles) = makePlan(tracks: tracks, tuning: tuning, seed: seed) else {
+        guard let (plan, profiles) = makePlan(
+            tracks: tracks, tuning: tuning, seed: seed, signals: signals
+        ) else {
             return nil
         }
         return AutoRemixValidator.validate(plan, profiles: profiles, tuning: tuning)

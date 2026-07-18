@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import Foundation
 
 // MARK: - Song Section
@@ -94,6 +96,11 @@ struct SongAnalysis: Sendable {
     /// Below ~0.5 the Auto planner switches to its safe fallback behavior.
     var analysisConfidence: Double
 
+    /// Real signal-derived measurements when the source audio has been
+    /// analyzed (nil = metadata/heuristics only, so editing must stay
+    /// maximally conservative).
+    var signal: SongSignalFeatures? = nil
+
     // MARK: Derived musical units
 
     var beatSeconds: Double { 60.0 / bpm }
@@ -160,7 +167,7 @@ enum SongAnalyzer {
     /// Builds an analysis for one song track. Uses the track's real BPM/key
     /// when known (metadata or MixrAudioAnalyzer) plus deterministic
     /// heuristics seeded by the track so different songs get different maps.
-    static func analyze(track: MixrTrack) -> SongAnalysis {
+    static func analyze(track: MixrTrack, signal: SongSignalFeatures? = nil) -> SongAnalysis {
         let bpm = track.bpm.map(Double.init) ?? defaultBPM
         let duration = track.durationSeconds
             ?? track.clips.first.map { MixrTimeline.seconds(fromUnits: $0.length) * $0.playbackSpeed }
@@ -304,7 +311,8 @@ enum SongAnalyzer {
             hookMoments: [chorus1.startSeconds, chorus2.startSeconds],
             drumStrength: drumStrength,
             bassDensity: bassDensity,
-            analysisConfidence: confidence
+            analysisConfidence: confidence,
+            signal: signal
         )
     }
 

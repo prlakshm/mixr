@@ -99,8 +99,12 @@ struct AutoSongProfile: Sendable {
 enum AutoSectionCatalog {
 
     /// Builds the scored candidate catalog for one song track.
-    static func profile(track: MixrTrack, tuning: AutoTuning = .standard) -> AutoSongProfile {
-        let analysis = SongAnalyzer.analyze(track: track)
+    static func profile(
+        track: MixrTrack,
+        tuning: AutoTuning = .standard,
+        signal: SongSignalFeatures? = nil
+    ) -> AutoSongProfile {
+        let analysis = SongAnalyzer.analyze(track: track, signal: signal)
         let bar = analysis.barSeconds
         let duration = analysis.durationSeconds
         let confidence = analysis.analysisConfidence
