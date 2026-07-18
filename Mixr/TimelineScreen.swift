@@ -563,8 +563,10 @@ struct TimelineScreen: View {
                     onClose: { dismissSFXPanel() }
                 )
                 .frame(
-                    width: screenSize.width * SFXMetrics.panelScreenFraction,
-                    height: screenSize.height * SFXMetrics.panelScreenFraction
+                    width: screenSize.width * SFXMetrics.panelScreenWidthFraction,
+                    height: SFXMetrics.panelHeight(
+                        forWidth: screenSize.width * SFXMetrics.panelScreenWidthFraction
+                    )
                 )
             }
             .zIndex(60)

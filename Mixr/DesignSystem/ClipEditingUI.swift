@@ -17,6 +17,7 @@ enum TLClipEditingMetrics {
         + toolbarTrailingPadding
         + toolbarActionWidth * 4
         + toolbarActionCellSpacing * 3
+        - 2
     static let toolbarSpeedWidth: CGFloat = 168
     static let toolbarBodyHeight: CGFloat = 50
     static let toolbarBodyHorizontalOffset: CGFloat = 12
@@ -117,20 +118,28 @@ private struct TLClipToolbarAction: View {
     var isDestructive: Bool = false
     let action: () -> Void
 
-    @State private var isHovered = false
+    private static let destructiveRed = Color(hex: "FF453A")
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6.4) {
                 Image(systemName: icon)
                     .font(.system(size: iconFontSize, weight: .regular))
-                    .foregroundStyle(foreground)
+                    .foregroundStyle(
+                        isDestructive
+                            ? Self.destructiveRed.opacity(0.88)
+                            : MixrColors.textPrimary.opacity(0.92)
+                    )
                     .offset(y: iconVerticalOffset)
                     .frame(height: 14)
 
                 Text(label)
-                    .font(.system(size: 9.8, weight: .medium))
-                    .foregroundStyle(foreground)
+                    .font(.system(size: 9.8, weight: isDestructive ? .regular : .medium))
+                    .foregroundStyle(
+                        isDestructive
+                            ? Self.destructiveRed.opacity(0.78)
+                            : MixrColors.textPrimary.opacity(0.92)
+                    )
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .offset(y: labelVerticalOffset)
@@ -139,20 +148,7 @@ private struct TLClipToolbarAction: View {
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(
-            TLClipActionPressStyle(
-                isDestructive: isDestructive,
-                expandsHorizontally: false
-            )
-        )
-        .onHover { isHovered = $0 }
-    }
-
-    private var foreground: Color {
-        if isDestructive && isHovered {
-            return Color.red.opacity(0.88)
-        }
-        return MixrColors.textPrimary.opacity(isDestructive ? 0.88 : 0.92)
+        .buttonStyle(TLClipToolbarPressStyle(isDestructive: isDestructive))
     }
 
     private var iconFontSize: CGFloat {
@@ -188,6 +184,25 @@ private struct TLClipToolbarAction: View {
     private var labelVerticalOffset: CGFloat {
         // Keep all labels on Speed's optical baseline.
         0.25
+    }
+}
+
+/// Toolbar press: normal actions dim; Delete keeps soft reds and darkens by the shared factor.
+private struct TLClipToolbarPressStyle: ButtonStyle {
+    var isDestructive: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .offset(y: configuration.isPressed ? 1.25 : 0)
+            .opacity(
+                configuration.isPressed
+                    ? (isDestructive ? MixrAlertPressColors.pressFactor : 0.88)
+                    : 1
+            )
+            .animation(
+                .spring(response: 0.17, dampingFraction: 0.82),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -615,6 +630,7 @@ struct TLClipContextToolbar: View {
                 isDestructive: true,
                 action: onDelete
             )
+            .padding(.leading, -2)
         }
     }
 

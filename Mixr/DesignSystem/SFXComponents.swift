@@ -6,14 +6,35 @@ enum SFXMetrics {
     static let markWidth: CGFloat = 46
     static let markHeight: CGFloat = 34
     static let markRadius: CGFloat = 8
-    /// Default card size — the library grid overrides this so exactly
-    /// 6 cards (3 × 2) fill the visible panel area.
+    /// Default card size — slightly wider than tall (reference aspect).
     static let cardDefaultWidth: CGFloat = 200
-    static let cardDefaultHeight: CGFloat = 118
+    static let cardDefaultHeight: CGFloat = 138
+    /// Width ÷ height — a little longer than tall.
+    static let cardAspectRatio: CGFloat = cardDefaultWidth / cardDefaultHeight
     static let cardRadius: CGFloat = MixrRadius.glass
-    static let panelScreenFraction: CGFloat = 0.86
+    static let panelScreenWidthFraction: CGFloat = 0.86
     static let libraryColumns: Int = 3
     static let libraryVisibleRows: Int = 2
+    static let libraryPageSize: Int = libraryColumns * libraryVisibleRows
+    static let panelPadH: CGFloat = MixrSpacing.xl
+    static let panelPadV: CGFloat = MixrSpacing.lg
+    static let panelCardSpacing: CGFloat = MixrSpacing.md
+    /// Space above the card grid so the close control sits in panel chrome.
+    static let panelCloseClearance: CGFloat = 28
+    static let panelCloseTopInset: CGFloat = 4
+    static let panelCloseTrailingInset: CGFloat = 6
+
+    /// Panel height for a given width so a 3 × 2 page of cards fits exactly.
+    static func panelHeight(forWidth width: CGFloat) -> CGFloat {
+        let columns = CGFloat(libraryColumns)
+        let rows = CGFloat(libraryVisibleRows)
+        let cardWidth = (width - panelPadH * 2 - panelCardSpacing * (columns - 1)) / columns
+        let cardHeight = cardWidth / cardAspectRatio
+        return panelCloseClearance
+            + panelPadV * 2
+            + cardHeight * rows
+            + panelCardSpacing * (rows - 1)
+    }
 }
 
 // MARK: - SFX Tile Mark
@@ -123,16 +144,14 @@ struct SFXTileMark: View {
 
 // MARK: - Silver SFX Card
 
-/// Wide glass SFX card — dark pane wrapped in a bright glowing silver rim,
-/// with a large glowing silver icon over a title + duration stack. Colors
-/// come from the silver song chip / silver SFX track family.
+/// Wide glass SFX card — dark pane wrapped in a thick glowing silver rim,
+/// with a pearl-glow icon over a title + duration stack. Colors come from
+/// the silver song chip / silver SFX track family.
 struct SFXCard: View {
     let effect: SoundEffectDefinition
     var width: CGFloat = SFXMetrics.cardDefaultWidth
     var height: CGFloat = SFXMetrics.cardDefaultHeight
     var onTap: () -> Void = {}
-
-    @GestureState private var isPressed = false
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: SFXMetrics.cardRadius, style: .continuous)
@@ -143,57 +162,57 @@ struct SFXCard: View {
     private var silverEdge: Color { MixrColors.sfxOutline }
     private var silverGlow: Color { MixrColors.sfxGlow }
 
-    private var iconSize: CGFloat { min(44, max(24, height * 0.30)) }
-    private var titleSize: CGFloat { min(16, max(12, height * 0.125)) }
+    private var iconSize: CGFloat { min(48, max(26, height * 0.32)) }
+    private var titleSize: CGFloat { min(16, max(12, height * 0.115)) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Icon centered in the upper region
-            Image(systemName: effect.icon)
-                .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            Color.white,
-                            silver,
-                            silverSoft.opacity(0.95),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .shadow(color: Color.white.opacity(0.55), radius: 4)
-                .shadow(color: silverGlow.opacity(0.45), radius: 10)
-                .frame(maxHeight: .infinity)
+        Button(action: onTap) {
+            VStack(spacing: 0) {
+                Image(systemName: effect.icon)
+                    .font(.system(size: iconSize, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(pearlIconFill)
+                    .shadow(color: Color.white.opacity(0.72), radius: 3.5)
+                    .shadow(color: silverGlow.opacity(0.55), radius: 9)
+                    .shadow(color: silver.opacity(0.28), radius: 16)
+                    .frame(maxHeight: .infinity)
 
-            VStack(spacing: 2) {
-                Text(effect.title)
-                    .font(.system(size: titleSize, weight: .semibold))
-                    .foregroundStyle(MixrColors.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                VStack(spacing: 2) {
+                    Text(effect.title)
+                        .font(.system(size: titleSize, weight: .semibold))
+                        .foregroundStyle(MixrColors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
-                Text(Self.durationLabel(effect.durationSeconds))
-                    .font(.system(size: titleSize * 0.8, weight: .medium))
-                    .foregroundStyle(MixrColors.textSecondary)
+                    Text(Self.durationLabel(effect.durationSeconds))
+                        .font(.system(size: titleSize * 0.78, weight: .medium))
+                        .foregroundStyle(MixrColors.textSecondary)
+                }
+                .padding(.bottom, height * 0.12)
             }
-            .padding(.bottom, height * 0.11)
+            .padding(.horizontal, MixrSpacing.sm)
+            .frame(width: width, height: height)
+            .background { silverGlass }
+            .clipShape(shape)
+            .overlay { silverRim }
+            .shadow(color: silverGlow.opacity(0.38), radius: 12)
+            .shadow(color: silver.opacity(0.22), radius: 22)
+            .shadow(color: .black.opacity(0.32), radius: 6, x: 0, y: 2)
         }
-        .padding(.horizontal, MixrSpacing.sm)
-        .frame(width: width, height: height)
-        .background { silverGlass }
-        .clipShape(shape)
-        .overlay { silverRim }
-        .shadow(color: silverGlow.opacity(isPressed ? 0.42 : 0.30), radius: isPressed ? 12 : 8)
-        .shadow(color: silver.opacity(isPressed ? 0.26 : 0.16), radius: isPressed ? 22 : 16)
-        .shadow(color: .black.opacity(0.32), radius: 6, x: 0, y: 2)
-        .scaleEffect(isPressed ? 0.96 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isPressed)
-        .contentShape(shape)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .updating($isPressed) { _, state, _ in state = true }
-                .onEnded { _ in onTap() }
+        .buttonStyle(SFXCardPressStyle())
+        .accessibilityLabel("\(effect.title), \(Self.durationLabel(effect.durationSeconds))")
+    }
+
+    /// Soft white-pearl luminance — luminous, not metallic chrome.
+    private var pearlIconFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white,
+                silverGlow.opacity(0.96),
+                silver.opacity(0.92),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
         )
     }
 
@@ -205,20 +224,20 @@ struct SFXCard: View {
 
     private var silverGlass: some View {
         shape
-            .fill(Color(hex: "0B0F1A").opacity(0.62))
+            .fill(Color(hex: "0B0F1A").opacity(0.58))
             .background {
                 shape
                     .fill(.ultraThinMaterial)
-                    .opacity(0.07)
+                    .opacity(0.06)
                     .environment(\.colorScheme, .dark)
             }
             .overlay {
                 shape.fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.10),
-                            silverSoft.opacity(0.05),
-                            Color.black.opacity(0.18),
+                            Color.white.opacity(0.08),
+                            Color.clear,
+                            Color.black.opacity(0.16),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -229,62 +248,67 @@ struct SFXCard: View {
                 shape.fill(
                     RadialGradient(
                         colors: [
-                            silverSoft.opacity(0.14),
+                            silverSoft.opacity(0.10),
                             Color.clear,
                         ],
-                        center: UnitPoint(x: 0.5, y: 0.32),
+                        center: UnitPoint(x: 0.5, y: 0.30),
                         startRadius: 0,
-                        endRadius: max(width, height) * 0.62
+                        endRadius: max(width, height) * 0.58
                     )
                 )
             }
     }
 
-    /// Bright silver rim with an inner bloom — the defining edge glow.
+    /// Thick bright silver rim with strong inner/outer bloom — reference look.
     private var silverRim: some View {
         ZStack {
-            // Soft bloom hugging the rim
+            // Outer bloom
             shape
-                .strokeBorder(silverGlow.opacity(isPressed ? 0.85 : 0.65), lineWidth: 2.5)
-                .blur(radius: 3)
+                .strokeBorder(silverGlow.opacity(0.55), lineWidth: 6)
+                .blur(radius: 6)
+            // Mid bloom
+            shape
+                .strokeBorder(Color.white.opacity(0.50), lineWidth: 3.8)
+                .blur(radius: 2.8)
             // Crisp bright edge
             shape.strokeBorder(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.95),
-                        silverEdge.opacity(0.80),
-                        silver.opacity(0.70),
-                        silverEdge.opacity(0.85),
+                        Color.white,
+                        silverEdge.opacity(0.92),
+                        silver.opacity(0.78),
+                        silverEdge.opacity(0.90),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 ),
-                lineWidth: 1.2
+                lineWidth: 2.15
             )
-            // Top catchlight lip
+            // Inner lip catchlight
             shape
-                .strokeBorder(Color.white.opacity(0.85), lineWidth: 0.8)
+                .strokeBorder(Color.white.opacity(0.88), lineWidth: 1.1)
                 .mask {
                     LinearGradient(
-                        colors: [Color.white, Color.white.opacity(0.25), Color.clear],
+                        colors: [Color.white, Color.white.opacity(0.30), Color.clear],
                         startPoint: .top,
                         endPoint: UnitPoint(x: 0.5, y: 0.55)
                     )
                 }
         }
+        .allowsHitTesting(false)
     }
 }
 
 // MARK: - SFX Library Panel
 
-/// Large silver library panel — same open/close overlay model as the rest
-/// of Mixr's floating panels. Sizing is applied by the presenting overlay.
+/// Headerless SFX library — 3 × 2 card pages, horizontal scroll for the
+/// rest. Menu glass matches Mixr alert / project-menu chrome.
 struct SFXLibraryPanel: View {
     var onSelect: (SoundEffectDefinition) -> Void = { _ in }
     var onClose: () -> Void = {}
 
-    /// Display order — first screenful (3 × 2) matches the reference set,
-    /// remaining effects follow and are reached by scrolling.
+    /// Display order — first page matches the reference set; remaining
+    /// effects follow on the next horizontal page.
     private static let displayOrder: [String] = [
         "riser", "downlifter", "impact",
         "crash", "snareBuild", "clapFill",
@@ -296,71 +320,52 @@ struct SFXLibraryPanel: View {
         return front + rest
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.horizontal, MixrSpacing.xl)
-                .padding(.top, MixrSpacing.lg)
-                .padding(.bottom, MixrSpacing.md)
-
-            MixrColors.divider.frame(height: 0.5)
-                .padding(.horizontal, MixrSpacing.lg)
-
-            // Exactly 6 cards (3 × 2) fill the visible area; scroll for the rest.
-            GeometryReader { geo in
-                let spacing = MixrSpacing.md
-                let padH = MixrSpacing.xl
-                let padV = MixrSpacing.lg
-                let columns = CGFloat(SFXMetrics.libraryColumns)
-                let rows = CGFloat(SFXMetrics.libraryVisibleRows)
-                let cardWidth = (geo.size.width - padH * 2 - spacing * (columns - 1)) / columns
-                let cardHeight = (geo.size.height - padV * 2 - spacing * (rows - 1)) / rows
-
-                ScrollView(showsIndicators: false) {
-                    LazyVGrid(
-                        columns: Array(
-                            repeating: GridItem(.fixed(cardWidth), spacing: spacing),
-                            count: SFXMetrics.libraryColumns
-                        ),
-                        spacing: spacing
-                    ) {
-                        ForEach(Self.orderedEffects) { effect in
-                            SFXCard(effect: effect, width: cardWidth, height: cardHeight) {
-                                onSelect(effect)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, padH)
-                    .padding(.vertical, padV)
-                }
-            }
+    private static var pages: [[SoundEffectDefinition]] {
+        let all = orderedEffects
+        let size = SFXMetrics.libraryPageSize
+        guard !all.isEmpty else { return [] }
+        return stride(from: 0, to: all.count, by: size).map {
+            Array(all[$0..<min($0 + size, all.count)])
         }
-        .background {
-            GlassBackground(level: .strong, cornerRadius: MixrRadius.glass)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous)
-                .strokeBorder(MixrColors.sfxSecondary.opacity(0.22), lineWidth: 0.6)
-        }
-        .mixrShadow(.glassStrong)
-        .mixrGlow(.glassAmbientStrong)
     }
 
-    private var header: some View {
-        HStack(spacing: MixrSpacing.md) {
-            SFXTileMark(isActive: true, width: 40, height: 30)
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            GeometryReader { geo in
+                let spacing = SFXMetrics.panelCardSpacing
+                let padH = SFXMetrics.panelPadH
+                let padV = SFXMetrics.panelPadV
+                let columns = CGFloat(SFXMetrics.libraryColumns)
+                let cardWidth = (geo.size.width - padH * 2 - spacing * (columns - 1)) / columns
+                let cardHeight = cardWidth / SFXMetrics.cardAspectRatio
+                let pageWidth = geo.size.width
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Sound Effects")
-                    .mixrFont(.sectionTitle)
-                    .foregroundStyle(MixrColors.textPrimary)
-                Text("Tap to add at the playhead on the silver SFX track")
-                    .mixrFont(.metadata)
-                    .foregroundStyle(MixrColors.textSecondary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(Self.pages.enumerated()), id: \.offset) { _, page in
+                            LazyVGrid(
+                                columns: Array(
+                                    repeating: GridItem(.fixed(cardWidth), spacing: spacing),
+                                    count: SFXMetrics.libraryColumns
+                                ),
+                                spacing: spacing
+                            ) {
+                                ForEach(page) { effect in
+                                    SFXCard(effect: effect, width: cardWidth, height: cardHeight) {
+                                        onSelect(effect)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, padH)
+                            .padding(.top, SFXMetrics.panelCloseClearance + padV)
+                            .padding(.bottom, padV)
+                            .frame(width: pageWidth, height: geo.size.height)
+                        }
+                    }
+                    .scrollTargetLayout()
+                }
+                .scrollTargetBehavior(.paging)
             }
-
-            Spacer()
 
             Button(action: onClose) {
                 Image(systemName: "xmark")
@@ -373,7 +378,24 @@ struct SFXLibraryPanel: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(SFXPlainIconPressStyle())
+            .accessibilityLabel("Close")
+            .padding(.top, SFXMetrics.panelCloseTopInset)
+            .padding(.trailing, SFXMetrics.panelCloseTrailingInset)
         }
+        .background { MixrAlertChrome.background(cornerRadius: MixrRadius.glass) }
+        .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
+        .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
+    }
+}
+
+// MARK: - Press Styles
+
+private struct SFXCardPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .opacity(configuration.isPressed ? 0.92 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }
 
@@ -388,8 +410,9 @@ private struct SFXPlainIconPressStyle: ButtonStyle {
 #Preview("SFX Library Panel") {
     ZStack {
         MixrGradients.backgroundLinear.ignoresSafeArea()
+        let width: CGFloat = 800
         SFXLibraryPanel()
-            .frame(width: 800, height: 380)
+            .frame(width: width, height: SFXMetrics.panelHeight(forWidth: width))
     }
     .frame(width: 932, height: 430)
     .preferredColorScheme(.dark)

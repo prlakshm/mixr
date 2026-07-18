@@ -573,8 +573,9 @@ struct DesignSystemPreviewView: View {
                 }
 
                 PreviewSubsection(title: "SFX library panel") {
+                    let width: CGFloat = 760
                     SFXLibraryPanel()
-                        .frame(width: 760, height: 340)
+                        .frame(width: width, height: SFXMetrics.panelHeight(forWidth: width))
                 }
             }
         }
