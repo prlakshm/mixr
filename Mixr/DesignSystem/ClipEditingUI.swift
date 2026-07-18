@@ -31,17 +31,22 @@ enum TLClipEditingMetrics {
     static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 11.5
     static let menuRowHeight: CGFloat = 42
-    static let menuSettingsHeaderRowHeight: CGFloat = 33
-    static let menuSettingsHeaderIconBoxSize: CGFloat = 22.5
-    static let menuSettingsHeaderChevronIconGap: CGFloat = 8.25
-    static let menuSettingsHeaderIconTitleGap: CGFloat = 9.5
+    /// Sized so heading→Duration spacing matches Duration↔Curve control gap.
+    static let menuSettingsHeaderRowHeight: CGFloat = 20.5
+    static let menuSettingsHeaderChevronTitleGap: CGFloat = 9
     static let menuSettingsHeaderLeadingOffset: CGFloat = -0.75
     static let menuSettingsHorizontalPadding: CGFloat = 20
-    static let menuSettingsTopPadding: CGFloat = 4
-    static let menuSettingsBottomPadding: CGFloat = 4
+    static let menuSettingsTopPadding: CGFloat = 8
+    static let menuSettingsBottomPadding: CGFloat = 8
     static let menuSlideDuration: Double = 0.30
     static var menuEstimatedHeight: CGFloat {
         CGFloat(ClipTransitionType.allCases.count) * menuRowHeight + 6
+    }
+    static var menuSettingsEstimatedHeight: CGFloat {
+        menuSettingsHeaderRowHeight
+            + menuRowHeight * 2
+            + menuSettingsTopPadding
+            + menuSettingsBottomPadding
     }
     static let menuIconBoxSize: CGFloat = 22.5
     static let menuIconBoxRadius: CGFloat = 6
@@ -818,10 +823,7 @@ struct TLTransitionMenu: View {
         case .list:
             TLClipEditingMetrics.menuEstimatedHeight
         case .settings:
-            TLClipEditingMetrics.menuSettingsHeaderRowHeight
-                + TLClipEditingMetrics.menuRowHeight * 2
-                + TLClipEditingMetrics.menuSettingsTopPadding
-                + TLClipEditingMetrics.menuSettingsBottomPadding
+            TLClipEditingMetrics.menuSettingsEstimatedHeight
         }
     }
 
@@ -927,7 +929,7 @@ struct TLTransitionMenu: View {
 
     private func settingsHeader(_ txType: ClipTransitionType) -> some View {
         HStack(spacing: 0) {
-            HStack(spacing: 0) {
+            HStack(spacing: TLClipEditingMetrics.menuSettingsHeaderChevronTitleGap) {
                 Button {
                     withAnimation(
                         .easeInOut(duration: TLClipEditingMetrics.menuSlideDuration)
@@ -937,23 +939,10 @@ struct TLTransitionMenu: View {
                 } label: {
                     MixrChevron(direction: .back, size: 10.5)
                         .offset(y: 0.1)
-                        .frame(height: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize)
+                        .frame(height: TLClipEditingMetrics.menuSettingsHeaderRowHeight)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-
-                Spacer()
-                    .frame(width: TLClipEditingMetrics.menuSettingsHeaderChevronIconGap)
-
-                TLTransitionIconBox(
-                    transitionType: txType,
-                    highlighted: true,
-                    trackColor: trackColor,
-                    size: TLClipEditingMetrics.menuSettingsHeaderIconBoxSize
-                )
-
-                Spacer()
-                    .frame(width: TLClipEditingMetrics.menuSettingsHeaderIconTitleGap)
 
                 Text(txType.rawValue)
                     .font(.system(size: 12, weight: .semibold))
