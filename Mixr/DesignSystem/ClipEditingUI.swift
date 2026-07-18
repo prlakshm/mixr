@@ -139,7 +139,7 @@ private struct TLClipToolbarAction: View {
                     .font(.system(size: 9.8, weight: isDestructive ? .regular : .medium))
                     .foregroundStyle(
                         isDestructive
-                            ? Self.destructiveRed.opacity(0.78)
+                            ? Self.destructiveRed.opacity(0.88)
                             : MixrColors.textPrimary.opacity(0.92)
                     )
                     .lineLimit(1)
