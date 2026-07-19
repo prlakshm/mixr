@@ -738,7 +738,7 @@ struct TLClipContextToolbar: View {
             }
             .buttonStyle(.plain)
 
-            Text("x")
+            Text("×")
                 .font(.system(size: 13 * s, weight: .semibold))
                 .foregroundStyle(MixrColors.textPrimary)
                 .padding(.bottom, multiplierBottomSpacing)

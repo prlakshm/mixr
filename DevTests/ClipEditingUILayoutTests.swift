@@ -49,8 +49,9 @@ check(
         && matches(#"frame\s*\(\s*height:\s*fieldHeight\s*\+\s*bottomExtension"#)
 )
 check(
-    "Speed multiplier is bottom-aligned to the value field",
-    matches(#"HStack\s*\(\s*alignment:\s*\.bottom"#)
+    "Speed multiplier uses × and is bottom-aligned to the value field",
+    source.contains("Text(\"×\")")
+        && matches(#"HStack\s*\(\s*alignment:\s*\.bottom"#)
         && source.contains("field.contentVerticalAlignment = .bottom")
         && matches(#"speedMultiplierBottomSpacing\s*:\s*CGFloat\s*="#)
 )
