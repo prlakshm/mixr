@@ -122,6 +122,7 @@ enum SongSignalAnalyzer {
         var hopIdx = 0, hopFill = 0
         var fineSumSq = 0.0
         var fineIdx = 0, fineFill = 0
+        var prevSample = 0.0
 
         for sample in samples {
             let v = Double(sample)
@@ -129,6 +130,11 @@ enum SongSignalAnalyzer {
             lpMidLo += (v - lpMidLo) * aMidLo
             lpMidHi += (v - lpMidHi) * aMidHi
             let mid = lpMidHi - lpMidLo
+            // Transient emphasis for the beat tracker: first difference
+            // (6 dB/oct high-pass) so steady tonal content cannot bias
+            // the onset grid — only true transients score.
+            let transient = v - prevSample
+            prevSample = v
 
             sumSq += v * v
             sumSqBass += lpBass * lpBass
@@ -146,7 +152,7 @@ enum SongSignalAnalyzer {
                 sumSq = 0; sumSqBass = 0; sumSqMid = 0
             }
 
-            fineSumSq += v * v
+            fineSumSq += transient * transient
             fineFill += 1
             if fineFill == fineHop, fineIdx < fineCount {
                 fineRMS[fineIdx] = (fineSumSq / Double(fineHop)).squareRoot()
