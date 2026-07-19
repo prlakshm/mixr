@@ -4,28 +4,34 @@ import UIKit
 // MARK: - Metrics
 
 enum TLClipEditingMetrics {
-    static let toolbarHorizontalPadding: CGFloat = 10
-    static let toolbarTrailingPadding: CGFloat = 2.5
+    /// Uniform scale for the clip context toolbar (chrome, gaps, type, icons).
+    /// Chosen so action labels hit 11pt (effect card title size): 11 / 9.8.
+    static let toolbarScale: CGFloat = 11.0 / 9.8
+
+    private static func ts(_ value: CGFloat) -> CGFloat { value * toolbarScale }
+
+    static let toolbarHorizontalPadding: CGFloat = ts(10)
+    static let toolbarTrailingPadding: CGFloat = ts(2.5)
     /// Edge-to-edge gap between Split and Speed.
-    static let toolbarActionSpacing: CGFloat = 24
+    static let toolbarActionSpacing: CGFloat = ts(24)
     /// Optical Duplicate↔Delete gap. Mathematically equal gaps read wider
     /// here: both labels are long with small icons centered above them, so
     /// the icon row is much sparser than Split↔Speed's, and Delete's red
     /// recedes against the dark pane. Narrower metric, equal optics.
-    static let toolbarDeleteGap: CGFloat = 17.5
+    static let toolbarDeleteGap: CGFloat = ts(17.5)
     /// Speed↔Duplicate gap — wider so the playhead pointer sits inside it.
-    static let toolbarCenterGap: CGFloat = 24
+    static let toolbarCenterGap: CGFloat = ts(24)
     /// Pane-edge padding — benchmark is 3/4 of the Split↔Speed gap. The
     /// leading side carries a small optical bump: Split's bright leading
     /// cap (and its inset scissors icon) makes equal padding read tighter
     /// than the trailing side next to Delete's receding red tail.
-    static let toolbarOuterPaddingTrailing: CGFloat = 17.5
-    static let toolbarOuterPaddingLeading: CGFloat = 23
+    static let toolbarOuterPaddingTrailing: CGFloat = ts(17.5)
+    static let toolbarOuterPaddingLeading: CGFloat = ts(23)
     /// Pre-measurement estimates of each half's label run (Split+Speed /
     /// Duplicate+Delete). The pane measures the real widths at layout time
     /// and sizes itself exactly; these only seed the first frame.
-    static let toolbarLeftHalfEstimate: CGFloat = 80
-    static let toolbarRightHalfEstimate: CGFloat = 99.5
+    static let toolbarLeftHalfEstimate: CGFloat = ts(80)
+    static let toolbarRightHalfEstimate: CGFloat = ts(99.5)
     /// Estimated actions-pane width for the presenting overlay's frame.
     /// The playhead anchoring is measurement-based and exact regardless.
     static let toolbarWidth: CGFloat =
@@ -34,11 +40,18 @@ enum TLClipEditingMetrics {
         + toolbarLeftHalfEstimate
         + toolbarCenterGap
         + toolbarRightHalfEstimate
-    static let toolbarSpeedWidth: CGFloat = 168
-    static let toolbarBodyHeight: CGFloat = 50
-    static let toolbarBodyHorizontalOffset: CGFloat = 12
-    static let toolbarPointerW: CGFloat = 7
-    static let toolbarPointerH: CGFloat = 4
+    static let toolbarSpeedWidth: CGFloat = ts(168)
+    static let toolbarBodyHeight: CGFloat = ts(50)
+    static let toolbarBodyHorizontalOffset: CGFloat = ts(12)
+    static let toolbarPointerW: CGFloat = ts(7)
+    static let toolbarPointerH: CGFloat = ts(4)
+    static let toolbarCornerRadius: CGFloat = ts(11)
+    static let toolbarContentTopPadding: CGFloat = ts(8)
+    static let toolbarContentBottomPadding: CGFloat = ts(10)
+    static let toolbarActionStackSpacing: CGFloat = ts(6.4)
+    static let toolbarActionIconHeight: CGFloat = ts(14)
+    static let toolbarActionLabelSize: CGFloat = ts(9.8)
+    static let toolbarActionTopPadding: CGFloat = ts(2)
     static let toolbarMorphDuration: Double = 0.28
     static let minPlaybackSpeed: Double = 0.25
     static let maxPlaybackSpeed: Double = 4.0
@@ -49,7 +62,7 @@ enum TLClipEditingMetrics {
     static let menuSettingsControlGap: CGFloat = 11.5
     static let menuRowHeight: CGFloat = 42
     /// Sized so heading→Duration spacing matches Duration↔Curve control gap.
-    static let menuSettingsHeaderRowHeight: CGFloat = 18.5
+    static let menuSettingsHeaderRowHeight: CGFloat = 19.5
     static let menuSettingsHeaderChevronTitleGap: CGFloat = 9
     static let menuSettingsHeaderLeadingOffset: CGFloat = -0.75
     static let menuSettingsHorizontalPadding: CGFloat = 20
@@ -138,7 +151,7 @@ private struct TLClipToolbarAction: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6.4) {
+            VStack(spacing: TLClipEditingMetrics.toolbarActionStackSpacing) {
                 Image(systemName: icon)
                     .font(.system(size: iconFontSize, weight: .regular))
                     .foregroundStyle(
@@ -147,10 +160,15 @@ private struct TLClipToolbarAction: View {
                             : MixrColors.textPrimary.opacity(0.92)
                     )
                     .offset(y: iconVerticalOffset)
-                    .frame(height: 14)
+                    .frame(height: TLClipEditingMetrics.toolbarActionIconHeight)
 
                 Text(label)
-                    .font(.system(size: 9.8, weight: isDestructive ? .regular : .medium))
+                    .font(
+                        .system(
+                            size: TLClipEditingMetrics.toolbarActionLabelSize,
+                            weight: isDestructive ? .regular : .medium
+                        )
+                    )
                     .foregroundStyle(
                         isDestructive
                             ? Self.destructiveRed.opacity(0.88)
@@ -160,7 +178,7 @@ private struct TLClipToolbarAction: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .offset(y: labelVerticalOffset)
             }
-            .padding(.top, 2)
+            .padding(.top, TLClipEditingMetrics.toolbarActionTopPadding)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
         }
@@ -168,38 +186,40 @@ private struct TLClipToolbarAction: View {
     }
 
     private var iconFontSize: CGFloat {
+        let s = TLClipEditingMetrics.toolbarScale
         switch icon {
         case "gauge.with.dots.needle.67percent":
-            13.2
+            return 13.2 * s
         case "scissors":
-            11.65
+            return 11.65 * s
         case "doc.on.doc":
-            11.35
+            return 11.35 * s
         case "trash":
-            11.4
+            return 11.4 * s
         default:
-            11.5
+            return 11.5 * s
         }
     }
 
     private var iconVerticalOffset: CGFloat {
+        let s = TLClipEditingMetrics.toolbarScale
         switch icon {
         case "scissors":
-            1.95
+            return 1.95 * s
         case "gauge.with.dots.needle.67percent":
-            2.0
+            return 2.0 * s
         case "doc.on.doc":
-            2.2
+            return 2.2 * s
         case "trash":
-            2.33
+            return 2.33 * s
         default:
-            0
+            return 0
         }
     }
 
     private var labelVerticalOffset: CGFloat {
         // Keep all labels on Speed's optical baseline.
-        0.25
+        0.25 * TLClipEditingMetrics.toolbarScale
     }
 }
 
@@ -209,7 +229,11 @@ private struct TLClipToolbarPressStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .offset(y: configuration.isPressed ? 1.25 : 0)
+            .offset(
+                y: configuration.isPressed
+                    ? 1.25 * TLClipEditingMetrics.toolbarScale
+                    : 0
+            )
             .opacity(
                 configuration.isPressed
                     ? (isDestructive ? MixrAlertPressColors.pressFactor : 0.88)
@@ -556,7 +580,8 @@ struct TLClipContextToolbar: View {
         let tbH = TLClipEditingMetrics.toolbarBodyHeight
         let pW = TLClipEditingMetrics.toolbarPointerW
         let pH = TLClipEditingMetrics.toolbarPointerH
-        let radius: CGFloat = 11
+        let radius = TLClipEditingMetrics.toolbarCornerRadius
+        let s = TLClipEditingMetrics.toolbarScale
 
         VStack(spacing: 0) {
             ZStack {
@@ -570,8 +595,8 @@ struct TLClipContextToolbar: View {
             }
             .padding(.leading, TLClipEditingMetrics.toolbarHorizontalPadding)
             .padding(.trailing, TLClipEditingMetrics.toolbarTrailingPadding)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
+            .padding(.top, TLClipEditingMetrics.toolbarContentTopPadding)
+            .padding(.bottom, TLClipEditingMetrics.toolbarContentBottomPadding)
             .frame(width: bodyWidth, height: tbH)
             .background {
                 let shape = RoundedRectangle(
@@ -602,15 +627,15 @@ struct TLClipContextToolbar: View {
                         shape
                             .strokeBorder(
                                 Color.white.opacity(0.09),
-                                lineWidth: 0.5
+                                lineWidth: 0.5 * s
                             )
                     }
             }
             .clipShape(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
             )
-            .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
-            .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
+            .shadow(color: .black.opacity(0.55), radius: 20 * s, x: 0, y: 8 * s)
+            .shadow(color: .black.opacity(0.20), radius: 4 * s, x: 0, y: 2 * s)
             // Actions mode shifts the pane so the playhead pointer stays at
             // the center-gap midpoint even though the halves differ in
             // width; the speed editor keeps its own tuned shift.
@@ -727,46 +752,47 @@ struct TLClipContextToolbar: View {
     }
 
     private var speedContent: some View {
-        HStack(spacing: 6) {
+        let s = TLClipEditingMetrics.toolbarScale
+        return HStack(spacing: 6 * s) {
             Button(action: onSpeedBack) {
                 MixrChevron(
                     direction: .back,
-                    size: 11,
+                    size: 11 * s,
                     color: MixrColors.textPrimary.opacity(0.88)
                 )
-                    .frame(width: 20, height: 28)
+                    .frame(width: 20 * s, height: 28 * s)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             Text("x")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13 * s, weight: .semibold))
                 .foregroundStyle(MixrColors.textPrimary)
 
             TextField("1.0", text: $speedText)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13 * s, weight: .semibold, design: .rounded))
                 .foregroundStyle(MixrColors.textPrimary)
                 .multilineTextAlignment(.center)
                 .keyboardType(.decimalPad)
                 .textFieldStyle(.plain)
                 .focused($isSpeedFieldFocused)
-                .padding(.horizontal, 8)
-                .frame(width: 76, height: 28)
+                .padding(.horizontal, 8 * s)
+                .frame(width: 76 * s, height: 28 * s)
                 .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
                         .fill(Color.white.opacity(0.08))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5 * s)
                         }
                 }
                 .onSubmit { commitSpeed() }
 
             Button(action: commitSpeed) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12 * s, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
-                    .frame(width: 22, height: 28)
+                    .frame(width: 22 * s, height: 28 * s)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
