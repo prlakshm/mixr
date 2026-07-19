@@ -58,6 +58,13 @@ struct SongSignalFeatures: Sendable {
     /// 0…1 overall trust in these measurements.
     var overallConfidence: Double
 
+    /// Windowed beat-phase measurements across the song (local grid
+    /// stability). Empty when beat tracking was inconclusive.
+    var beatPhaseWindows: [AutoRemixGridWindow] = []
+    /// Max circular phase deviation across windows, fraction of a beat.
+    /// 1.0 = unknown/unstable.
+    var gridDriftFractionOfBeat: Double = 1.0
+
     nonisolated var hopCount: Int { rmsCurveDB.count }
 
     /// Mean short-time RMS (power domain) over a source range, dBFS.

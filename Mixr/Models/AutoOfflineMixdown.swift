@@ -35,14 +35,31 @@ nonisolated enum AutoOfflineMixdown {
 
     /// Renders a plan against per-song sources. `trackVolume` mirrors the
     /// song tracks' mixer volume; `sfxTrackVolume` mirrors the SFX track.
+    ///
+    /// `neutralizing` strips the effects, volume shaping, and attached SFX
+    /// of ONE transformation (by id) so A/B renders can measure that
+    /// transformation's PORTABLE audible delta. This uses the same
+    /// approximate echo/low-pass models as the forward render — it is an
+    /// audibility model, never proof of export-render or perceptual
+    /// equivalence (those are separate ledger stages).
     static func render(
-        plan: AutoRemixPlan,
+        plan planIn: AutoRemixPlan,
         sources: [UUID: Source],
         sampleRate: Double = 44_100,
         trackVolume: Double = 1.0,
         sfxTrackVolume: Double = 0.85,
-        includeTail: Bool = true
+        includeTail: Bool = true,
+        neutralizing: UUID? = nil
     ) -> Result {
+        var plan = planIn
+        if let neutralizing {
+            for i in plan.placements.indices
+            where plan.placements[i].transformationID == neutralizing {
+                plan.placements[i].effects = ClipEffectSettings()
+                plan.placements[i].volume = AutoGainPolicy.preservationSongVolume
+            }
+            plan.sfxEvents.removeAll { $0.transformationID == neutralizing }
+        }
         let contentEnd = plan.placements.map(\.timelineEnd).max() ?? 0
         let sfxEnd = plan.sfxEvents.map(\.timelineEnd).max() ?? 0
         let tail = includeTail ? exportTailSeconds(plan: plan) : 0
@@ -155,27 +172,80 @@ nonisolated enum AutoOfflineMixdown {
         guard frameCount > 0 else { return }
         let srcRate = source.sampleRate
 
-        for j in 0..<frameCount {
+        // ── Lightweight effect models (audibility approximation only) ──
+        // Same slider→parameter formulas as ClipEffectDSP for echo time /
+        // feedback / wet and the blur low-pass cutoff. Deterministic and
+        // portable so A/B renders can MEASURE a transformation's effect;
+        // never a substitute for the real AVFoundation chain.
+        let blurAmount = p.effects.level(for: "blur") / 100.0
+        let echoAmount = p.effects.level(for: "echo") / 100.0
+        let beat = 60.0 / max(bpm, 1)
+        let echoDelaySeconds: Double
+        switch p.effects.echoPreset {
+        case .classic: echoDelaySeconds = beat
+        case .pingPong: echoDelaySeconds = beat * 0.5
+        case .reverse: echoDelaySeconds = beat * 0.25
+        }
+        let echoWet = Float(min(0.7, 0.5 * pow(max(echoAmount, 0), 0.9)))
+        let echoFeedback: Float
+        switch p.effects.echoPreset {
+        case .classic: echoFeedback = Float((18.0 + 34.0 * echoAmount) / 100.0)
+        case .pingPong: echoFeedback = Float((25.0 + 38.0 * echoAmount) / 100.0)
+        case .reverse: echoFeedback = Float((35.0 + 38.0 * echoAmount) / 100.0)
+        }
+        let hasEcho = echoAmount > 0.005
+        let hasBlur = blurAmount > 0.005
+        var delayLine = hasEcho
+            ? [Float](repeating: 0, count: max(1, Int(echoDelaySeconds * sampleRate)))
+            : []
+        var delayIdx = 0
+        var lpState: Float = 0
+        let lpCutoff = 20000.0 * pow(650.0 / 20000.0, pow(max(blurAmount, 0), 1.3))
+        let lpCoeff = Float(1.0 - exp(-2.0 * .pi * lpCutoff / sampleRate))
+
+        // Echo rings past the clip edge — render a bounded wet tail.
+        let tailFrames = hasEcho ? min(Int(2.5 * sampleRate), bus.count) : 0
+
+        for j in 0..<(frameCount + tailFrames) {
             let outIdx = startFrame + j
             guard outIdx >= 0, outIdx < bus.count else { continue }
             let t = Double(outIdx) / sampleRate
-            let sourceSeconds = p.sourceStart + (Double(j) / sampleRate) * p.tempoRatio
-            let srcPos = sourceSeconds * srcRate
-            let i0 = Int(srcPos)
-            guard i0 >= 0, i0 + 1 < source.samples.count else { continue }
-            let frac = Float(srcPos - Double(i0))
-            let sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
 
-            let envelope = AutoTransitionEnvelope.envelope(
-                transitionIn: p.fadeIn,
-                transitionOut: p.fadeOut,
-                clipStart: p.timelineStart,
-                clipEnd: p.timelineEnd,
-                at: t,
-                bpm: bpm,
-                continuity: continuity
-            )
-            bus[outIdx] += sample * Float(trackVolume * p.volume * envelope.gain)
+            var dry: Float = 0
+            if j < frameCount {
+                let sourceSeconds = p.sourceStart + (Double(j) / sampleRate) * p.tempoRatio
+                let srcPos = sourceSeconds * srcRate
+                let i0 = Int(srcPos)
+                if i0 >= 0, i0 + 1 < source.samples.count {
+                    let frac = Float(srcPos - Double(i0))
+                    let sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
+                    let envelope = AutoTransitionEnvelope.envelope(
+                        transitionIn: p.fadeIn,
+                        transitionOut: p.fadeOut,
+                        clipStart: p.timelineStart,
+                        clipEnd: p.timelineEnd,
+                        at: t,
+                        bpm: bpm,
+                        continuity: continuity
+                    )
+                    dry = sample * Float(trackVolume * p.volume * envelope.gain)
+                }
+            }
+
+            if hasBlur {
+                lpState += (dry - lpState) * lpCoeff
+                dry = lpState
+            }
+
+            if hasEcho {
+                let delayed = delayLine[delayIdx]
+                delayLine[delayIdx] = dry + delayed * echoFeedback
+                delayIdx = (delayIdx + 1) % delayLine.count
+                bus[outIdx] += dry + delayed * echoWet
+            } else {
+                if j >= frameCount { break }
+                bus[outIdx] += dry
+            }
         }
     }
 

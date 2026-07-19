@@ -170,6 +170,94 @@ nonisolated enum AutoRemixDiagnostics {
         return regions
     }
 
+    // MARK: High-frequency energy
+
+    /// Mean level of the first-difference (HF-emphasis) signal over
+    /// [start, end), dBFS — the meter behind filtered-build audibility.
+    static func hfEnergyDB(
+        samples: [Float],
+        sampleRate: Double,
+        from start: Double,
+        to end: Double
+    ) -> Double {
+        let lo = max(1, Int(start * sampleRate))
+        let hi = min(samples.count, Int(end * sampleRate))
+        guard hi > lo else { return -120 }
+        var sum = 0.0
+        for i in lo..<hi {
+            let d = Double(samples[i]) - Double(samples[i - 1])
+            sum += d * d
+        }
+        let rms = (sum / Double(hi - lo)).squareRoot()
+        return 20 * log10(max(rms, 1e-12))
+    }
+
+    // MARK: Portable audibility (A/B render)
+
+    /// Measures ONE transformation's portable-render audible delta by
+    /// rendering the plan with and without it and comparing the
+    /// transformation's contracted feature over its timeline range.
+    ///
+    /// Result units per feature:
+    ///  • hfEnergy / rmsLevel — absolute change over the zone, dB
+    ///  • echoTailEnergy — effect-to-signal ratio over the zone plus the
+    ///    following bar, dB (0 = as loud as the song, −∞ = inaudible)
+    ///  • durationChange / rhythmDensity — measured at PLAN level, not
+    ///    here; returns nil.
+    ///
+    /// This uses the mixdown's approximate effect models: it verifies the
+    /// PORTABLE stage of the audibility ledger only.
+    static func portableAudibilityDelta(
+        plan: AutoRemixPlan,
+        transformation: AutoRemixOpportunity,
+        sources: [UUID: AutoOfflineMixdown.Source],
+        sampleRate: Double = 44_100
+    ) -> Double? {
+        switch transformation.audibility.measuredFeature {
+        case .durationChange, .rhythmDensity:
+            return nil
+        case .hfEnergy, .rmsLevel, .echoTailEnergy:
+            break
+        }
+
+        let owned = plan.placements.filter { $0.transformationID == transformation.id }
+        guard let zoneStart = owned.map(\.timelineStart).min(),
+              let zoneEnd = owned.map(\.timelineEnd).max()
+        else { return nil }
+
+        let a = AutoOfflineMixdown.render(
+            plan: plan, sources: sources, sampleRate: sampleRate, includeTail: true
+        ).mix
+        let b = AutoOfflineMixdown.render(
+            plan: plan, sources: sources, sampleRate: sampleRate, includeTail: true,
+            neutralizing: transformation.id
+        ).mix
+
+        let bpm = max(plan.targetBPM, 40)
+        let barSeconds = 240.0 / bpm
+
+        switch transformation.audibility.measuredFeature {
+        case .hfEnergy:
+            let hfA = hfEnergyDB(samples: a, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            let hfB = hfEnergyDB(samples: b, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            return abs(hfA - hfB)
+        case .rmsLevel:
+            let la = meanLoudnessDB(samples: a, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            let lb = meanLoudnessDB(samples: b, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            return abs(la - lb)
+        case .echoTailEnergy:
+            let end = zoneEnd + barSeconds
+            let n = min(a.count, b.count)
+            var diff = [Float](repeating: 0, count: n)
+            for i in 0..<n { diff[i] = a[i] - b[i] }
+            let effect = meanLoudnessDB(samples: diff, sampleRate: sampleRate, from: zoneStart, to: end)
+            let signal = meanLoudnessDB(samples: a, sampleRate: sampleRate, from: zoneStart, to: end)
+            return effect - signal
+        case .durationChange, .rhythmDensity:
+            return nil
+        }
+    }
+
     // MARK: Clicks
 
     /// Largest absolute sample-to-sample jump and where it happens.

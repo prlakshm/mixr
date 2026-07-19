@@ -825,6 +825,671 @@ do {
           String(format: "max step %.3f", maxStep))
 }
 
+// MARK: - Structured-pop fixture (transformation-layer tests)
+//
+// A deterministic pop arrangement with real measured structure: distinct
+// per-section levels, bass, vocal-band activity patterns, and transient
+// density, so similarity / hook differentiation / vocal protection are
+// exercised against MEASURED curves, never hard-coded song knowledge.
+
+struct PopSection {
+    var name: String
+    var bars: Int
+    var level: Float          // body tone amplitude factor
+    var bass: Float           // 80 Hz band factor
+    var vocal: Float          // 800 Hz "vocal" band factor
+    var vocalPattern: Int     // 0 = none; else 8th-note activity mask id
+    var hitsPerBar: Int       // transient hits per bar
+}
+
+let popBPM = 132.0
+
+let vocalMasks: [[Int]] = [
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 1, 1, 0, 1, 0, 0],   // verse phrasing
+    [1, 1, 0, 0, 1, 0, 1, 0],   // pre-chorus phrasing
+    [1, 1, 1, 0, 1, 1, 0, 1],   // chorus phrasing (dense)
+]
+
+func defaultPopScript() -> [PopSection] {
+    [
+        PopSection(name: "intro",   bars: 8,  level: 0.35, bass: 0.20, vocal: 0.00, vocalPattern: 0, hitsPerBar: 4),
+        PopSection(name: "verse1",  bars: 8,  level: 0.50, bass: 0.40, vocal: 0.50, vocalPattern: 1, hitsPerBar: 4),
+        PopSection(name: "pre1",    bars: 8,  level: 0.55, bass: 0.30, vocal: 0.40, vocalPattern: 2, hitsPerBar: 4),
+        PopSection(name: "chorus1", bars: 16, level: 0.70, bass: 0.70, vocal: 0.60, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "post1",   bars: 8,  level: 0.65, bass: 0.60, vocal: 0.00, vocalPattern: 0, hitsPerBar: 8),
+        PopSection(name: "verse2",  bars: 8,  level: 0.50, bass: 0.40, vocal: 0.50, vocalPattern: 1, hitsPerBar: 4),
+        PopSection(name: "pre2",    bars: 8,  level: 0.55, bass: 0.30, vocal: 0.40, vocalPattern: 2, hitsPerBar: 4),
+        PopSection(name: "chorus2", bars: 16, level: 0.70, bass: 0.70, vocal: 0.60, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "post2",   bars: 8,  level: 0.65, bass: 0.60, vocal: 0.00, vocalPattern: 0, hitsPerBar: 8),
+        PopSection(name: "bridge",  bars: 8,  level: 0.25, bass: 0.15, vocal: 0.30, vocalPattern: 1, hitsPerBar: 4),
+        PopSection(name: "chorus3", bars: 16, level: 0.875, bass: 0.80, vocal: 0.75, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "outro",   bars: 12, level: 0.30, bass: 0.20, vocal: 0.00, vocalPattern: 0, hitsPerBar: 4),
+    ]
+}
+
+/// Verses identical, choruses DIFFERENTIATED, single post-chorus — the
+/// only near-duplicate pair is vocal-heavy.
+func vocalRepeatScript() -> [PopSection] {
+    [
+        PopSection(name: "intro",   bars: 8,  level: 0.35, bass: 0.20, vocal: 0.00, vocalPattern: 0, hitsPerBar: 4),
+        PopSection(name: "verse1",  bars: 16, level: 0.50, bass: 0.40, vocal: 0.55, vocalPattern: 1, hitsPerBar: 4),
+        PopSection(name: "pre1",    bars: 8,  level: 0.55, bass: 0.30, vocal: 0.40, vocalPattern: 2, hitsPerBar: 4),
+        PopSection(name: "chorus1", bars: 16, level: 0.70, bass: 0.70, vocal: 0.60, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "verse2",  bars: 16, level: 0.50, bass: 0.40, vocal: 0.55, vocalPattern: 1, hitsPerBar: 4),
+        PopSection(name: "chorus2", bars: 16, level: 0.85, bass: 0.80, vocal: 0.72, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "outro",   bars: 12, level: 0.30, bass: 0.20, vocal: 0.00, vocalPattern: 0, hitsPerBar: 4),
+    ]
+}
+
+/// Short, homogeneous, with a dull bridge: few valid opportunities.
+func sparsePopScript() -> [PopSection] {
+    [
+        PopSection(name: "intro",   bars: 8,  level: 0.35, bass: 0.20, vocal: 0.00, vocalPattern: 0, hitsPerBar: 4),
+        PopSection(name: "verse1",  bars: 16, level: 0.50, bass: 0.40, vocal: 0.50, vocalPattern: 1, hitsPerBar: 4),
+        PopSection(name: "chorus1", bars: 16, level: 0.70, bass: 0.70, vocal: 0.60, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "bridge",  bars: 8,  level: 0.12, bass: 0.06, vocal: 0.10, vocalPattern: 1, hitsPerBar: 2),
+        PopSection(name: "chorus2", bars: 16, level: 0.85, bass: 0.80, vocal: 0.72, vocalPattern: 3, hitsPerBar: 8),
+        PopSection(name: "outro",   bars: 8,  level: 0.30, bass: 0.20, vocal: 0.00, vocalPattern: 0, hitsPerBar: 4),
+    ]
+}
+
+/// Default structure but the FINAL chorus is a near-duplicate and the
+/// tempo drifts +2% from the bridge onward.
+func driftPopScript() -> (script: [PopSection], driftAfterBar: Int) {
+    var script = defaultPopScript()
+    script[10] = PopSection(name: "chorus3", bars: 16, level: 0.70, bass: 0.70, vocal: 0.60, vocalPattern: 3, hitsPerBar: 8)
+    let barsBeforeBridge = script.prefix(9).reduce(0) { $0 + $1.bars }
+    return (script, barsBeforeBridge)
+}
+
+/// Bar length in seconds at bar index (drift-aware).
+func popBarSeconds(_ barIndex: Int, bpm: Double, driftAfterBar: Int?, driftFactor: Double) -> Double {
+    let base = 240.0 / bpm
+    if let driftAfterBar, barIndex >= driftAfterBar { return base * driftFactor }
+    return base
+}
+
+/// Source-second range of a named section occurrence.
+func popSectionRange(
+    _ sections: [PopSection],
+    name: String,
+    bpm: Double = popBPM,
+    leadingSilence: Double = 1.0,
+    driftAfterBar: Int? = nil,
+    driftFactor: Double = 1.0
+) -> (start: Double, end: Double) {
+    var t = leadingSilence
+    var barIndex = 0
+    for section in sections {
+        let start = t
+        for _ in 0..<section.bars {
+            t += popBarSeconds(barIndex, bpm: bpm, driftAfterBar: driftAfterBar, driftFactor: driftFactor)
+            barIndex += 1
+        }
+        if section.name == name { return (start, t) }
+    }
+    return (0, 0)
+}
+
+func popSong(
+    _ sections: [PopSection],
+    bpm: Double = popBPM,
+    leadingSilence: Double = 1.0,
+    driftAfterBar: Int? = nil,
+    driftFactor: Double = 1.0,
+    sampleRate: Double = SR
+) -> [Float] {
+    var out = [Float](repeating: 0, count: Int(leadingSilence * sampleRate))
+    var phase220 = 0.0, phase80 = 0.0, phase800 = 0.0
+    let w220 = 2 * Double.pi * 220.0 / sampleRate
+    let w80 = 2 * Double.pi * 80.0 / sampleRate
+    let w800 = 2 * Double.pi * 800.0 / sampleRate
+    let rampSamples = max(1, Int(0.008 * sampleRate))
+    var clickSpots: [(index: Int, level: Float)] = []
+    var barIndex = 0
+
+    for section in sections {
+        let mask = vocalMasks[min(section.vocalPattern, vocalMasks.count - 1)]
+        for _ in 0..<section.bars {
+            let barLen = popBarSeconds(barIndex, bpm: bpm, driftAfterBar: driftAfterBar, driftFactor: driftFactor)
+            let barSamples = max(8, Int(barLen * sampleRate))
+            let eighth = barSamples / 8
+            let barStart = out.count
+
+            for i in 0..<barSamples {
+                let eighthIdx = min(7, i / eighth)
+                let inEighth = i - eighthIdx * eighth
+                var vocalEnv: Double = Double(mask[eighthIdx])
+                if mask[eighthIdx] == 1 {
+                    if inEighth < rampSamples {
+                        vocalEnv = 0.5 - 0.5 * cos(.pi * Double(inEighth) / Double(rampSamples))
+                    } else if inEighth > eighth - rampSamples {
+                        vocalEnv = 0.5 - 0.5 * cos(.pi * Double(eighth - inEighth) / Double(rampSamples))
+                    }
+                }
+                phase220 += w220
+                phase80 += w80
+                phase800 += w800
+                let sample = 0.4 * Double(section.level) * sin(phase220)
+                    + 0.3 * Double(section.bass) * sin(phase80)
+                    + 0.25 * Double(section.vocal) * vocalEnv * sin(phase800)
+                out.append(Float(sample))
+            }
+
+            for h in 0..<max(1, section.hitsPerBar) {
+                clickSpots.append((barStart + h * barSamples / max(1, section.hitsPerBar), section.level))
+            }
+            barIndex += 1
+        }
+    }
+
+    // Transient clicks (2 kHz shaped bursts) at the hit grid.
+    let clickLen = Int(0.006 * sampleRate)
+    for spot in clickSpots {
+        for j in 0..<clickLen {
+            let idx = spot.index + j
+            guard idx < out.count else { continue }
+            let x = Double(j) / Double(clickLen)
+            let window = Float(0.5 * (1 - cos(2 * .pi * x)))
+            out[idx] += 0.45 * spot.level * window * Float(sin(2 * .pi * 2000.0 * Double(j) / sampleRate))
+        }
+    }
+    return out
+}
+
+func zonesOverlap(_ aStart: Double, _ aEnd: Double, _ bStart: Double, _ bEnd: Double) -> Bool {
+    max(aStart, bStart) < min(aEnd, bEnd) - 0.01
+}
+
+// MARK: - 13. Structure map: classes, hooks, differentiation (measured)
+
+var popPlanForAudit: AutoRemixPlan?
+var popSongTrack: MixrTrack?
+var popPCM: [Float] = []
+do {
+    let script = defaultPopScript()
+    popPCM = popSong(script)
+    let duration = Double(popPCM.count) / SR
+    let song = makeSong(title: "Structured Pop", bpm: Int(popBPM), durationSeconds: duration)
+    popSongTrack = song
+    let features = SongSignalAnalyzer.extract(samples: popPCM, sampleRate: SR, bpmHint: popBPM)
+    let analysis = SongAnalyzer.analyze(track: song, signal: features)
+    let usable = max(0, features.leadingSilenceSeconds - 0.15)...duration
+    let map = AutoRemixStructureMapBuilder.build(analysis: analysis, usableRange: usable)
+
+    check("Structure: phrase grid covers the song", map.phrases.count >= 24,
+          "got \(map.phrases.count) phrases")
+    check("Structure: hook family found with ≥ 3 instances",
+          map.hookInstances.count >= 3, "got \(map.hookInstances.count)")
+    check("Structure: first hook instance protected",
+          map.hookInstances.first?.isProtected == true)
+
+    let chorus2 = popSectionRange(script, name: "chorus2")
+    let chorus3 = popSectionRange(script, name: "chorus3")
+    let nearDup = map.hookInstances.first {
+        zonesOverlap($0.startSeconds, $0.endSeconds, chorus2.start, chorus2.end)
+    }
+    check("Structure: duplicate mid chorus classified nearDuplicate",
+          nearDup?.differentiation == .nearDuplicate,
+          nearDup.map { "\($0.differentiation)" } ?? "not found")
+    let finalHook = map.hookInstances.first {
+        zonesOverlap($0.startSeconds, $0.endSeconds, chorus3.start, chorus3.end)
+    }
+    check("Structure: intensified final chorus is NOT near-duplicate",
+          finalHook.map { $0.differentiation == .intensified } ?? false,
+          finalHook.map { "\($0.differentiation)" } ?? "not found")
+
+    let verse2 = popSectionRange(script, name: "verse2")
+    check("Structure: verses classified vocalDistinct (never removable)",
+          map.phrase(at: verse2.start + 2)?.removability == .vocalDistinct,
+          map.phrase(at: verse2.start + 2).map { "\($0.removability)" } ?? "no phrase")
+    let post1 = popSectionRange(script, name: "post1")
+    check("Structure: post-chorus classified instrumental",
+          map.phrase(at: post1.start + 2)?.removability == .instrumental,
+          map.phrase(at: post1.start + 2).map { "\($0.removability)" } ?? "no phrase")
+
+    check("Structure: ≥ 3 regions for distribution", map.regions.count >= 3)
+    check("Structure: grid windows measured across the song",
+          map.gridWindows.count >= 4, "got \(map.gridWindows.count)")
+    check("Structure: steady fixture shows low grid drift",
+          map.gridDriftFractionOfBeat <= 0.1,
+          String(format: "%.3f of a beat", map.gridDriftFractionOfBeat))
+}
+
+// MARK: - 14. Distributed recipe: multiple interventions, hard guarantees
+
+do {
+    guard let song = popSongTrack else { fatalError("pop fixture missing") }
+    let script = defaultPopScript()
+    let features = SongSignalAnalyzer.extract(samples: popPCM, sampleRate: SR, bpmHint: popBPM)
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song], seed: 44, signals: [song.id: features]
+    )
+    switch outcome {
+    case .success(_, let plan, _):
+        popPlanForAudit = plan
+        guard let recipe = plan.remixRecipe else {
+            check("Recipe: plan carries a transformation recipe", false, "remixRecipe is nil")
+            break
+        }
+        check("Recipe: plan carries a transformation recipe", true)
+        check("Recipe: 3–5 transformation zones selected",
+              (3...5).contains(recipe.selected.count), "got \(recipe.selected.count)")
+        check("Recipe: ≥ 2 meaningful (non-SFX) transformations",
+              recipe.meaningfulCount >= 2, "got \(recipe.meaningfulCount)")
+        check("Recipe: 1–2 structural interventions used",
+              (1...2).contains(recipe.structuralCount), "got \(recipe.structuralCount)")
+
+        let regions = Set(recipe.selected.map(\.region))
+        check("Recipe: zones span ≥ 3 structural regions",
+              regions.count >= 3, "regions \(regions.sorted())")
+        let anchors = recipe.selected.map(\.anchorDownbeat).sorted()
+        check("Recipe: zones distributed (span ≥ 60 s)",
+              (anchors.last ?? 0) - (anchors.first ?? 0) >= 60,
+              String(format: "span %.1fs", (anchors.last ?? 0) - (anchors.first ?? 0)))
+
+        // Protected first hook untouched by any transformation.
+        let chorus1 = popSectionRange(script, name: "chorus1")
+        let hookTouched = recipe.selected.contains {
+            zonesOverlap($0.zoneStart, $0.zoneEnd, chorus1.start, chorus1.end)
+        }
+        check("Recipe: first full hook left untouched", !hookTouched)
+
+        // One continuous ≥ 32-bar passage untouched.
+        let barSec = 240.0 / popBPM
+        let usable = plan.usableSourceRange ?? 0...1
+        var edges = [usable.lowerBound]
+        for z in recipe.selected.sorted(by: { $0.zoneStart < $1.zoneStart }) {
+            edges.append(z.zoneStart)
+            edges.append(z.zoneEnd)
+        }
+        edges.append(usable.upperBound)
+        var longestGap = 0.0
+        var i = 0
+        while i + 1 < edges.count {
+            longestGap = max(longestGap, edges[i + 1] - edges[i])
+            i += 2
+        }
+        check("Recipe: a continuous ≥ 32-bar passage survives",
+              longestGap >= 32 * barSec,
+              String(format: "longest %.1f bars", longestGap / barSec))
+
+        // Every selection independently passes its floors.
+        check("Recipe: every selection meets its confidence floor",
+              recipe.selected.allSatisfy { $0.confidence >= 0.45 })
+        check("Recipe: every selection meets its audibility floor",
+              recipe.selected.allSatisfy {
+                  $0.audibility.predictedDelta >= $0.audibility.minimumRequiredDelta
+              })
+        check("Recipe: every selection carries measured evidence",
+              recipe.selected.allSatisfy { sel in sel.evidence.contains { $0.measured } })
+
+        // SFX only reinforce selected zones.
+        let selectedIDs = Set(recipe.selected.map(\.id))
+        check("Recipe: every SFX event supports a selected zone",
+              plan.sfxEvents.allSatisfy { event in
+                  event.transformationID.map(selectedIDs.contains) ?? false
+              })
+
+        // Ledgers: prediction filled, export PENDING, no audition claims.
+        check("Recipe: ledger export stage is pending, audition unclaimed",
+              recipe.selected.allSatisfy { sel in
+                  let ledger = recipe.ledgers[sel.id]
+                  return ledger != nil && ledger!.exportDelta == nil && ledger!.auditioned == false
+              })
+
+        // Cut integrity + full rendered battery on the transformed plan.
+        let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
+        check("Recipe: every internal cut carries a record",
+              cuts.allSatisfy { cut in plan.cutRecords.contains { abs($0.timelineAt - cut) < 0.1 } },
+              "\(cuts.count) cuts, \(plan.cutRecords.count) records")
+
+        let sources = [song.id: AutoOfflineMixdown.Source(samples: popPCM, sampleRate: SR)]
+        let result = AutoOfflineMixdown.render(plan: plan, sources: sources, sampleRate: SR)
+        let mix = result.mix
+        check("Recipe render: no clipped samples",
+              AutoRemixDiagnostics.clippedSampleCount(mix) == 0)
+        let truePeak = AutoRemixDiagnostics.truePeakDB(samples: mix, sampleRate: SR)
+        check("Recipe render: true peak ≤ −1 dBTP",
+              truePeak <= AutoGainPolicy.truePeakCeilingDB + 0.2,
+              String(format: "%.2f dBTP", truePeak))
+        check("Recipe render: limiter GR ≤ 3 dB",
+              result.limiterGainReductionDB <= 3.0,
+              String(format: "%.1f dB", result.limiterGainReductionDB))
+
+        var worstTrough = 0.0
+        var worstUnexplained = 0.0
+        for cut in cuts {
+            let b = AutoRemixDiagnostics.boundaryLoudness(samples: mix, sampleRate: SR, boundarySeconds: cut)
+            worstTrough = max(worstTrough, b.centerTroughDB)
+            let explained = plan.cutRecords.contains {
+                abs($0.timelineAt - cut) < 0.1 && abs($0.expectedEnergyDeltaDB) + 2.0 >= b.jumpDB
+            }
+            if !explained { worstUnexplained = max(worstUnexplained, b.jumpDB) }
+        }
+        check("Recipe render: no cut trough > 3 dB",
+              worstTrough <= 3.0, String(format: "worst %.1f dB", worstTrough))
+        check("Recipe render: no unexplained cut jump > 4 dB",
+              worstUnexplained <= 4.0, String(format: "worst %.1f dB", worstUnexplained))
+
+        let contentStart = plan.placements.map(\.timelineStart).min() ?? 0
+        let contentEnd = plan.placements.map(\.timelineEnd).max() ?? 0
+        let silences = AutoRemixDiagnostics.silenceRuns(
+            samples: mix, sampleRate: SR, thresholdDB: -45, minSeconds: 0.1
+        ).filter { $0.start > contentStart + 0.5 && $0.end < contentEnd - 0.5 }
+        check("Recipe render: no silence holes", silences.isEmpty,
+              silences.prefix(3).map { String(format: "%.2f–%.2fs", $0.start, $0.end) }.joined(separator: ", "))
+        let click = AutoRemixDiagnostics.maxAdjacentSampleJump(samples: result.songBus, sampleRate: SR)
+        check("Recipe render: no clicks on the song bus",
+              click.jump <= 0.5, String(format: "%.3f at %.2fs", click.jump, click.atSeconds))
+
+        // Determinism of the transformation layer.
+        let again = AutoRemixRunner.runEntireProject(
+            tracks: [song], seed: 44, signals: [song.id: features]
+        )
+        if case .success(_, let planB, _) = again, let recipeB = planB.remixRecipe {
+            let sameSelection = recipe.selected.count == recipeB.selected.count
+                && zip(recipe.selected, recipeB.selected).allSatisfy {
+                    $0.kind == $1.kind && abs($0.anchorDownbeat - $1.anchorDownbeat) < 0.001
+                }
+            check("Recipe: same seed → identical transformation selection", sameSelection)
+        } else {
+            check("Recipe: same seed → identical transformation selection", false, "second run failed")
+        }
+    case .failure(let message):
+        check("Structured pop fixture plans", false, message)
+    }
+}
+
+// MARK: - 15. Structural cut from repeat evidence, phrase-aligned
+
+do {
+    if let plan = popPlanForAudit, let recipe = plan.remixRecipe {
+        let script = defaultPopScript()
+        let structuralZones = recipe.selected.filter { $0.kind.isStructural }
+        check("Repeat evidence: ≥ 1 structural intervention proposed",
+              !structuralZones.isEmpty)
+
+        // Structural removals must live in near-duplicate hook, repeated
+        // instrumental, or outro material — never verses.
+        let verse1 = popSectionRange(script, name: "verse1")
+        let verse2 = popSectionRange(script, name: "verse2")
+        let versesTouched = structuralZones.contains {
+            zonesOverlap($0.zoneStart, $0.zoneEnd, verse1.start, verse1.end)
+                || zonesOverlap($0.zoneStart, $0.zoneEnd, verse2.start, verse2.end)
+        }
+        check("Repeat evidence: no structural edit touches a verse", !versesTouched)
+
+        // Phrase alignment: cut boundaries land within a beat of the
+        // measured downbeat grid.
+        let beat = 60.0 / popBPM
+        let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
+        var aligned = true
+        for cut in cuts {
+            guard let record = plan.cutRecords.first(where: { abs($0.timelineAt - cut) < 0.1 })
+            else { aligned = false; continue }
+            let sourceJoin = record.sourceTo
+            let usableStart = plan.usableSourceRange?.lowerBound ?? 0
+            let phase = (sourceJoin - usableStart).truncatingRemainder(dividingBy: beat)
+            if min(phase, beat - phase) > beat * 0.5 { aligned = false }
+        }
+        check("Repeat evidence: cut joins land on the beat grid", aligned)
+    } else {
+        check("Repeat evidence: ≥ 1 structural intervention proposed", false, "no recipe")
+    }
+}
+
+// MARK: - 16. Vocal similarity is NOT redundancy
+
+do {
+    let script = vocalRepeatScript()
+    let pcm = popSong(script)
+    let duration = Double(pcm.count) / SR
+    let song = makeSong(title: "Vocal Repeat Pop", bpm: Int(popBPM), durationSeconds: duration)
+    let features = SongSignalAnalyzer.extract(samples: pcm, sampleRate: SR, bpmHint: popBPM)
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song], seed: 45, signals: [song.id: features]
+    )
+    switch outcome {
+    case .success(_, let plan, _):
+        guard let recipe = plan.remixRecipe else {
+            check("Vocal protection: recipe exists", false, "remixRecipe nil")
+            break
+        }
+        check("Vocal protection: recipe exists", true)
+        let verse1 = popSectionRange(script, name: "verse1")
+        let verse2 = popSectionRange(script, name: "verse2")
+        let structural = recipe.selected.filter { $0.kind.isStructural }
+        let verseRemoved = structural.contains {
+            zonesOverlap($0.zoneStart, $0.zoneEnd, verse1.start, verse1.end)
+                || zonesOverlap($0.zoneStart, $0.zoneEnd, verse2.start, verse2.end)
+        }
+        check("Vocal protection: similar vocal verses are never removed", !verseRemoved)
+        check("Vocal protection: rejection recorded for the vocal candidate",
+              recipe.rejected.contains { $0.reason == .vocalProtection })
+    case .failure(let message):
+        check("Vocal repeat fixture plans", false, message)
+    }
+}
+
+// MARK: - 17. Intensified final hook protected; audibility floors bind
+
+do {
+    if let plan = popPlanForAudit, let recipe = plan.remixRecipe {
+        let script = defaultPopScript()
+        let chorus3 = popSectionRange(script, name: "chorus3")
+        let structural = recipe.selected.filter { $0.kind.isStructural }
+        let finalHookRemoved = structural.contains {
+            zonesOverlap($0.zoneStart, $0.zoneEnd, chorus3.start, chorus3.end)
+        }
+        check("Hook differentiation: intensified final chorus never removed",
+              !finalHookRemoved)
+    } else {
+        check("Hook differentiation: intensified final chorus never removed", false, "no recipe")
+    }
+
+    // Portable A/B: every selected DSP transformation must measurably
+    // change its contracted feature.
+    if let plan = popPlanForAudit, let recipe = plan.remixRecipe, let song = popSongTrack {
+        let sources = [song.id: AutoOfflineMixdown.Source(samples: popPCM, sampleRate: SR)]
+        let dsp = recipe.selected.filter {
+            !$0.kind.isStructural && $0.kind != .sfxAccent
+        }
+        check("Audibility: ≥ 2 DSP transformations to verify", dsp.count >= 2,
+              "got \(dsp.count)")
+        var allAudible = true
+        var detail = ""
+        for transformation in dsp {
+            guard let delta = AutoRemixDiagnostics.portableAudibilityDelta(
+                plan: plan, transformation: transformation, sources: sources, sampleRate: SR
+            ) else { continue }
+            if delta < transformation.audibility.minimumRequiredDelta {
+                allAudible = false
+                detail += String(format: "%@ %.1f<%.1f ", transformation.kind.rawValue,
+                                 delta, transformation.audibility.minimumRequiredDelta)
+            }
+        }
+        check("Audibility: portable render confirms every DSP transformation",
+              allAudible, detail)
+    }
+}
+
+// MARK: - 18. Weak opportunities rejected; targets are not quotas
+
+do {
+    let script = sparsePopScript()
+    let pcm = popSong(script)
+    let duration = Double(pcm.count) / SR
+    let song = makeSong(title: "Sparse Pop", bpm: Int(popBPM), durationSeconds: duration)
+    let features = SongSignalAnalyzer.extract(samples: pcm, sampleRate: SR, bpmHint: popBPM)
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song], seed: 46, signals: [song.id: features]
+    )
+    switch outcome {
+    case .success(_, let plan, _):
+        guard let recipe = plan.remixRecipe else {
+            check("Sparse: recipe exists", false, "remixRecipe nil")
+            break
+        }
+        check("Sparse: some valid transformation still selected",
+              !recipe.selected.isEmpty)
+        check("Sparse: no selection below its floors",
+              recipe.selected.allSatisfy {
+                  $0.confidence >= 0.45
+                      && $0.audibility.predictedDelta >= $0.audibility.minimumRequiredDelta
+              })
+        check("Sparse: unmet targets reported instead of padded",
+              recipe.selected.count >= 3 || !recipe.unmetTargets.isEmpty,
+              "selected \(recipe.selected.count), unmet \(recipe.unmetTargets)")
+        check("Sparse: weak candidates visible as audibility/confidence rejections",
+              recipe.selected.count >= 3 || recipe.rejected.contains {
+                  $0.reason == .belowAudibilityFloor || $0.reason == .belowConfidence
+              })
+    case .failure(let message):
+        check("Sparse pop fixture plans", false, message)
+    }
+}
+
+// MARK: - 19. Grid drift blocks late structural edits
+
+do {
+    let (script, driftBar) = driftPopScript()
+    let pcm = popSong(script, driftAfterBar: driftBar, driftFactor: 1.02)
+    let duration = Double(pcm.count) / SR
+    let song = makeSong(title: "Drifting Pop", bpm: Int(popBPM), durationSeconds: duration)
+    let features = SongSignalAnalyzer.extract(samples: pcm, sampleRate: SR, bpmHint: popBPM)
+
+    check("Drift: windowed beat phases measured", features.beatPhaseWindows.count >= 4,
+          "got \(features.beatPhaseWindows.count)")
+    check("Drift: phase deviation detected", features.gridDriftFractionOfBeat > 0.1,
+          String(format: "%.3f of a beat", features.gridDriftFractionOfBeat))
+
+    let driftOnset = popSectionRange(
+        script, name: "bridge", driftAfterBar: driftBar, driftFactor: 1.02
+    ).start
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song], seed: 47, signals: [song.id: features]
+    )
+    switch outcome {
+    case .success(_, let plan, _):
+        guard let recipe = plan.remixRecipe else {
+            check("Drift: recipe exists", false, "remixRecipe nil")
+            break
+        }
+        let lateStructural = recipe.selected.filter {
+            $0.kind.isStructural && $0.anchorDownbeat >= driftOnset - 1
+        }
+        check("Drift: no structural edit in the drifting region",
+              lateStructural.isEmpty,
+              lateStructural.map { "\($0.kind.rawValue)@\(Int($0.anchorDownbeat))s" }.joined(separator: ", "))
+        check("Drift: unstable candidates downgraded or rejected visibly",
+              recipe.rejected.contains { $0.reason == .gridUnstable }
+                  || recipe.selected.contains { !$0.kind.isStructural && $0.anchorDownbeat >= driftOnset - 1 })
+    case .failure(let message):
+        check("Drifting pop fixture plans", false, message)
+    }
+}
+
+// MARK: - 20. Structural budget counts rewinds and loops (unit)
+
+do {
+    func structuralOpportunity(
+        _ kind: AutoTransformationKind,
+        anchor: Double,
+        region: Int,
+        score: Double
+    ) -> AutoRemixOpportunity {
+        AutoRemixOpportunity(
+            kind: kind,
+            zoneStart: anchor,
+            zoneEnd: anchor + 14.5,
+            anchorDownbeat: anchor,
+            region: region,
+            score: score,
+            confidence: 0.9,
+            vocalSafe: true,
+            evidence: [AutoRemixEvidence(name: "repeatSimilarity", value: 0.95, measured: true)],
+            audibility: AudibilityContract(
+                musicalJustification: "unit fixture",
+                expectedConsequence: "bars removed",
+                measuredFeature: .durationChange,
+                predictedDelta: 8,
+                minimumRequiredDelta: 4
+            )
+        )
+    }
+    func dspOpportunity(_ kind: AutoTransformationKind, anchor: Double, region: Int) -> AutoRemixOpportunity {
+        AutoRemixOpportunity(
+            kind: kind,
+            zoneStart: anchor,
+            zoneEnd: anchor + 7.2,
+            anchorDownbeat: anchor + 7.2,
+            region: region,
+            score: 0.7,
+            confidence: 0.8,
+            vocalSafe: true,
+            evidence: [AutoRemixEvidence(name: "energyRise", value: 0.4, measured: true)],
+            audibility: AudibilityContract(
+                musicalJustification: "unit fixture",
+                expectedConsequence: "HF sweep",
+                measuredFeature: .hfEnergy,
+                predictedDelta: 8,
+                minimumRequiredDelta: 3
+            )
+        )
+    }
+
+    var map = AutoRemixStructureMap.empty
+    map.usableRange = 0...220
+    map.regions = [0...73, 73.001...146, 146.001...220]
+    map.gridDriftFractionOfBeat = 0.02
+    map.beatSecondsHint = 60 / popBPM
+    map.gridWindows = [
+        AutoRemixGridWindow(centerSeconds: 30, phase: 0.1, confidence: 0.9),
+        AutoRemixGridWindow(centerSeconds: 110, phase: 0.1, confidence: 0.9),
+        AutoRemixGridWindow(centerSeconds: 190, phase: 0.1, confidence: 0.9),
+    ]
+
+    let opportunities = [
+        structuralOpportunity(.shortenRepeat, anchor: 40, region: 0, score: 0.9),
+        structuralOpportunity(.hookReturn, anchor: 120, region: 1, score: 0.85),
+        structuralOpportunity(.loopStutter, anchor: 190, region: 2, score: 0.8),
+        dspOpportunity(.filteredBuild, anchor: 70, region: 0),
+        dspOpportunity(.echoThrow, anchor: 150, region: 2),
+    ]
+    let recipe = AutoRemixRecipePlanner.recipe(
+        from: opportunities, structure: map, seed: 5
+    )
+    check("Budget: at most two structural interventions selected",
+          recipe.structuralCount == 2, "got \(recipe.structuralCount)")
+    check("Budget: rewinds and loops count against the budget",
+          recipe.selected.filter { $0.kind == .hookReturn || $0.kind == .loopStutter }.count
+              + recipe.selected.filter { $0.kind == .shortenRepeat }.count
+              == recipe.structuralCount)
+    check("Budget: overflow rejected with budgetExhausted",
+          recipe.rejected.contains { $0.reason == .budgetExhausted })
+    check("Budget: DSP zones still selected alongside",
+          recipe.selected.contains { !$0.kind.isStructural })
+}
+
+// MARK: - 21. Low-confidence path unchanged by the transformation layer
+
+do {
+    guard let song = popSongTrack else { fatalError("pop fixture missing") }
+    let outcome = AutoRemixRunner.runEntireProject(tracks: [song], seed: 48)
+    switch outcome {
+    case .success(_, let plan, _):
+        check("Layer: no signal → still one continuous placement",
+              plan.placements.filter { $0.role == .dominant }.count == 1,
+              "got \(plan.placements.count)")
+        check("Layer: no signal → no transformations invented",
+              (plan.remixRecipe?.selected.isEmpty ?? true))
+    case .failure(let message):
+        check("Low-confidence pop plans", false, message)
+    }
+}
+
 // MARK: - Diagnostics evidence (printed, not asserted)
 
 if let plan = confidentPlan, let song = confidentSong {
