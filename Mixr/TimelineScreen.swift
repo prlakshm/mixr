@@ -333,6 +333,7 @@ struct TimelineScreen: View {
     @State private var showSFXPanel = false
     @State private var showAutoDialog = false
     @State private var isAutoRunning = false
+    @State private var isExporting = false
     @State private var autoErrorMessage: String?
     @State private var showProjectMenu = false
     @State private var projectTitleFrame: CGRect = .zero
@@ -378,6 +379,7 @@ struct TimelineScreen: View {
                         library: library,
                         displayTimeSeconds: displayTimeSeconds,
                         isProjectMenuOpen: showProjectMenu,
+                        isExporting: $isExporting,
                         onProjectTapped: {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 showProjectMenu.toggle()
@@ -603,11 +605,13 @@ struct TimelineScreen: View {
             .transition(.opacity.combined(with: .scale(scale: 0.94)))
         }
 
-        // Auto loading — simple spinner on a black screen.
-        if isAutoRunning {
-            MixrAutoLoadingOverlay()
-                .zIndex(80)
-                .transition(.opacity)
+        // Auto / Export loading — same full-screen spinner.
+        if isAutoRunning || isExporting {
+            MixrAutoLoadingOverlay(
+                accessibilityLabelText: isExporting ? "Exporting" : "Auto is running"
+            )
+            .zIndex(80)
+            .transition(.opacity)
         }
 
         // Entire Project Auto failure — timeline unchanged, no undo entry.
@@ -829,11 +833,9 @@ private struct TLTransportBar: View {
     @ObservedObject var library: TrackLibrary
     var displayTimeSeconds: Double = 0
     var isProjectMenuOpen: Bool = false
+    @Binding var isExporting: Bool
     var onProjectTapped: () -> Void = {}
     var onProjectRenameBegan: () -> Void = {}
-
-    // Export — offline render (MixrExportRenderer) then share sheet.
-    @State private var isExporting = false
     @State private var exportedFile: TLExportedFile?
     @State private var exportErrorMessage: String?
 
@@ -888,17 +890,8 @@ private struct TLTransportBar: View {
             HStack {
                 Spacer()
                 Button { startExport() } label: {
-                    HStack(spacing: 6) {
-                        if isExporting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(MixrColors.textSecondary)
-                            Text("Exporting…")
-                        } else {
-                            Label("Export", systemImage: "square.and.arrow.up")
-                        }
-                    }
-                    .frame(minWidth: 74)
+                    Label("Export", systemImage: "square.and.arrow.up")
+                        .frame(minWidth: 74)
                 }
                 .buttonStyle(MixrSecondaryGlassButtonStyle())
                 .fixedSize(horizontal: true, vertical: false)

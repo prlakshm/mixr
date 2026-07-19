@@ -82,8 +82,10 @@ private struct AutoScopeAlertActionStyle: ButtonStyle {
 
 // MARK: - Auto Loading Overlay
 
-/// Simple circular spinner on a black screen while Auto runs.
+/// Simple circular spinner on a black screen (Auto, Export, etc.).
 struct MixrAutoLoadingOverlay: View {
+    var accessibilityLabelText: String = "Loading"
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -92,7 +94,7 @@ struct MixrAutoLoadingOverlay: View {
                 .controlSize(.large)
                 .tint(.white)
         }
-        .accessibilityLabel("Auto is running")
+        .accessibilityLabel(accessibilityLabelText)
     }
 }
 
