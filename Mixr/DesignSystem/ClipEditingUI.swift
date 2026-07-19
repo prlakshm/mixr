@@ -13,11 +13,11 @@ enum TLClipEditingMetrics {
     /// Equal horizontal inset inside the actions glass (left == right).
     static let toolbarHorizontalPadding: CGFloat = ts(10)
     /// Extra space between Duplicate and Delete only.
-    static let toolbarDeleteGap: CGFloat = 1.5
+    static let toolbarDeleteGap: CGFloat = 2
     /// Fixed actions-pane width; equal left/right halves share the remainder
     /// after insets + center gap. Base 248 matches the prior roomier total;
     /// delete gap is added so columns aren't squeezed.
-    static let toolbarWidth: CGFloat = ts(248) - 2
+    static let toolbarWidth: CGFloat = ts(248) - 2.5
     /// Speed↔Duplicate gap — playhead/pointer sits at its midpoint.
     static let toolbarCenterGap: CGFloat = ts(16)
     static let toolbarSpeedWidth: CGFloat = ts(168)
