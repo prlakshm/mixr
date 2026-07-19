@@ -20,8 +20,10 @@ enum TLClipEditingMetrics {
     static let toolbarWidth: CGFloat = ts(248) - 2.5
     /// Speed↔Duplicate gap — playhead/pointer sits at its midpoint.
     static let toolbarCenterGap: CGFloat = ts(16)
-    static let toolbarSpeedWidth: CGFloat = ts(168)
+    /// Compact speed-only bubble after removing the trailing checkmark.
+    static let toolbarSpeedWidth: CGFloat = ts(98)
     static let toolbarBodyHeight: CGFloat = ts(50)
+    static let toolbarSpeedBodyHeight: CGFloat = ts(46)
     /// Glass-only — shift right so playhead reads closer to Duplicate.
     static let toolbarActionsHorizontalOffset: CGFloat = 4
     /// Pointer tip stays on the playhead (does not follow the glass nudge).
@@ -33,10 +35,20 @@ enum TLClipEditingMetrics {
     static let toolbarCornerRadius: CGFloat = ts(11)
     static let toolbarContentTopPadding: CGFloat = ts(8)
     static let toolbarContentBottomPadding: CGFloat = ts(10)
+    /// Speed insets: leading / trailing / top / bottom.
+    static let toolbarSpeedLeadingPadding: CGFloat = ts(6)
+    static let toolbarSpeedTrailingPadding: CGFloat = ts(10)
+    static let toolbarSpeedContentTopPadding: CGFloat = 0
+    static let toolbarSpeedContentBottomPadding: CGFloat = ts(2)
     static let toolbarActionStackSpacing: CGFloat = ts(6.4)
     static let toolbarActionIconHeight: CGFloat = ts(14)
     static let toolbarActionLabelSize: CGFloat = ts(9.8)
     static let toolbarActionTopPadding: CGFloat = ts(2)
+    static let speedFieldBottomExtension: CGFloat = 2
+    static let speedFieldHorizontalPadding: CGFloat = 6
+    static let speedValueBottomSpacing: CGFloat = 1.5
+    static let speedMultiplierBottomSpacing: CGFloat = 0.5
+    static let speedChevronVerticalOffset: CGFloat = 1.5
     static let toolbarMorphDuration: Double = 0.28
     static let minPlaybackSpeed: Double = 0.25
     static let maxPlaybackSpeed: Double = 4.0
@@ -518,7 +530,8 @@ struct TLClipContextToolbar: View {
     let onSpeedCommit: (Double) -> Void
 
     @State private var speedText: String = "1.0"
-    @FocusState private var isSpeedFieldFocused: Bool
+    /// Driven by the UIKit speed field — used for focus chrome + commit.
+    @State private var isSpeedFieldFocused = false
 
     private var bodyWidth: CGFloat {
         switch mode {
@@ -527,8 +540,15 @@ struct TLClipContextToolbar: View {
         }
     }
 
+    private var bodyHeight: CGFloat {
+        switch mode {
+        case .actions: TLClipEditingMetrics.toolbarBodyHeight
+        case .speed: TLClipEditingMetrics.toolbarSpeedBodyHeight
+        }
+    }
+
     var body: some View {
-        let tbH = TLClipEditingMetrics.toolbarBodyHeight
+        let tbH = bodyHeight
         let pW = TLClipEditingMetrics.toolbarPointerW
         let pH = TLClipEditingMetrics.toolbarPointerH
         let radius = TLClipEditingMetrics.toolbarCornerRadius
@@ -544,11 +564,33 @@ struct TLClipContextToolbar: View {
                     .opacity(mode == .speed ? 1 : 0)
                     .allowsHitTesting(mode == .speed)
             }
-            .padding(.horizontal, TLClipEditingMetrics.toolbarHorizontalPadding)
-            .padding(.top, TLClipEditingMetrics.toolbarContentTopPadding)
-            .padding(.bottom, TLClipEditingMetrics.toolbarContentBottomPadding)
+            .padding(
+                .leading,
+                mode == .speed
+                    ? TLClipEditingMetrics.toolbarSpeedLeadingPadding
+                    : TLClipEditingMetrics.toolbarHorizontalPadding
+            )
+            .padding(
+                .trailing,
+                mode == .speed
+                    ? TLClipEditingMetrics.toolbarSpeedTrailingPadding
+                    : TLClipEditingMetrics.toolbarHorizontalPadding
+            )
+            .padding(
+                .top,
+                mode == .speed
+                    ? TLClipEditingMetrics.toolbarSpeedContentTopPadding
+                    : TLClipEditingMetrics.toolbarContentTopPadding
+            )
+            .padding(
+                .bottom,
+                mode == .speed
+                    ? TLClipEditingMetrics.toolbarSpeedContentBottomPadding
+                    : TLClipEditingMetrics.toolbarContentBottomPadding
+            )
             .frame(width: bodyWidth, height: tbH)
             .background {
+                // Same glass as actions toolbar + transition menu.
                 let shape = RoundedRectangle(
                     cornerRadius: radius,
                     style: .continuous
@@ -677,14 +719,21 @@ struct TLClipContextToolbar: View {
 
     private var speedContent: some View {
         let s = TLClipEditingMetrics.toolbarScale
-        return HStack(spacing: 6 * s) {
-            Button(action: onSpeedBack) {
-                MixrChevron(
-                    direction: .back,
-                    size: 11 * s,
-                    color: MixrColors.textPrimary.opacity(0.88)
-                )
-                    .frame(width: 20 * s, height: 28 * s)
+        let fieldHeight = 24 * s
+        let fieldWidth = 40 * s
+        let valueBottomSpacing = TLClipEditingMetrics.speedValueBottomSpacing
+        let multiplierBottomSpacing = TLClipEditingMetrics.speedMultiplierBottomSpacing
+        let bottomExtension = TLClipEditingMetrics.speedFieldBottomExtension
+        return HStack(alignment: .bottom, spacing: 4 * s) {
+            Button {
+                commitSpeed()
+                onSpeedBack()
+            } label: {
+                // Match transition settings back chevron; vertically centered
+                // on the value field.
+                MixrChevron(direction: .back, size: 10.5 * s)
+                    .offset(y: TLClipEditingMetrics.speedChevronVerticalOffset)
+                    .frame(width: 14 * s, height: fieldHeight)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -692,34 +741,35 @@ struct TLClipContextToolbar: View {
             Text("x")
                 .font(.system(size: 13 * s, weight: .semibold))
                 .foregroundStyle(MixrColors.textPrimary)
+                .padding(.bottom, multiplierBottomSpacing)
+                .padding(.trailing, 2 * s)
 
-            TextField("1.0", text: $speedText)
-                .font(.system(size: 13 * s, weight: .semibold, design: .rounded))
-                .foregroundStyle(MixrColors.textPrimary)
-                .multilineTextAlignment(.center)
-                .keyboardType(.decimalPad)
-                .textFieldStyle(.plain)
-                .focused($isSpeedFieldFocused)
-                .padding(.horizontal, 8 * s)
-                .frame(width: 76 * s, height: 28 * s)
-                .background {
-                    RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5 * s)
-                        }
-                }
-                .onSubmit { commitSpeed() }
-
-            Button(action: commitSpeed) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12 * s, weight: .semibold))
-                    .foregroundStyle(MixrColors.textPrimary)
-                    .frame(width: 22 * s, height: 28 * s)
-                    .contentShape(Rectangle())
+            TLSpeedValueField(
+                text: $speedText,
+                isFocused: $isSpeedFieldFocused,
+                fontSize: 13 * s,
+                onSubmit: commitSpeed
+            )
+            .padding(
+                .horizontal,
+                TLClipEditingMetrics.speedFieldHorizontalPadding
+            )
+            .padding(.bottom, valueBottomSpacing)
+            // A UIKit text field can retain an intrinsic width wider than this
+            // frame, so clip at the SwiftUI boundary that defines the box.
+            .frame(width: fieldWidth, height: fieldHeight, alignment: .bottomTrailing)
+            .clipped()
+            .background {
+                RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: fieldHeight + bottomExtension)
+                    .offset(y: bottomExtension / 2)
             }
-            .buttonStyle(.plain)
+        }
+        .onChange(of: isSpeedFieldFocused) { _, focused in
+            if !focused {
+                commitSpeed()
+            }
         }
     }
 
@@ -748,6 +798,146 @@ struct TLClipContextToolbar: View {
             return String(format: "%.1f", rounded)
         }
         return String(format: "%g", rounded)
+    }
+}
+
+/// Keeps Paste in the native edit menu even when simulator pasteboard syncing
+/// has not yet exposed a compatible value to the field.
+private final class TLSpeedPasteTextField: UITextField {
+    override func canPerformAction(
+        _ action: Selector,
+        withSender sender: Any?
+    ) -> Bool {
+        if action == #selector(paste(_:)) {
+            return true
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+}
+
+/// Preserves the system edit menu while giving the speed field a predictable
+/// order: Select, Select All, Paste, followed by UIKit's remaining actions.
+private enum TLTextEditMenuOrder {
+    private static let preferredSelectors = [
+        NSSelectorFromString("select:"),
+        NSSelectorFromString("selectAll:"),
+        NSSelectorFromString("paste:"),
+    ]
+
+    static func menu(from suggestedActions: [UIMenuElement]) -> UIMenu {
+        let orderedActions = suggestedActions.enumerated().sorted { lhs, rhs in
+            let lhsRank = rank(of: lhs.element)
+            let rhsRank = rank(of: rhs.element)
+            if lhsRank == rhsRank {
+                return lhs.offset < rhs.offset
+            }
+            return lhsRank < rhsRank
+        }.map(\.element)
+        return UIMenu(children: orderedActions)
+    }
+
+    private static func rank(of element: UIMenuElement) -> Int {
+        guard let command = element as? UICommand,
+              let preferredIndex = preferredSelectors.firstIndex(of: command.action)
+        else {
+            return preferredSelectors.count
+        }
+        return preferredIndex
+    }
+}
+
+/// Speed value field — trailing, bottom-aligned text with a gray caret.
+private struct TLSpeedValueField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    var fontSize: CGFloat
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> TLSpeedPasteTextField {
+        let field = TLSpeedPasteTextField()
+        field.delegate = context.coordinator
+        field.borderStyle = .none
+        field.backgroundColor = .clear
+        field.clipsToBounds = true
+        field.keyboardType = .decimalPad
+        field.returnKeyType = .done
+        field.textAlignment = .right
+        field.contentVerticalAlignment = .bottom
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.tintColor = UIColor(white: 0.62, alpha: 1)
+        field.textColor = UIColor(white: 1, alpha: 0.92)
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
+        return field
+    }
+
+    func updateUIView(_ field: TLSpeedPasteTextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text {
+            field.text = text
+        }
+
+        let base = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        if let rounded = base.fontDescriptor.withDesign(.rounded) {
+            field.font = UIFont(descriptor: rounded, size: fontSize)
+        } else {
+            field.font = base
+        }
+        field.tintColor = UIColor(white: 0.62, alpha: 1)
+        field.textColor = UIColor(white: 1, alpha: 0.92)
+
+        if isFocused, !field.isFirstResponder {
+            DispatchQueue.main.async { field.becomeFirstResponder() }
+        } else if !isFocused, field.isFirstResponder {
+            DispatchQueue.main.async { field.resignFirstResponder() }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: TLSpeedValueField
+
+        init(_ parent: TLSpeedValueField) {
+            self.parent = parent
+        }
+
+        @objc func textChanged(_ field: UITextField) {
+            parent.text = field.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            DispatchQueue.main.async {
+                self.parent.isFocused = true
+            }
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            DispatchQueue.main.async {
+                self.parent.isFocused = false
+            }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onSubmit()
+            textField.resignFirstResponder()
+            return true
+        }
+
+        func textField(
+            _ textField: UITextField,
+            editMenuForCharactersIn range: NSRange,
+            suggestedActions: [UIMenuElement]
+        ) -> UIMenu? {
+            TLTextEditMenuOrder.menu(from: suggestedActions)
+        }
     }
 }
 

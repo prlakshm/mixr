@@ -2339,7 +2339,10 @@ private struct TLTrackArea: View {
             let tbW = mode == .speed
                 ? TLClipEditingMetrics.toolbarSpeedWidth
                 : TLClipEditingMetrics.toolbarWidth
-            let tbH    = TLClipEditingMetrics.toolbarBodyHeight + TLClipEditingMetrics.toolbarPointerH
+            let tbH = (mode == .speed
+                ? TLClipEditingMetrics.toolbarSpeedBodyHeight
+                : TLClipEditingMetrics.toolbarBodyHeight)
+                + TLClipEditingMetrics.toolbarPointerH
             let playheadContentX = (effectivePlayheadUnit / contentUnits) * contentW
             let tbSX   = screenXFor(playheadContentX)
             let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
