@@ -725,7 +725,7 @@ struct TimelineScreen: View {
 
             switch AutoRemixRunner.engine(for: scope) {
             case .planPipeline:
-                runEntireProjectAuto()
+                await runEntireProjectAuto()
             case .arrangementEngine:
                 library.beginGestureEdit("Auto Remix", scope: .tracks)
                 let arranged = AutoArrangementEngine.arrange(
@@ -746,10 +746,30 @@ struct TimelineScreen: View {
     /// Entire Project: draft → validate → apply.
     /// Commits undo only after a successful apply; failures leave the timeline
     /// untouched and show an error sheet.
-    private func runEntireProjectAuto() {
+    private func runEntireProjectAuto() async {
         let originalTracks = library.tracks
         let seed = UInt64(Date().timeIntervalSince1970)
-        let outcome = AutoRemixRunner.runEntireProject(tracks: originalTracks, seed: seed)
+
+        // Measure the source audio first — Auto's editing decisions come
+        // from real signal features (silence, beat phase, energy), never
+        // guesses. A file that cannot be decoded simply contributes no
+        // features and keeps Auto maximally conservative for that song.
+        var signals: [UUID: SongSignalFeatures] = [:]
+        for track in originalTracks where !track.isSFXTrack && !track.clips.isEmpty {
+            guard let url = track.url else { continue }
+            if let features = await MixrAudioAnalyzer.extractSignalFeatures(
+                url: url,
+                bpmHint: track.bpm.map(Double.init)
+            ) {
+                signals[track.id] = features
+            }
+        }
+
+        let outcome = AutoRemixRunner.runEntireProject(
+            tracks: originalTracks,
+            seed: seed,
+            signals: signals
+        )
 
         switch outcome {
         case .success(let tracks, _, _):

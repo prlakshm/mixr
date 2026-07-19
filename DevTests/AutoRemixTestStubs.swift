@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 // Minimal stubs so the Auto pipeline harness can compile without the full
 // DesignSystem / playback / SwiftData stack. Not used by the app target.

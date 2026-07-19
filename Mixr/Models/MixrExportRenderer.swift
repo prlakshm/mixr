@@ -37,9 +37,13 @@ nonisolated enum MixrExportRenderer {
         }
     }
 
-    /// One offline effect chain per song track (mirrors TrackChain).
+    /// One offline effect chain per song track (mirrors TrackChain):
+    /// two clip players summed by a head mixer so same-song crossfades
+    /// truly overlap, exactly like live playback.
     private final class ExportChain {
-        let player = AVAudioPlayerNode()
+        let playerA = AVAudioPlayerNode()
+        let playerB = AVAudioPlayerNode()
+        let head = AVAudioMixerNode()
         let timePitch = AVAudioUnitTimePitch()
         let eq = AVAudioUnitEQ(numberOfBands: 1)
         let flangerNode: AVAudioUnit?
@@ -57,8 +61,14 @@ nonisolated enum MixrExportRenderer {
             flangerKernel = ClipFlanger.kernel(of: node)
         }
 
+        var players: [AVAudioPlayerNode] { [playerA, playerB] }
+
+        func player(forLane lane: Int) -> AVAudioPlayerNode {
+            lane == 1 ? playerB : playerA
+        }
+
         var allNodes: [AVAudioNode] {
-            var nodes: [AVAudioNode] = [player, timePitch, eq]
+            var nodes: [AVAudioNode] = [playerA, playerB, head, timePitch, eq]
             if let flangerNode { nodes.append(flangerNode) }
             nodes.append(contentsOf: [delay, reverb])
             return nodes
@@ -105,7 +115,9 @@ nonisolated enum MixrExportRenderer {
 
             for node in chain.allNodes { engine.attach(node) }
             let fmt = file.processingFormat
-            engine.connect(chain.player, to: chain.timePitch, format: fmt)
+            engine.connect(chain.playerA, to: chain.head, format: fmt)
+            engine.connect(chain.playerB, to: chain.head, format: fmt)
+            engine.connect(chain.head, to: chain.timePitch, format: fmt)
             engine.connect(chain.timePitch, to: chain.eq, format: fmt)
             if let flangerNode = chain.flangerNode {
                 engine.connect(chain.eq, to: flangerNode, format: fmt)
@@ -156,7 +168,7 @@ nonisolated enum MixrExportRenderer {
 
         for (track, chain) in chains {
             scheduleClips(for: track, chain: chain, timelineSeconds: 0)
-            chain.player.play()
+            for player in chain.players { player.play() }
 
             // Pre-arm the playback rate: segment delays are scheduled in
             // the player's INPUT timeline (delay × rate), which assumes
@@ -207,12 +219,24 @@ nonisolated enum MixrExportRenderer {
         // ── Render loop ──
         // 1024-frame blocks (~23 ms at 44.1 kHz) so per-clip parameters,
         // transition envelopes, and volume automation track closely.
+        //
+        // Tail policy (AutoGainPolicy): after the musical content ends,
+        // blocks are written only while the tail stays AUDIBLE. Silent
+        // blocks are held back and flushed if a later audible block
+        // arrives; once the tail stays below the silence threshold for
+        // the policy window, the export ends. A fixed silent tail is
+        // never appended.
         let outputSR = renderFormat.sampleRate
+        let contentFrames = AVAudioFramePosition(contentSeconds * outputSR)
         let totalFrames = AVAudioFramePosition(totalSeconds * outputSR)
         let blockFrames: AVAudioFrameCount = 1024
         var rendered: AVAudioFramePosition = 0
+        let silenceLinear = Float(pow(10.0, AutoGainPolicy.silentTailThresholdDB / 20.0))
+        let maxHeldFrames = AVAudioFramePosition(AutoGainPolicy.silentTailWindowSeconds * outputSR)
+        var heldTail: [AVAudioPCMBuffer] = []
+        var heldFrames: AVAudioFramePosition = 0
 
-        while rendered < totalFrames {
+        renderLoop: while rendered < totalFrames {
             let t = Double(rendered) / outputSR
             applyParameters(at: t, tracks: tracks, chains: chains, sfxPlayer: sfxPlayer)
 
@@ -221,7 +245,25 @@ nonisolated enum MixrExportRenderer {
                 let status = try engine.renderOffline(framesThisBlock, to: block)
                 switch status {
                 case .success:
-                    try outFile.write(from: block)
+                    if rendered < contentFrames {
+                        try outFile.write(from: block)
+                    } else if blockRMS(block) >= silenceLinear {
+                        for held in heldTail { try outFile.write(from: held) }
+                        heldTail.removeAll()
+                        heldFrames = 0
+                        try outFile.write(from: block)
+                    } else {
+                        if let copy = copyBuffer(block) {
+                            heldTail.append(copy)
+                            heldFrames += AVAudioFramePosition(copy.frameLength)
+                        }
+                        if heldFrames >= maxHeldFrames {
+                            // Tail has been silent for the policy window —
+                            // drop the held silence and finish.
+                            rendered += AVAudioFramePosition(block.frameLength)
+                            break renderLoop
+                        }
+                    }
                     rendered += AVAudioFramePosition(block.frameLength)
                 case .insufficientDataFromInputNode, .cannotDoInCurrentContext:
                     continue
@@ -241,8 +283,39 @@ nonisolated enum MixrExportRenderer {
             progress?(Double(rendered) / Double(totalFrames))
         }
 
+        progress?(1.0)
         engine.stop()
         return outURL
+    }
+
+    // MARK: - Block helpers (tail policy)
+
+    private static func blockRMS(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let data = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
+        let channels = Int(buffer.format.channelCount)
+        let frames = Int(buffer.frameLength)
+        var sum: Double = 0
+        for ch in 0..<channels {
+            for i in 0..<frames {
+                let v = Double(data[ch][i])
+                sum += v * v
+            }
+        }
+        return Float((sum / Double(frames * max(channels, 1))).squareRoot())
+    }
+
+    private static func copyBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(
+            pcmFormat: buffer.format,
+            frameCapacity: buffer.frameLength
+        ) else { return nil }
+        copy.frameLength = buffer.frameLength
+        guard let src = buffer.floatChannelData, let dst = copy.floatChannelData else { return nil }
+        let channels = Int(buffer.format.channelCount)
+        for ch in 0..<channels {
+            dst[ch].update(from: src[ch], count: Int(buffer.frameLength))
+        }
+        return copy
     }
 
     // MARK: - Scheduling (same trim/offset/speed math as live playback)
@@ -254,6 +327,7 @@ nonisolated enum MixrExportRenderer {
     ) {
         let sr = chain.file.processingFormat.sampleRate
         let fileFrames = chain.file.length
+        let lanes = AutoTransitionEnvelope.playerLanes(for: track.clips)
 
         for clip in track.clips.sorted(by: { $0.start < $1.start }) {
             let clipStart = MixrTimeline.seconds(fromUnits: clip.start)
@@ -275,7 +349,7 @@ nonisolated enum MixrExportRenderer {
             guard frames > 0 else { continue }
 
             let delaySec = max(0, playStart - timelineSeconds) * speed
-            chain.player.scheduleSegment(
+            chain.player(forLane: lanes[clip.id] ?? 0).scheduleSegment(
                 chain.file,
                 startingFrame: startFrame,
                 frameCount: frames,
@@ -294,26 +368,57 @@ nonisolated enum MixrExportRenderer {
     ) {
         let soloActive = tracks.contains { $0.isSoloed }
 
+        // Policy ducking under major SFX — identical to the live tick.
+        var duckGain = 1.0
+        if let sfxTrack = tracks.first(where: { $0.isSFXTrack }),
+           !sfxTrack.isMuted, !soloActive || sfxTrack.isSoloed {
+            let events = sfxTrack.clips.compactMap { clip -> AutoSFXEvent? in
+                guard let id = clip.soundEffectID else { return nil }
+                return AutoSFXEvent(
+                    assetID: id,
+                    timelineStart: MixrTimeline.seconds(fromUnits: clip.start),
+                    purpose: ""
+                )
+            }
+            duckGain = AutoGainPolicy.duckGain(at: t, sfxEvents: events)
+        }
+
         for (track, chain) in chains {
             let audible = !track.isMuted && (!soloActive || track.isSoloed)
             let bpm = Double(track.bpm ?? 124)
 
-            let clip = track.clips.first { clip in
-                !clip.isSoundEffect
-                    && t >= MixrTimeline.seconds(fromUnits: clip.start)
+            let songClips = track.clips.filter { !$0.isSoundEffect }
+            let lanes = AutoTransitionEnvelope.playerLanes(for: songClips)
+            let active = songClips.filter { clip in
+                t >= MixrTimeline.seconds(fromUnits: clip.start)
                     && t < MixrTimeline.seconds(fromUnits: clip.start + clip.length)
             }
 
-            var volume: Float = 0
-            if let clip, audible {
-                let envelope = ClipEffectDSP.transitionEnvelope(for: clip, at: t, bpm: bpm)
-                volume = Float(track.volume * clip.volume * envelope.gain)
+            var laneVolumes: [Float] = [0, 0]
+            var effectsClip: MixrClip?
+            var effectsBoost = 0.0
+            if audible {
+                for clip in active {
+                    let continuity = AutoTransitionEnvelope.continuity(for: clip, in: songClips)
+                    let envelope = ClipEffectDSP.transitionEnvelope(
+                        for: clip, at: t, bpm: bpm, continuity: continuity
+                    )
+                    let volume = Float(track.volume * clip.volume * envelope.gain * duckGain)
+                    let lane = lanes[clip.id] ?? 0
+                    laneVolumes[lane] = max(laneVolumes[lane], volume)
+                    if effectsClip == nil || clip.start > effectsClip!.start {
+                        effectsClip = clip
+                        effectsBoost = envelope.echoBoost
+                    }
+                }
+            }
 
+            if let clip = effectsClip {
                 let targets = ClipEffectDSP.targets(
                     for: clip.effects,
                     playbackSpeed: clip.playbackSpeed,
                     bpm: bpm,
-                    echoBoost: envelope.echoBoost
+                    echoBoost: effectsBoost
                 )
                 ClipEffectDSP.apply(
                     targets,
@@ -334,7 +439,8 @@ nonisolated enum MixrExportRenderer {
                     baseDelaySeconds: 0.0006, lfoFrequency: 0.25, phase: 0
                 )
             }
-            chain.player.volume = volume
+            chain.playerA.volume = laneVolumes[0]
+            chain.playerB.volume = laneVolumes[1]
         }
 
         if let sfxPlayer, let sfxTrack = tracks.first(where: { $0.isSFXTrack }) {
@@ -351,6 +457,7 @@ nonisolated enum MixrExportRenderer {
             ?? Bundle.main.url(forResource: base, withExtension: "wav", subdirectory: "SFX")
             ?? Bundle.main.url(forResource: base, withExtension: "wav", subdirectory: "Resources/SFX")
 
+        var buffer: AVAudioPCMBuffer?
         if let url,
            let file = try? AVAudioFile(forReading: url),
            let loaded = AVAudioPCMBuffer(
@@ -358,9 +465,25 @@ nonisolated enum MixrExportRenderer {
             frameCapacity: AVAudioFrameCount(file.length)
            ),
            (try? file.read(into: loaded)) != nil {
-            return loaded
+            buffer = loaded
+        } else {
+            buffer = SFXSynthesizer.buffer(for: definition)
         }
-        return SFXSynthesizer.buffer(for: definition)
+        if let buffer {
+            applyNominalGain(to: buffer, sfxID: definition.id)
+        }
+        return buffer
+    }
+
+    /// Bakes the policy's calibrated per-asset gain into the buffer so
+    /// SFX ride on the song instead of fighting it (same as live).
+    static func applyNominalGain(to buffer: AVAudioPCMBuffer, sfxID: String) {
+        let gain = Float(AutoGainPolicy.nominalGain(forSFX: sfxID))
+        guard abs(gain - 1) > 0.001, let data = buffer.floatChannelData else { return }
+        let frames = Int(buffer.frameLength)
+        for ch in 0..<Int(buffer.format.channelCount) {
+            for i in 0..<frames { data[ch][i] *= gain }
+        }
     }
 
     private static func safeFileName(_ name: String) -> String {

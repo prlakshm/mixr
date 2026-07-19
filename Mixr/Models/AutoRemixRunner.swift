@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import Foundation
 
 // MARK: - Auto Remix Runner
@@ -35,7 +37,8 @@ enum AutoRemixRunner {
     static func runEntireProject(
         tracks: [MixrTrack],
         tuning: AutoTuning = .standard,
-        seed: UInt64 = UInt64(Date().timeIntervalSince1970)
+        seed: UInt64 = UInt64(Date().timeIntervalSince1970),
+        signals: [UUID: SongSignalFeatures] = [:]
     ) -> Outcome {
         let songTracks = tracks.filter { !$0.isSFXTrack && !$0.clips.isEmpty }
         guard !songTracks.isEmpty else {
@@ -45,7 +48,8 @@ enum AutoRemixRunner {
         guard let (draft, profiles) = AutoRemixPlanner.makePlan(
             tracks: tracks,
             tuning: tuning,
-            seed: seed
+            seed: seed,
+            signals: signals
         ) else {
             return .failure(message: "Auto couldn’t build an arrangement from the current songs.")
         }

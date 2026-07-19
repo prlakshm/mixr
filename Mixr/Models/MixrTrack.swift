@@ -1,4 +1,7 @@
-import SwiftUI
+import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 // MARK: - Clip Transition Types
 
@@ -198,11 +201,15 @@ extension MixrTrack: Codable {
         clips = try c.decode([MixrClip].self, forKey: .clips)
 
         if let bookmark = try c.decodeIfPresent(Data.self, forKey: .urlBookmark) {
+            #if canImport(Darwin)
             var isStale = false
             url = try? URL(
                 resolvingBookmarkData: bookmark,
                 bookmarkDataIsStale: &isStale
             )
+            #else
+            _ = bookmark   // security-scoped bookmarks are Apple-only
+            #endif
         }
         if url == nil, let path = try c.decodeIfPresent(String.self, forKey: .urlPath) {
             url = URL(fileURLWithPath: path)
@@ -229,11 +236,13 @@ extension MixrTrack: Codable {
         try c.encode(clips, forKey: .clips)
 
         if let url {
+            #if canImport(Darwin)
             let didAccess = url.startAccessingSecurityScopedResource()
             defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
             if let bookmark = try? url.bookmarkData() {
                 try c.encode(bookmark, forKey: .urlBookmark)
             }
+            #endif
             try c.encode(url.path, forKey: .urlPath)
         }
     }

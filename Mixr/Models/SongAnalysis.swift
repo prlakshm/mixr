@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import Foundation
 
 // MARK: - Song Section
@@ -94,6 +96,11 @@ struct SongAnalysis: Sendable {
     /// Below ~0.5 the Auto planner switches to its safe fallback behavior.
     var analysisConfidence: Double
 
+    /// Real signal-derived measurements when the source audio has been
+    /// analyzed (nil = metadata/heuristics only, so editing must stay
+    /// maximally conservative).
+    var signal: SongSignalFeatures? = nil
+
     // MARK: Derived musical units
 
     var beatSeconds: Double { 60.0 / bpm }
@@ -158,9 +165,10 @@ enum SongAnalyzer {
     private static let curveSamples = 64
 
     /// Builds an analysis for one song track. Uses the track's real BPM/key
-    /// when known (metadata or MixrAudioAnalyzer) plus deterministic
-    /// heuristics seeded by the track so different songs get different maps.
-    static func analyze(track: MixrTrack) -> SongAnalysis {
+    /// when known (metadata or MixrAudioAnalyzer), real signal features
+    /// when the audio has been measured, and deterministic heuristics
+    /// only where no measurement exists.
+    static func analyze(track: MixrTrack, signal: SongSignalFeatures? = nil) -> SongAnalysis {
         let bpm = track.bpm.map(Double.init) ?? defaultBPM
         let duration = track.durationSeconds
             ?? track.clips.first.map { MixrTimeline.seconds(fromUnits: $0.length) * $0.playbackSpeed }
@@ -171,9 +179,24 @@ enum SongAnalyzer {
         let phrase = bar * 8
         let seed = stableSeed(track.title + track.artist)
 
-        let beatGrid = Array(stride(from: 0.0, to: duration, by: beat))
-        let downbeats = Array(stride(from: 0.0, to: duration, by: bar))
-        let phrases = Array(stride(from: 0.0, to: duration, by: phrase))
+        // Beat grid anchored to the MEASURED first downbeat when the
+        // signal has one — source time zero is never assumed to be beat
+        // one without evidence.
+        let gridAnchor: Double
+        if let signal, let firstDownbeat = signal.downbeatOffsetSeconds, signal.beatConfidence > 0.3 {
+            gridAnchor = firstDownbeat.truncatingRemainder(dividingBy: beat)
+        } else {
+            gridAnchor = 0
+        }
+        let beatGrid = Array(stride(from: gridAnchor, to: duration, by: beat))
+        let downbeatAnchor: Double
+        if let signal, let firstDownbeat = signal.downbeatOffsetSeconds, signal.beatConfidence > 0.3 {
+            downbeatAnchor = firstDownbeat.truncatingRemainder(dividingBy: bar)
+        } else {
+            downbeatAnchor = 0
+        }
+        let downbeats = Array(stride(from: downbeatAnchor, to: duration, by: bar))
+        let phrases = Array(stride(from: downbeatAnchor, to: duration, by: phrase))
 
         // ── Section heuristics (phrase-snapped fractions of the song) ──
         func snap(_ t: Double) -> Double {
@@ -231,21 +254,31 @@ enum SongAnalyzer {
         sections.sort { $0.startSeconds < $1.startSeconds }
 
         // ── Energy & vocal-density curves ──
-        let energy = buildEnergyCurve(
-            duration: duration,
-            intro: intro, outro: outro,
-            choruses: [chorus1, chorus2],
-            bridge: bridge,
-            seed: seed
-        )
-        let vocals = buildVocalCurve(
-            duration: duration,
-            intro: intro, outro: outro,
-            choruses: [chorus1, chorus2],
-            bridge: bridge,
-            verses: verses,
-            seed: seed
-        )
+        // MEASURED when the signal was analyzed; heuristic shape otherwise.
+        let energy: [Double]
+        let vocals: [Double]
+        if let signal, !signal.energyCurve.isEmpty {
+            energy = resample(signal.energyCurve, to: curveSamples)
+            vocals = signal.vocalPresenceCurve.isEmpty
+                ? resample(signal.energyCurve, to: curveSamples)
+                : resample(signal.vocalPresenceCurve, to: curveSamples)
+        } else {
+            energy = buildEnergyCurve(
+                duration: duration,
+                intro: intro, outro: outro,
+                choruses: [chorus1, chorus2],
+                bridge: bridge,
+                seed: seed
+            )
+            vocals = buildVocalCurve(
+                duration: duration,
+                intro: intro, outro: outro,
+                choruses: [chorus1, chorus2],
+                bridge: bridge,
+                verses: verses,
+                seed: seed
+            )
+        }
 
         // ── Mix points: phrase boundaries in low-vocal regions ──
         func density(at t: Double) -> Double {
@@ -271,12 +304,28 @@ enum SongAnalyzer {
         let bpmTrust: Double = track.bpm == nil ? 0.15 : (track.bpmConfidence ?? 1.0)
         let keyTrust: Double = track.key == nil ? 0.2 : (track.keyConfidence ?? 1.0)
         let durationTrust: Double = track.durationSeconds == nil ? 0.4 : 1.0
-        let confidence = min(1, max(0, bpmTrust * 0.55 + keyTrust * 0.20 + durationTrust * 0.25))
+        let metadataConfidence = min(1, max(0, bpmTrust * 0.55 + keyTrust * 0.20 + durationTrust * 0.25))
+        // Real measurements raise (or lower) trust; metadata alone never
+        // reaches the certainty of an analyzed waveform.
+        let confidence: Double
+        if let signal {
+            confidence = min(1, max(0, metadataConfidence * 0.4 + signal.overallConfidence * 0.6))
+        } else {
+            confidence = metadataConfidence
+        }
 
-        // Deterministic per-song texture estimates (integration point:
-        // replace with real transient/low-band analysis).
-        let drumStrength = min(1, max(0, 0.62 + 0.25 * pseudoNoise(index: 7, seed: seed)))
-        let bassDensity = min(1, max(0, 0.58 + 0.28 * pseudoNoise(index: 13, seed: seed)))
+        // Texture: MEASURED transient/low-band values when available.
+        // The seeded fallback is cosmetic only — the planner requires
+        // signal evidence before making any structural cut.
+        let drumStrength: Double
+        let bassDensity: Double
+        if let signal, !signal.bassEnergyCurve.isEmpty {
+            drumStrength = signal.drumConfidence
+            bassDensity = signal.bassEnergyCurve.reduce(0, +) / Double(signal.bassEnergyCurve.count)
+        } else {
+            drumStrength = min(1, max(0, 0.62 + 0.25 * pseudoNoise(index: 7, seed: seed)))
+            bassDensity = min(1, max(0, 0.58 + 0.28 * pseudoNoise(index: 13, seed: seed)))
+        }
 
         return SongAnalysis(
             bpm: bpm,
@@ -304,7 +353,8 @@ enum SongAnalyzer {
             hookMoments: [chorus1.startSeconds, chorus2.startSeconds],
             drumStrength: drumStrength,
             bassDensity: bassDensity,
-            analysisConfidence: confidence
+            analysisConfidence: confidence,
+            signal: signal
         )
     }
 
@@ -365,6 +415,15 @@ enum SongAnalyzer {
     }
 
     // MARK: Helpers
+
+    /// Nearest-index resample of a measured curve onto `count` samples.
+    private static func resample(_ curve: [Double], to count: Int) -> [Double] {
+        guard !curve.isEmpty, count > 1 else { return curve }
+        return (0..<count).map { i in
+            let idx = Int(Double(i) / Double(count - 1) * Double(curve.count - 1))
+            return curve[min(curve.count - 1, max(0, idx))]
+        }
+    }
 
     private static func snapOr(_ t: Double, _ phrases: [Double]) -> Double {
         phrases.last { $0 <= t && $0 > 0 } ?? t

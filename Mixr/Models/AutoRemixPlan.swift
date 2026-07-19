@@ -1,4 +1,6 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import Foundation
 
 // MARK: - Auto Remix Plan
@@ -156,10 +158,65 @@ struct AutoClipPlacement: Sendable {
     /// and the summary). Head/body/tail splits share one slotIndex so the
     /// summary treats them as a single song appearance.
     var slotIndex: Int
+    /// True when this placement continues the SAME source material
+    /// sample-exactly from the previous placement of this song (a segment
+    /// split made only to change effects). Continuous edges get no fades
+    /// of any kind — the audio underneath is continuous.
+    var continuesPrevious: Bool = false
+    /// > 0 when this placement deliberately OVERLAPS the previous
+    /// placement of the same song by this many timeline seconds for a
+    /// true equal-power crossfade. The validator only permits same-song
+    /// overlap that is declared here.
+    var overlapsPreviousSeconds: Double = 0
 
     nonisolated var timelineEnd: Double { timelineStart + timelineDuration }
     nonisolated var sourceDuration: Double { timelineDuration * tempoRatio }
     nonisolated var sourceEnd: Double { sourceStart + sourceDuration }
+}
+
+// MARK: - Internal Cut Record
+
+/// Why an internal cut exists. There is no "variety" case on purpose —
+/// cutting merely to add variety is not a valid reason.
+enum AutoCutReason: String, Sendable, Equatable {
+    /// Removes material that repeats already-heard content.
+    case redundantRepeat
+    /// Trims detected silence or DJ intro/outro filler at the edges.
+    case edgeTrim
+    /// An explicitly requested return to the hook for a final peak.
+    case hookReturn
+}
+
+/// How a cut's transition is audibly covered.
+enum AutoCutMasking: Equatable, Sendable {
+    /// Equal-power overlap of the outgoing and incoming song regions.
+    case equalPowerCrossfade(seconds: Double)
+    /// A specific SFX (riser / impact / fill) carries the join.
+    case sfx(assetID: String)
+    /// An effect tail (echo throw, reverb bloom) fills the join.
+    case effectTail
+    /// Downbeat-aligned hard cut with an anti-click microfade —
+    /// only valid when the join's energy profile already matches.
+    case alignedHardCut
+}
+
+/// Structured record of one internal cut. Validation REJECTS any source
+/// discontinuity that has no matching record, insufficient confidence,
+/// or no masking strategy.
+struct AutoCutRecord: Sendable {
+    /// Timeline seconds where the incoming material starts.
+    var timelineAt: Double
+    /// Source seconds where the outgoing material stops.
+    var sourceFrom: Double
+    /// Source seconds where the incoming material starts.
+    var sourceTo: Double
+    var reason: AutoCutReason
+    /// Analysis confidence backing this cut, 0…1.
+    var confidence: Double
+    /// Expected short-term energy change across the join, dB
+    /// (0 = energy-preserving).
+    var expectedEnergyDeltaDB: Double
+    var masking: AutoCutMasking
 }
 
 // MARK: - SFX Event
@@ -199,6 +256,12 @@ struct AutoRemixPlan: Sendable {
     var selectedSections: [AutoSelectedSection]
     var placements: [AutoClipPlacement]
     var sfxEvents: [AutoSFXEvent]
+    /// Structured record for EVERY internal cut (source discontinuity).
+    /// A cut without a record here is invalid.
+    var cutRecords: [AutoCutRecord] = []
+    /// Source range the one-song remix preserves (after evidence-based
+    /// edge trimming). nil for mashups.
+    var usableSourceRange: ClosedRange<Double>? = nil
     /// Deliberate micro-pauses / intentional silence the validator preserves.
     var intentionalGaps: [AutoIntentionalGap] = []
     /// Song-change count between consecutive dominant slots.

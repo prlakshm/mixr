@@ -49,12 +49,15 @@ enum AutoRemixPlanner {
     static func makePlan(
         tracks: [MixrTrack],
         tuning: AutoTuning = .standard,
-        seed: UInt64 = UInt64(Date().timeIntervalSince1970)
+        seed: UInt64 = UInt64(Date().timeIntervalSince1970),
+        signals: [UUID: SongSignalFeatures] = [:]
     ) -> (plan: AutoRemixPlan, profiles: [UUID: AutoSongProfile])? {
         let songTracks = tracks.filter { !$0.isSFXTrack && !$0.clips.isEmpty }
         guard !songTracks.isEmpty else { return nil }
 
-        let profiles = songTracks.map { AutoSectionCatalog.profile(track: $0, tuning: tuning) }
+        let profiles = songTracks.map {
+            AutoSectionCatalog.profile(track: $0, tuning: tuning, signal: signals[$0.id])
+        }
         var rng = AutoRandom(seed: seed)
 
         let plan: AutoRemixPlan?
@@ -73,9 +76,12 @@ enum AutoRemixPlanner {
     static func makeValidatedPlan(
         tracks: [MixrTrack],
         tuning: AutoTuning = .standard,
-        seed: UInt64 = UInt64(Date().timeIntervalSince1970)
+        seed: UInt64 = UInt64(Date().timeIntervalSince1970),
+        signals: [UUID: SongSignalFeatures] = [:]
     ) -> AutoRemixPlan? {
-        guard let (plan, profiles) = makePlan(tracks: tracks, tuning: tuning, seed: seed) else {
+        guard let (plan, profiles) = makePlan(
+            tracks: tracks, tuning: tuning, seed: seed, signals: signals
+        ) else {
             return nil
         }
         return AutoRemixValidator.validate(plan, profiles: profiles, tuning: tuning)
@@ -141,7 +147,15 @@ enum AutoRemixPlanner {
         return out
     }
 
-    // MARK: - Remix (one song)
+    // MARK: - Remix (one song, preservation-first)
+    //
+    // A one-song Auto Remix PRESERVES the song: one continuous placement
+    // covering the usable source range, trimmed only where measured
+    // evidence shows silence at the edges. Internal cuts default to ZERO;
+    // any cut requires signal evidence, a structured AutoCutRecord, and
+    // an audible masking layer — never a cut for variety. Effects ride on
+    // source-continuous segment splits, not structural edits. When
+    // analysis confidence is low the result is a nearly untouched song.
 
     private static func remixPlan(
         profile: AutoSongProfile,
@@ -149,35 +163,240 @@ enum AutoRemixPlanner {
         seed: UInt64,
         rng: inout AutoRandom
     ) -> AutoRemixPlan? {
-        let targetBPM = profile.analysis.bpm
-        let low = profile.lowConfidence
+        let analysis = profile.analysis
+        let duration = analysis.durationSeconds
+        guard duration > 1 else { return nil }
+        let bpm = analysis.bpm
+        let beat = 60.0 / max(bpm, 40)
+        let bar = beat * 4
 
-        var slots: [Slot] = [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.5, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .reverseEntrance, energy: 0.62),
-            Slot(songIdx: 0, role: .build, bars: 4, entry: .cleanCrossfade, energy: 0.72, shrinkPriority: 0),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.95),
-            Slot(songIdx: 0, role: .breakdown, bars: 8, entry: .vocalEchoOut, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .build, bars: 4, entry: .cleanCrossfade, energy: 0.8, shrinkPriority: 0),
-            Slot(songIdx: 0, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true, shrinkPriority: 1),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0),
+        var decisions: [AutoDecision] = [
+            AutoDecision(kind: .selectedAnchor, songTitle: profile.title, detail: "remix — preservation-first")
         ]
-        if low {
-            for i in slots.indices { slots[i].entry = i == 0 ? .none : .cleanCrossfade }
+        var warnings: [String] = []
+
+        let signal = analysis.signal
+        let signalTrusted = (signal?.overallConfidence ?? 0) >= 0.4
+
+        // ── Usable range: trim only MEASURED edge silence ──
+        var usableStart = 0.0
+        var usableEnd = duration
+        if let signal, signalTrusted {
+            if signal.leadingSilenceSeconds > 0.35 {
+                usableStart = max(0, signal.leadingSilenceSeconds - 0.15)
+                decisions.append(
+                    AutoDecision(
+                        kind: .skippedIntro,
+                        songTitle: profile.title,
+                        detail: String(format: "%.1fs of leading silence", signal.leadingSilenceSeconds)
+                    )
+                )
+            }
+            if signal.trailingSilenceSeconds > 0.35 {
+                usableEnd = min(duration, duration - signal.trailingSilenceSeconds + 0.15)
+                decisions.append(
+                    AutoDecision(
+                        kind: .shortenedLowEnergySection,
+                        songTitle: profile.title,
+                        detail: String(format: "trailing silence (%.1fs)", signal.trailingSilenceSeconds)
+                    )
+                )
+            }
+        }
+        if usableEnd - usableStart < max(tuning.minSegmentSeconds, 8.0) {
+            usableStart = 0
+            usableEnd = duration
+            warnings.append("Edge trimming would have removed too much material; kept the full source.")
         }
 
-        return buildPlan(
-            mode: .remix,
-            slots: slots,
-            ordered: [profile],
-            targetBPM: targetBPM,
-            tuning: tuning,
-            seed: seed,
-            rng: &rng,
-            preDecisions: [
-                AutoDecision(kind: .selectedAnchor, songTitle: profile.title, detail: "remix")
+        // Timeline budget: trim the END, never chop the middle.
+        var trimmedForBudget = false
+        if usableEnd - usableStart > tuning.maxTimelineSeconds {
+            usableEnd = usableStart + tuning.maxTimelineSeconds
+            trimmedForBudget = true
+            decisions.append(
+                AutoDecision(
+                    kind: .shortenedForMaterial,
+                    songTitle: profile.title,
+                    detail: "ending to fit the timeline"
+                )
+            )
+        }
+
+        let confident = signalTrusted
+            && analysis.analysisConfidence >= tuning.lowConfidenceThreshold
+            && (signal?.beatConfidence ?? 0) > 0.4
+        if !confident {
+            decisions.append(
+                AutoDecision(kind: .usedLowConfidenceFallback, songTitle: profile.title, detail: nil)
+            )
+        }
+
+        let volume = AutoGainPolicy.preservationSongVolume
+
+        // A trailing fade only when we cut into audible material.
+        let endsMidAudio = trimmedForBudget
+            || (usableEnd < duration - 0.05 && (signal.map { $0.trailingSilenceSeconds <= 0.35 } ?? true))
+        let finalFadeOut: ClipTransition = endsMidAudio
+            ? ClipTransition(type: .fadeOut, duration: 2, curve: AutoTransitionEnvelope.equalPowerCurveName)
+            : .none
+
+        // ── Optional SOURCE-CONTINUOUS effect segments (no cutting) ──
+        struct Segment {
+            var sourceStart: Double
+            var sourceEnd: Double
+            var fx: ClipEffectSettings
+        }
+        var segments: [Segment] = []
+        var liftBoundary: Double?
+        if confident, let signal, usableEnd - usableStart > bar * 24 {
+            liftBoundary = biggestEnergyRise(
+                signal: signal,
+                analysis: analysis,
+                from: usableStart + bar * 8,
+                to: usableEnd - bar * 8,
+                minRise: 0.18
+            )
+        }
+        if let lift = liftBoundary,
+           lift - bar * 4 > usableStart + bar * 8,
+           lift < usableEnd - bar * 8 {
+            var buildFX = ClipEffectSettings()
+            buildFX.flangerAmount = 0.16
+            buildFX.setLevel(12, for: MixrEffect.echo.rawValue)
+            buildFX.echoPreset = .classic
+            segments = [
+                Segment(sourceStart: usableStart, sourceEnd: lift - bar * 4, fx: ClipEffectSettings()),
+                Segment(sourceStart: lift - bar * 4, sourceEnd: lift, fx: AutoSupportedEffects.sanitize(buildFX)),
+                Segment(sourceStart: lift, sourceEnd: usableEnd, fx: ClipEffectSettings()),
             ]
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: profile.title,
+                    detail: "filtered build into the song's biggest lift"
+                )
+            )
+        } else {
+            segments = [Segment(sourceStart: usableStart, sourceEnd: usableEnd, fx: ClipEffectSettings())]
+        }
+
+        // ── Placements: gapless, source order untouched ──
+        var placements: [AutoClipPlacement] = []
+        for (i, seg) in segments.enumerated() {
+            let isLast = i == segments.count - 1
+            placements.append(
+                AutoClipPlacement(
+                    songID: profile.songID,
+                    sourceStart: seg.sourceStart,
+                    timelineStart: seg.sourceStart - usableStart,
+                    timelineDuration: seg.sourceEnd - seg.sourceStart,
+                    tempoRatio: 1.0,
+                    volume: volume,
+                    fadeIn: .none,
+                    fadeOut: isLast ? finalFadeOut : .none,
+                    effects: seg.fx,
+                    role: .dominant,
+                    slotIndex: i,
+                    continuesPrevious: i > 0
+                )
+            )
+        }
+
+        // ── Sparse, coordinated SFX: one riser + impact at the lift ──
+        var sfx: [AutoSFXEvent] = []
+        if confident, let lift = liftBoundary, usableEnd - usableStart >= 60 {
+            let liftTimeline = lift - usableStart
+            if let riser = SoundEffectLibrary.definition(for: "riser"),
+               liftTimeline - riser.durationSeconds >= 0 {
+                sfx.append(
+                    AutoSFXEvent(
+                        assetID: "riser",
+                        timelineStart: liftTimeline - riser.durationSeconds,
+                        purpose: "riser into the song's own lift"
+                    )
+                )
+            }
+            sfx.append(
+                AutoSFXEvent(assetID: "impact", timelineStart: liftTimeline, purpose: "impact on the lift downbeat")
+            )
+        }
+
+        let totalDuration = usableEnd - usableStart
+        let section = AutoSelectedSection(
+            songID: profile.songID,
+            sourceStart: usableStart,
+            sourceEnd: usableEnd,
+            phraseType: "song",
+            barCount: Int((totalDuration / bar).rounded()),
+            hookScore: 1.0,
+            energyScore: analysis.meanEnergy(from: usableStart, to: usableEnd),
+            vocalDensity: analysis.meanVocalDensity(from: usableStart, to: usableEnd),
+            compatibilityRole: .dominant,
+            confidence: analysis.analysisConfidence
         )
+
+        return AutoRemixPlan(
+            mode: .remix,
+            targetBPM: bpm,
+            targetDuration: totalDuration,
+            anchorSongIDs: [profile.songID],
+            selectedSections: [section],
+            placements: placements,
+            sfxEvents: sfx,
+            cutRecords: [],                       // zero internal cuts by default
+            usableSourceRange: usableStart...usableEnd,
+            intentionalGaps: [],                  // silence only by explicit recipe
+            handoffCount: 0,
+            songLetters: [profile.songID: "A"],
+            sequence: ["A"],
+            sequenceTitles: [profile.title],
+            transitionsUsed: [],
+            decisions: decisions,
+            warnings: warnings,
+            confidence: analysis.analysisConfidence,
+            randomSeed: seed
+        )
+    }
+
+    /// Downbeat-snapped source time of the largest sustained energy rise
+    /// (mean of the next 4 s minus mean of the previous 4 s), or nil when
+    /// nothing rises by at least `minRise`.
+    private static func biggestEnergyRise(
+        signal: SongSignalFeatures,
+        analysis: SongAnalysis,
+        from: Double,
+        to: Double,
+        minRise: Double
+    ) -> Double? {
+        let hop = signal.hopSeconds
+        let curve = signal.energyCurve
+        guard hop > 0, !curve.isEmpty, to > from else { return nil }
+        let windowHops = max(1, Int(4.0 / hop))
+
+        func mean(_ lo: Int, _ hi: Int) -> Double {
+            let a = max(0, lo), b = min(curve.count, hi)
+            guard b > a else { return 0 }
+            var s = 0.0
+            for i in a..<b { s += curve[i] }
+            return s / Double(b - a)
+        }
+
+        var bestRise = 0.0
+        var bestTime: Double?
+        var t = from
+        while t < to {
+            let idx = Int(t / hop)
+            let rise = mean(idx, idx + windowHops) - mean(idx - windowHops, idx)
+            if rise > bestRise {
+                bestRise = rise
+                bestTime = t
+            }
+            t += 0.5
+        }
+        guard bestRise >= minRise, let raw = bestTime else { return nil }
+        let snapped = analysis.downbeats.min { abs($0 - raw) < abs($1 - raw) } ?? raw
+        return (snapped >= from && snapped <= to) ? snapped : raw
     }
 
     // MARK: - Mashup (2+ songs)
