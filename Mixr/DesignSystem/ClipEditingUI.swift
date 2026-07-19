@@ -10,38 +10,23 @@ enum TLClipEditingMetrics {
 
     private static func ts(_ value: CGFloat) -> CGFloat { value * toolbarScale }
 
+    /// Equal horizontal inset inside the actions glass (left == right).
     static let toolbarHorizontalPadding: CGFloat = ts(10)
-    static let toolbarTrailingPadding: CGFloat = ts(2.5)
-    /// Edge-to-edge gap between Split and Speed.
-    static let toolbarActionSpacing: CGFloat = ts(24)
-    /// Optical Duplicate↔Delete gap. Mathematically equal gaps read wider
-    /// here: both labels are long with small icons centered above them, so
-    /// the icon row is much sparser than Split↔Speed's, and Delete's red
-    /// recedes against the dark pane. Narrower metric, equal optics.
-    static let toolbarDeleteGap: CGFloat = ts(17.5)
-    /// Speed↔Duplicate gap — wider so the playhead pointer sits inside it.
-    static let toolbarCenterGap: CGFloat = ts(24)
-    /// Pane-edge padding — benchmark is 3/4 of the Split↔Speed gap. The
-    /// leading side carries a small optical bump: Split's bright leading
-    /// cap (and its inset scissors icon) makes equal padding read tighter
-    /// than the trailing side next to Delete's receding red tail.
-    static let toolbarOuterPaddingTrailing: CGFloat = ts(17.5)
-    static let toolbarOuterPaddingLeading: CGFloat = ts(23)
-    /// Pre-measurement estimates of each half's label run (Split+Speed /
-    /// Duplicate+Delete). The pane measures the real widths at layout time
-    /// and sizes itself exactly; these only seed the first frame.
-    static let toolbarLeftHalfEstimate: CGFloat = ts(80)
-    static let toolbarRightHalfEstimate: CGFloat = ts(99.5)
-    /// Estimated actions-pane width for the presenting overlay's frame.
-    /// The playhead anchoring is measurement-based and exact regardless.
-    static let toolbarWidth: CGFloat =
-        toolbarOuterPaddingLeading
-        + toolbarOuterPaddingTrailing
-        + toolbarLeftHalfEstimate
-        + toolbarCenterGap
-        + toolbarRightHalfEstimate
+    /// Extra space between Duplicate and Delete only.
+    static let toolbarDeleteGap: CGFloat = 1.5
+    /// Fixed actions-pane width; equal left/right halves share the remainder
+    /// after insets + center gap. Base 248 matches the prior roomier total;
+    /// delete gap is added so columns aren't squeezed.
+    static let toolbarWidth: CGFloat = ts(248) - 2
+    /// Speed↔Duplicate gap — playhead/pointer sits at its midpoint.
+    static let toolbarCenterGap: CGFloat = ts(16)
     static let toolbarSpeedWidth: CGFloat = ts(168)
     static let toolbarBodyHeight: CGFloat = ts(50)
+    /// Glass-only — shift right so playhead reads closer to Duplicate.
+    static let toolbarActionsHorizontalOffset: CGFloat = 4
+    /// Pointer tip stays on the playhead (does not follow the glass nudge).
+    static let toolbarPointerOffsetX: CGFloat = 0
+    /// Speed editor pane shift relative to the playhead.
     static let toolbarBodyHorizontalOffset: CGFloat = ts(12)
     static let toolbarPointerW: CGFloat = ts(7)
     static let toolbarPointerH: CGFloat = ts(4)
@@ -179,7 +164,7 @@ private struct TLClipToolbarAction: View {
                     .offset(y: labelVerticalOffset)
             }
             .padding(.top, TLClipEditingMetrics.toolbarActionTopPadding)
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(TLClipToolbarPressStyle(isDestructive: isDestructive))
@@ -516,18 +501,6 @@ struct TLToolbarPointer: Shape {
 
 // MARK: - Clip Context Toolbar
 
-/// Measured widths of the two action-label halves, keyed "left" / "right".
-private struct TLToolbarHalfWidthKey: PreferenceKey {
-    static var defaultValue: [String: CGFloat] = [:]
-
-    static func reduce(
-        value: inout [String: CGFloat],
-        nextValue: () -> [String: CGFloat]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 struct TLClipContextToolbar: View {
     enum Mode: Equatable {
         case actions
@@ -546,34 +519,12 @@ struct TLClipContextToolbar: View {
 
     @State private var speedText: String = "1.0"
     @FocusState private var isSpeedFieldFocused: Bool
-    @State private var actionHalfWidths: [String: CGFloat] = [:]
-
-    private var actionsLeftWidth: CGFloat {
-        actionHalfWidths["left"] ?? TLClipEditingMetrics.toolbarLeftHalfEstimate
-    }
-
-    private var actionsRightWidth: CGFloat {
-        actionHalfWidths["right"] ?? TLClipEditingMetrics.toolbarRightHalfEstimate
-    }
 
     private var bodyWidth: CGFloat {
         switch mode {
-        case .actions:
-            TLClipEditingMetrics.toolbarOuterPaddingLeading
-                + TLClipEditingMetrics.toolbarOuterPaddingTrailing
-                + actionsLeftWidth
-                + TLClipEditingMetrics.toolbarCenterGap
-                + actionsRightWidth
+        case .actions: TLClipEditingMetrics.toolbarWidth
         case .speed: TLClipEditingMetrics.toolbarSpeedWidth
         }
-    }
-
-    /// Pane shift that keeps the center-gap midpoint (playhead/pointer) at
-    /// the frame center despite unequal halves and outer paddings.
-    private var actionsBodyOffset: CGFloat {
-        (actionsRightWidth - actionsLeftWidth) / 2
-            + (TLClipEditingMetrics.toolbarOuterPaddingTrailing
-                - TLClipEditingMetrics.toolbarOuterPaddingLeading) / 2
     }
 
     var body: some View {
@@ -593,8 +544,7 @@ struct TLClipContextToolbar: View {
                     .opacity(mode == .speed ? 1 : 0)
                     .allowsHitTesting(mode == .speed)
             }
-            .padding(.leading, TLClipEditingMetrics.toolbarHorizontalPadding)
-            .padding(.trailing, TLClipEditingMetrics.toolbarTrailingPadding)
+            .padding(.horizontal, TLClipEditingMetrics.toolbarHorizontalPadding)
             .padding(.top, TLClipEditingMetrics.toolbarContentTopPadding)
             .padding(.bottom, TLClipEditingMetrics.toolbarContentBottomPadding)
             .frame(width: bodyWidth, height: tbH)
@@ -636,12 +586,10 @@ struct TLClipContextToolbar: View {
             )
             .shadow(color: .black.opacity(0.55), radius: 20 * s, x: 0, y: 8 * s)
             .shadow(color: .black.opacity(0.20), radius: 4 * s, x: 0, y: 2 * s)
-            // Actions mode shifts the pane so the playhead pointer stays at
-            // the center-gap midpoint even though the halves differ in
-            // width; the speed editor keeps its own tuned shift.
+            // Glass shifts for content alignment; pointer stays on the playhead.
             .offset(
                 x: mode == .actions
-                    ? actionsBodyOffset
+                    ? TLClipEditingMetrics.toolbarActionsHorizontalOffset
                     : TLClipEditingMetrics.toolbarBodyHorizontalOffset
             )
 
@@ -660,14 +608,12 @@ struct TLClipContextToolbar: View {
                         )
                 }
                 .frame(width: pW, height: pH)
+                .offset(x: TLClipEditingMetrics.toolbarPointerOffsetX)
         }
         .animation(
             .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration),
             value: mode
         )
-        .onPreferenceChange(TLToolbarHalfWidthKey.self) { widths in
-            actionHalfWidths = widths
-        }
         .onAppear {
             speedText = Self.formattedSpeed(speedValue)
             if mode == .speed {
@@ -690,28 +636,24 @@ struct TLClipContextToolbar: View {
     }
 
     private var actionsContent: some View {
+        // Equal left/right halves; center gap hosts the playhead.
         HStack(spacing: TLClipEditingMetrics.toolbarCenterGap) {
-            HStack(spacing: TLClipEditingMetrics.toolbarActionSpacing) {
+            HStack(spacing: 0) {
                 TLClipToolbarAction(
                     icon: "scissors",
                     label: "Split",
                     action: onSplit
                 )
+                .frame(maxWidth: .infinity)
 
                 TLClipToolbarAction(
                     icon: "gauge.with.dots.needle.67percent",
                     label: "Speed",
                     action: onSpeed
                 )
+                .frame(maxWidth: .infinity)
             }
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: TLToolbarHalfWidthKey.self,
-                        value: ["left": proxy.size.width]
-                    )
-                }
-            }
+            .frame(maxWidth: .infinity)
 
             HStack(spacing: TLClipEditingMetrics.toolbarDeleteGap) {
                 TLClipToolbarAction(
@@ -719,6 +661,7 @@ struct TLClipContextToolbar: View {
                     label: "Duplicate",
                     action: onDuplicate
                 )
+                .frame(maxWidth: .infinity)
 
                 TLClipToolbarAction(
                     icon: "trash",
@@ -726,29 +669,10 @@ struct TLClipContextToolbar: View {
                     isDestructive: true,
                     action: onDelete
                 )
+                .frame(maxWidth: .infinity)
             }
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: TLToolbarHalfWidthKey.self,
-                        value: ["right": proxy.size.width]
-                    )
-                }
-            }
+            .frame(maxWidth: .infinity)
         }
-        // The pane's shared paddings are asymmetric (leading 10 /
-        // trailing 2.5); top both sides up so Split and Delete sit exactly
-        // at their outer paddings from the pane edges.
-        .padding(
-            .leading,
-            TLClipEditingMetrics.toolbarOuterPaddingLeading
-                - TLClipEditingMetrics.toolbarHorizontalPadding
-        )
-        .padding(
-            .trailing,
-            TLClipEditingMetrics.toolbarOuterPaddingTrailing
-                - TLClipEditingMetrics.toolbarTrailingPadding
-        )
     }
 
     private var speedContent: some View {
