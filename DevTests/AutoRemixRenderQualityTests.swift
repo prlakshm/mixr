@@ -593,6 +593,238 @@ do {
     }
 }
 
+// MARK: - 10. Multi-edit path: measured lift → segments + SFX (end-to-end)
+//
+// Guards against trivially-green results: the planner must still make
+// MEANINGFUL edits (source-continuous effect segments, coordinated SFX)
+// when the signal supports them — and those edits must pass the same
+// continuity and loudness gates as the untouched path.
+
+do {
+    let song = makeSong(title: "Lift Song", durationSeconds: 160)
+    let pcm = syntheticSong(durationSeconds: 160, leadingSilence: 2.0)
+    let features = SongSignalAnalyzer.extract(samples: pcm, sampleRate: SR, bpmHint: 124)
+    check("Multi-edit: extractor trusts the clean fixture",
+          features.overallConfidence > 0.5 && features.beatConfidence > 0.4,
+          String(format: "overall %.2f beat %.2f", features.overallConfidence, features.beatConfidence))
+
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song], seed: 33, signals: [song.id: features]
+    )
+    switch outcome {
+    case .success(_, let plan, _):
+        let dominants = plan.placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+
+        // The system must actually DO something here: segments + SFX.
+        check("Multi-edit: planner emits effect segments (3 placements)",
+              dominants.count == 3, "got \(dominants.count)")
+        check("Multi-edit: later segments are source-continuous",
+              dominants.dropFirst().allSatisfy(\.continuesPrevious))
+        check("Multi-edit: segments never cut the source",
+              AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements).isEmpty)
+        check("Multi-edit: coordinated riser + impact planned",
+              Set(plan.sfxEvents.map(\.assetID)) == Set(["riser", "impact"]),
+              "\(plan.sfxEvents.map(\.assetID))")
+        let minutes = max(plan.targetDuration / 60, 0.01)
+        check("Multi-edit: SFX density still bounded",
+              Double(plan.sfxEvents.count) / minutes <= 3.0)
+        check("Multi-edit: a build effect rides the middle segment",
+              dominants.count == 3 && dominants[1].effects.flangerAmount > 0.01)
+
+        let result = AutoOfflineMixdown.render(
+            plan: plan, sources: [song.id: AutoOfflineMixdown.Source(samples: pcm, sampleRate: SR)],
+            sampleRate: SR
+        )
+        let mix = result.mix
+
+        check("Multi-edit: no clipped samples with SFX in the mix",
+              AutoRemixDiagnostics.clippedSampleCount(mix) == 0)
+        let truePeak = AutoRemixDiagnostics.truePeakDB(samples: mix, sampleRate: SR)
+        check("Multi-edit: true peak ≤ −1 dBTP with SFX",
+              truePeak <= AutoGainPolicy.truePeakCeilingDB + 0.2,
+              String(format: "%.2f dBTP", truePeak))
+        check("Multi-edit: limiter stays a safety layer with SFX",
+              result.limiterGainReductionDB <= AutoGainPolicy.maxSustainedLimiterReductionDB,
+              String(format: "%.1f dB", result.limiterGainReductionDB))
+
+        // Segment splits are source-continuous — they must not dip.
+        var worstSplitTrough = 0.0
+        for p in dominants.dropFirst() {
+            let b = AutoRemixDiagnostics.boundaryLoudness(
+                samples: mix, sampleRate: SR, boundarySeconds: p.timelineStart
+            )
+            worstSplitTrough = max(worstSplitTrough, b.centerTroughDB)
+        }
+        check("Multi-edit: segment splits hold level (trough ≤ 3 dB)",
+              worstSplitTrough <= 3.0, String(format: "worst %.1f dB", worstSplitTrough))
+
+        let contentStart = dominants.first?.timelineStart ?? 0
+        let contentEnd = dominants.last?.timelineEnd ?? 0
+        let silences = AutoRemixDiagnostics.silenceRuns(
+            samples: mix, sampleRate: SR, thresholdDB: -45, minSeconds: 0.1
+        ).filter { $0.start > contentStart + 0.5 && $0.end < contentEnd - 0.5 }
+        check("Multi-edit: no silence holes with edits present", silences.isEmpty)
+
+        // Join-click gate on the SONG bus (synthetic noise SFX have large
+        // legitimate sample deltas; the click gate targets song joins).
+        let click = AutoRemixDiagnostics.maxAdjacentSampleJump(samples: result.songBus, sampleRate: SR)
+        check("Multi-edit: no click at segment boundaries (song bus)",
+              click.jump <= 0.5, String(format: "%.3f at %.2fs", click.jump, click.atSeconds))
+    case .failure(let message):
+        check("Multi-edit lift fixture plans", false, message)
+    }
+}
+
+// MARK: - 11. Multi-edit path: masked internal cut passes the full battery
+
+do {
+    let song = makeSong(title: "Masked Cut Song", durationSeconds: 80)
+    let profiles = [song.id: AutoSectionCatalog.profile(track: song)]
+    let equalPower = AutoTransitionEnvelope.equalPowerCurveName
+    let bpm = 124.0
+    let beatSec = 60.0 / bpm
+    let crossfade = 1.5
+    let beats = crossfade / beatSec
+
+    var echoFX = ClipEffectSettings()
+    echoFX.setLevel(15, for: MixrEffect.echo.rawValue)
+
+    var plan = AutoRemixPlan(
+        mode: .remix,
+        targetBPM: bpm,
+        targetDuration: 38.5,
+        anchorSongIDs: [song.id],
+        selectedSections: [],
+        placements: [
+            AutoClipPlacement(
+                songID: song.id, sourceStart: 0, timelineStart: 0, timelineDuration: 20,
+                tempoRatio: 1, volume: 0.9,
+                fadeIn: .none,
+                fadeOut: ClipTransition(type: .crossfade, duration: beats, curve: equalPower),
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 0
+            ),
+            AutoClipPlacement(
+                songID: song.id, sourceStart: 40, timelineStart: 18.5, timelineDuration: 11.5,
+                tempoRatio: 1, volume: 0.9,
+                fadeIn: ClipTransition(type: .crossfade, duration: beats, curve: equalPower),
+                fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 1,
+                overlapsPreviousSeconds: crossfade
+            ),
+            AutoClipPlacement(
+                songID: song.id, sourceStart: 51.5, timelineStart: 30, timelineDuration: 8.5,
+                tempoRatio: 1, volume: 0.9,
+                fadeIn: .none, fadeOut: .none,
+                effects: AutoSupportedEffects.sanitize(echoFX), role: .dominant, slotIndex: 2,
+                continuesPrevious: true
+            ),
+        ],
+        sfxEvents: [
+            AutoSFXEvent(assetID: "riser", timelineStart: 14.5, purpose: "riser masking the cut"),
+            AutoSFXEvent(assetID: "impact", timelineStart: 18.5, purpose: "impact on the incoming downbeat"),
+        ],
+        handoffCount: 0,
+        songLetters: [song.id: "A"],
+        sequence: ["A", "A", "A"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 2
+    )
+    plan.cutRecords = [
+        AutoCutRecord(
+            timelineAt: 18.5, sourceFrom: 20, sourceTo: 40,
+            reason: .redundantRepeat, confidence: 0.9,
+            expectedEnergyDeltaDB: 0,
+            masking: .equalPowerCrossfade(seconds: crossfade)
+        )
+    ]
+
+    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
+    check("Masked cut: validator keeps all three placements",
+          validated.placements.filter { $0.role == .dominant }.count == 3,
+          "got \(validated.placements.count)")
+    let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: validated.placements)
+    check("Masked cut: exactly one internal cut survives",
+          cuts.count == 1 && abs((cuts.first ?? 0) - 18.5) < 0.1, "\(cuts)")
+    check("Masked cut: record retained by the validator",
+          !validated.cutRecords.isEmpty)
+
+    let source = AutoOfflineMixdown.Source(
+        samples: syntheticSong(durationSeconds: 80, flatAmplitude: 0.5),
+        sampleRate: SR
+    )
+    let result = AutoOfflineMixdown.render(
+        plan: validated, sources: [song.id: source], sampleRate: SR
+    )
+    let mix = result.mix
+
+    check("Masked cut: no clipped samples",
+          AutoRemixDiagnostics.clippedSampleCount(mix) == 0)
+    check("Masked cut: limiter GR ≤ 3 dB",
+          result.limiterGainReductionDB <= 3.0,
+          String(format: "%.1f dB", result.limiterGainReductionDB))
+
+    var worstTrough = 0.0
+    var worstUnexplained = 0.0
+    for cut in cuts {
+        let b = AutoRemixDiagnostics.boundaryLoudness(samples: mix, sampleRate: SR, boundarySeconds: cut)
+        worstTrough = max(worstTrough, b.centerTroughDB)
+        let explained = validated.cutRecords.contains {
+            abs($0.timelineAt - cut) < 0.1 && abs($0.expectedEnergyDeltaDB) + 2.0 >= b.jumpDB
+        }
+        if !explained { worstUnexplained = max(worstUnexplained, b.jumpDB) }
+    }
+    // The continuity split at t=30 must hold level too.
+    let split = AutoRemixDiagnostics.boundaryLoudness(samples: mix, sampleRate: SR, boundarySeconds: 30)
+    worstTrough = max(worstTrough, split.centerTroughDB)
+
+    check("Masked cut: crossfaded join holds level (trough ≤ 3 dB)",
+          worstTrough <= 3.0, String(format: "worst %.1f dB", worstTrough))
+    check("Masked cut: join jump explained by its record (≤ 4 dB unexplained)",
+          worstUnexplained <= 4.0, String(format: "worst %.1f dB", worstUnexplained))
+
+    let silences = AutoRemixDiagnostics.silenceRuns(
+        samples: mix, sampleRate: SR, thresholdDB: -45, minSeconds: 0.1
+    ).filter { $0.start > 0.5 && $0.end < 38.0 }
+    check("Masked cut: no silence holes through cut and split", silences.isEmpty)
+
+    let click = AutoRemixDiagnostics.maxAdjacentSampleJump(samples: result.songBus, sampleRate: SR)
+    check("Masked cut: no click at join or split (song bus)",
+          click.jump <= 0.5, String(format: "%.3f at %.2fs", click.jump, click.atSeconds))
+}
+
+// MARK: - 12. Ducking policy shape (unit)
+
+do {
+    let events = [AutoSFXEvent(assetID: "impact", timelineStart: 10.0, purpose: "")]
+    let floorGain = pow(10.0, -AutoGainPolicy.duckDepthDB / 20.0)
+
+    check("Duck: unity before the attack window",
+          AutoGainPolicy.duckGain(at: 9.9, sfxEvents: events) > 0.999)
+    let atImpact = AutoGainPolicy.duckGain(at: 10.0, sfxEvents: events)
+    check("Duck: full depth at the impact",
+          abs(atImpact - floorGain) < 0.01,
+          String(format: "%.3f vs %.3f", atImpact, floorGain))
+    check("Duck: fully released after hold + release",
+          AutoGainPolicy.duckGain(at: 10.0 + AutoGainPolicy.duckHoldSeconds + AutoGainPolicy.duckReleaseSeconds + 0.01, sfxEvents: events) > 0.999)
+
+    var maxStep = 0.0
+    var t = 9.8
+    var prev = AutoGainPolicy.duckGain(at: t, sfxEvents: events)
+    while t < 10.7 {
+        t += 0.005
+        let g = AutoGainPolicy.duckGain(at: t, sfxEvents: events)
+        maxStep = max(maxStep, abs(g - prev))
+        prev = g
+    }
+    check("Duck: ramp is smooth (≤ 0.05 per 5 ms)", maxStep <= 0.05,
+          String(format: "max step %.3f", maxStep))
+}
+
 // MARK: - Diagnostics evidence (printed, not asserted)
 
 if let plan = confidentPlan, let song = confidentSong {
