@@ -551,7 +551,7 @@ struct TimelineScreen: View {
         // SFX library — large glass panel, like the import picker flow:
         // opens over the timeline, closes after a selection.
         if showSFXPanel {
-            ZStack {
+            ZStack(alignment: .center) {
                 Color.black.opacity(0.52)
                     .ignoresSafeArea()
                     .onTapGesture { dismissSFXPanel() }
@@ -570,7 +570,14 @@ struct TimelineScreen: View {
                         forWidth: screenSize.width * SFXMetrics.panelScreenWidthFraction
                     )
                 )
+                .scaleEffect(SFXMetrics.panelDisplayScale, anchor: .center)
+                .offset(y: SFXMetrics.panelOpticalOffsetY)
             }
+            .frame(
+                width: screenSize.width,
+                height: screenSize.height,
+                alignment: .center
+            )
             .zIndex(60)
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }

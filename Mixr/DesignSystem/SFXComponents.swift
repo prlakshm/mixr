@@ -11,25 +11,36 @@ enum SFXMetrics {
     static let cardDefaultHeight: CGFloat = 138
     /// Width ÷ height — a little longer than tall.
     static let cardAspectRatio: CGFloat = cardDefaultWidth / cardDefaultHeight
-    static let cardRadius: CGFloat = MixrRadius.glass
-    static let panelScreenWidthFraction: CGFloat = 0.86
+    static let cardRadius: CGFloat = 14
+    static let panelScreenWidthFraction: CGFloat = 0.637
+    static let panelDisplayScale: CGFloat = 1.05
+    static let panelOpticalOffsetY: CGFloat = -10
+    static let cardBorderLineWidth: CGFloat = 0.85
+    static let cardIconTileSizeFraction: CGFloat = 0.47
+    static let cardIconTileCornerRadius: CGFloat = 12
+    static let cardIconCoreGlowRadius: CGFloat = 2.8
+    static let cardIconBloomRadius: CGFloat = 6
+    static let cardIconVerticalOffsetFraction: CGFloat = 0.055
     static let libraryColumns: Int = 3
     static let libraryVisibleRows: Int = 2
     static let libraryPageSize: Int = libraryColumns * libraryVisibleRows
     static let panelPadH: CGFloat = MixrSpacing.xl
     static let panelPadV: CGFloat = MixrSpacing.lg
-    static let panelCardSpacing: CGFloat = MixrSpacing.md
+    static let panelCardSpacing: CGFloat = 10
     /// Space above the card grid so the close control sits in panel chrome.
     static let panelCloseClearance: CGFloat = 28
     static let panelCloseTopInset: CGFloat = 4
     static let panelCloseTrailingInset: CGFloat = 6
 
-    /// Panel height for a given width so a 3 × 2 page of cards fits exactly.
-    static func panelHeight(forWidth width: CGFloat) -> CGFloat {
+    static func cardWidth(forPanelWidth width: CGFloat) -> CGFloat {
         let columns = CGFloat(libraryColumns)
+        return (width - panelPadH * 2 - panelCardSpacing * (columns - 1)) / columns
+    }
+
+    /// Panel height for a given width so a centered 3 × 2 page fits exactly.
+    static func panelHeight(forWidth width: CGFloat) -> CGFloat {
         let rows = CGFloat(libraryVisibleRows)
-        let cardWidth = (width - panelPadH * 2 - panelCardSpacing * (columns - 1)) / columns
-        let cardHeight = cardWidth / cardAspectRatio
+        let cardHeight = cardWidth(forPanelWidth: width) / cardAspectRatio
         return panelCloseClearance
             + panelPadV * 2
             + cardHeight * rows
@@ -142,11 +153,9 @@ struct SFXTileMark: View {
     }
 }
 
-// MARK: - Silver SFX Card
+// MARK: - SFX Card
 
-/// Wide glass SFX card — dark pane wrapped in a thick glowing silver rim,
-/// with a pearl-glow icon over a title + duration stack. Colors come from
-/// the silver song chip / silver SFX track family.
+/// Calm charcoal-indigo glass with an integrated pearl icon tile.
 struct SFXCard: View {
     let effect: SoundEffectDefinition
     var width: CGFloat = SFXMetrics.cardDefaultWidth
@@ -157,59 +166,67 @@ struct SFXCard: View {
         RoundedRectangle(cornerRadius: SFXMetrics.cardRadius, style: .continuous)
     }
 
-    private var silver: Color { MixrColors.sfxPrimary }
-    private var silverSoft: Color { MixrColors.sfxSecondary }
-    private var silverEdge: Color { MixrColors.sfxOutline }
-    private var silverGlow: Color { MixrColors.sfxGlow }
+    private var pearlLavender: Color { Color(hex: "E6DCFF") }
 
-    private var iconSize: CGFloat { min(48, max(26, height * 0.32)) }
+    private var iconTileSize: CGFloat {
+        min(68, max(49, height * SFXMetrics.cardIconTileSizeFraction))
+    }
+
+    private var iconSize: CGFloat { min(36, max(24, height * 0.26)) }
     private var titleSize: CGFloat { min(16, max(12, height * 0.115)) }
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 0) {
+            VStack(spacing: height * 0.10) {
                 Image(systemName: effect.icon)
                     .font(.system(size: iconSize, weight: .semibold))
                     .symbolRenderingMode(.monochrome)
                     .foregroundStyle(pearlIconFill)
-                    .shadow(color: Color.white.opacity(0.72), radius: 3.5)
-                    .shadow(color: silverGlow.opacity(0.55), radius: 9)
-                    .shadow(color: silver.opacity(0.28), radius: 16)
-                    .frame(maxHeight: .infinity)
+                    .shadow(
+                        color: Color.white.opacity(0.56),
+                        radius: SFXMetrics.cardIconCoreGlowRadius
+                    )
+                    .shadow(
+                        color: Color(hex: "D88BC8").opacity(0.20),
+                        radius: SFXMetrics.cardIconBloomRadius
+                    )
+                    .frame(width: iconTileSize, height: iconTileSize)
+                    .background { iconTile }
+                    .offset(y: height * SFXMetrics.cardIconVerticalOffsetFraction)
 
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Text(effect.title)
                         .font(.system(size: titleSize, weight: .semibold))
-                        .foregroundStyle(MixrColors.textPrimary)
+                        .foregroundStyle(Color.white.opacity(0.96))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
 
                     Text(Self.durationLabel(effect.durationSeconds))
                         .font(.system(size: titleSize * 0.78, weight: .medium))
-                        .foregroundStyle(MixrColors.textSecondary)
+                        .foregroundStyle(Color(hex: "D1B9FA").opacity(0.91))
+                        .shadow(color: Color(hex: "D88BC8").opacity(0.14), radius: 3)
                 }
-                .padding(.bottom, height * 0.12)
             }
             .padding(.horizontal, MixrSpacing.sm)
+            .padding(.vertical, height * 0.08)
             .frame(width: width, height: height)
-            .background { silverGlass }
+            .background { cardSurface }
             .clipShape(shape)
-            .overlay { silverRim }
-            .shadow(color: silverGlow.opacity(0.38), radius: 12)
-            .shadow(color: silver.opacity(0.22), radius: 22)
-            .shadow(color: .black.opacity(0.32), radius: 6, x: 0, y: 2)
+            .overlay { cardBorder }
+            .shadow(color: Color(hex: "B987C5").opacity(0.07), radius: 8)
+            .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 2)
         }
         .buttonStyle(SFXCardPressStyle())
         .accessibilityLabel("\(effect.title), \(Self.durationLabel(effect.durationSeconds))")
     }
 
-    /// Soft white-pearl luminance — luminous, not metallic chrome.
+    /// Soft pearl luminance with a restrained lavender falloff.
     private var pearlIconFill: LinearGradient {
         LinearGradient(
             colors: [
                 Color.white,
-                silverGlow.opacity(0.96),
-                silver.opacity(0.92),
+                Color(hex: "F8F5FF"),
+                Color(hex: "D8CEEF"),
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -222,87 +239,99 @@ struct SFXCard: View {
             : String(format: "%.1fs", seconds)
     }
 
-    private var silverGlass: some View {
+    private var iconTile: some View {
+        let tileShape = RoundedRectangle(
+            cornerRadius: SFXMetrics.cardIconTileCornerRadius,
+            style: .continuous
+        )
+        return tileShape
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(hex: "272337").opacity(0.90),
+                        Color(hex: "161724").opacity(0.96),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                tileShape.fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: "C78BC4").opacity(0.13),
+                            pearlLavender.opacity(0.07),
+                            Color.clear,
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: iconTileSize * 0.62
+                    )
+                )
+            }
+            .overlay {
+                tileShape.strokeBorder(
+                    Color(hex: "8E739F").opacity(0.21),
+                    lineWidth: 0.75
+                )
+            }
+            .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
+    }
+
+    private var cardSurface: some View {
         shape
-            .fill(Color(hex: "0B0F1A").opacity(0.58))
-            .background {
-                shape
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.06)
-                    .environment(\.colorScheme, .dark)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(hex: "1B1F2E").opacity(0.90),
+                        Color(hex: "101421").opacity(0.95),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay {
+                shape.fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: "9B78C5").opacity(0.10),
+                            Color(hex: "C27DA6").opacity(0.045),
+                            Color.clear,
+                        ],
+                        center: UnitPoint(x: 0.5, y: 0.10),
+                        startRadius: 0,
+                        endRadius: max(width, height) * 0.72
+                    )
+                )
             }
             .overlay {
                 shape.fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.08),
+                            Color.white.opacity(0.035),
                             Color.clear,
-                            Color.black.opacity(0.16),
+                            Color.black.opacity(0.06),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
             }
-            .overlay {
-                shape.fill(
-                    RadialGradient(
-                        colors: [
-                            silverSoft.opacity(0.10),
-                            Color.clear,
-                        ],
-                        center: UnitPoint(x: 0.5, y: 0.30),
-                        startRadius: 0,
-                        endRadius: max(width, height) * 0.58
-                    )
-                )
-            }
     }
 
-    /// Thick bright silver rim with strong inner/outer bloom — reference look.
-    private var silverRim: some View {
-        ZStack {
-            // Outer bloom
-            shape
-                .strokeBorder(silverGlow.opacity(0.55), lineWidth: 6)
-                .blur(radius: 6)
-            // Mid bloom
-            shape
-                .strokeBorder(Color.white.opacity(0.50), lineWidth: 3.8)
-                .blur(radius: 2.8)
-            // Crisp bright edge
-            shape.strokeBorder(
-                LinearGradient(
-                    colors: [
-                        Color.white,
-                        silverEdge.opacity(0.92),
-                        silver.opacity(0.78),
-                        silverEdge.opacity(0.90),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 2.15
+    private var cardBorder: some View {
+        shape
+            .strokeBorder(
+                Color.white.opacity(0.16), lineWidth: SFXMetrics.cardBorderLineWidth
             )
-            // Inner lip catchlight
-            shape
-                .strokeBorder(Color.white.opacity(0.88), lineWidth: 1.1)
-                .mask {
-                    LinearGradient(
-                        colors: [Color.white, Color.white.opacity(0.30), Color.clear],
-                        startPoint: .top,
-                        endPoint: UnitPoint(x: 0.5, y: 0.55)
-                    )
-                }
-        }
-        .allowsHitTesting(false)
+            .allowsHitTesting(false)
     }
 }
 
 // MARK: - SFX Library Panel
 
-/// Headerless SFX library — 3 × 2 card pages, horizontal scroll for the
-/// rest. Menu glass matches Mixr alert / project-menu chrome.
+/// Headerless SFX library — 3 × 2 card pages in a restrained modal glass,
+/// with horizontal paging for the remaining effects.
 struct SFXLibraryPanel: View {
     var onSelect: (SoundEffectDefinition) -> Void = { _ in }
     var onClose: () -> Void = {}
@@ -333,10 +362,9 @@ struct SFXLibraryPanel: View {
         ZStack(alignment: .topTrailing) {
             GeometryReader { geo in
                 let spacing = SFXMetrics.panelCardSpacing
-                let padH = SFXMetrics.panelPadH
                 let padV = SFXMetrics.panelPadV
-                let columns = CGFloat(SFXMetrics.libraryColumns)
-                let cardWidth = (geo.size.width - padH * 2 - spacing * (columns - 1)) / columns
+                let padH = SFXMetrics.panelPadH
+                let cardWidth = SFXMetrics.cardWidth(forPanelWidth: geo.size.width)
                 let cardHeight = cardWidth / SFXMetrics.cardAspectRatio
                 let pageWidth = geo.size.width
 
@@ -382,9 +410,48 @@ struct SFXLibraryPanel: View {
             .padding(.top, SFXMetrics.panelCloseTopInset)
             .padding(.trailing, SFXMetrics.panelCloseTrailingInset)
         }
-        .background { MixrAlertChrome.background(cornerRadius: MixrRadius.glass) }
+        .background { panelGlass }
         .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
-        .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
+        .shadow(color: Color(hex: "8C7DAA").opacity(0.06), radius: 16)
+        .shadow(color: .black.opacity(0.42), radius: 18, x: 0, y: 8)
+    }
+
+    /// A restrained, heavier modal material over the dimmed timeline.
+    private var panelGlass: some View {
+        let shape = RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous)
+        return shape
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(hex: "171927").opacity(0.88),
+                        Color(hex: "0B0E19").opacity(0.94),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background {
+                shape
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.16)
+                    .environment(\.colorScheme, .dark)
+            }
+            .overlay {
+                shape.fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: "8C7DAA").opacity(0.055),
+                            Color.clear,
+                        ],
+                        center: UnitPoint(x: 0.5, y: 0.08),
+                        startRadius: 0,
+                        endRadius: 460
+                    )
+                )
+            }
+            .overlay {
+                shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
+            }
     }
 }
 
