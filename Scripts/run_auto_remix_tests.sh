@@ -39,6 +39,10 @@ SOURCES=(
   "$ROOT/Mixr/Models/AutoGainPolicy.swift"
   "$ROOT/Mixr/Models/AutoRemixDiagnostics.swift"
   "$ROOT/Mixr/Models/AutoOfflineMixdown.swift"
+  "$ROOT/Mixr/Models/AutoRemixOpportunity.swift"
+  "$ROOT/Mixr/Models/AutoRemixStructureMap.swift"
+  "$ROOT/Mixr/Models/AutoRemixOpportunityGenerator.swift"
+  "$ROOT/Mixr/Models/AutoRemixRecipePlanner.swift"
   "$ROOT/DevTests/AutoRemixTestStubs.swift"
 )
 
