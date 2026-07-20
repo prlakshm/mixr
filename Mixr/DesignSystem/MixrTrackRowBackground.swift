@@ -50,10 +50,9 @@ struct MixrTrackRowBackground: View {
                 }
                 .shadow(color: Color.black.opacity(0.32), radius: 3, x: 0, y: 1.5)
                 .opacity(isSFXTrack ? 1 : 0)
-                .padding(.leading, 20)
+                .padding(.leading, 19.5)
                 .padding(.trailing, 5)
                 .padding(.vertical, 2)
-                .offset(x: -0.5)
             }
     }
 }
