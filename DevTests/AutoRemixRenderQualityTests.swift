@@ -1311,10 +1311,21 @@ do {
         var allAudible = true
         var detail = ""
         for transformation in dsp {
-            guard let delta = AutoRemixDiagnostics.portableAudibilityDelta(
+            // A selected DSP transformation with a renderable feature MUST
+            // produce a measurable delta — a nil here means it emitted no
+            // audible placement (a silent no-op), which is a failure, not
+            // a skip.
+            let renderable = transformation.audibility.measuredFeature != .durationChange
+                && transformation.audibility.measuredFeature != .rhythmDensity
+            let delta = AutoRemixDiagnostics.portableAudibilityDelta(
                 plan: plan, transformation: transformation, sources: sources, sampleRate: SR
-            ) else { continue }
-            if delta < transformation.audibility.minimumRequiredDelta {
+            )
+            if renderable, delta == nil {
+                allAudible = false
+                detail += "\(transformation.kind.rawValue) produced no audible placement; "
+                continue
+            }
+            if let delta, delta < transformation.audibility.minimumRequiredDelta {
                 allAudible = false
                 detail += String(format: "%@ %.1f<%.1f ", transformation.kind.rawValue,
                                  delta, transformation.audibility.minimumRequiredDelta)
@@ -1515,6 +1526,24 @@ if let plan = confidentPlan, let song = confidentSong {
         limiterGainReductionDB: result.limiterGainReductionDB
     )
     print("\n" + report.text)
+}
+
+// Remix report (items 1 & 2) is non-empty and audit-complete on the
+// structured-pop fixture. Portable-render audibility (stage 2) filled;
+// export + audition stay PENDING.
+if let plan0 = popPlanForAudit {
+    let sources = [popSongTrack!.id: AutoOfflineMixdown.Source(samples: popPCM, sampleRate: SR)]
+    let plan = AutoRemixDiagnostics.fillingPortableAudibility(plan: plan0, sources: sources, sampleRate: SR)
+    let report = AutoRemixDiagnostics.remixReport(plan: plan, bpm: popBPM)
+    check("Remix report: lists selections", report.contains("Selected ("))
+    check("Remix report: lists rejections", report.contains("Rejected ("))
+    check("Remix report: shows removability classes",
+          report.contains("vocalDistinct") && report.contains("hookFamily"))
+    check("Remix report: shows hook differentiation", report.contains("Hook family ("))
+    check("Remix report: shows budget usage", report.contains("Budget:"))
+    check("Remix report: marks export/audition PENDING",
+          report.contains("export PENDING") && report.contains("audition PENDING"))
+    print("\n" + report)
 }
 
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")

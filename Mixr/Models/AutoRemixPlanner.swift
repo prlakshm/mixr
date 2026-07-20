@@ -298,6 +298,40 @@ enum AutoRemixPlanner {
             removals.contains { max(zone.zoneStart, $0.start) < min(zone.zoneEnd, $0.end) - 0.01 }
         }
 
+        // A DSP effect can only live on a clip that meets the model's
+        // minimum length; a sub-minimum zone would be dropped by the
+        // validator and lost. Expand short zones BACKWARD (the effect
+        // leads into its anchor) to a valid whole-bar length, clamped so
+        // they never cross a removal, another zone, or the usable start.
+        let minZone = tuning.minSegmentSeconds + 0.15
+        dspZones.sort { $0.zoneStart < $1.zoneStart }
+        for i in dspZones.indices {
+            var z = dspZones[i]
+            guard z.zoneEnd - z.zoneStart < minZone else { continue }
+            // The zone END is the musically important edge (a phrase
+            // boundary); its START sits inside continuous material, so it
+            // need not be bar-aligned. Extend back just enough for a
+            // valid clip, clamped to the prior removal/zone/usable start.
+            let lowerClamp = max(
+                usableStart,
+                removals.filter { $0.end <= z.zoneStart + 0.01 }.map(\.end).max() ?? usableStart,
+                i > 0 ? dspZones[i - 1].zoneEnd : usableStart
+            )
+            let newStart = max(z.zoneEnd - minZone, lowerClamp)
+            if z.zoneEnd - newStart >= tuning.minSegmentSeconds {
+                z.zoneStart = newStart
+                dspZones[i] = z
+            }
+        }
+        // Drop any zone that still can't reach a valid length (no room).
+        let droppedForRoom = dspZones.filter { $0.zoneEnd - $0.zoneStart < tuning.minSegmentSeconds }
+        dspZones.removeAll { $0.zoneEnd - $0.zoneStart < tuning.minSegmentSeconds }
+        for op in droppedForRoom {
+            warnings.append(
+                "Remix zone dropped: \(op.kind.rawValue) had no room for a minimum-length clip."
+            )
+        }
+
         func effectsFor(_ op: AutoRemixOpportunity) -> ClipEffectSettings {
             var fx = ClipEffectSettings()
             switch op.kind {
@@ -437,7 +471,9 @@ enum AutoRemixPlanner {
                 sourceStart: intervalStart,
                 sourceEnd: intervalEnd,
                 fx: zone.map(effectsFor) ?? ClipEffectSettings(),
-                volumeScale: zone?.kind == .partialDropout ? 0.28 : 1.0,
+                // Moderated depth (−8 dB): the dropout zone is a phrase
+                // pullback into the return, not a momentary hole.
+                volumeScale: zone?.kind == .partialDropout ? 0.4 : 1.0,
                 transformationID: zone?.id
             )
 
@@ -603,6 +639,7 @@ enum AutoRemixPlanner {
             sfxEvents: sfx,
             cutRecords: cutRecords,
             remixRecipe: recipe,
+            structureMap: confident ? structure : nil,
             usableSourceRange: usableStart...usableEnd,
             intentionalGaps: [],                  // silence only by explicit recipe
             handoffCount: 0,

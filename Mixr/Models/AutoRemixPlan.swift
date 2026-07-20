@@ -275,6 +275,10 @@ struct AutoRemixPlan: Sendable {
     /// The transformation recipe behind a one-song remix (selection,
     /// rejections, unmet targets, audibility ledgers). nil for mashups.
     var remixRecipe: AutoRemixRecipe? = nil
+    /// Measured structure behind the recipe (phrase classes, hook
+    /// differentiation, regions, grid stability). Debug-only — feeds the
+    /// remix report; not shown in the normal UI. nil for mashups.
+    var structureMap: AutoRemixStructureMap? = nil
     /// Source range the one-song remix preserves (after evidence-based
     /// edge trimming). nil for mashups.
     var usableSourceRange: ClosedRange<Double>? = nil
