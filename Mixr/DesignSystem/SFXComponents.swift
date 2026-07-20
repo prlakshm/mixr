@@ -162,11 +162,62 @@ struct SFXCard: View {
     var height: CGFloat = SFXMetrics.cardDefaultHeight
     var onTap: () -> Void = {}
 
+    private enum Colorway {
+        case version1Colored
+        case version2GrayLavender
+    }
+
+    /// Change this one selector to compare the preserved treatments.
+    private static let activeColorway: Colorway = .version2GrayLavender
+
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: SFXMetrics.cardRadius, style: .continuous)
     }
 
     private var pearlLavender: Color { Color(hex: "E6DCFF") }
+
+    private var iconBloomColor: Color {
+        switch Self.activeColorway {
+        case .version1Colored:
+            Color(hex: "D88BC8").opacity(0.20)
+        case .version2GrayLavender:
+            pearlLavender.opacity(0.30)
+        }
+    }
+
+    private var iconTileBorderColor: Color {
+        switch Self.activeColorway {
+        case .version1Colored:
+            Color(hex: "8E739F").opacity(0.21)
+        case .version2GrayLavender:
+            Color.white.opacity(0.14)
+        }
+    }
+
+    private var durationColor: Color {
+        switch Self.activeColorway {
+        case .version1Colored:
+            Color(hex: "D1B9FA").opacity(0.91)
+        case .version2GrayLavender:
+            Color(hex: "C9B9F4").opacity(0.88)
+        }
+    }
+
+    private var durationGlowColor: Color {
+        switch Self.activeColorway {
+        case .version1Colored:
+            Color(hex: "D88BC8").opacity(0.14)
+        case .version2GrayLavender:
+            Color.clear
+        }
+    }
+
+    private var durationGlowRadius: CGFloat {
+        switch Self.activeColorway {
+        case .version1Colored: 3
+        case .version2GrayLavender: 0
+        }
+    }
 
     private var iconTileSize: CGFloat {
         min(68, max(49, height * SFXMetrics.cardIconTileSizeFraction))
@@ -187,7 +238,7 @@ struct SFXCard: View {
                         radius: SFXMetrics.cardIconCoreGlowRadius
                     )
                     .shadow(
-                        color: Color(hex: "D88BC8").opacity(0.20),
+                        color: iconBloomColor,
                         radius: SFXMetrics.cardIconBloomRadius
                     )
                     .frame(width: iconTileSize, height: iconTileSize)
@@ -203,8 +254,8 @@ struct SFXCard: View {
 
                     Text(Self.durationLabel(effect.durationSeconds))
                         .font(.system(size: titleSize * 0.78, weight: .medium))
-                        .foregroundStyle(Color(hex: "D1B9FA").opacity(0.91))
-                        .shadow(color: Color(hex: "D88BC8").opacity(0.14), radius: 3)
+                        .foregroundStyle(durationColor)
+                        .shadow(color: durationGlowColor, radius: durationGlowRadius)
                 }
             }
             .padding(.horizontal, MixrSpacing.sm)
@@ -270,10 +321,7 @@ struct SFXCard: View {
                 )
             }
             .overlay {
-                tileShape.strokeBorder(
-                    Color(hex: "8E739F").opacity(0.21),
-                    lineWidth: 0.75
-                )
+                tileShape.strokeBorder(iconTileBorderColor, lineWidth: 0.75)
             }
             .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
     }

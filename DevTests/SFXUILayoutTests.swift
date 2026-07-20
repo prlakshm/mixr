@@ -120,7 +120,23 @@ check(
 )
 
 check(
-    "SFX icon wells use the previous color at half border intensity",
+    "SFX preserves Version 1 and activates Version 2 gray-lavender",
+    cardSource.contains("private enum Colorway")
+        && cardSource.contains("case version1Colored")
+        && cardSource.contains("case version2GrayLavender")
+        && cardSource.contains(
+            "private static let activeColorway: Colorway = .version2GrayLavender"
+        )
+        && cardSource.contains("Color(hex: \"D88BC8\").opacity(0.20)")
+        && cardSource.contains("Color(hex: \"D1B9FA\").opacity(0.91)")
+        && cardSource.contains("Color(hex: \"8E739F\").opacity(0.21)")
+        && cardSource.contains("pearlLavender.opacity(0.30)")
+        && cardSource.contains("Color(hex: \"C9B9F4\").opacity(0.88)")
+        && cardSource.contains("Color.white.opacity(0.14)")
+)
+
+check(
+    "SFX icon wells use the active colorway border",
     matches(#"cardIconTileSizeFraction\s*:\s*CGFloat\s*=\s*0\.47"#)
         && matches(#"cardIconTileCornerRadius\s*:\s*CGFloat\s*=\s*12"#)
         && cardSource.contains("min(68, max(49, height * SFXMetrics.cardIconTileSizeFraction))")
@@ -129,9 +145,9 @@ check(
         && cardSource.contains("Color(hex: \"272337\").opacity(0.90)")
         && cardSource.contains("Color(hex: \"C78BC4\").opacity(0.13)")
         && cardSource.contains("pearlLavender.opacity(0.07)")
-        && cardSource.contains("Color(hex: \"8E739F\").opacity(0.21)")
-        && cardSource.contains("lineWidth: 0.75")
-        && !cardSource.contains("Color(hex: \"8E739F\").opacity(0.42)")
+        && cardSource.contains(
+            "tileShape.strokeBorder(iconTileBorderColor, lineWidth: 0.75)"
+        )
 )
 
 check(
@@ -146,19 +162,23 @@ check(
     matches(#"cardIconCoreGlowRadius\s*:\s*CGFloat\s*=\s*2\.8"#)
         && matches(#"cardIconBloomRadius\s*:\s*CGFloat\s*=\s*6"#)
         && cardSource.contains("Color.white.opacity(0.56)")
+        && cardSource.contains("color: iconBloomColor")
         && cardSource.contains("Color(hex: \"D88BC8\").opacity(0.20)")
-        && !cardSource.contains("Color(hex: \"D88BC8\").opacity(0.40)")
+        && cardSource.contains("pearlLavender.opacity(0.30)")
         && cardSource.contains("radius: SFXMetrics.cardIconCoreGlowRadius")
         && cardSource.contains("radius: SFXMetrics.cardIconBloomRadius")
 )
 
 check(
-    "SFX duration text uses a half-strength color blend and glow",
-    cardSource.contains("Color(hex: \"D1B9FA\").opacity(0.91)")
+    "SFX duration text uses the active colorway",
+    cardSource.contains(".foregroundStyle(durationColor)")
+        && cardSource.contains(
+            ".shadow(color: durationGlowColor, radius: durationGlowRadius)"
+        )
+        && cardSource.contains("private var durationGlowRadius: CGFloat")
+        && cardSource.contains("Color(hex: \"D1B9FA\").opacity(0.91)")
         && cardSource.contains("Color(hex: \"D88BC8\").opacity(0.14)")
-        && cardSource.contains("radius: 3")
-        && !cardSource.contains("Color(hex: \"D9B8FF\").opacity(0.94)")
-        && !cardSource.contains("Color(hex: \"D88BC8\").opacity(0.28)")
+        && cardSource.contains("Color(hex: \"C9B9F4\").opacity(0.88)")
 )
 
 check(
@@ -169,7 +189,7 @@ check(
 check(
     "SFX type follows the reference hierarchy",
     cardSource.contains(".font(.system(size: titleSize, weight: .semibold))")
-        && cardSource.contains("Color(hex: \"D1B9FA\").opacity(0.91)")
+        && cardSource.contains(".foregroundStyle(durationColor)")
         && cardSource.contains("VStack(spacing: 4)")
         && cardSource.contains("VStack(spacing: height * 0.10)")
         && cardSource.contains(".padding(.vertical, height * 0.08)")
