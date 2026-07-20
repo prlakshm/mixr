@@ -241,88 +241,381 @@ enum AutoRemixPlanner {
             ? ClipTransition(type: .fadeOut, duration: 2, curve: AutoTransitionEnvelope.equalPowerCurveName)
             : .none
 
-        // ── Optional SOURCE-CONTINUOUS effect segments (no cutting) ──
-        struct Segment {
-            var sourceStart: Double
-            var sourceEnd: Double
-            var fx: ClipEffectSettings
-        }
-        var segments: [Segment] = []
-        var liftBoundary: Double?
-        if confident, let signal, usableEnd - usableStart > bar * 24 {
-            liftBoundary = biggestEnergyRise(
-                signal: signal,
+        // ── Transformation recipe: measured structure → scored
+        // opportunities → varied, distributed selection ──
+        var structure = AutoRemixStructureMap.empty
+        structure.usableRange = usableStart...usableEnd
+        var recipe = AutoRemixRecipe.empty
+        if confident {
+            structure = AutoRemixStructureMapBuilder.build(
                 analysis: analysis,
-                from: usableStart + bar * 8,
-                to: usableEnd - bar * 8,
-                minRise: 0.18
+                usableRange: usableStart...usableEnd,
+                tuning: tuning
             )
-        }
-        if let lift = liftBoundary,
-           lift - bar * 4 > usableStart + bar * 8,
-           lift < usableEnd - bar * 8 {
-            var buildFX = ClipEffectSettings()
-            buildFX.flangerAmount = 0.16
-            buildFX.setLevel(12, for: MixrEffect.echo.rawValue)
-            buildFX.echoPreset = .classic
-            segments = [
-                Segment(sourceStart: usableStart, sourceEnd: lift - bar * 4, fx: ClipEffectSettings()),
-                Segment(sourceStart: lift - bar * 4, sourceEnd: lift, fx: AutoSupportedEffects.sanitize(buildFX)),
-                Segment(sourceStart: lift, sourceEnd: usableEnd, fx: ClipEffectSettings()),
-            ]
-            decisions.append(
-                AutoDecision(
-                    kind: .addedRiserIntoDrop,
-                    songTitle: profile.title,
-                    detail: "filtered build into the song's biggest lift"
-                )
+            let opportunities = AutoRemixOpportunityGenerator.opportunities(
+                structure: structure,
+                analysis: analysis,
+                tuning: tuning
             )
-        } else {
-            segments = [Segment(sourceStart: usableStart, sourceEnd: usableEnd, fx: ClipEffectSettings())]
+            recipe = AutoRemixRecipePlanner.recipe(
+                from: opportunities,
+                structure: structure,
+                tuning: tuning,
+                seed: seed
+            )
         }
 
-        // ── Placements: gapless, source order untouched ──
+        // ── Assembly: walk the usable range in source order, applying
+        // the recipe. Structural removals crossfade ACROSS the removed
+        // material (real temporal overlap); loops rewind briefly with a
+        // justified record; DSP zones are source-continuous splits. ──
+        let crossfadeSeconds = min(1.5, beat * 4)
+        struct Removal {
+            var start: Double
+            var end: Double
+            var op: AutoRemixOpportunity
+        }
+        var removals: [Removal] = []
+        var loops: [AutoRemixOpportunity] = []
+        var dspZones: [AutoRemixOpportunity] = []
+        var hookReturnOp: AutoRemixOpportunity?
+        for op in recipe.selected {
+            switch op.kind {
+            case .shortenRepeat, .outroCompress:
+                removals.append(Removal(start: op.zoneStart, end: op.zoneEnd, op: op))
+            case .loopStutter:
+                loops.append(op)
+            case .hookReturn:
+                hookReturnOp = op
+            case .filteredBuild, .echoThrow, .partialDropout, .finalChorusLift:
+                dspZones.append(op)
+            case .sfxAccent:
+                break
+            }
+        }
+        removals.sort { $0.start < $1.start }
+        dspZones.removeAll { zone in
+            removals.contains { max(zone.zoneStart, $0.start) < min(zone.zoneEnd, $0.end) - 0.01 }
+        }
+
+        // A DSP effect can only live on a clip that meets the model's
+        // minimum length; a sub-minimum zone would be dropped by the
+        // validator and lost. Expand short zones BACKWARD (the effect
+        // leads into its anchor) to a valid whole-bar length, clamped so
+        // they never cross a removal, another zone, or the usable start.
+        let minZone = tuning.minSegmentSeconds + 0.15
+        dspZones.sort { $0.zoneStart < $1.zoneStart }
+        for i in dspZones.indices {
+            var z = dspZones[i]
+            guard z.zoneEnd - z.zoneStart < minZone else { continue }
+            // The zone END is the musically important edge (a phrase
+            // boundary); its START sits inside continuous material, so it
+            // need not be bar-aligned. Extend back just enough for a
+            // valid clip, clamped to the prior removal/zone/usable start.
+            let lowerClamp = max(
+                usableStart,
+                removals.filter { $0.end <= z.zoneStart + 0.01 }.map(\.end).max() ?? usableStart,
+                i > 0 ? dspZones[i - 1].zoneEnd : usableStart
+            )
+            let newStart = max(z.zoneEnd - minZone, lowerClamp)
+            if z.zoneEnd - newStart >= tuning.minSegmentSeconds {
+                z.zoneStart = newStart
+                dspZones[i] = z
+            }
+        }
+        // Drop any zone that still can't reach a valid length (no room).
+        let droppedForRoom = dspZones.filter { $0.zoneEnd - $0.zoneStart < tuning.minSegmentSeconds }
+        dspZones.removeAll { $0.zoneEnd - $0.zoneStart < tuning.minSegmentSeconds }
+        for op in droppedForRoom {
+            warnings.append(
+                "Remix zone dropped: \(op.kind.rawValue) had no room for a minimum-length clip."
+            )
+        }
+
+        func effectsFor(_ op: AutoRemixOpportunity) -> ClipEffectSettings {
+            var fx = ClipEffectSettings()
+            switch op.kind {
+            case .filteredBuild:
+                fx.setLevel(55, for: MixrEffect.blur.rawValue)
+                fx.setLevel(10, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .classic
+                fx.flangerAmount = 0.15
+            case .echoThrow:
+                fx.setLevel(35, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .classic
+            case .partialDropout:
+                fx.setLevel(50, for: MixrEffect.blur.rawValue)
+            case .finalChorusLift:
+                fx.setLevel(18, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .classic
+                fx.setLevel(10, for: MixrEffect.reverb.rawValue)
+                fx.reverbPreset = .hall
+                fx.flangerAmount = 0.12
+            default:
+                break
+            }
+            return AutoSupportedEffects.sanitize(fx)
+        }
+
+        // Segment boundaries in source time (milliseconds for stable keys).
+        var boundaryKeys = Set<Int>()
+        func addBoundary(_ t: Double) {
+            if t > usableStart + 0.01, t < usableEnd - 0.01 {
+                boundaryKeys.insert(Int((t * 1000).rounded()))
+            }
+        }
+        for removal in removals {
+            addBoundary(removal.start)
+            addBoundary(removal.end)
+        }
+        for zone in dspZones {
+            addBoundary(zone.zoneStart)
+            addBoundary(zone.zoneEnd)
+        }
+        for loop in loops {
+            addBoundary(loop.zoneStart)
+            addBoundary(loop.zoneEnd)
+        }
+        let sortedBoundaries = ([usableStart, usableEnd] + boundaryKeys.map { Double($0) / 1000 })
+            .sorted()
+
         var placements: [AutoClipPlacement] = []
-        for (i, seg) in segments.enumerated() {
-            let isLast = i == segments.count - 1
+        var cutRecords: [AutoCutRecord] = []
+        var timeline = 0.0
+        var pendingCut: Removal?
+        var slot = 0
+
+        func crossfadeTransition() -> ClipTransition {
+            ClipTransition(
+                type: .crossfade,
+                duration: crossfadeSeconds / beat,
+                curve: AutoTransitionEnvelope.equalPowerCurveName
+            )
+        }
+
+        func emit(
+            sourceStart: Double,
+            sourceEnd: Double,
+            fx: ClipEffectSettings,
+            volumeScale: Double,
+            transformationID: UUID?
+        ) {
+            guard sourceEnd - sourceStart > 0.01 else { return }
+            var fadeIn = ClipTransition.none
+            var overlap = 0.0
+            var continues = false
+            var tid = transformationID
+            var record: AutoCutRecord?
+            var startTimeline = timeline
+
+            if let cut = pendingCut {
+                pendingCut = nil
+                if var prev = placements.popLast() {
+                    prev.timelineDuration += crossfadeSeconds
+                    prev.fadeOut = crossfadeTransition()
+                    placements.append(prev)
+                    startTimeline = prev.timelineEnd - crossfadeSeconds
+                    overlap = crossfadeSeconds
+                    fadeIn = crossfadeTransition()
+                    if tid == nil { tid = cut.op.id }
+                    let before = signal?.meanRMSDB(from: cut.start - 2, to: cut.start) ?? -20
+                    let after = signal?.meanRMSDB(from: cut.end, to: cut.end + 2) ?? -20
+                    record = AutoCutRecord(
+                        timelineAt: startTimeline,
+                        sourceFrom: cut.start,
+                        sourceTo: cut.end,
+                        reason: cut.op.kind == .outroCompress ? .edgeTrim : .redundantRepeat,
+                        confidence: cut.op.confidence,
+                        expectedEnergyDeltaDB: after - before,
+                        masking: .equalPowerCrossfade(seconds: crossfadeSeconds)
+                    )
+                }
+            } else if !placements.isEmpty {
+                continues = true
+            }
+
             placements.append(
                 AutoClipPlacement(
                     songID: profile.songID,
-                    sourceStart: seg.sourceStart,
-                    timelineStart: seg.sourceStart - usableStart,
-                    timelineDuration: seg.sourceEnd - seg.sourceStart,
+                    sourceStart: sourceStart,
+                    timelineStart: startTimeline,
+                    timelineDuration: sourceEnd - sourceStart,
                     tempoRatio: 1.0,
-                    volume: volume,
-                    fadeIn: .none,
-                    fadeOut: isLast ? finalFadeOut : .none,
-                    effects: seg.fx,
+                    volume: volume * volumeScale,
+                    fadeIn: fadeIn,
+                    fadeOut: .none,
+                    effects: fx,
                     role: .dominant,
-                    slotIndex: i,
-                    continuesPrevious: i > 0
+                    slotIndex: slot,
+                    continuesPrevious: continues,
+                    overlapsPreviousSeconds: overlap,
+                    transformationID: tid
                 )
             )
+            slot += 1
+            if let record { cutRecords.append(record) }
+            timeline = startTimeline + (sourceEnd - sourceStart)
         }
 
-        // ── Sparse, coordinated SFX: one riser + impact at the lift ──
+        for (intervalStart, intervalEnd) in zip(sortedBoundaries, sortedBoundaries.dropFirst()) {
+            guard intervalEnd - intervalStart > 0.01 else { continue }
+            let mid = (intervalStart + intervalEnd) / 2
+
+            if let removal = removals.first(where: { mid >= $0.start && mid < $0.end }) {
+                if pendingCut == nil { pendingCut = removal }
+                continue
+            }
+
+            let zone = dspZones.first { mid >= $0.zoneStart && mid < $0.zoneEnd }
+            emit(
+                sourceStart: intervalStart,
+                sourceEnd: intervalEnd,
+                fx: zone.map(effectsFor) ?? ClipEffectSettings(),
+                // Moderated depth (−8 dB): the dropout zone is a phrase
+                // pullback into the return, not a momentary hole.
+                volumeScale: zone?.kind == .partialDropout ? 0.4 : 1.0,
+                transformationID: zone?.id
+            )
+
+            // Beat-synchronous loop: repeat the just-emitted zone once,
+            // as a justified source rewind with a structured record.
+            if let loop = loops.first(where: {
+                abs($0.zoneStart - intervalStart) < 0.02 && abs($0.zoneEnd - intervalEnd) < 0.05
+            }) {
+                let loopDuration = intervalEnd - intervalStart
+                placements.append(
+                    AutoClipPlacement(
+                        songID: profile.songID,
+                        sourceStart: intervalStart,
+                        timelineStart: timeline,
+                        timelineDuration: loopDuration,
+                        tempoRatio: 1.0,
+                        volume: volume,
+                        fadeIn: .none,
+                        fadeOut: .none,
+                        effects: ClipEffectSettings(),
+                        role: .dominant,
+                        slotIndex: slot,
+                        transformationID: loop.id
+                    )
+                )
+                slot += 1
+                cutRecords.append(
+                    AutoCutRecord(
+                        timelineAt: timeline,
+                        sourceFrom: intervalEnd,
+                        sourceTo: intervalStart,
+                        reason: .loop,
+                        confidence: loop.confidence,
+                        expectedEnergyDeltaDB: 0,
+                        masking: .alignedHardCut
+                    )
+                )
+                timeline += loopDuration
+            }
+        }
+
+        // Hook return for the close: one justified rewind, crossfaded.
+        if let op = hookReturnOp, var prev = placements.popLast() {
+            prev.timelineDuration += crossfadeSeconds
+            prev.fadeOut = crossfadeTransition()
+            let prevSourceEnd = prev.sourceEnd
+            placements.append(prev)
+            let startTimeline = prev.timelineEnd - crossfadeSeconds
+            placements.append(
+                AutoClipPlacement(
+                    songID: profile.songID,
+                    sourceStart: op.zoneStart,
+                    timelineStart: startTimeline,
+                    timelineDuration: op.zoneEnd - op.zoneStart,
+                    tempoRatio: 1.0,
+                    volume: volume,
+                    fadeIn: crossfadeTransition(),
+                    fadeOut: .none,
+                    effects: ClipEffectSettings(),
+                    role: .dominant,
+                    slotIndex: slot,
+                    overlapsPreviousSeconds: crossfadeSeconds,
+                    transformationID: op.id
+                )
+            )
+            slot += 1
+            cutRecords.append(
+                AutoCutRecord(
+                    timelineAt: startTimeline,
+                    sourceFrom: prevSourceEnd,
+                    sourceTo: op.zoneStart,
+                    reason: .hookReturn,
+                    confidence: op.confidence,
+                    expectedEnergyDeltaDB: 0,
+                    masking: .equalPowerCrossfade(seconds: crossfadeSeconds)
+                )
+            )
+            timeline = startTimeline + (op.zoneEnd - op.zoneStart)
+        }
+
+        // Trailing fade: the song either ends naturally or fades where a
+        // trim / hook return leaves audible material.
+        if var last = placements.popLast() {
+            if last.fadeOut.type == .none {
+                last.fadeOut = hookReturnOp != nil
+                    ? ClipTransition(
+                        type: .fadeOut, duration: 2,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName
+                    )
+                    : finalFadeOut
+            }
+            placements.append(last)
+        }
+
+        // ── SFX: reinforce the top transformation zones only ──
         var sfx: [AutoSFXEvent] = []
-        if confident, let lift = liftBoundary, usableEnd - usableStart >= 60 {
-            let liftTimeline = lift - usableStart
+        func timelineFor(sourceTime t: Double) -> Double? {
+            for p in placements where t >= p.sourceStart - 0.01 && t < p.sourceEnd + 0.01 {
+                return p.timelineStart + (t - p.sourceStart)
+            }
+            return nil
+        }
+        let sfxKinds: Set<AutoTransformationKind> = [.filteredBuild, .partialDropout, .shortenRepeat]
+        for op in recipe.selected.filter({ sfxKinds.contains($0.kind) })
+            .sorted(by: { $0.score > $1.score })
+            .prefix(2) {
+            let sourceAnchor = op.kind == .shortenRepeat ? op.zoneEnd : op.anchorDownbeat
+            guard let anchorTimeline = timelineFor(sourceTime: sourceAnchor) else { continue }
             if let riser = SoundEffectLibrary.definition(for: "riser"),
-               liftTimeline - riser.durationSeconds >= 0 {
+               anchorTimeline - riser.durationSeconds >= 0 {
                 sfx.append(
                     AutoSFXEvent(
                         assetID: "riser",
-                        timelineStart: liftTimeline - riser.durationSeconds,
-                        purpose: "riser into the song's own lift"
+                        timelineStart: anchorTimeline - riser.durationSeconds,
+                        purpose: "riser into the \(op.kind.rawValue) zone",
+                        transformationID: op.id
                     )
                 )
             }
             sfx.append(
-                AutoSFXEvent(assetID: "impact", timelineStart: liftTimeline, purpose: "impact on the lift downbeat")
+                AutoSFXEvent(
+                    assetID: "impact",
+                    timelineStart: anchorTimeline,
+                    purpose: "impact on the \(op.kind.rawValue) downbeat",
+                    transformationID: op.id
+                )
             )
         }
 
-        let totalDuration = usableEnd - usableStart
+        // ── Decisions + unmet-target visibility ──
+        for op in recipe.selected {
+            decisions.append(
+                AutoDecision(
+                    kind: .transformedZone,
+                    songTitle: profile.title,
+                    detail: transformationSentence(op, bar: bar)
+                )
+            )
+        }
+        warnings.append(contentsOf: recipe.unmetTargets.map { "Remix target unmet: \($0)." })
+
+        let totalDuration = max(timeline, placements.map(\.timelineEnd).max() ?? 0)
         let section = AutoSelectedSection(
             songID: profile.songID,
             sourceStart: usableStart,
@@ -344,7 +637,9 @@ enum AutoRemixPlanner {
             selectedSections: [section],
             placements: placements,
             sfxEvents: sfx,
-            cutRecords: [],                       // zero internal cuts by default
+            cutRecords: cutRecords,
+            remixRecipe: recipe,
+            structureMap: confident ? structure : nil,
             usableSourceRange: usableStart...usableEnd,
             intentionalGaps: [],                  // silence only by explicit recipe
             handoffCount: 0,
@@ -359,44 +654,29 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// Downbeat-snapped source time of the largest sustained energy rise
-    /// (mean of the next 4 s minus mean of the previous 4 s), or nil when
-    /// nothing rises by at least `minRise`.
-    private static func biggestEnergyRise(
-        signal: SongSignalFeatures,
-        analysis: SongAnalysis,
-        from: Double,
-        to: Double,
-        minRise: Double
-    ) -> Double? {
-        let hop = signal.hopSeconds
-        let curve = signal.energyCurve
-        guard hop > 0, !curve.isEmpty, to > from else { return nil }
-        let windowHops = max(1, Int(4.0 / hop))
-
-        func mean(_ lo: Int, _ hi: Int) -> Double {
-            let a = max(0, lo), b = min(curve.count, hi)
-            guard b > a else { return 0 }
-            var s = 0.0
-            for i in a..<b { s += curve[i] }
-            return s / Double(b - a)
+    /// User-facing sentence for one applied transformation.
+    private static func transformationSentence(_ op: AutoRemixOpportunity, bar: Double) -> String {
+        let bars = Int((op.zoneDuration / max(bar, 0.001)).rounded())
+        switch op.kind {
+        case .filteredBuild:
+            return "Filtered build into a measured entrance (\(bars) bars)."
+        case .echoThrow:
+            return "Echo throw on a vocal phrase ending."
+        case .partialDropout:
+            return "Brief dropout before the return."
+        case .shortenRepeat:
+            return "Shortened repeated material (\(bars) bars) under a masked crossfade."
+        case .outroCompress:
+            return "Compressed the outro (\(bars) bars)."
+        case .loopStutter:
+            return "Stuttered the hook entrance (1-bar loop)."
+        case .finalChorusLift:
+            return "Intensified the final chorus with an effect arc."
+        case .hookReturn:
+            return "Returned to the hook for the close."
+        case .sfxAccent:
+            return "Accented a transformation with SFX."
         }
-
-        var bestRise = 0.0
-        var bestTime: Double?
-        var t = from
-        while t < to {
-            let idx = Int(t / hop)
-            let rise = mean(idx, idx + windowHops) - mean(idx - windowHops, idx)
-            if rise > bestRise {
-                bestRise = rise
-                bestTime = t
-            }
-            t += 0.5
-        }
-        guard bestRise >= minRise, let raw = bestTime else { return nil }
-        let snapped = analysis.downbeats.min { abs($0 - raw) < abs($1 - raw) } ?? raw
-        return (snapped >= from && snapped <= to) ? snapped : raw
     }
 
     // MARK: - Mashup (2+ songs)

@@ -65,6 +65,9 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case savedStrongestForPeak
     case duoAlternationFallback
     case excludedLowConfidenceSong
+    /// One recipe transformation applied to the one-song remix
+    /// (sentence supplied in `detail`).
+    case transformedZone
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -116,6 +119,8 @@ struct AutoDecision: Sendable, Equatable {
                 ?? "Could not reach the full A → B → A → B alternation without incomplete sections."
         case .excludedLowConfidenceSong:
             return "Excluded \(song): \(detail ?? "not enough timeline for a recognizable phrase")."
+        case .transformedZone:
+            return detail ?? "Transformed a section."
         }
     }
 }
@@ -168,6 +173,9 @@ struct AutoClipPlacement: Sendable {
     /// true equal-power crossfade. The validator only permits same-song
     /// overlap that is declared here.
     var overlapsPreviousSeconds: Double = 0
+    /// Links this placement to the recipe transformation that created
+    /// it (nil for base material) — used by A/B audibility renders.
+    var transformationID: UUID? = nil
 
     nonisolated var timelineEnd: Double { timelineStart + timelineDuration }
     nonisolated var sourceDuration: Double { timelineDuration * tempoRatio }
@@ -185,6 +193,8 @@ enum AutoCutReason: String, Sendable, Equatable {
     case edgeTrim
     /// An explicitly requested return to the hook for a final peak.
     case hookReturn
+    /// A brief beat-synchronous loop/stutter (justified source rewind).
+    case loop
 }
 
 /// How a cut's transition is audibly covered.
@@ -227,6 +237,9 @@ struct AutoSFXEvent: Sendable {
     var timelineStart: Double
     /// Why it exists — surfaces in the summary ("riser into the drop").
     var purpose: String
+    /// Links this event to the recipe transformation it reinforces
+    /// (SFX must always support a selected zone).
+    var transformationID: UUID? = nil
 
     nonisolated var duration: Double {
         SoundEffectLibrary.definition(for: assetID)?.durationSeconds ?? 0
@@ -259,6 +272,13 @@ struct AutoRemixPlan: Sendable {
     /// Structured record for EVERY internal cut (source discontinuity).
     /// A cut without a record here is invalid.
     var cutRecords: [AutoCutRecord] = []
+    /// The transformation recipe behind a one-song remix (selection,
+    /// rejections, unmet targets, audibility ledgers). nil for mashups.
+    var remixRecipe: AutoRemixRecipe? = nil
+    /// Measured structure behind the recipe (phrase classes, hook
+    /// differentiation, regions, grid stability). Debug-only — feeds the
+    /// remix report; not shown in the normal UI. nil for mashups.
+    var structureMap: AutoRemixStructureMap? = nil
     /// Source range the one-song remix preserves (after evidence-based
     /// edge trimming). nil for mashups.
     var usableSourceRange: ClosedRange<Double>? = nil

@@ -170,6 +170,115 @@ nonisolated enum AutoRemixDiagnostics {
         return regions
     }
 
+    // MARK: High-frequency energy
+
+    /// Mean level of the first-difference (HF-emphasis) signal over
+    /// [start, end), dBFS — the meter behind filtered-build audibility.
+    static func hfEnergyDB(
+        samples: [Float],
+        sampleRate: Double,
+        from start: Double,
+        to end: Double
+    ) -> Double {
+        let lo = max(1, Int(start * sampleRate))
+        let hi = min(samples.count, Int(end * sampleRate))
+        guard hi > lo else { return -120 }
+        var sum = 0.0
+        for i in lo..<hi {
+            let d = Double(samples[i]) - Double(samples[i - 1])
+            sum += d * d
+        }
+        let rms = (sum / Double(hi - lo)).squareRoot()
+        return 20 * log10(max(rms, 1e-12))
+    }
+
+    // MARK: Portable audibility (A/B render)
+
+    /// Measures ONE transformation's portable-render audible delta by
+    /// rendering the plan with and without it and comparing the
+    /// transformation's contracted feature over its timeline range.
+    ///
+    /// Result units per feature:
+    ///  • hfEnergy / rmsLevel — absolute change over the zone, dB
+    ///  • echoTailEnergy — effect-to-signal ratio over the zone plus the
+    ///    following bar, dB (0 = as loud as the song, −∞ = inaudible)
+    ///  • durationChange / rhythmDensity — measured at PLAN level, not
+    ///    here; returns nil.
+    ///
+    /// This uses the mixdown's approximate effect models: it verifies the
+    /// PORTABLE stage of the audibility ledger only.
+    static func portableAudibilityDelta(
+        plan: AutoRemixPlan,
+        transformation: AutoRemixOpportunity,
+        sources: [UUID: AutoOfflineMixdown.Source],
+        sampleRate: Double = 44_100
+    ) -> Double? {
+        switch transformation.audibility.measuredFeature {
+        case .durationChange, .rhythmDensity:
+            return nil
+        case .hfEnergy, .rmsLevel, .echoTailEnergy:
+            break
+        }
+
+        let owned = plan.placements.filter { $0.transformationID == transformation.id }
+        guard let zoneStart = owned.map(\.timelineStart).min(),
+              let zoneEnd = owned.map(\.timelineEnd).max()
+        else { return nil }
+
+        let a = AutoOfflineMixdown.render(
+            plan: plan, sources: sources, sampleRate: sampleRate, includeTail: true
+        ).mix
+        let b = AutoOfflineMixdown.render(
+            plan: plan, sources: sources, sampleRate: sampleRate, includeTail: true,
+            neutralizing: transformation.id
+        ).mix
+
+        let bpm = max(plan.targetBPM, 40)
+        let barSeconds = 240.0 / bpm
+
+        switch transformation.audibility.measuredFeature {
+        case .hfEnergy:
+            let hfA = hfEnergyDB(samples: a, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            let hfB = hfEnergyDB(samples: b, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            return abs(hfA - hfB)
+        case .rmsLevel:
+            let la = meanLoudnessDB(samples: a, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            let lb = meanLoudnessDB(samples: b, sampleRate: sampleRate, from: zoneStart, to: zoneEnd)
+            return abs(la - lb)
+        case .echoTailEnergy:
+            let end = zoneEnd + barSeconds
+            let n = min(a.count, b.count)
+            var diff = [Float](repeating: 0, count: n)
+            for i in 0..<n { diff[i] = a[i] - b[i] }
+            let effect = meanLoudnessDB(samples: diff, sampleRate: sampleRate, from: zoneStart, to: end)
+            let signal = meanLoudnessDB(samples: a, sampleRate: sampleRate, from: zoneStart, to: end)
+            return effect - signal
+        case .durationChange, .rhythmDensity:
+            return nil
+        }
+    }
+
+    /// Returns a copy of the plan with each selected transformation's
+    /// PORTABLE-render audibility delta measured and recorded in the
+    /// ledger (stage 2). Export (stage 3) and audition (stage 4) stay
+    /// PENDING. Runs on Linux and macOS alike.
+    static func fillingPortableAudibility(
+        plan: AutoRemixPlan,
+        sources: [UUID: AutoOfflineMixdown.Source],
+        sampleRate: Double = 44_100
+    ) -> AutoRemixPlan {
+        guard var recipe = plan.remixRecipe else { return plan }
+        for op in recipe.selected {
+            guard let delta = portableAudibilityDelta(
+                plan: plan, transformation: op, sources: sources, sampleRate: sampleRate
+            ) else { continue }
+            recipe.ledgers[op.id]?.portableRenderDelta = delta
+        }
+        var out = plan
+        out.remixRecipe = recipe
+        return out
+    }
+
     // MARK: Clicks
 
     /// Largest absolute sample-to-sample jump and where it happens.
@@ -220,6 +329,120 @@ nonisolated enum AutoRemixDiagnostics {
             centerDB: meanLoudnessDB(samples: samples, sampleRate: sampleRate, from: t - 0.15, to: t + 0.15),
             afterDB: meanLoudnessDB(samples: samples, sampleRate: sampleRate, from: t + 0.15, to: t + 1.0)
         )
+    }
+
+    // MARK: Remix report (debug-only — the recipe audit)
+    //
+    // Items 1 & 2 of the completion report: every opportunity considered,
+    // every selection with its evidence/confidence/audibility, every
+    // rejection with its reason, the section/removability classification,
+    // hook differentiation, structural-budget usage, and a compact
+    // timeline. Pure text from the plan's recipe + structure map, so the
+    // Mac remix tool and the Linux harness emit the identical format.
+
+    static func remixReport(plan: AutoRemixPlan, bpm: Double) -> String {
+        guard let recipe = plan.remixRecipe else {
+            return "No transformation recipe (low-confidence or mashup)."
+        }
+        let bar = 240.0 / max(bpm, 40)
+        var lines: [String] = ["── DJ Remix report ──"]
+
+        if let usable = plan.usableSourceRange {
+            lines.append(String(format: "usable source: %.1fs – %.1fs (%.0f bars)",
+                                usable.lowerBound, usable.upperBound,
+                                (usable.upperBound - usable.lowerBound) / bar))
+        }
+
+        // ── Section / removability classification ──
+        if let map = plan.structureMap, !map.phrases.isEmpty {
+            lines.append("\nStructure (\(map.phrases.count) phrases, \(map.regions.count) regions, "
+                + String(format: "grid drift %.2f beat):", map.gridDriftFractionOfBeat))
+            for phrase in map.phrases {
+                lines.append(String(
+                    format: "  phrase %2d  %6.1f–%6.1fs  %-14@ energy=%.2f vocal=%.2f",
+                    phrase.index, phrase.startSeconds, phrase.endSeconds,
+                    phrase.removability.rawValue as NSString, phrase.energyMean, phrase.vocalMean
+                ))
+            }
+            lines.append("Hook family (\(map.hookInstances.count) instances):")
+            for (i, inst) in map.hookInstances.enumerated() {
+                lines.append(String(
+                    format: "  hook %d  %6.1f–%6.1fs  %-20@ %@",
+                    i, inst.startSeconds, inst.endSeconds,
+                    inst.differentiation.rawValue as NSString,
+                    inst.isProtected ? "PROTECTED" : "removable-if-nearDuplicate"
+                ))
+            }
+        }
+
+        // ── Structural intervention budget ──
+        lines.append(String(
+            format: "\nBudget: %d/%d structural, %d DSP, %d non-SFX, %d zones total",
+            recipe.structuralCount, 2,
+            recipe.selected.filter { !$0.kind.isStructural && $0.kind != .sfxAccent }.count,
+            recipe.meaningfulCount, recipe.selected.count
+        ))
+
+        // ── Selected transformations ──
+        lines.append("\nSelected (\(recipe.selected.count)):")
+        for op in recipe.selected.sorted(by: { $0.zoneStart < $1.zoneStart }) {
+            let ledger = recipe.ledgers[op.id]
+            let evidence = op.evidence
+                .map { String(format: "%@=%.2f%@", $0.name, $0.value, $0.measured ? "" : "(heuristic)") }
+                .joined(separator: ", ")
+            lines.append(String(
+                format: "  %6.1fs region %d  %-16@ [%@]  score=%.2f conf=%.2f",
+                op.zoneStart, op.region, op.kind.rawValue as NSString,
+                op.kind.isStructural ? "STRUCT" : (op.kind == .sfxAccent ? "SFX" : "DSP"),
+                op.score, op.confidence
+            ))
+            lines.append("        evidence: \(evidence)")
+            lines.append(String(
+                format: "        audibility: predicted %.1f (floor %.1f) %@; portable %@; export %@; audition %@",
+                op.audibility.predictedDelta, op.audibility.minimumRequiredDelta,
+                op.audibility.measuredFeature.rawValue,
+                ledger?.portableRenderDelta.map { String(format: "%.1f", $0) } ?? "—",
+                ledger?.exportDelta.map { String(format: "%.1f", $0) } ?? "PENDING",
+                (ledger?.auditioned ?? false) ? "done" : "PENDING"
+            ))
+            lines.append("        consequence: \(op.audibility.expectedConsequence)")
+        }
+
+        // ── Rejections ──
+        lines.append("\nRejected (\(recipe.rejected.count)):")
+        for r in recipe.rejected.sorted(by: { $0.opportunity.zoneStart < $1.opportunity.zoneStart }) {
+            lines.append(String(
+                format: "  %6.1fs  %-16@ → %@%@ (score=%.2f conf=%.2f)",
+                r.opportunity.zoneStart, r.opportunity.kind.rawValue as NSString,
+                r.reason.rawValue as NSString,
+                r.downgradedTo.map { " ⇒ \($0.rawValue)" } ?? "",
+                r.opportunity.score, r.opportunity.confidence
+            ))
+        }
+
+        if !recipe.unmetTargets.isEmpty {
+            lines.append("\nUnmet soft targets (reported, not padded):")
+            for t in recipe.unmetTargets { lines.append("  • \(t)") }
+        }
+
+        // ── Compact timeline ──
+        lines.append("\nTimeline:")
+        for op in recipe.selected.sorted(by: { $0.zoneStart < $1.zoneStart }) {
+            let axis: String
+            switch op.kind {
+            case .shortenRepeat, .outroCompress, .hookReturn: axis = "STRUCTURE"
+            case .loopStutter: axis = "RHYTHM"
+            case .sfxAccent: axis = "SFX-ONLY"
+            default: axis = "DSP"
+            }
+            lines.append(String(
+                format: "  ~%3.0fs  %-16@ %-10@ — %@",
+                op.zoneStart, op.kind.rawValue as NSString, axis as NSString,
+                op.audibility.expectedConsequence
+            ))
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     // MARK: Quality report (debug-only)
