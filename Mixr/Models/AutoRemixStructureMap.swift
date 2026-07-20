@@ -137,13 +137,25 @@ struct AutoRemixStructureMap: Sendable {
     )
 }
 
-// MARK: - Builder (stub — implemented by the transformation layer)
+// MARK: - Builder
 
 enum AutoRemixStructureMapBuilder {
 
+    /// Phrase unit: 4 bars (finer boundaries; 8/16/32-bar completions
+    /// are every 2nd/4th/8th unit from the anchor).
+    nonisolated static let phraseBars = 4.0
+    /// Similarity at or above this marks a repeat of earlier material.
+    nonisolated static let repeatSimilarity = 0.85
+    /// Similarity above this keeps two phrases in one section family.
+    nonisolated static let familySimilarity = 0.6
+    /// Normalized vocal presence above this marks vocal-heavy material.
+    nonisolated static let vocalThreshold = 0.45
+    /// Instance-level deltas beyond these mark a differentiated hook.
+    nonisolated static let differentiationDelta = 0.08
+
     /// Builds the measured structure map for one analyzed song.
-    /// BASELINE STUB: returns an empty map (no structural knowledge) —
-    /// the opportunity layer supplies the real implementation.
+    /// Requires trusted signal features — a song without measurements has
+    /// no structural knowledge and gets an empty map (conservative path).
     nonisolated static func build(
         analysis: SongAnalysis,
         usableRange: ClosedRange<Double>,
@@ -151,6 +163,232 @@ enum AutoRemixStructureMapBuilder {
     ) -> AutoRemixStructureMap {
         var map = AutoRemixStructureMap.empty
         map.usableRange = usableRange
+        map.beatSecondsHint = analysis.beatSeconds
+
+        guard let signal = analysis.signal,
+              signal.overallConfidence >= 0.4,
+              signal.beatConfidence > 0.4
+        else { return map }
+
+        map.gridWindows = signal.beatPhaseWindows
+        map.gridDriftFractionOfBeat = signal.gridDriftFractionOfBeat
+
+        let bar = analysis.barSeconds
+        let unit = bar * phraseBars
+        guard unit > 0.5, usableRange.upperBound - usableRange.lowerBound > unit * 4 else {
+            return map
+        }
+
+        // Anchor the phrase grid to the first measured downbeat inside
+        // the usable range.
+        let anchor = analysis.downbeats.first { $0 >= usableRange.lowerBound - 0.05 }
+            ?? usableRange.lowerBound
+
+        // ── Per-phrase feature vectors ──
+        var phrases: [AutoRemixPhrase] = []
+        var start = anchor
+        var index = 0
+        let hop = signal.hopSeconds
+        let onsetMedian = median(signal.onsetStrength.filter { $0 > 0 }) ?? 0
+
+        while start + unit <= usableRange.upperBound + 0.5 {
+            let end = min(start + unit, usableRange.upperBound)
+            let energy = meanCurve(signal.energyCurve, hop: hop, from: start, to: end)
+            let vocal = meanCurve(signal.vocalPresenceCurve, hop: hop, from: start, to: end)
+            let bass = meanCurve(signal.bassEnergyCurve, hop: hop, from: start, to: end)
+            let density = onsetDensity(
+                signal.onsetStrength, hop: hop, from: start, to: end, median: onsetMedian
+            )
+            let energySlope = meanCurve(signal.energyCurve, hop: hop, from: (start + end) / 2, to: end)
+                - meanCurve(signal.energyCurve, hop: hop, from: start, to: (start + end) / 2)
+            let vocalSlope = meanCurve(signal.vocalPresenceCurve, hop: hop, from: (start + end) / 2, to: end)
+                - meanCurve(signal.vocalPresenceCurve, hop: hop, from: start, to: (start + end) / 2)
+
+            phrases.append(
+                AutoRemixPhrase(
+                    index: index,
+                    startSeconds: start,
+                    endSeconds: end,
+                    removability: .instrumental,   // assigned below
+                    energyMean: energy,
+                    vocalMean: vocal,
+                    bassMean: bass,
+                    onsetDensity: density,
+                    features: [energy, bass, vocal, density, energySlope * 0.5, vocalSlope * 0.5]
+                )
+            )
+            index += 1
+            start += unit
+        }
+        guard phrases.count >= 6 else { return map }
+
+        // ── Similarity matrix ──
+        let n = phrases.count
+        var similarity = [[Double]](repeating: [Double](repeating: 0, count: n), count: n)
+        for i in 0..<n {
+            similarity[i][i] = 1
+            for j in (i + 1)..<n {
+                let s = phraseSimilarity(phrases[i].features, phrases[j].features)
+                similarity[i][j] = s
+                similarity[j][i] = s
+            }
+        }
+
+        // ── Hook family: the most-repeated high-energy family ──
+        let maxEnergy = phrases.map(\.energyMean).max() ?? 1
+        let highEnergy = phrases.indices.filter { phrases[$0].energyMean >= maxEnergy * 0.75 }
+        var bestFamily: [Int] = []
+        for seedIdx in highEnergy {
+            let family = highEnergy.filter { similarity[seedIdx][$0] >= familySimilarity }
+            if family.count > bestFamily.count { bestFamily = family }
+        }
+        let hookPhrases = Set(bestFamily)
+
+        // ── Removability classes ──
+        for i in phrases.indices {
+            if hookPhrases.contains(i) {
+                phrases[i].removability = .hookFamily
+            } else if phrases[i].startSeconds < anchor + unit * 2,
+                      phrases[i].energyMean < maxEnergy * 0.6 {
+                phrases[i].removability = .intro
+            } else if phrases[i].endSeconds > usableRange.upperBound - unit * 3 - 0.5,
+                      phrases[i].energyMean < maxEnergy * 0.6 {
+                phrases[i].removability = .outro
+            } else if phrases[i].vocalMean >= vocalThreshold {
+                phrases[i].removability = .vocalDistinct
+            } else {
+                phrases[i].removability = .instrumental
+            }
+        }
+
+        // ── Hook instances (contiguous runs) with differentiation ──
+        var instances: [AutoRemixHookInstance] = []
+        var run: [Int] = []
+        func closeRun() {
+            guard !run.isEmpty else { return }
+            instances.append(
+                AutoRemixHookInstance(
+                    phraseIndices: run,
+                    startSeconds: phrases[run.first!].startSeconds,
+                    endSeconds: phrases[run.last!].endSeconds,
+                    differentiation: .nearDuplicate,   // classified below
+                    isProtected: instances.isEmpty
+                )
+            )
+            run = []
+        }
+        for i in phrases.indices {
+            if hookPhrases.contains(i) {
+                run.append(i)
+            } else {
+                closeRun()
+            }
+        }
+        closeRun()
+
+        if let first = instances.first {
+            func instanceMean(_ inst: AutoRemixHookInstance, _ key: (AutoRemixPhrase) -> Double) -> Double {
+                let values = inst.phraseIndices.map { key(phrases[$0]) }
+                return values.reduce(0, +) / Double(max(values.count, 1))
+            }
+            let refEnergy = instanceMean(first, \.energyMean)
+            let refVocal = instanceMean(first, \.vocalMean)
+            let refDensity = instanceMean(first, \.onsetDensity)
+
+            for k in instances.indices.dropFirst() {
+                let inst = instances[k]
+                var pairSim = 0.0
+                var pairs = 0
+                for (a, b) in zip(first.phraseIndices, inst.phraseIndices) {
+                    pairSim += similarity[a][b]
+                    pairs += 1
+                }
+                pairSim = pairs > 0 ? pairSim / Double(pairs) : 0
+
+                let dEnergy = instanceMean(inst, \.energyMean) - refEnergy
+                let dVocal = instanceMean(inst, \.vocalMean) - refVocal
+                let dDensity = instanceMean(inst, \.onsetDensity) - refDensity
+
+                let differentiation: AutoHookDifferentiation
+                if dEnergy >= differentiationDelta || dVocal >= differentiationDelta
+                    || dDensity >= 0.15 {
+                    differentiation = .intensified
+                } else if dEnergy <= -differentiationDelta {
+                    differentiation = .reduced
+                } else if pairSim >= 0.8 {
+                    differentiation = .nearDuplicate
+                } else {
+                    differentiation = .structurallyDistinct
+                }
+                instances[k].differentiation = differentiation
+                // Only a near-duplicate may lose its protection.
+                instances[k].isProtected = differentiation != .nearDuplicate
+            }
+        }
+
+        // ── Regions: thirds of the usable range ──
+        let span = usableRange.upperBound - usableRange.lowerBound
+        let third = span / 3
+        map.regions = [
+            usableRange.lowerBound...(usableRange.lowerBound + third),
+            (usableRange.lowerBound + third)...(usableRange.lowerBound + 2 * third),
+            (usableRange.lowerBound + 2 * third)...usableRange.upperBound,
+        ]
+
+        map.phrases = phrases
+        map.similarity = similarity
+        map.hookInstances = instances
         return map
+    }
+
+    // MARK: Internals
+
+    nonisolated private static func meanCurve(
+        _ curve: [Double],
+        hop: Double,
+        from start: Double,
+        to end: Double
+    ) -> Double {
+        guard hop > 0, !curve.isEmpty, end > start else { return 0 }
+        let lo = max(0, Int(start / hop))
+        let hi = min(curve.count - 1, Int(end / hop))
+        guard hi >= lo else { return 0 }
+        var sum = 0.0
+        for i in lo...hi { sum += curve[i] }
+        return sum / Double(hi - lo + 1)
+    }
+
+    /// Fraction of hops whose onset exceeds twice the median — a 0…1
+    /// transient-density proxy.
+    nonisolated private static func onsetDensity(
+        _ onset: [Double],
+        hop: Double,
+        from start: Double,
+        to end: Double,
+        median: Double
+    ) -> Double {
+        guard hop > 0, !onset.isEmpty, end > start, median > 0 else { return 0 }
+        let lo = max(0, Int(start / hop))
+        let hi = min(onset.count - 1, Int(end / hop))
+        guard hi >= lo else { return 0 }
+        var hits = 0
+        for i in lo...hi where onset[i] > median * 2 { hits += 1 }
+        return Double(hits) / Double(hi - lo + 1)
+    }
+
+    nonisolated private static func phraseSimilarity(_ a: [Double], _ b: [Double]) -> Double {
+        guard a.count == b.count, !a.isEmpty else { return 0 }
+        var sum = 0.0
+        for i in a.indices {
+            let d = a[i] - b[i]
+            sum += d * d
+        }
+        let distance = (sum / Double(a.count)).squareRoot()
+        return max(0, 1 - distance * 2.5)
+    }
+
+    nonisolated private static func median(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        return values.sorted()[values.count / 2]
     }
 }

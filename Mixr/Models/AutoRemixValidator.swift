@@ -338,7 +338,8 @@ nonisolated enum AutoRemixValidator {
         for p in timelineOrder {
             if let last = lastStartBySong[p.songID], p.sourceStart < last - 0.05 {
                 let justified = plan.cutRecords.contains {
-                    $0.reason == .hookReturn && abs($0.timelineAt - p.timelineStart) < 0.1
+                    ($0.reason == .hookReturn || $0.reason == .loop)
+                        && abs($0.timelineAt - p.timelineStart) < 0.1
                 }
                 if !justified {
                     toRemove.insert(idFor(p))

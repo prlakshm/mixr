@@ -617,21 +617,27 @@ do {
             .filter { $0.role == .dominant }
             .sorted { $0.timelineStart < $1.timelineStart }
 
-        // The system must actually DO something here: segments + SFX.
-        check("Multi-edit: planner emits effect segments (3 placements)",
-              dominants.count == 3, "got \(dominants.count)")
-        check("Multi-edit: later segments are source-continuous",
-              dominants.dropFirst().allSatisfy(\.continuesPrevious))
-        check("Multi-edit: segments never cut the source",
-              AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements).isEmpty)
-        check("Multi-edit: coordinated riser + impact planned",
-              Set(plan.sfxEvents.map(\.assetID)) == Set(["riser", "impact"]),
+        // The system must actually DO something here: multiple
+        // interventions, every source discontinuity recorded and masked.
+        check("Multi-edit: planner makes multiple interventions",
+              dominants.count >= 3, "got \(dominants.count)")
+        let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
+        check("Multi-edit: every cut carries a structured record",
+              cuts.allSatisfy { cut in plan.cutRecords.contains { abs($0.timelineAt - cut) < 0.1 } },
+              "\(cuts.count) cuts, \(plan.cutRecords.count) records")
+        check("Multi-edit: structural budget respected",
+              (plan.remixRecipe?.structuralCount ?? 0) <= 2)
+        check("Multi-edit: SFX only riser/impact, bound to zones",
+              plan.sfxEvents.allSatisfy {
+                  ["riser", "impact"].contains($0.assetID) && $0.transformationID != nil
+              },
               "\(plan.sfxEvents.map(\.assetID))")
         let minutes = max(plan.targetDuration / 60, 0.01)
         check("Multi-edit: SFX density still bounded",
               Double(plan.sfxEvents.count) / minutes <= 3.0)
-        check("Multi-edit: a build effect rides the middle segment",
-              dominants.count == 3 && dominants[1].effects.flangerAmount > 0.01)
+        check("Multi-edit: meaningful transformations selected",
+              (plan.remixRecipe?.meaningfulCount ?? 0) >= 1,
+              "got \(plan.remixRecipe?.meaningfulCount ?? 0)")
 
         let result = AutoOfflineMixdown.render(
             plan: plan, sources: [song.id: AutoOfflineMixdown.Source(samples: pcm, sampleRate: SR)],
@@ -649,11 +655,15 @@ do {
               result.limiterGainReductionDB <= AutoGainPolicy.maxSustainedLimiterReductionDB,
               String(format: "%.1f dB", result.limiterGainReductionDB))
 
-        // Segment splits are source-continuous — they must not dip.
+        // Every internal boundary — continuous split or masked cut —
+        // must hold level through its center.
         var worstSplitTrough = 0.0
         for p in dominants.dropFirst() {
+            let boundary = p.overlapsPreviousSeconds > 0
+                ? p.timelineStart + p.overlapsPreviousSeconds / 2
+                : p.timelineStart
             let b = AutoRemixDiagnostics.boundaryLoudness(
-                samples: mix, sampleRate: SR, boundarySeconds: p.timelineStart
+                samples: mix, sampleRate: SR, boundarySeconds: boundary
             )
             worstSplitTrough = max(worstSplitTrough, b.centerTroughDB)
         }

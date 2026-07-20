@@ -47,7 +47,7 @@ struct SongSignalFeatures: Sendable {
     var energyCurve: [Double]
     /// Low-band (~<150 Hz) energy per hop, normalized 0…1.
     var bassEnergyCurve: [Double]
-    /// Mid-band (~300 Hz–3 kHz) presence per hop, normalized 0…1 —
+    /// Mid-band (~450 Hz–3 kHz) presence per hop, normalized 0…1 —
     /// vocal-presence proxy without a separation model.
     var vocalPresenceCurve: [Double]
     /// Spectral-novelty proxy per hop (band-energy change), normalized.
@@ -106,9 +106,12 @@ enum SongSignalAnalyzer {
         }
 
         // ── Band-filtered streams (one-pole cascades, single pass) ──
-        // bass ≈ < 150 Hz, mid ≈ 300 Hz – 3 kHz (vocal-presence proxy).
+        // bass ≈ < 150 Hz; vocal proxy ≈ 450 Hz – 3 kHz built as TWO
+        // cascaded first-order high-passes into a low-pass — a simple
+        // band-difference (lpHigh − lpLow) leaks low-mid fundamentals
+        // through phase mismatch and read instruments as vocals.
         let aBass = onePoleCoefficient(cutoff: 150, sampleRate: sampleRate)
-        let aMidLo = onePoleCoefficient(cutoff: 300, sampleRate: sampleRate)
+        let aMidLo = onePoleCoefficient(cutoff: 450, sampleRate: sampleRate)
         let aMidHi = onePoleCoefficient(cutoff: 3000, sampleRate: sampleRate)
 
         let hop = max(1, Int(hopSeconds * sampleRate))
@@ -123,20 +126,33 @@ enum SongSignalAnalyzer {
         var fineRMS = [Double](repeating: 0, count: fineCount)
 
         var lpBass: Double = 0
-        var lpMidLo: Double = 0
-        var lpMidHi: Double = 0
-        var sumSq = 0.0, sumSqBass = 0.0, sumSqMid = 0.0
+        var lpHP1: Double = 0
+        var lpHP2: Double = 0
+        var lpMidOut: Double = 0
+        var sumSq = 0.0, sumSqBass = 0.0
         var hopIdx = 0, hopFill = 0
         var fineSumSq = 0.0
         var fineIdx = 0, fineFill = 0
         var prevSample = 0.0
+        // Vocal proxy: vocals are SUSTAINED mid-band energy. Per hop the
+        // mid RMS is the MEDIAN of five 20 ms sub-windows, so an isolated
+        // percussive transient (one corrupted sub-window) cannot read as
+        // vocal presence.
+        let midSubCount = 5
+        let midSubLen = max(1, hop / midSubCount)
+        var midSubSumSq = 0.0
+        var midSubFill = 0
+        var midSubRMS: [Double] = []
 
         for sample in samples {
             let v = Double(sample)
             lpBass += (v - lpBass) * aBass
-            lpMidLo += (v - lpMidLo) * aMidLo
-            lpMidHi += (v - lpMidHi) * aMidHi
-            let mid = lpMidHi - lpMidLo
+            lpHP1 += (v - lpHP1) * aMidLo
+            let hp1 = v - lpHP1
+            lpHP2 += (hp1 - lpHP2) * aMidLo
+            let hp2 = hp1 - lpHP2
+            lpMidOut += (hp2 - lpMidOut) * aMidHi
+            let mid = lpMidOut
             // Transient emphasis for the beat tracker: first difference
             // (6 dB/oct high-pass) so steady tonal content cannot bias
             // the onset grid — only true transients score.
@@ -145,7 +161,13 @@ enum SongSignalAnalyzer {
 
             sumSq += v * v
             sumSqBass += lpBass * lpBass
-            sumSqMid += mid * mid
+            midSubSumSq += mid * mid
+            midSubFill += 1
+            if midSubFill == midSubLen {
+                midSubRMS.append((midSubSumSq / Double(midSubLen)).squareRoot())
+                midSubSumSq = 0
+                midSubFill = 0
+            }
             hopFill += 1
             if hopFill == hop, hopIdx < hopCount {
                 let n = Double(hop)
@@ -153,10 +175,14 @@ enum SongSignalAnalyzer {
                 rmsDB[hopIdx] = 20 * log10(max(rms, 1e-12))
                 totalRMS[hopIdx] = rms
                 bassRMS[hopIdx] = (sumSqBass / n).squareRoot()
-                midRMS[hopIdx] = (sumSqMid / n).squareRoot()
+                let sortedSubs = midSubRMS.sorted()
+                midRMS[hopIdx] = sortedSubs.isEmpty ? 0 : sortedSubs[sortedSubs.count / 2]
+                midSubRMS.removeAll(keepingCapacity: true)
+                midSubSumSq = 0
+                midSubFill = 0
                 hopIdx += 1
                 hopFill = 0
-                sumSq = 0; sumSqBass = 0; sumSqMid = 0
+                sumSq = 0; sumSqBass = 0
             }
 
             fineSumSq += transient * transient
@@ -257,6 +283,8 @@ enum SongSignalAnalyzer {
         var downbeatOffset: Double?
         var beatConfidence = 0.0
         var drumConfidence = 0.0
+        var gridWindows: [AutoRemixGridWindow] = []
+        var gridDrift = 1.0
         if let period {
             let search = beatPhase(
                 onset: fineOnset,
@@ -271,6 +299,56 @@ enum SongSignalAnalyzer {
                 // First grid time at/after the music starts with real onset
                 // energy — never assume the source begins on beat one.
                 downbeatOffset = search.firstBeatSeconds
+            }
+
+            // ── Local grid stability: independent phase measurements in
+            // windows across the song. One global anchor is NOT enough
+            // evidence for later structural edits — phases must agree.
+            let windowLen = 25.0
+            let musicStart = leadingSilence
+            let musicEnd = duration - trailingSilence
+            if musicEnd - musicStart > windowLen * 1.5 {
+                let step = max(10.0, (musicEnd - musicStart - windowLen) / 5.0)
+                var wStart = musicStart
+                while wStart + windowLen <= musicEnd + 0.01 {
+                    let w = beatPhase(
+                        onset: fineOnset,
+                        hop: onsetHopSeconds,
+                        period: period,
+                        searchStart: wStart,
+                        searchSeconds: windowLen
+                    )
+                    gridWindows.append(
+                        AutoRemixGridWindow(
+                            centerSeconds: wStart + windowLen / 2,
+                            phase: (w.firstBeatSeconds ?? wStart)
+                                .truncatingRemainder(dividingBy: period),
+                            confidence: w.confidence
+                        )
+                    )
+                    wStart += step
+                }
+
+                // Drift: max circular phase deviation between confident
+                // windows; a window where the fixed-period grid stops
+                // scoring at all is itself evidence of local instability.
+                let maxConf = gridWindows.map(\.confidence).max() ?? 0
+                let confident = gridWindows.filter { $0.confidence > 0.25 }
+                var deviation = 0.0
+                if confident.count >= 2 {
+                    for i in 0..<confident.count {
+                        for j in (i + 1)..<confident.count {
+                            let raw = abs(confident[i].phase - confident[j].phase)
+                            deviation = max(deviation, min(raw, period - raw))
+                        }
+                    }
+                    gridDrift = deviation / period
+                }
+                if maxConf > 0.3, gridWindows.contains(where: { $0.confidence < maxConf * 0.25 }) {
+                    gridDrift = max(gridDrift, 0.5)
+                }
+            } else if beatConfidence > 0.3 {
+                gridDrift = 0
             }
         }
 
@@ -293,7 +371,9 @@ enum SongSignalAnalyzer {
             vocalPresenceCurve: vocalCurve,
             noveltyCurve: noveltyCurve,
             drumConfidence: drumConfidence,
-            overallConfidence: overall
+            overallConfidence: overall,
+            beatPhaseWindows: gridWindows,
+            gridDriftFractionOfBeat: gridDrift
         )
     }
 

@@ -65,6 +65,9 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case savedStrongestForPeak
     case duoAlternationFallback
     case excludedLowConfidenceSong
+    /// One recipe transformation applied to the one-song remix
+    /// (sentence supplied in `detail`).
+    case transformedZone
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -116,6 +119,8 @@ struct AutoDecision: Sendable, Equatable {
                 ?? "Could not reach the full A → B → A → B alternation without incomplete sections."
         case .excludedLowConfidenceSong:
             return "Excluded \(song): \(detail ?? "not enough timeline for a recognizable phrase")."
+        case .transformedZone:
+            return detail ?? "Transformed a section."
         }
     }
 }
