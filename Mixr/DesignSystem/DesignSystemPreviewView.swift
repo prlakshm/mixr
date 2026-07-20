@@ -337,8 +337,8 @@ struct DesignSystemPreviewView: View {
 
                         TLVolumeSlider(
                             value: .constant(sample.value),
-                            accentColor: sample.color.peakColor,
-                            trackColor: sample.color.color
+                            accentColor: sample.color.volumeAccentColor,
+                            trackColor: sample.color.volumeTrackColor
                         )
                         .frame(width: 120)
 
@@ -553,12 +553,7 @@ struct DesignSystemPreviewView: View {
                     }
                     .padding(.horizontal, 10)
                     .frame(width: 208, height: 46)
-                    .background(MixrColors.backgroundSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
-                            .strokeBorder(MixrColors.divider, lineWidth: 0.5)
-                    }
+                    .background(MixrTrackRowBackground(isSFXTrack: true))
                 }
 
                 PreviewSubsection(title: "Silver SFX clips") {
@@ -901,8 +896,8 @@ private struct DSPreviewTrackControlRow: View {
 
                 TLVolumeSlider(
                     value: $volume,
-                    accentColor: color.peakColor,
-                    trackColor: color.color
+                    accentColor: color.volumeAccentColor,
+                    trackColor: color.volumeTrackColor
                 )
                 .frame(maxWidth: .infinity)
             }

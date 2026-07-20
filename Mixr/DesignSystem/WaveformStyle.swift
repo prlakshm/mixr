@@ -196,7 +196,7 @@ struct WaveformClipBackground: View {
                         colors: [
                             waveformColor.tintColor,
                             waveformColor == .silver
-                                ? MixrColors.sfxFill.opacity(0.14)
+                                ? MixrColors.sfxClipInnerTint.opacity(0.076)
                                 : waveformColor.color.opacity(0.10),
                         ],
                         startPoint: .topLeading,
@@ -270,19 +270,33 @@ struct WaveformSilhouetteCanvas: View {
             let peakColor = waveformColor.peakColor
             let baseColor = waveformColor.color
 
-            context.fill(silhouette, with: .linearGradient(
-                Gradient(colors: [
+            let waveformGradient = waveformColor == .silver
+                ? Gradient(colors: [
+                    MixrColors.sfxWaveformTop,
+                    MixrColors.sfxWaveformBottom,
+                ])
+                : Gradient(colors: [
                     peakColor.opacity(0.94),
-                    baseColor.opacity(waveformColor == .silver ? 0.88 : 1.0),
-                    peakColor.opacity(waveformColor == .silver ? 0.88 : 1.0),
-                ]),
+                    baseColor,
+                    peakColor,
+                ])
+
+            context.fill(silhouette, with: .linearGradient(
+                waveformGradient,
                 startPoint: CGPoint(x: size.width / 2, y: 0),
                 endPoint: CGPoint(x: size.width / 2, y: size.height)
             ))
 
             context.drawLayer { layer in
-                layer.addFilter(.shadow(color: baseColor.opacity(0.38), radius: 2.5, x: 0, y: 0))
-                layer.fill(silhouette, with: .color(peakColor.opacity(0.20)))
+                let glowColor = waveformColor == .silver
+                    ? MixrColors.sfxWaveformGlow.opacity(0.08)
+                    : baseColor.opacity(0.38)
+                let highlightColor = waveformColor == .silver
+                    ? MixrColors.sfxWaveformTop.opacity(0.08)
+                    : peakColor.opacity(0.20)
+
+                layer.addFilter(.shadow(color: glowColor, radius: 2.5, x: 0, y: 0))
+                layer.fill(silhouette, with: .color(highlightColor))
             }
         }
         .opacity(WaveformMetrics.waveformOpacity * waveformColor.waveformOpacity)

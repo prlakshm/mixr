@@ -2668,7 +2668,7 @@ private struct TLSongRow: View {
                 .zIndex(isDeleteRevealed ? 2 : 0)
 
             rowContent
-                .background(MixrColors.backgroundSecondary)
+                .background(MixrTrackRowBackground(isSFXTrack: track.isSFXTrack))
                 .offset(x: isDeleting ? -TLK.sidebarWidth : swipeOffset)
                 .opacity(isDeleting ? 0.72 : 1)
                 .contentShape(Rectangle())
@@ -3749,8 +3749,8 @@ private struct TLTrackControlRow: View {
 
                 TLVolumeSlider(
                     value: $volume,
-                    accentColor: track.color.peakColor,
-                    trackColor:  track.color.color,
+                    accentColor: track.color.volumeAccentColor,
+                    trackColor:  track.color.volumeTrackColor,
                     onEditingChanged: onVolumeEditingChanged
                 )
                 .frame(maxWidth: .infinity)

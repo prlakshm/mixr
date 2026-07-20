@@ -162,30 +162,30 @@ struct SFXCard: View {
     var height: CGFloat = SFXMetrics.cardDefaultHeight
     var onTap: () -> Void = {}
 
-    private enum Colorway {
+    enum Colorway {
         case version1Colored
         case version2GrayLavender
     }
 
     /// Change this one selector to compare the preserved treatments.
-    private static let activeColorway: Colorway = .version2GrayLavender
+    static let activeColorway: Colorway = .version2GrayLavender
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: SFXMetrics.cardRadius, style: .continuous)
     }
 
-    private var pearlLavender: Color { Color(hex: "E6DCFF") }
+    static var pearlLavender: Color { Color(hex: "E6DCFF") }
 
-    private var iconBloomColor: Color {
+    static var iconBloomColor: Color {
         switch Self.activeColorway {
         case .version1Colored:
             Color(hex: "D88BC8").opacity(0.20)
         case .version2GrayLavender:
-            pearlLavender.opacity(0.30)
+            Self.pearlLavender.opacity(0.30)
         }
     }
 
-    private var iconTileBorderColor: Color {
+    static var iconTileBorderColor: Color {
         switch Self.activeColorway {
         case .version1Colored:
             Color(hex: "8E739F").opacity(0.21)
@@ -199,7 +199,7 @@ struct SFXCard: View {
         case .version1Colored:
             Color(hex: "D1B9FA").opacity(0.91)
         case .version2GrayLavender:
-            Color(hex: "C9B9F4").opacity(0.88)
+            MixrColors.sfxMenuLavender.opacity(0.88)
         }
     }
 
@@ -232,13 +232,13 @@ struct SFXCard: View {
                 Image(systemName: effect.icon)
                     .font(.system(size: iconSize, weight: .semibold))
                     .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(pearlIconFill)
+                    .foregroundStyle(Self.pearlIconFill)
                     .shadow(
                         color: Color.white.opacity(0.56),
                         radius: SFXMetrics.cardIconCoreGlowRadius
                     )
                     .shadow(
-                        color: iconBloomColor,
+                        color: Self.iconBloomColor,
                         radius: SFXMetrics.cardIconBloomRadius
                     )
                     .frame(width: iconTileSize, height: iconTileSize)
@@ -272,7 +272,7 @@ struct SFXCard: View {
     }
 
     /// Soft pearl luminance with a restrained lavender falloff.
-    private var pearlIconFill: LinearGradient {
+    static var pearlIconFill: LinearGradient {
         LinearGradient(
             colors: [
                 Color.white,
@@ -291,39 +291,10 @@ struct SFXCard: View {
     }
 
     private var iconTile: some View {
-        let tileShape = RoundedRectangle(
+        SFXIconBoxSurface(
             cornerRadius: SFXMetrics.cardIconTileCornerRadius,
-            style: .continuous
+            bloomEndRadius: iconTileSize * 0.62
         )
-        return tileShape
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(hex: "272337").opacity(0.90),
-                        Color(hex: "161724").opacity(0.96),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay {
-                tileShape.fill(
-                    RadialGradient(
-                        colors: [
-                            Color(hex: "C78BC4").opacity(0.13),
-                            pearlLavender.opacity(0.07),
-                            Color.clear,
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: iconTileSize * 0.62
-                    )
-                )
-            }
-            .overlay {
-                tileShape.strokeBorder(iconTileBorderColor, lineWidth: 0.75)
-            }
-            .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
     }
 
     private var cardSurface: some View {
@@ -373,6 +344,60 @@ struct SFXCard: View {
                 Color.white.opacity(0.16), lineWidth: SFXMetrics.cardBorderLineWidth
             )
             .allowsHitTesting(false)
+    }
+}
+
+/// Shared card/chip surface so the SFX track chip cannot drift from the menu icons.
+struct SFXIconBoxSurface: View {
+    let cornerRadius: CGFloat
+    let bloomEndRadius: CGFloat
+    var profile: SFXIconBoxRenderingProfile = .standard
+
+    private var tileShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
+
+    var body: some View {
+        tileShape
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(hex: "272337").opacity(0.90),
+                        Color(hex: "161724").opacity(0.96),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                tileShape.fill(
+                    profile.luminanceWashColor.opacity(profile.luminanceWashOpacity)
+                )
+            }
+            .overlay {
+                tileShape.fill(
+                    profile.navyWashColor.opacity(profile.navyWashOpacity)
+                )
+            }
+            .overlay {
+                tileShape.fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: "C78BC4").opacity(profile.radialPrimaryOpacity),
+                            profile.radialSecondaryColor.opacity(profile.radialSecondaryOpacity),
+                            Color.clear,
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: bloomEndRadius
+                    )
+                )
+            }
+            .overlay {
+                tileShape.strokeBorder(profile.borderColor, lineWidth: 0.75)
+            }
+            .shadow(color: profile.outerGlowColor, radius: profile.outerGlowRadius)
+            .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
     }
 }
 

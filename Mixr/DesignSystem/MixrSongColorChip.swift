@@ -17,7 +17,16 @@ struct MixrSongColorChip: View {
     /// Option D — reduced outer glow, crisp edges (SFX chip only).
     private var isReducedGlowChip: Bool { color == .silver }
 
+    @ViewBuilder
     var body: some View {
+        if usesSFXMark && artworkData == nil {
+            sfxChipContent
+        } else {
+            standardChip
+        }
+    }
+
+    private var standardChip: some View {
         Group {
             if let artworkData, let image = UIImage(data: artworkData) {
                 Image(uiImage: image)
@@ -98,6 +107,34 @@ struct MixrSongColorChip: View {
             x: 0,
             y: 0
         )
+    }
+
+    private var sfxChipContent: some View {
+        let profile = SFXIconBoxRenderingProfile.compact
+
+        return ZStack {
+            SFXIconBoxSurface(
+                cornerRadius: 7,
+                bloomEndRadius: 34 * 0.62,
+                profile: profile
+            )
+
+            SFXCard.pearlIconFill
+                .frame(width: 34, height: 34)
+                .mask {
+                    MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95, color: .white)
+                        .frame(width: 34, height: 34)
+                }
+                .shadow(
+                    color: Color.white.opacity(profile.iconCoreGlowOpacity),
+                    radius: profile.iconCoreGlowRadius
+                )
+                .shadow(
+                    color: profile.iconBloomColor,
+                    radius: profile.iconBloomRadius
+                )
+        }
+        .frame(width: 34, height: 34)
     }
 
     private var defaultChipContent: some View {

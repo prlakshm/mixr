@@ -83,15 +83,19 @@ enum MixrColors {
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
 
-    /// Cool silver with a slight blue cast — SFX lane primary
-    /// (waveform, grips, selected accents).
-    static let sfxPrimary = Color(hex: "D2D8E2")
-    /// Softer SFX secondary (cards, softer reflections).
-    static let sfxSecondary = Color(hex: "8C97A8")
-    /// Clip body fill — intensity closer to pink/yellow track tints.
-    static let sfxFill = Color(hex: "C9D2DE")
-    /// Clip outline / stroke.
-    static let sfxOutline = Color(hex: "DDE5F0")
+    /// Refined B — darker pearl-lavender SFX clip presentation.
+    static let sfxClipBodyTint = Color(hex: "8A839D")
+    static let sfxClipInnerTint = Color(hex: "B9B0D2")
+    static let sfxWaveformTop = Color(hex: "E4DBFA")
+    static let sfxWaveformBottom = Color(hex: "CFC6EE")
+    static let sfxOutline = Color(hex: "CDC2F4")
+    static let sfxWaveformGlow = Color(hex: "E6E1F4")
+    static let sfxMenuLavender = Color(hex: "C9B9F4")
+
+    /// Compatibility aliases for existing SFX-only accents and transitions.
+    static let sfxPrimary = sfxWaveformBottom
+    static let sfxSecondary = sfxClipBodyTint
+    static let sfxFill = sfxClipBodyTint
     /// Resting clip ambient glow.
     static let sfxGlow = Color(hex: "E7EDF5")
     /// Alias for the Sound Effects track color (`sfxPrimary`).
@@ -159,7 +163,7 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
     var tintColor: Color {
         switch self {
         case .silver:
-            MixrColors.sfxFill.opacity(0.22)
+            MixrColors.sfxClipBodyTint.opacity(0.152)
         default:
             color.opacity(0.18)
         }
@@ -169,7 +173,7 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
     var outlineColor: Color {
         switch self {
         case .silver:
-            MixrColors.sfxOutline.opacity(0.40)
+            MixrColors.sfxOutline.opacity(0.48)
         default:
             color.opacity(0.45)
         }
@@ -208,8 +212,24 @@ enum MixrWaveformColor: String, CaseIterable, Identifiable, Codable {
     /// Waveform silhouette opacity multiplier.
     var waveformOpacity: CGFloat {
         switch self {
-        case .silver: 0.88
+        case .silver: 0.94
         default: 1.0
+        }
+    }
+
+    /// Filled slider segment and thumb accent. Music tracks preserve their peak colors.
+    var volumeAccentColor: Color {
+        switch self {
+        case .silver: MixrColors.sfxMenuLavender
+        default: peakColor
+        }
+    }
+
+    /// Slider color wash. Music tracks preserve their existing lane colors.
+    var volumeTrackColor: Color {
+        switch self {
+        case .silver: MixrColors.sfxMenuLavender
+        default: color
         }
     }
 }

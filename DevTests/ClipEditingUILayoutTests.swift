@@ -44,6 +44,12 @@ check(
         && matches(#"toolbarSpeedContentBottomPadding\s*:\s*CGFloat\s*=\s*ts\s*\(\s*2\s*\)"#)
 )
 check(
+    "Action toolbar uses less top padding for optical vertical balance",
+    matches(#"toolbarContentTopPadding\s*:\s*CGFloat\s*=\s*ts\s*\(\s*6\s*\)"#)
+        && matches(#"toolbarContentBottomPadding\s*:\s*CGFloat\s*=\s*ts\s*\(\s*10\s*\)"#)
+        && matches(#"toolbarActionTopPadding\s*:\s*CGFloat\s*=\s*ts\s*\(\s*2\s*\)"#)
+)
+check(
     "Speed field background extends two points lower",
     matches(#"speedFieldBottomExtension\s*:\s*CGFloat\s*=\s*2"#)
         && matches(#"frame\s*\(\s*height:\s*fieldHeight\s*\+\s*bottomExtension"#)

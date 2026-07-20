@@ -33,7 +33,7 @@ enum TLClipEditingMetrics {
     static let toolbarPointerW: CGFloat = ts(7)
     static let toolbarPointerH: CGFloat = ts(4)
     static let toolbarCornerRadius: CGFloat = ts(11)
-    static let toolbarContentTopPadding: CGFloat = ts(8)
+    static let toolbarContentTopPadding: CGFloat = ts(6)
     static let toolbarContentBottomPadding: CGFloat = ts(10)
     /// Speed insets: leading / trailing / top / bottom.
     static let toolbarSpeedLeadingPadding: CGFloat = ts(6)
