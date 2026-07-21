@@ -1654,6 +1654,80 @@ do {
     }
 }
 
+// MARK: - 24. Moderate confidence → safe DSP edits, never a cut
+//
+// The fix for "Auto did nothing on a real song": when the signal is
+// trustworthy but beat/structure confidence is below the structural bar,
+// the planner still applies source-continuous effect treatments (no
+// cuts) so the result has audible movement — instead of collapsing to a
+// single untouched placement.
+
+do {
+    let duration = 150.0
+    let hop = SongSignalAnalyzer.hopSeconds
+    let hops = Int(duration / hop)
+    // Energy curve with two clear rises; beat confidence deliberately LOW.
+    var energy = [Double](repeating: 0.5, count: hops)
+    for i in 0..<hops {
+        let t = Double(i) * hop
+        if t >= 40 && t < 70 { energy[i] = 0.85 }   // rise at ~40s
+        if t >= 100 && t < 130 { energy[i] = 0.9 }  // rise at ~100s
+    }
+    let moderateFeatures = SongSignalFeatures(
+        sampleRate: SR, durationSeconds: duration,
+        rmsCurveDB: [Double](repeating: -12, count: hops),
+        onsetStrength: [Double](repeating: 0.3, count: hops), hopSeconds: hop,
+        downbeatOffsetSeconds: nil,
+        beatConfidence: 0.25,             // < 0.4 → structural edits withheld
+        leadingSilenceSeconds: 0, trailingSilenceSeconds: 0, quietRegions: [],
+        energyCurve: energy,
+        bassEnergyCurve: [Double](repeating: 0.6, count: hops),
+        vocalPresenceCurve: [Double](repeating: 0.5, count: hops),
+        noveltyCurve: [Double](repeating: 0.2, count: hops),
+        drumConfidence: 0.3,
+        overallConfidence: 0.5,           // ≥ 0.35 → safe-effects tier
+        beatPhaseWindows: [], gridDriftFractionOfBeat: 1.0
+    )
+    let song = makeSong(title: "Moderate Song", bpm: 120, key: "C", durationSeconds: duration)
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song], seed: 60, signals: [song.id: moderateFeatures]
+    )
+    switch outcome {
+    case .success(_, let plan, _):
+        // The key fix: NOT empty. It makes audible effect edits.
+        let dspPlacements = plan.placements.filter { $0.effects.hasAnyActiveEffect }
+        check("Moderate: produces audible effect treatments (not nothing)",
+              !dspPlacements.isEmpty, "\(dspPlacements.count) effected placements")
+        check("Moderate: at least one coordinated SFX",
+              !plan.sfxEvents.isEmpty, "\(plan.sfxEvents.count) SFX")
+
+        // But NEVER a cut — structural edits are withheld at this tier.
+        let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
+        check("Moderate: zero internal cuts (structural withheld)", cuts.isEmpty,
+              "got \(cuts.count)")
+        check("Moderate: source order stays monotonic",
+              AutoRemixDiagnostics.sourceOrderIsMonotonic(placements: plan.placements))
+        check("Moderate: reports why structural edits were withheld",
+              plan.warnings.contains { $0.contains("safe-effects") }
+                  || (plan.remixRecipe?.unmetTargets.contains { $0.contains("structural edits withheld") } ?? false))
+
+        // Render must still pass the audio gates.
+        let source = AutoOfflineMixdown.Source(
+            samples: syntheticSong(durationSeconds: duration, flatAmplitude: 0.5), sampleRate: SR)
+        let result = AutoOfflineMixdown.render(plan: plan, sources: [song.id: source], sampleRate: SR)
+        check("Moderate render: no clipping", AutoRemixDiagnostics.clippedSampleCount(result.mix) == 0)
+        check("Moderate render: true peak ≤ −1 dBTP",
+              AutoRemixDiagnostics.truePeakDB(samples: result.mix, sampleRate: SR) <= AutoGainPolicy.truePeakCeilingDB + 0.2)
+        let cStart = plan.placements.map(\.timelineStart).min() ?? 0
+        let cEnd = plan.placements.map(\.timelineEnd).max() ?? 0
+        let sil = AutoRemixDiagnostics.silenceRuns(samples: result.mix, sampleRate: SR, thresholdDB: -45, minSeconds: 0.1)
+            .filter { $0.start > cStart + 0.5 && $0.end < cEnd - 0.5 }
+        check("Moderate render: no silence holes", sil.isEmpty)
+    case .failure(let message):
+        check("Moderate-confidence one-song plans", false, message)
+    }
+}
+
 // MARK: - Diagnostics evidence (printed, not asserted)
 
 if let plan = confidentPlan, let song = confidentSong {

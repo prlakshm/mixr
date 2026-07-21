@@ -226,6 +226,22 @@ enum AutoRemixPlanner {
         let confident = signalTrusted
             && analysis.analysisConfidence >= tuning.lowConfidenceThreshold
             && (signal?.beatConfidence ?? 0) > 0.4
+        // Moderate tier: the signal is trustworthy enough for SAFE effect
+        // treatments that don't need reliable structure/beat grid, but
+        // NOT for structural cuts. Below this, stay fully continuous.
+        let moderate = !confident
+            && (signal?.overallConfidence ?? 0) >= 0.35
+
+        // Debug readout so "why did Auto do little/nothing" is visible
+        // (surfaces in the summary warnings; not shown in the main UI).
+        if let signal {
+            warnings.append(String(
+                format: "Analysis confidence — overall %.2f, beat %.2f, analysis %.2f (tier: %@).",
+                signal.overallConfidence, signal.beatConfidence, analysis.analysisConfidence,
+                confident ? "full" : (moderate ? "safe-effects" : "continuous")))
+        } else {
+            warnings.append("No signal analysis available — kept the song continuous.")
+        }
         if !confident {
             decisions.append(
                 AutoDecision(kind: .usedLowConfidenceFallback, songTitle: profile.title, detail: nil)
@@ -262,6 +278,24 @@ enum AutoRemixPlanner {
                 structure: structure,
                 tuning: tuning,
                 seed: seed
+            )
+        } else if moderate, let signal {
+            // Safe-effects tier: source-continuous DSP treatments driven
+            // by the ENERGY curve alone (no beat grid / structure needed),
+            // so a well-recorded song whose beat/section analysis is
+            // uncertain still gets audible movement — never a cut.
+            let safe = safeDspOpportunities(
+                analysis: analysis, signal: signal,
+                usableStart: usableStart, usableEnd: usableEnd, bar: bar
+            )
+            recipe = AutoRemixRecipe(
+                selected: safe,
+                rejected: [],
+                unmetTargets: ["structural edits withheld — analysis confidence below the safe-cut threshold"],
+                ledgers: Dictionary(uniqueKeysWithValues: safe.map {
+                    ($0.id, AudibilityLedger(predictedDelta: $0.audibility.predictedDelta,
+                                             portableRenderDelta: nil, exportDelta: nil, auditioned: false))
+                })
             )
         }
 
@@ -652,6 +686,80 @@ enum AutoRemixPlanner {
             confidence: analysis.analysisConfidence,
             randomSeed: seed
         )
+    }
+
+    /// Safe DSP-only opportunities for the moderate-confidence tier:
+    /// filtered builds at the strongest MEASURED energy rises plus a
+    /// reverb/echo swell over the final section. Energy comes from the
+    /// RMS curve, which is reliable even when the beat grid is not — so
+    /// none of these need structure, and none is a cut.
+    private static func safeDspOpportunities(
+        analysis: SongAnalysis,
+        signal: SongSignalFeatures,
+        usableStart: Double,
+        usableEnd: Double,
+        bar: Double
+    ) -> [AutoRemixOpportunity] {
+        let hop = signal.hopSeconds
+        let curve = signal.energyCurve
+        guard hop > 0, !curve.isEmpty, usableEnd - usableStart > bar * 12 else { return [] }
+        let windowHops = max(1, Int(4.0 / hop))
+        func mean(_ from: Double, _ to: Double) -> Double {
+            let a = max(0, Int(from / hop)), b = min(curve.count, Int(to / hop))
+            guard b > a else { return 0 }
+            var s = 0.0; for i in a..<b { s += curve[i] }
+            return s / Double(b - a)
+        }
+
+        // Scan for the two biggest sustained energy rises, spaced apart.
+        var rises: [(t: Double, rise: Double)] = []
+        var t = usableStart + bar * 4
+        while t < usableEnd - bar * 4 {
+            let idx = Int(t / hop)
+            let rise = mean(Double(idx) * hop, Double(idx + windowHops) * hop)
+                - mean(Double(idx - windowHops) * hop, Double(idx) * hop)
+            rises.append((t, rise))
+            t += bar
+        }
+        rises.sort { $0.rise > $1.rise }
+        var chosen: [Double] = []
+        for r in rises where r.rise >= 0.12 {
+            if chosen.allSatisfy({ abs($0 - r.t) >= bar * 8 }) { chosen.append(r.t) }
+            if chosen.count == 2 { break }
+        }
+
+        var out: [AutoRemixOpportunity] = []
+        for anchor in chosen {
+            let zoneStart = max(usableStart, anchor - bar * 4)
+            let zoneEnergy = mean(zoneStart, anchor)
+            out.append(AutoRemixOpportunity(
+                kind: .filteredBuild, zoneStart: zoneStart, zoneEnd: anchor,
+                anchorDownbeat: anchor, region: 0,
+                score: 0.6, confidence: signal.overallConfidence, vocalSafe: true,
+                evidence: [AutoRemixEvidence(name: "energyRise", value: 0.15, measured: true)],
+                audibility: AudibilityContract(
+                    musicalJustification: "measured energy rise (safe-effects tier)",
+                    expectedConsequence: "high frequencies sweep closed then reopen at the lift",
+                    measuredFeature: .hfEnergy,
+                    predictedDelta: 16 * min(1, zoneEnergy + 0.3),
+                    minimumRequiredDelta: 3)))
+        }
+
+        // A reverb/echo swell over the final section for a shaped ending.
+        let swellStart = usableEnd - bar * 8
+        if swellStart > usableStart + bar * 4 {
+            out.append(AutoRemixOpportunity(
+                kind: .finalChorusLift, zoneStart: swellStart, zoneEnd: usableEnd,
+                anchorDownbeat: swellStart, region: 0,
+                score: 0.55, confidence: signal.overallConfidence, vocalSafe: true,
+                evidence: [AutoRemixEvidence(name: "finalSection", value: 1, measured: true)],
+                audibility: AudibilityContract(
+                    musicalJustification: "shape the final section (safe-effects tier)",
+                    expectedConsequence: "reverb and echo swell into the ending",
+                    measuredFeature: .echoTailEnergy,
+                    predictedDelta: -12, minimumRequiredDelta: -22)))
+        }
+        return out.sorted { $0.zoneStart < $1.zoneStart }
     }
 
     /// User-facing sentence for one applied transformation.
