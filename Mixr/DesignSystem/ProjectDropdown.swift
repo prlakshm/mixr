@@ -63,6 +63,12 @@ struct ProjectDropdownMenu: View {
         .frame(width: Self.menuWidth)
         .background { menuGlass }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .partyModeBorder(
+            shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous),
+            role: .menu,
+            lighting: .violetTrailing,
+            glintOffset: .near
+        )
         .shadow(color: .black.opacity(0.55), radius: 18, x: 0, y: 7)
         .shadow(color: .black.opacity(0.20), radius: 3.5, x: 0, y: 1.75)
     }
@@ -277,6 +283,15 @@ struct DeleteProjectConfirmDialog: View {
         .fixedSize(horizontal: true, vertical: true)
         .background { MixrAlertChrome.background() }
         .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius, style: .continuous))
+        .partyModeBorder(
+            shape: RoundedRectangle(
+                cornerRadius: MixrAlertChrome.cornerRadius,
+                style: .continuous
+            ),
+            role: .dialog,
+            lighting: .clockwise,
+            glintOffset: .near
+        )
         .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Delete \(projectName)?")

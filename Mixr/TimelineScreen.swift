@@ -836,6 +836,7 @@ private struct ProjectTitleFrameKey: PreferenceKey {
 // MARK: - Transport Bar
 
 private struct TLTransportBar: View {
+    @Environment(AppAppearanceState.self) private var appearanceState
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
     var displayTimeSeconds: Double = 0
@@ -854,14 +855,24 @@ private struct TLTransportBar: View {
         ZStack {
             // Home group — Mixr + project + undo/redo
             HStack(spacing: 24) {
-                HStack(spacing: 7) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(MixrColors.primaryPurple)
-                    Text("Mixr")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(MixrColors.textPrimary)
+                Button {
+                    appearanceState.togglePartyMode()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(MixrColors.primaryPurple)
+                            .partyModeIconGlow()
+                        Text("Mixr")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(MixrColors.textPrimary)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Toggle Party Mode")
+                .accessibilityValue(appearanceState.isPartyModeEnabled ? "On" : "Off")
 
                 HStack(spacing: 18) {
                     projectTitleControl
@@ -900,7 +911,7 @@ private struct TLTransportBar: View {
                     Label("Export", systemImage: "square.and.arrow.up")
                         .frame(minWidth: 74)
                 }
-                .buttonStyle(MixrSecondaryGlassButtonStyle())
+                .buttonStyle(MixrSecondaryGlassButtonStyle(partyRole: .export))
                 .fixedSize(horizontal: true, vertical: false)
                 .disabled(isExporting)
                 .padding(.trailing, 14)
@@ -941,8 +952,9 @@ private struct TLTransportBar: View {
                             .offset(x: playback.isPlaying ? 0 : 1)
                     }
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(MixrColors.primaryPurple))
+                    .background { PartyModePlayButtonSurface() }
                     .shadow(color: MixrColors.primaryPurple.opacity(0.50), radius: 10)
+                    .partyModePlayButton()
 
                     Button {
                         playback.skipToEnd()
@@ -1000,6 +1012,12 @@ private struct TLTransportBar: View {
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
         }
+        .partyModeBorder(
+            shape: Rectangle(),
+            role: .majorPanel,
+            lighting: .violetTrailing,
+            glintOffset: .none
+        )
     }
 
     // MARK: - Project title
@@ -1025,6 +1043,12 @@ private struct TLTransportBar: View {
                                 .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
                         }
                 }
+                .partyModeBorder(
+                    shape: RoundedRectangle(cornerRadius: 6, style: .continuous),
+                    role: .compactControl,
+                    lighting: .violetTrailing,
+                    glintOffset: .far
+                )
                 .background {
                     GeometryReader { geo in
                         Color.clear.preference(
@@ -2110,6 +2134,37 @@ private struct TLTrackArea: View {
                 .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .overlay {
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: TLK.sidebarWidth)
+                        .partyModeBorder(
+                            shape: Rectangle(),
+                            role: .majorPanel,
+                            lighting: .coolLeading,
+                            glintOffset: .near
+                        )
+
+                    Color.clear
+                        .frame(width: laneVW)
+                        .partyModeBorder(
+                            shape: Rectangle(),
+                            role: .majorPanel,
+                            lighting: .shared,
+                            glintOffset: .none
+                        )
+
+                    Color.clear
+                        .frame(width: TLK.smColumnWidth)
+                        .partyModeBorder(
+                            shape: Rectangle(),
+                            role: .majorPanel,
+                            lighting: .violetTrailing,
+                            glintOffset: .far
+                        )
+                }
+                .allowsHitTesting(false)
+            }
             .onAppear {
                 currentContentW = contentW
                 currentContentUnits = contentUnits
@@ -2561,6 +2616,12 @@ private struct TLTrackArea: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .strokeBorder(MixrColors.divider, lineWidth: 0.5)
                 }
+                .partyModeBorder(
+                    shape: RoundedRectangle(cornerRadius: 8, style: .continuous),
+                    role: .button,
+                    lighting: .coolLeading,
+                    glintOffset: .near
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -3879,6 +3940,12 @@ private struct TLEffectsPanel: View {
         }
         .contentShape(Rectangle())
         .gesture(effectsDragGesture)
+        .partyModeBorder(
+            shape: Rectangle(),
+            role: .majorPanel,
+            lighting: .counterClockwise,
+            glintOffset: .far
+        )
         .onChange(of: hasTarget) { _, hasClip in
             if !hasClip {
                 withAnimation(expandAnimation) {

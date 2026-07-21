@@ -44,6 +44,13 @@ struct WaveformClip: View {
             x: 0,
             y: 0
         )
+        .partyModeShapeBorder(
+            shape: WaveformClipShape(tailWidth: WaveformMetrics.tailWidth),
+            role: .timelineClip,
+            lighting: .coolLeading,
+            semanticColor: waveformColor.color,
+            glintOffset: .far
+        )
     }
 
     private func resolvedAmplitudes(for width: CGFloat) -> [CGFloat] {

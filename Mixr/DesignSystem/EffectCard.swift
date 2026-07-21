@@ -326,6 +326,16 @@ struct EffectCard: View {
         .overlay {
             EffectCardBorderGlow(effect: effect, isSelected: isActive)
         }
+        .partyModeBorder(
+            shape: RoundedRectangle(
+                cornerRadius: EffectCardMetrics.cornerRadius,
+                style: .continuous
+            ),
+            role: .effectCard,
+            lighting: isAuto ? .clockwise : .shared,
+            semanticColor: effect.color,
+            glintOffset: .far
+        )
         .background {
             EffectCardSpillGlow(effect: effect, isActive: isActive)
         }

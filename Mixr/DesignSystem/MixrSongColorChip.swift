@@ -107,6 +107,13 @@ struct MixrSongColorChip: View {
             x: 0,
             y: 0
         )
+        .partyModeBorder(
+            shape: shape,
+            role: .trackChip,
+            lighting: .coolLeading,
+            semanticColor: color.color,
+            glintOffset: .far
+        )
     }
 
     private var sfxChipContent: some View {
@@ -135,6 +142,13 @@ struct MixrSongColorChip: View {
                 )
         }
         .frame(width: 34, height: 34)
+        .partyModeBorder(
+            shape: shape,
+            role: .trackChip,
+            lighting: .counterClockwise,
+            semanticColor: MixrColors.sfxGlow,
+            glintOffset: .far
+        )
     }
 
     private var defaultChipContent: some View {

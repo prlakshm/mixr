@@ -19,7 +19,10 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
 }
 
 struct MixrSecondaryGlassButtonStyle: ButtonStyle {
+    var partyRole: PartyModeSurfaceRole = .button
+
     func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
         configuration.label
             .mixrFont(.button)
             .foregroundStyle(MixrColors.textPrimary)
@@ -30,9 +33,15 @@ struct MixrSecondaryGlassButtonStyle: ButtonStyle {
             }
             .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
+                shape
                     .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
             }
+            .partyModeBorder(
+                shape: shape,
+                role: partyRole,
+                lighting: partyRole == .export ? .violetTrailing : .coolLeading,
+                glintOffset: .near
+            )
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
@@ -68,6 +77,12 @@ struct MixrIconGlassButtonStyle: ButtonStyle {
                 Circle()
                     .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.55)
             }
+            .partyModeBorder(
+                shape: Circle(),
+                role: .compactControl,
+                lighting: .clockwise,
+                glintOffset: .far
+            )
             .shadow(color: .black.opacity(0.32), radius: 5, x: 0, y: 2)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
@@ -90,6 +105,12 @@ struct MixrToggleButtonStyle: ButtonStyle {
                 Circle()
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
             }
+            .partyModeBorder(
+                shape: Circle(),
+                role: .compactControl,
+                lighting: .coolLeading,
+                glintOffset: .far
+            )
             .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
@@ -127,6 +148,12 @@ struct MixrCompactTrackToggleButtonStyle: ButtonStyle {
                 Circle()
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
             }
+            .partyModeBorder(
+                shape: Circle(),
+                role: .compactControl,
+                lighting: .violetTrailing,
+                glintOffset: .far
+            )
             .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }

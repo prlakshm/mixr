@@ -48,6 +48,13 @@ struct MixrTrackRowBackground: View {
                         lineWidth: 0.6
                     )
                 }
+                .partyModeBorder(
+                    shape: cardShape,
+                    role: .semantic,
+                    lighting: .counterClockwise,
+                    semanticColor: MixrColors.sfxGlow,
+                    glintOffset: .far
+                )
                 .shadow(color: Color.black.opacity(0.32), radius: 3, x: 0, y: 1.5)
                 .opacity(isSFXTrack ? 1 : 0)
                 .padding(.leading, 19.5)

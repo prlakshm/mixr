@@ -37,6 +37,15 @@ struct AutoRemixErrorSheet: View {
         .fixedSize(horizontal: true, vertical: true)
         .background { MixrAlertChrome.background() }
         .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius, style: .continuous))
+        .partyModeBorder(
+            shape: RoundedRectangle(
+                cornerRadius: MixrAlertChrome.cornerRadius,
+                style: .continuous
+            ),
+            role: .dialog,
+            lighting: .counterClockwise,
+            glintOffset: .near
+        )
         .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Auto couldn’t finish")

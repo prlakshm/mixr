@@ -235,18 +235,43 @@ struct GlassCardModifier: ViewModifier {
         case .default:
             base
                 .shadow(color: .black.opacity(0.22), radius: 3, x: 0, y: 1)
+                .partyModeBorder(
+                    shape: shape,
+                    role: .button,
+                    lighting: .shared,
+                    glintOffset: .near
+                )
         case .selected:
             base
                 .shadow(color: MixrColors.primaryPurple.opacity(0.28), radius: 12, x: 0, y: 0)
                 .shadow(color: .black.opacity(0.34), radius: 8, x: 0, y: 3)
+                .partyModeBorder(
+                    shape: shape,
+                    role: .semantic,
+                    lighting: .violetTrailing,
+                    semanticColor: MixrColors.primaryPurple,
+                    glintOffset: .near
+                )
         case .elevated:
             base
                 .mixrShadow(.glassElevated)
                 .mixrGlow(.glassAmbient)
+                .partyModeBorder(
+                    shape: shape,
+                    role: .dialog,
+                    lighting: .clockwise,
+                    glintOffset: .near
+                )
         case .strong:
             base
                 .mixrShadow(.glassStrong)
                 .mixrGlow(.glassAmbientStrong)
+                .partyModeBorder(
+                    shape: shape,
+                    role: .majorPanel,
+                    lighting: .counterClockwise,
+                    glintOffset: .far
+                )
         }
     }
 }

@@ -123,6 +123,16 @@ struct EffectControlTray: View {
             RoundedRectangle(cornerRadius: EffectTrayMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(effect.color.opacity(0.30), lineWidth: 0.6)
         }
+        .partyModeBorder(
+            shape: RoundedRectangle(
+                cornerRadius: EffectTrayMetrics.cornerRadius,
+                style: .continuous
+            ),
+            role: .semantic,
+            lighting: .violetTrailing,
+            semanticColor: effect.color,
+            glintOffset: .far
+        )
         .shadow(color: .black.opacity(0.32), radius: 6, x: 0, y: 2)
         .shadow(color: effect.color.opacity(0.14), radius: 9)
     }

@@ -264,6 +264,13 @@ struct SFXCard: View {
             .background { cardSurface }
             .clipShape(shape)
             .overlay { cardBorder }
+            .partyModeBorder(
+                shape: shape,
+                role: .semantic,
+                lighting: .counterClockwise,
+                semanticColor: MixrColors.sfxGlow,
+                glintOffset: .far
+            )
             .shadow(color: Color(hex: "B987C5").opacity(0.07), radius: 8)
             .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 2)
         }
@@ -485,6 +492,12 @@ struct SFXLibraryPanel: View {
         }
         .background { panelGlass }
         .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
+        .partyModeBorder(
+            shape: RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous),
+            role: .dialog,
+            lighting: .clockwise,
+            glintOffset: .near
+        )
         .shadow(color: Color(hex: "8C7DAA").opacity(0.06), radius: 16)
         .shadow(color: .black.opacity(0.42), radius: 18, x: 0, y: 8)
     }

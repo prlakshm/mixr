@@ -10,9 +10,12 @@ import SwiftData
 
 @main
 struct MixrApp: App {
+    @State private var appearanceState = AppAppearanceState()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(appearanceState)
         }
         .modelContainer(for: MixrProjectRecord.self)
     }

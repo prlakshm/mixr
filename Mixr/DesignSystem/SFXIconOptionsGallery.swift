@@ -87,6 +87,12 @@ struct MixrSFXOutlineButtonLabel: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(MixrColors.divider, lineWidth: 0.5)
             }
+            .partyModeBorder(
+                shape: RoundedRectangle(cornerRadius: 8, style: .continuous),
+                role: .compactControl,
+                lighting: .violetTrailing,
+                glintOffset: .far
+            )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

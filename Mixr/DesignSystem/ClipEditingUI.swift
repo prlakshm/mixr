@@ -626,6 +626,12 @@ struct TLClipContextToolbar: View {
             .clipShape(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
             )
+            .partyModeBorder(
+                shape: RoundedRectangle(cornerRadius: radius, style: .continuous),
+                role: .menu,
+                lighting: .violetTrailing,
+                glintOffset: .near
+            )
             .shadow(color: .black.opacity(0.55), radius: 20 * s, x: 0, y: 8 * s)
             .shadow(color: .black.opacity(0.20), radius: 4 * s, x: 0, y: 2 * s)
             // Glass shifts for content alignment; pointer stays on the playhead.
@@ -650,6 +656,12 @@ struct TLClipContextToolbar: View {
                         )
                 }
                 .frame(width: pW, height: pH)
+                .partyModeShapeBorder(
+                    shape: TLToolbarPointer(),
+                    role: .compactControl,
+                    lighting: .violetTrailing,
+                    glintOffset: .near
+                )
                 .offset(x: TLClipEditingMetrics.toolbarPointerOffsetX)
         }
         .animation(
@@ -1048,6 +1060,12 @@ struct TLTransitionMenu: View {
                 }
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .partyModeBorder(
+            shape: RoundedRectangle(cornerRadius: 12, style: .continuous),
+            role: .menu,
+            lighting: .clockwise,
+            glintOffset: .near
+        )
         .shadow(color: .black.opacity(0.55), radius: 20, x: 0, y: 8)
         .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
         .onChange(of: selected.type) { _, newValue in
@@ -1515,6 +1533,12 @@ struct TLTransitionSettingsSegmentedControl<
                         .mask(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
         }
+        .partyModeBorder(
+            shape: RoundedRectangle(cornerRadius: 9, style: .continuous),
+            role: .compactControl,
+            lighting: .coolLeading,
+            glintOffset: .far
+        )
     }
 
     private struct SegmentLayout {
