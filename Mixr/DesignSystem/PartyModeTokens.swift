@@ -10,8 +10,8 @@ enum PartyModeTokens {
 
     static let primaryStrokeWidth: CGFloat = 0.96
     static let compactStrokeWidth: CGFloat = 0.82
-    static let nearGlowRadius: CGFloat = 4.8
-    static let ambientGlowRadius: CGFloat = 10.5
+    static let nearGlowRadius: CGFloat = 5.4
+    static let ambientGlowRadius: CGFloat = 12
     static let glintArmingDelay: TimeInterval = 0.016
     static let glintDuration: TimeInterval = 1.10
     static let activationFadeDuration: TimeInterval = 0.20

@@ -11,9 +11,9 @@ struct PartyModePlayButtonSurface: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                PartyModeTokens.lavender.opacity(0.86),
-                                PartyModeTokens.violet.opacity(0.98),
-                                Color(hex: "3B159A").opacity(0.99),
+                                Color(hex: "A389FF").opacity(0.66),
+                                Color(hex: "6940EB").opacity(0.98),
+                                Color(hex: "351181").opacity(0.99),
                             ],
                             center: UnitPoint(x: 0.42, y: 0.34),
                             startRadius: 0,
@@ -36,13 +36,30 @@ private struct PartyModePlayButtonModifier: ViewModifier {
                         Circle()
                             .strokeBorder(
                                 LinearGradient(
-                                    colors: [PartyModeTokens.lavender, PartyModeTokens.violet],
+                                    colors: [
+                                        PartyModeTokens.glintWhite.opacity(0.90),
+                                        PartyModeTokens.lavender,
+                                        PartyModeTokens.violet,
+                                    ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
-                                lineWidth: 1.2
+                                lineWidth: 1.35
                             )
-                            .padding(1.5)
+                            .padding(0.45)
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        PartyModeTokens.lavender.opacity(0.58),
+                                        PartyModeTokens.violet.opacity(0.78),
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 0.58
+                            )
+                            .padding(3.6)
                     }
                     .opacity(renderState.chromeOpacity)
                     .allowsHitTesting(false)

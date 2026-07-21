@@ -46,9 +46,9 @@ struct WaveformClip: View {
         )
         .partyModeShapeBorder(
             shape: WaveformClipShape(tailWidth: WaveformMetrics.tailWidth),
-            role: .timelineClip,
-            lighting: .coolLeading,
-            semanticColor: waveformColor.color,
+            role: waveformColor == .silver ? .sfxClip : .timelineClip,
+            lighting: waveformColor == .silver ? .counterClockwise : .coolLeading,
+            semanticColor: waveformColor == .silver ? nil : waveformColor.color,
             glintOffset: .far
         )
     }

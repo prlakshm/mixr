@@ -80,6 +80,8 @@ check(
     modifierSource.contains("enum PartyModeSurfaceRole")
         && modifierSource.contains("enum PartyModeLightingVariant")
         && modifierSource.contains("case play")
+        && modifierSource.contains("case sfxSurface")
+        && modifierSource.contains("case sfxClip")
         && modifierSource.contains("var glintOpacity")
         && modifierSource.contains("func partyModeBorder")
         && modifierSource.contains("Shape")
@@ -109,6 +111,12 @@ check(
     songChipSource.contains("semanticColor: color.color")
         && songChipSource.contains("semanticColor: MixrColors.sfxGlow")
         && songChipSource.contains("SFXIconBoxSurface")
+)
+
+check(
+    "SFX clips and the current SFX row use dedicated pearl-lavender Party chrome",
+    source("Mixr/DesignSystem/WaveformClip.swift").contains(".sfxClip")
+        && source("Mixr/DesignSystem/MixrTrackRowBackground.swift").contains("role: .sfxSurface")
 )
 
 if failures > 0 {

@@ -12,36 +12,41 @@ enum PartyModeSurfaceRole: Sendable {
     case semantic
     case trackChip
     case timelineClip
+    case sfxSurface
+    case sfxClip
 
     var strokeWidth: CGFloat {
         switch self {
         case .majorPanel, .dialog: PartyModeTokens.primaryStrokeWidth
         case .export, .play: 1.14
-        case .button, .menu, .effectCard, .semantic, .trackChip: 0.92
+        case .button, .menu, .effectCard, .semantic, .trackChip, .sfxSurface: 0.92
         case .timelineClip: 0.72
+        case .sfxClip: 0.82
         case .compactControl: PartyModeTokens.compactStrokeWidth
         }
     }
 
     var primaryOpacity: Double {
         switch self {
-        case .majorPanel: 0.84
+        case .majorPanel: 0.78
         case .dialog: 0.88
         case .export: 0.98
-        case .play: 1.0
+        case .play: 0
         case .button: 0.78
         case .menu: 0.84
         case .effectCard: 0.52
         case .semantic: 0.38
         case .trackChip: 0.68
         case .timelineClip: 0.25
+        case .sfxSurface: 0.90
+        case .sfxClip: 0.94
         case .compactControl: 0.66
         }
     }
 
     var nearGlowOpacity: Double {
         switch self {
-        case .majorPanel: 0.30
+        case .majorPanel: 0.34
         case .dialog: 0.27
         case .export: 0.36
         case .play: 0.36
@@ -51,13 +56,15 @@ enum PartyModeSurfaceRole: Sendable {
         case .semantic: 0.10
         case .trackChip: 0.20
         case .timelineClip: 0.06
+        case .sfxSurface: 0.27
+        case .sfxClip: 0.32
         case .compactControl: 0.14
         }
     }
 
     var ambientGlowOpacity: Double {
         switch self {
-        case .majorPanel: 0.14
+        case .majorPanel: 0.18
         case .dialog: 0.12
         case .export: 0.18
         case .play: 0.17
@@ -67,6 +74,8 @@ enum PartyModeSurfaceRole: Sendable {
         case .semantic: 0.04
         case .trackChip: 0.08
         case .timelineClip: 0.02
+        case .sfxSurface: 0.11
+        case .sfxClip: 0.12
         case .compactControl: 0.055
         }
     }
@@ -79,6 +88,8 @@ enum PartyModeSurfaceRole: Sendable {
         case .effectCard, .semantic: 0.64
         case .trackChip: 0.56
         case .timelineClip: 0.44
+        case .sfxSurface: 0.70
+        case .sfxClip: 0.60
         case .compactControl: 0.56
         }
     }
@@ -91,6 +102,8 @@ enum PartyModeSurfaceRole: Sendable {
         case .effectCard: 0.44
         case .semantic, .trackChip: 0.34
         case .timelineClip: 0.24
+        case .sfxSurface: 0.60
+        case .sfxClip: 0.46
         }
     }
 
@@ -99,6 +112,7 @@ enum PartyModeSurfaceRole: Sendable {
         case .majorPanel, .dialog: 0.045
         case .play: 0.075
         case .timelineClip: 0.04
+        case .sfxClip: 0.05
         default: 0.06
         }
     }
@@ -129,6 +143,72 @@ enum PartyModeLightingVariant: Sendable {
         case .coolLeading: .topTrailing
         case .violetTrailing: .trailing
         }
+    }
+}
+
+private enum PartyModeBorderGradient {
+    static func style(
+        role: PartyModeSurfaceRole,
+        lighting: PartyModeLightingVariant,
+        semanticColor: Color?
+    ) -> AnyShapeStyle {
+        if role == .sfxSurface || role == .sfxClip {
+            return AnyShapeStyle(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: PartyModeTokens.lavender.opacity(0.88), location: 0),
+                        .init(color: PartyModeTokens.violet, location: 0.30),
+                        .init(color: PartyModeTokens.glintWhite.opacity(0.96), location: 0.63),
+                        .init(color: PartyModeTokens.electricBlue.opacity(0.86), location: 1),
+                    ]),
+                    startPoint: lighting.startPoint,
+                    endPoint: lighting.endPoint
+                )
+            )
+        }
+
+        if let semanticColor {
+            let sharedReflection = role == .effectCard
+                ? PartyModeTokens.lavender.opacity(0.72)
+                : semanticColor.opacity(0.78)
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        semanticColor.opacity(0.76), semanticColor,
+                        sharedReflection, semanticColor.opacity(0.90),
+                    ],
+                    startPoint: lighting.startPoint,
+                    endPoint: lighting.endPoint
+                )
+            )
+        }
+
+        let stops: [Gradient.Stop]
+        if role == .compactControl {
+            stops = [
+                .init(color: PartyModeTokens.electricBlue, location: 0),
+                .init(color: PartyModeTokens.coolCyan, location: 0.16),
+                .init(color: PartyModeTokens.electricBlue, location: 0.34),
+                .init(color: PartyModeTokens.violet, location: 0.70),
+                .init(color: PartyModeTokens.lavender, location: 1),
+            ]
+        } else {
+            stops = [
+                .init(color: PartyModeTokens.electricBlue, location: 0),
+                .init(color: PartyModeTokens.coolCyan, location: 0.13),
+                .init(color: PartyModeTokens.electricBlue, location: 0.29),
+                .init(color: PartyModeTokens.violet, location: 0.57),
+                .init(color: PartyModeTokens.lavender, location: 0.80),
+                .init(color: PartyModeTokens.magenta, location: 1),
+            ]
+        }
+        return AnyShapeStyle(
+            LinearGradient(
+                gradient: Gradient(stops: stops),
+                startPoint: lighting.startPoint,
+                endPoint: lighting.endPoint
+            )
+        )
     }
 }
 
@@ -172,43 +252,10 @@ private struct PartyModeShapeBorderModifier<S: Shape>: ViewModifier {
     @Environment(\.isEnabled) private var isEnabled
 
     private var gradient: AnyShapeStyle {
-        if let semanticColor {
-            let sharedReflection = role == .effectCard
-                ? PartyModeTokens.lavender.opacity(0.72)
-                : semanticColor.opacity(0.78)
-            return AnyShapeStyle(LinearGradient(
-                colors: [
-                    semanticColor.opacity(0.76), semanticColor,
-                    sharedReflection, semanticColor.opacity(0.90),
-                ],
-                startPoint: lighting.startPoint,
-                endPoint: lighting.endPoint
-            ))
-        }
-
-        let colors: [Color]
-        if role == .compactControl {
-            colors = [
-                PartyModeTokens.coolCyan,
-                PartyModeTokens.electricBlue,
-                PartyModeTokens.violet,
-                PartyModeTokens.lavender,
-            ]
-        } else {
-            colors = [
-                PartyModeTokens.coolCyan,
-                PartyModeTokens.electricBlue,
-                PartyModeTokens.violet,
-                PartyModeTokens.lavender,
-                PartyModeTokens.magenta,
-            ]
-        }
-        return AnyShapeStyle(
-            LinearGradient(
-                colors: colors,
-                startPoint: lighting.startPoint,
-                endPoint: lighting.endPoint
-            )
+        PartyModeBorderGradient.style(
+            role: role,
+            lighting: lighting,
+            semanticColor: semanticColor
         )
     }
 
@@ -275,43 +322,10 @@ private struct PartyModeBorderLayers<S: InsettableShape>: View {
     private var enabledOpacity: Double { isEnabled ? 1 : 0.42 }
 
     private var borderGradient: AnyShapeStyle {
-        if let semanticColor {
-            let sharedReflection = role == .effectCard
-                ? PartyModeTokens.lavender.opacity(0.72)
-                : semanticColor.opacity(0.78)
-            return AnyShapeStyle(LinearGradient(
-                colors: [
-                    semanticColor.opacity(0.76), semanticColor,
-                    sharedReflection, semanticColor.opacity(0.90),
-                ],
-                startPoint: lighting.startPoint,
-                endPoint: lighting.endPoint
-            ))
-        }
-
-        let colors: [Color]
-        if role == .compactControl {
-            colors = [
-                PartyModeTokens.coolCyan,
-                PartyModeTokens.electricBlue,
-                PartyModeTokens.violet,
-                PartyModeTokens.lavender,
-            ]
-        } else {
-            colors = [
-                PartyModeTokens.coolCyan,
-                PartyModeTokens.electricBlue,
-                PartyModeTokens.violet,
-                PartyModeTokens.lavender,
-                PartyModeTokens.magenta,
-            ]
-        }
-        return AnyShapeStyle(
-            LinearGradient(
-                colors: colors,
-                startPoint: lighting.startPoint,
-                endPoint: lighting.endPoint
-            )
+        PartyModeBorderGradient.style(
+            role: role,
+            lighting: lighting,
+            semanticColor: semanticColor
         )
     }
 
