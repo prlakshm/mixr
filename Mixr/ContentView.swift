@@ -92,12 +92,30 @@ struct ContentView: View {
     }
 
     private func captureLiveActivationSequence() async {
-        let captures: [(filename: String, progress: Double)] = [
-            ("mixr-party-live-initial.png", 0.120),
-            ("mixr-party-live-mid.png", 0.300),
-            ("mixr-party-live-reconnect.png", 0.616),
-            ("mixr-party-live-afterglint-early.png", 0.695),
-            ("mixr-party-live-afterglint-late.png", 0.878),
+        let captures: [(filename: String, elapsed: TimeInterval)] = [
+            (
+                "mixr-party-live-initial.png",
+                PartyModeTokens.traceDurationPanel * 0.18
+            ),
+            (
+                "mixr-party-live-mid.png",
+                PartyModeTokens.traceDurationPanel * 0.55
+            ),
+            (
+                "mixr-party-live-reconnect.png",
+                PartyModeTokens.globalAfterglintStartTime
+                    - PartyModeTokens.reconnectFlareDuration * 0.5
+            ),
+            (
+                "mixr-party-live-afterglint-early.png",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.18
+            ),
+            (
+                "mixr-party-live-afterglint-late.png",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.78
+            ),
         ]
         var frames: [PartyModeVisualQACapture.Frame] = []
 
@@ -109,8 +127,7 @@ struct ContentView: View {
 
         let startedAt = Date.timeIntervalSinceReferenceDate
         for capture in captures {
-            let target = startedAt
-                + capture.progress * PartyModeTokens.activationSequenceDuration
+            let target = startedAt + capture.elapsed
             let remaining = target - Date.timeIntervalSinceReferenceDate
             if remaining > 0 {
                 try? await Task.sleep(for: .seconds(remaining))

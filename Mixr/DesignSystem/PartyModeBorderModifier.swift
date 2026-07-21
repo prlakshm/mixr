@@ -134,11 +134,11 @@ enum PartyModeSurfaceRole: Sendable {
     var traceDuration: TimeInterval {
         switch self {
         case .majorPanel: PartyModeTokens.traceDurationPanel
-        case .dialog: 0.88
-        case .export, .play: 0.68
+        case .dialog: PartyModeTokens.durationAtPartyVelocity(0.88)
+        case .export, .play: PartyModeTokens.durationAtPartyVelocity(0.68)
         case .button, .menu, .effectCard, .semantic, .sfxSurface:
             PartyModeTokens.traceDurationButton
-        case .compactControl: 0.54
+        case .compactControl: PartyModeTokens.durationAtPartyVelocity(0.54)
         case .timelineClip, .sfxClip, .trackChip: 0.01
         }
     }
@@ -162,9 +162,10 @@ enum PartyModeSurfaceRole: Sendable {
     var afterglintDuration: TimeInterval {
         switch self {
         case .majorPanel, .dialog: PartyModeTokens.afterglintDuration
-        case .export, .play: 0.48
-        case .button, .menu, .effectCard, .semantic, .sfxSurface: 0.46
-        case .compactControl: 0.42
+        case .export, .play: PartyModeTokens.durationAtPartyVelocity(0.48)
+        case .button, .menu, .effectCard, .semantic, .sfxSurface:
+            PartyModeTokens.durationAtPartyVelocity(0.46)
+        case .compactControl: PartyModeTokens.durationAtPartyVelocity(0.42)
         case .timelineClip, .sfxClip, .trackChip: 0.01
         }
     }

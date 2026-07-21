@@ -38,7 +38,7 @@ struct PartyModeRenderState: Equatable, Sendable {
             : 0
         let afterglintProgress = normalized(
             elapsed,
-            from: traceEnd + PartyModeTokens.reconnectFlareDuration,
+            from: PartyModeTokens.globalAfterglintStartTime,
             duration: role.afterglintDuration
         )
 

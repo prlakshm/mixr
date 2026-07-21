@@ -74,6 +74,21 @@ check(
 )
 
 check(
+    "Trace and afterglint share a centralized 75 percent velocity",
+    matches(#"motionVelocity\s*:\s*Double\s*=\s*0\.75"#, in: tokensSource)
+        && tokensSource.contains("durationAtPartyVelocity")
+        && modifierSource.contains("PartyModeTokens.durationAtPartyVelocity")
+)
+
+check(
+    "Returning glints use one global post-connection start",
+    tokensSource.contains("globalAfterglintStartTime")
+        && tokensSource.contains("activationSequenceDuration =")
+        && renderStateSource.contains("PartyModeTokens.globalAfterglintStartTime")
+        && !renderStateSource.contains("from: traceEnd + PartyModeTokens.reconnectFlareDuration")
+)
+
+check(
     "Bloom energy comes from wider blurred light strokes, not a thicker visible core",
     modifierSource.contains("PartyModeTokens.nearGlowStrokeScale")
         && modifierSource.contains("PartyModeTokens.mediumGlowStrokeScale")
@@ -239,6 +254,13 @@ check(
         && contentSource.contains("captureLiveActivationSequence")
         && contentSource.contains("PartyModeTokens.activationSequenceDuration")
         && contentSource.contains("mixr-party-live-settled.png")
+)
+
+check(
+    "Visual QA checkpoints are derived from phase times instead of stale normalized values",
+    contentSource.contains("elapsed: TimeInterval")
+        && contentSource.contains("PartyModeTokens.globalAfterglintStartTime")
+        && !contentSource.contains("(\"mixr-party-live-initial.png\", 0.120)")
 )
 
 check(

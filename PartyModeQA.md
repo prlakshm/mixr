@@ -256,3 +256,34 @@ modifier in `PartyModeQAArtifacts/round9-renderer/`:
 No visual correction remains open in the production modifier. The only
 remaining evidence limitation is the unavailable second live-window sequence
 and final full-app normal recapture from this sandboxed Simulator client.
+
+## Round 10 — slower trace and globally sequenced afterglint
+
+This timing-only pass reduces both perimeter-trace and returning-glint velocity
+to 75% of the prior value. Surface staggers, the 100 ms reconnection flare,
+colors, glow layers, geometry, exit timing, and Reduce Motion behavior are
+unchanged.
+
+| State | Timing and visual result |
+|---|---|
+| Initial/mid trace | Major panels now take 1.28 s and shared buttons take approximately 0.827 s to close. The same deterministic clockwise paths, heads, trails, and completed-border reveal remain intact. |
+| Final connection | The last far-staggered major panel completes its trace and 100 ms flare at 1.455 s. Smaller surfaces remain statically closed; none shows a returning glint while waiting. |
+| Global afterglint | Every eligible surface begins its second pass from the same 1.455 s global gate. Major glints run approximately 0.667 s; role-specific glints retain their existing relative durations at the same 75% velocity. |
+| Settled | The finite activation clock ends at approximately 2.122 s and removes transient trace, flare, and glint layers exactly as before. |
+
+Fresh production-modifier evidence is in
+`PartyModeQAArtifacts/round10-timing/`. Initial trace, mid trace, final
+reconnection, early synchronized glint, and late fizzle all have distinct PNG
+hashes. The final-connection frame shows the local pearl flare at the last
+panel's start point with no glints on already-closed controls; the next frame
+shows simultaneous glint heads on the panel, button, and play circle.
+
+The 3× normal baseline and inactive Party modifier remain byte-identical with
+SHA-256
+`2cf1213343de84eaf0f9612f2b37c09f190ff2151da2279399c6f3ed19097027`.
+
+Fresh live-window attempts, including a cooldown retry after the timing build,
+both ended before device discovery because this sandboxed `simctl` client lost
+CoreSimulator XPC while `simdiskimaged` was unavailable. Round 10 therefore
+relies on the production SwiftUI renderer frames above rather than claiming a
+new live-app capture.

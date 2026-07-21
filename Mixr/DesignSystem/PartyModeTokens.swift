@@ -23,13 +23,20 @@ enum PartyModeTokens {
     static let innerHighlightWidth: CGFloat = 0.64
 
     // One finite activation clock. Individual surfaces derive their subtle
-    // offsets and shorter durations from this shared time source.
+    // offsets and shorter durations from this shared time source. Trace and
+    // returning-glint motion run at 75% of their original velocity while the
+    // connection flare and surface staggers retain their existing timing.
+    static let motionVelocity: Double = 0.75
     static let activationArmingDelay: TimeInterval = 0.016
-    static let activationSequenceDuration: TimeInterval = 1.64
-    static let traceDurationPanel: TimeInterval = 0.96
-    static let traceDurationButton: TimeInterval = 0.62
+    static let traceDurationPanel = durationAtPartyVelocity(0.96)
+    static let traceDurationButton = durationAtPartyVelocity(0.62)
     static let reconnectFlareDuration: TimeInterval = 0.10
-    static let afterglintDuration: TimeInterval = 0.50
+    static let afterglintDuration = durationAtPartyVelocity(0.50)
+    static let globalAfterglintStartTime = delay(for: .far)
+        + traceDurationPanel
+        + reconnectFlareDuration
+    static let activationSequenceDuration = globalAfterglintStartTime
+        + afterglintDuration
     static let traceHeadCoreWidth: CGFloat = 1.9
     static let traceHeadGlowRadius: CGFloat = 8
     static let traceTrailLength: CGFloat = 0.095
@@ -44,6 +51,12 @@ enum PartyModeTokens {
     static let activationFadeDuration: TimeInterval = 0.18
     static let exitFadeDuration: TimeInterval = 0.24
     static let reduceMotionFadeDuration: TimeInterval = 0.20
+
+    static func durationAtPartyVelocity(
+        _ baselineDuration: TimeInterval
+    ) -> TimeInterval {
+        baselineDuration / motionVelocity
+    }
 
     static func delay(for offset: PartyModeGlintOffset) -> TimeInterval {
         switch offset {

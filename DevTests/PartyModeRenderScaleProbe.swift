@@ -23,18 +23,30 @@ struct PartyModeRenderScaleProbe {
             )
         }
 
-        let activationFrames: [(String, CGFloat)] = [
-            ("trace-initial", 0.12),
-            ("trace-mid", 0.30),
-            ("reconnect", 0.616),
-            ("afterglint-early", 0.695),
-            ("afterglint-late", 0.878),
+        let activationFrames: [(String, TimeInterval)] = [
+            ("trace-initial", PartyModeTokens.traceDurationPanel * 0.18),
+            ("trace-mid", PartyModeTokens.traceDurationPanel * 0.55),
+            (
+                "reconnect",
+                PartyModeTokens.globalAfterglintStartTime
+                    - PartyModeTokens.reconnectFlareDuration * 0.5
+            ),
+            (
+                "afterglint-early",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.18
+            ),
+            (
+                "afterglint-late",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.78
+            ),
         ]
-        for (name, progress) in activationFrames {
+        for (name, elapsed) in activationFrames {
             try render(
                 state: PartyModeRenderState(
                     chromeOpacity: 1,
-                    activationProgress: progress,
+                    activationProgress: activationProgress(at: elapsed),
                     isActivationActive: true,
                     settledBorderOpacity: 0
                 ),
@@ -61,6 +73,18 @@ struct PartyModeRenderScaleProbe {
         )
     }
 
+    private static func activationProgress(
+        at elapsed: TimeInterval
+    ) -> CGFloat {
+        min(
+            1,
+            max(
+                0,
+                CGFloat(elapsed / PartyModeTokens.activationSequenceDuration)
+            )
+        )
+    }
+
     private static func sampleContent(
         state: PartyModeRenderState
     ) -> some View {
@@ -74,7 +98,8 @@ struct PartyModeRenderScaleProbe {
                     .partyModeBorder(
                         shape: RoundedRectangle(cornerRadius: 12, style: .continuous),
                         role: .majorPanel,
-                        lighting: .shared
+                        lighting: .shared,
+                        glintOffset: .far
                     )
 
                 HStack(spacing: 42) {
