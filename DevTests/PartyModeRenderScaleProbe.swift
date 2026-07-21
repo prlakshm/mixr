@@ -37,9 +37,24 @@ struct PartyModeRenderScaleProbe {
                     + PartyModeTokens.afterglintDuration * 0.18
             ),
             (
-                "afterglint-late",
+                "afterglint-75",
                 PartyModeTokens.globalAfterglintStartTime
-                    + PartyModeTokens.afterglintDuration * 0.78
+                    + PartyModeTokens.afterglintDuration * 0.75
+            ),
+            (
+                "afterglint-90",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.90
+            ),
+            (
+                "afterglint-95",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.95
+            ),
+            (
+                "afterglint-99",
+                PartyModeTokens.globalAfterglintStartTime
+                    + PartyModeTokens.afterglintDuration * 0.99
             ),
         ]
         for (name, elapsed) in activationFrames {

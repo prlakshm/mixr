@@ -81,11 +81,18 @@ check(
 )
 
 check(
-    "Returning glint travels exactly 75 percent of the perimeter",
-    matches(#"afterglintTravelFraction\s*:\s*CGFloat\s*=\s*0\.75"#, in: tokensSource)
+    "Returning glint travels one complete perimeter lap",
+    matches(#"afterglintTravelFraction\s*:\s*CGFloat\s*=\s*1\.0"#, in: tokensSource)
         && tokensSource.contains("afterglintTravelPosition")
         && modifierSource.contains("PartyModeTokens.afterglintTravelPosition")
         && !modifierSource.contains("progress * 0.80")
+)
+
+check(
+    "Returning glint remains visible until it approaches the connection point",
+    tokensSource.contains("afterglintOpacity(for progress:")
+        && modifierSource.contains("PartyModeTokens.afterglintOpacity(for: progress)")
+        && !modifierSource.contains("pow(1 - tail, 2.2)")
 )
 
 check(
@@ -105,19 +112,31 @@ check(
 )
 
 check(
-    "Activation host drives one finite sequence, cancels stale runs, and honors Reduce Motion",
+    "Activation host schedules one finite sequence without polling the root view tree",
     hostSource.contains("accessibilityReduceMotion")
         && hostSource.contains("activationTask?.cancel()")
         && hostSource.contains("await Task.yield()")
+        && hostSource.contains("activationStartedAt")
         && hostSource.contains("PartyModeTokens.activationSequenceDuration")
         && hostSource.contains("isActivationActive = false")
-        && !hostSource.contains("TimelineView")
+        && !hostSource.contains("while !Task.isCancelled")
+        && !hostSource.contains("Task.sleep(for: .milliseconds(16))")
         && !hostSource.contains("repeatForever")
 )
 
 check(
+    "Perimeter overlays use a finite display-synchronized clock only while active",
+    modifierSource.contains("TimelineView(.animation")
+        && matches(#"renderState\.advanced\(\s*to:"#, in: modifierSource)
+        && renderStateSource.contains("activationStartedAt")
+        && renderStateSource.contains("var usesLiveActivationClock")
+        && renderStateSource.contains("func advanced(to time:")
+        && !modifierSource.contains("repeatForever")
+)
+
+check(
     "Per-surface animation exposes trace, reconnection flare, afterglint, and settled border state",
-    ["activationProgress", "isActivationActive", "traceProgress",
+    ["activationProgress", "activationStartedAt", "isActivationActive", "traceProgress",
      "reconnectFlareProgress", "afterglintProgress", "settledBorderOpacity"]
         .allSatisfy(renderStateSource.contains)
         && renderStateSource.contains("PartyModeSurfaceAnimationPhase")
@@ -148,7 +167,7 @@ check(
         && modifierSource.contains("PartyModeReconnectFlare")
         && modifierSource.contains("PartyModeAfterglint")
         && modifierSource.contains("afterglintHeadSegments")
-        && !modifierSource.contains("TimelineView")
+        && !modifierSource.contains("repeatForever")
 )
 
 check(
@@ -194,6 +213,8 @@ check(
         && partyButtonSource.contains(".stroke(")
         && partyButtonSource.contains("animationPhase(for: .play")
         && partyButtonSource.contains("ringReveal")
+        && partyButtonSource.contains("TimelineView(.animation")
+        && matches(#"renderState\.advanced\(\s*to:"#, in: partyButtonSource)
 )
 
 check(

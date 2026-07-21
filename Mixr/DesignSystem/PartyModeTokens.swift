@@ -43,7 +43,14 @@ enum PartyModeTokens {
     static let afterglintInitialTrail: CGFloat = 0.12
     static let afterglintFinalTrail: CGFloat = 0.024
     static let afterglintStartPosition: CGFloat = 0.015
-    static let afterglintTravelFraction: CGFloat = 0.75
+    static let afterglintTravelFraction: CGFloat = 1.0
+    static let afterglintBrightPhaseEnd: CGFloat = 0.20
+    // Keep the victory-lap head readable through the final corner, then let it
+    // collapse into the start point during only the last three percent. A
+    // longer terminal fade made a mathematically complete lap look like 75%.
+    static let afterglintFinalFizzleStart: CGFloat = 0.97
+    static let afterglintBrightPhaseEndOpacity: Double = 0.92
+    static let afterglintFinalFizzleStartOpacity: Double = 0.30
 
     static let playOuterRimInset: CGFloat = 0.08
     static let playInnerRingInset: CGFloat = 2.7
@@ -62,6 +69,34 @@ enum PartyModeTokens {
 
     static func afterglintTravelPosition(for progress: CGFloat) -> CGFloat {
         afterglintStartPosition + progress * afterglintTravelFraction
+    }
+
+    static func afterglintOpacity(for progress: CGFloat) -> Double {
+        let value = min(1, max(0, progress))
+        if value <= afterglintBrightPhaseEnd {
+            let unit = value / afterglintBrightPhaseEnd
+            return 1 + (afterglintBrightPhaseEndOpacity - 1) * Double(unit)
+        }
+
+        if value <= afterglintFinalFizzleStart {
+            let unit = smoothstep(
+                (value - afterglintBrightPhaseEnd)
+                    / (afterglintFinalFizzleStart - afterglintBrightPhaseEnd)
+            )
+            return afterglintBrightPhaseEndOpacity
+                + (afterglintFinalFizzleStartOpacity - afterglintBrightPhaseEndOpacity)
+                    * Double(unit)
+        }
+
+        let unit = smoothstep(
+            (value - afterglintFinalFizzleStart)
+                / (1 - afterglintFinalFizzleStart)
+        )
+        return afterglintFinalFizzleStartOpacity * Double(1 - unit)
+    }
+
+    private static func smoothstep(_ value: CGFloat) -> CGFloat {
+        value * value * (3 - 2 * value)
     }
 
     static func delay(for offset: PartyModeGlintOffset) -> TimeInterval {

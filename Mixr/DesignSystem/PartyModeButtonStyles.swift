@@ -28,6 +28,48 @@ struct PartyModePlayButtonSurface: View {
 private struct PartyModePlayButtonModifier: ViewModifier {
     @Environment(\.partyModeRenderState) private var renderState
 
+    func body(content: Content) -> some View {
+        PartyModeLivePlayButtonChrome(
+            content: content,
+            renderState: renderState
+        )
+            .partyModeBorder(
+                shape: Circle(),
+                role: .play,
+                lighting: .clockwise,
+                semanticColor: PartyModeTokens.violet,
+                glintOffset: .none
+            )
+    }
+}
+
+private struct PartyModeLivePlayButtonChrome<Content: View>: View {
+    let content: Content
+    let renderState: PartyModeRenderState
+
+    var body: some View {
+        if renderState.usesLiveActivationClock {
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                PartyModePlayButtonChrome(
+                    content: content,
+                    renderState: renderState.advanced(
+                        to: context.date.timeIntervalSinceReferenceDate
+                    )
+                )
+            }
+        } else {
+            PartyModePlayButtonChrome(
+                content: content,
+                renderState: renderState
+            )
+        }
+    }
+}
+
+private struct PartyModePlayButtonChrome<Content: View>: View {
+    let content: Content
+    let renderState: PartyModeRenderState
+
     private var ringReveal: Double {
         let phase = renderState.animationPhase(for: .play, offset: .none)
         if phase.isTransient {
@@ -36,7 +78,7 @@ private struct PartyModePlayButtonModifier: ViewModifier {
         return renderState.settledBorderOpacity
     }
 
-    func body(content: Content) -> some View {
+    var body: some View {
         let ringOpacity = renderState.chromeOpacity * ringReveal
 
         content
@@ -90,13 +132,6 @@ private struct PartyModePlayButtonModifier: ViewModifier {
             .shadow(
                 color: PartyModeTokens.lavender.opacity(0.16 * ringOpacity),
                 radius: PartyModeTokens.playAmbientAuraRadius
-            )
-            .partyModeBorder(
-                shape: Circle(),
-                role: .play,
-                lighting: .clockwise,
-                semanticColor: PartyModeTokens.violet,
-                glintOffset: .none
             )
     }
 }

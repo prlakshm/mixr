@@ -301,3 +301,75 @@ Fresh production-modifier frames are in
 from Round 10 at the expected head positions, while trace, reconnection,
 settled 1×/2×/3×, and normal-mode outputs remain unchanged. The 3× normal
 baseline and inactive Party modifier are still byte-identical.
+
+## Round 12 — complete returning-glint lap
+
+The second-phase glint now advances exactly one normalized perimeter from its
+existing 1.5% optical start point. Its wrap-safe trim fragments carry the head
+cleanly across path zero, and the unchanged nonlinear fizzle reaches zero at
+the same perimeter point where the lap began. The synchronized post-connection
+gate, duration, trail contraction, glow decay, colors, and settled chrome are
+unchanged.
+
+Fresh production-modifier frames are in
+`PartyModeQAArtifacts/round12-glint-full-lap/`. The early and late frames show
+the revised path positions; the timing harness verifies a start-to-end travel
+delta of exactly `1.0`. Settled 1×/2×/3× output remains continuous, and the 3×
+normal baseline and inactive Party modifier have identical PNG bytes.
+
+## Round 13 — perceptual full-lap continuity and frame isolation
+
+The Round 12 path completed a normalized lap mathematically, but its original
+power-curve opacity had already fallen to approximately 7% at 75%, below 1% at
+90%, and effectively zero before the final corner. The victory lap therefore
+still looked truncated in motion.
+
+This round centralizes a piecewise nonlinear opacity curve and verifies visible
+checkpoints at 75%, 90%, 95%, and 99%. The trim helper now always returns two
+stable, identity-preserving fragments, including before and during zero-point
+wrapping, so SwiftUI does not insert and remove trail views at the seam.
+
+The previous animation host also wrote a new environment render state every
+16 ms, invalidating the root Party Mode hierarchy. It now schedules only the
+finite start and completion events. Active perimeter overlays derive progress
+from the same absolute activation timestamp with a display-synchronized local
+clock; static content, waveforms, playback state, and project state do not
+participate in those frame updates. The local clocks are removed as soon as
+the 2.122 s sequence settles, leaving no repeating task or idle animation.
+
+Production-modifier evidence is in
+`PartyModeQAArtifacts/round13-perceptual-full-lap/`.
+
+## Round 14 — terminal fizzle and live Simulator verification
+
+Direct inspection of the Round 13 3× samples showed that the 95% head reached
+the final leading edge, but the 99% head was still visually lost against the
+settled border. The terminal fizzle now begins at 97% rather than 90% and
+retains 30% source opacity at that gate, collapsing through the final three
+percent only. The 99% frame visibly crosses the top-left starting edge and the
+transient layer reaches zero exactly at 100%; no post-lap flash is introduced.
+
+Fresh deterministic frames are in
+`PartyModeQAArtifacts/round14-full-lap-terminal-fizzle/`. The isolated normal
+baseline and inactive Party modifier remain byte-identical with SHA-256
+`2cf1213343de84eaf0f9612f2b37c09f190ff2151da2279399c6f3ed19097027`.
+
+CoreSimulator was available for this round. One live iPhone 17 Pro launch
+captured initial trace, mid trace, reconnection, early glint, and settled
+app-window frames in `PartyModeQAArtifacts/round14-live-full-lap/`. Its later
+sequential snapshots all landed after settlement because full-window hierarchy
+capture itself consumed the remaining animation time; those duplicate files
+were rejected and deleted. Separate frozen production-hierarchy launches now
+provide distinct 75%, 90%, 95%, and 99% evidence in the same directory. A
+second launch recorded the actual activation without intermediate hierarchy
+snapshots as `mixr-party-full-lap.mov`; this keeps QA capture work out of the
+animation window. Debug and Release simulator builds, the Party
+architecture/timing harnesses, clip-editing layout harness, SFX layout harness,
+and 1×/2×/3× renderer probe pass.
+
+An `xctrace` Time Profiler attach was attempted, but Instruments could not use
+its cache or reconnect to CoreSimulator from the restricted Codex process.
+No unsupported profiler number is claimed. Performance acceptance here is
+based on the finite local-clock architecture, the no-snapshot live recording,
+and source contracts proving the root 16 ms polling loop and all settled-state
+recurring work are absent.

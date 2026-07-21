@@ -113,9 +113,17 @@ struct PartyModeTrimSegment: Identifiable, Sendable {
 enum PartyModeTrimSegments {
     static func wrapped(from rawStart: CGFloat, to rawEnd: CGFloat) -> [PartyModeTrimSegment] {
         let length = max(0, rawEnd - rawStart)
-        guard length > 0 else { return [] }
+        guard length > 0 else {
+            return [
+                PartyModeTrimSegment(id: 0, from: 0, to: 0),
+                PartyModeTrimSegment(id: 1, from: 0, to: 0),
+            ]
+        }
         guard length < 1 else {
-            return [PartyModeTrimSegment(id: 0, from: 0, to: 1)]
+            return [
+                PartyModeTrimSegment(id: 0, from: 0, to: 1),
+                PartyModeTrimSegment(id: 1, from: 0, to: 0),
+            ]
         }
 
         var start = rawStart
@@ -130,7 +138,10 @@ enum PartyModeTrimSegments {
         }
 
         if end <= 1 {
-            return [PartyModeTrimSegment(id: 0, from: start, to: end)]
+            return [
+                PartyModeTrimSegment(id: 0, from: start, to: end),
+                PartyModeTrimSegment(id: 1, from: 0, to: 0),
+            ]
         }
 
         return [

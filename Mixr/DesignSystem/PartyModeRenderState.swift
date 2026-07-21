@@ -4,10 +4,31 @@ import SwiftUI
 struct PartyModeRenderState: Equatable, Sendable {
     var chromeOpacity: Double = 0
     var activationProgress: CGFloat = 0
+    var activationStartedAt: TimeInterval?
     var isActivationActive = false
     var settledBorderOpacity: Double = 0
 
     static let off = PartyModeRenderState()
+
+    var usesLiveActivationClock: Bool {
+        isActivationActive && activationStartedAt != nil
+    }
+
+    func advanced(to time: TimeInterval) -> PartyModeRenderState {
+        guard let activationStartedAt, isActivationActive else { return self }
+        var copy = self
+        copy.activationProgress = min(
+            1,
+            max(
+                0,
+                CGFloat(
+                    (time - activationStartedAt)
+                        / PartyModeTokens.activationSequenceDuration
+                )
+            )
+        )
+        return copy
+    }
 
     func animationPhase(
         for role: PartyModeSurfaceRole,

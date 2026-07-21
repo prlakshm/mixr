@@ -304,7 +304,7 @@ private struct PartyModeBorderModifier<S: PartyModeTraceableShape>: ViewModifier
     func body(content: Content) -> some View {
         content.overlay {
             if renderState.chromeOpacity > 0.001 {
-                PartyModePerimeterLayers(
+                PartyModeLivePerimeter(
                     shape: shape,
                     role: role,
                     lighting: lighting,
@@ -316,6 +316,44 @@ private struct PartyModeBorderModifier<S: PartyModeTraceableShape>: ViewModifier
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
+        }
+    }
+}
+
+private struct PartyModeLivePerimeter<S: PartyModeTraceableShape>: View {
+    let shape: S
+    let role: PartyModeSurfaceRole
+    let lighting: PartyModeLightingVariant
+    let semanticColor: Color?
+    let glintOffset: PartyModeGlintOffset
+    let renderState: PartyModeRenderState
+    let isEnabled: Bool
+
+    var body: some View {
+        if renderState.usesLiveActivationClock {
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                PartyModePerimeterLayers(
+                    shape: shape,
+                    role: role,
+                    lighting: lighting,
+                    semanticColor: semanticColor,
+                    glintOffset: glintOffset,
+                    renderState: renderState.advanced(
+                        to: context.date.timeIntervalSinceReferenceDate
+                    ),
+                    isEnabled: isEnabled
+                )
+            }
+        } else {
+            PartyModePerimeterLayers(
+                shape: shape,
+                role: role,
+                lighting: lighting,
+                semanticColor: semanticColor,
+                glintOffset: glintOffset,
+                renderState: renderState,
+                isEnabled: isEnabled
+            )
         }
     }
 }
@@ -633,15 +671,6 @@ private struct PartyModeAfterglint<S: InsettableShape>: View {
     let progress: CGFloat
     let opacity: Double
 
-    private var decay: Double {
-        let value = Double(progress)
-        if value <= 0.20 {
-            return 1 - (value / 0.20) * 0.08
-        }
-        let tail = min(1, max(0, (value - 0.20) / 0.80))
-        return 0.92 * pow(1 - tail, 2.2)
-    }
-
     var body: some View {
         let travel = PartyModeTokens.afterglintTravelPosition(for: progress)
         let trail = PartyModeTokens.afterglintInitialTrail
@@ -653,7 +682,9 @@ private struct PartyModeAfterglint<S: InsettableShape>: View {
             to: travel
         )
         let glowRadius = 10 + (3 - 10) * progress
-        let intensity = opacity * role.traceIntensity * decay
+        let intensity = opacity
+            * role.traceIntensity
+            * PartyModeTokens.afterglintOpacity(for: progress)
         let insetShape = shape.inset(by: role.strokeWidth * 0.45)
 
         ZStack {

@@ -57,9 +57,56 @@ struct PartyModeAnimationTimingTests {
         let afterglintStart = PartyModeTokens.afterglintTravelPosition(for: 0)
         let afterglintEnd = PartyModeTokens.afterglintTravelPosition(for: 1)
         checkClose(
-            "Afterglint fades after exactly 75 percent of a lap",
+            "Afterglint fades after one complete perimeter lap",
             TimeInterval(afterglintEnd - afterglintStart),
-            0.75
+            1.0
+        )
+
+        let opacityCheckpoints: [(CGFloat, Double)] = [
+            (0, 1.0),
+            (0.20, 0.92),
+            (0.75, 0.35),
+            (0.90, 0.30),
+            (0.95, 0.27),
+            (0.99, 0.07),
+            (1, 0),
+        ]
+        for (progress, minimumOpacity) in opacityCheckpoints {
+            let opacity = PartyModeTokens.afterglintOpacity(for: progress)
+            check(
+                "Afterglint remains perceptible at \(Int(progress * 100)) percent",
+                progress == 1
+                    ? opacity == 0
+                    : opacity >= minimumOpacity
+            )
+        }
+
+        let sampledOpacities = stride(from: 0, through: 100, by: 1).map {
+            PartyModeTokens.afterglintOpacity(for: CGFloat($0) / 100)
+        }
+        check(
+            "Afterglint opacity decays monotonically across the complete lap",
+            zip(sampledOpacities, sampledOpacities.dropFirst()).allSatisfy(>=)
+        )
+
+        let unwrappedTrail = PartyModeTrimSegments.wrapped(from: 0.20, to: 0.32)
+        check(
+            "Afterglint keeps two stable trim fragments before the seam",
+            unwrappedTrail.count == 2
+                && unwrappedTrail[0].from == 0.20
+                && unwrappedTrail[0].to == 0.32
+                && unwrappedTrail[1].from == 0
+                && unwrappedTrail[1].to == 0
+        )
+
+        let wrappedTrail = PartyModeTrimSegments.wrapped(from: 0.94, to: 1.04)
+        check(
+            "Afterglint keeps the same two fragments while crossing the seam",
+            wrappedTrail.count == 2
+                && wrappedTrail[0].from == 0.94
+                && wrappedTrail[0].to == 1
+                && wrappedTrail[1].from == 0
+                && abs(wrappedTrail[1].to - 0.04) <= 0.0001
         )
 
         let finalTraceEnd = 0.075 + 0.96 / 0.75

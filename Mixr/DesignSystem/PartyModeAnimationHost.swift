@@ -6,6 +6,7 @@ struct PartyModeAnimationHost: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var chromeOpacity: Double = 0
     @State private var activationProgress: CGFloat = 0
+    @State private var activationStartedAt: TimeInterval?
     @State private var isActivationActive = false
     @State private var settledBorderOpacity: Double = 0
     @State private var activationTask: Task<Void, Never>?
@@ -38,6 +39,7 @@ struct PartyModeAnimationHost: ViewModifier {
                 PartyModeRenderState(
                     chromeOpacity: chromeOpacity,
                     activationProgress: activationProgress,
+                    activationStartedAt: activationStartedAt,
                     isActivationActive: isActivationActive,
                     settledBorderOpacity: settledBorderOpacity
                 )
@@ -67,6 +69,7 @@ struct PartyModeAnimationHost: ViewModifier {
             } else {
                 chromeOpacity = 0
                 activationProgress = 0
+                activationStartedAt = nil
                 isActivationActive = false
                 settledBorderOpacity = 0
             }
@@ -75,6 +78,7 @@ struct PartyModeAnimationHost: ViewModifier {
 
         if snapshot.reduceMotion {
             activationProgress = 1
+            activationStartedAt = nil
             isActivationActive = false
             if animate {
                 withAnimation(.easeOut(duration: PartyModeTokens.reduceMotionFadeDuration)) {
@@ -90,6 +94,7 @@ struct PartyModeAnimationHost: ViewModifier {
 
         chromeOpacity = animate ? 0 : 1
         activationProgress = animate ? 0 : 1
+        activationStartedAt = nil
         isActivationActive = animate
         settledBorderOpacity = animate ? 0 : 1
 
@@ -98,6 +103,7 @@ struct PartyModeAnimationHost: ViewModifier {
         if let captureProgress = partyModeCaptureProgress {
             chromeOpacity = 1
             activationProgress = captureProgress
+            activationStartedAt = nil
             isActivationActive = captureProgress < 1
             settledBorderOpacity = captureProgress >= 1 ? 1 : 0
             return
@@ -115,22 +121,17 @@ struct PartyModeAnimationHost: ViewModifier {
                   appearanceState.partyModeActivationID == activationID
             else { return }
 
-            let startedAt = Date.timeIntervalSinceReferenceDate
-            while !Task.isCancelled {
-                let elapsed = Date.timeIntervalSinceReferenceDate - startedAt
-                activationProgress = min(
-                    1,
-                    CGFloat(elapsed / PartyModeTokens.activationSequenceDuration)
-                )
-                if activationProgress >= 1 { break }
-                try? await Task.sleep(for: .milliseconds(16))
-            }
+            activationStartedAt = Date.timeIntervalSinceReferenceDate
+            try? await Task.sleep(
+                for: .seconds(PartyModeTokens.activationSequenceDuration)
+            )
 
             guard !Task.isCancelled,
                   appearanceState.isPartyModeEnabled,
                   appearanceState.partyModeActivationID == activationID
             else { return }
             activationProgress = 1
+            activationStartedAt = nil
             settledBorderOpacity = 1
             isActivationActive = false
             activationTask = nil
@@ -145,6 +146,7 @@ struct PartyModeAnimationHost: ViewModifier {
                   appearanceState.partyModeActivationID == activationID
             else { return }
             activationProgress = 0
+            activationStartedAt = nil
             isActivationActive = false
             settledBorderOpacity = 0
             activationTask = nil

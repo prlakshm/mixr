@@ -111,11 +111,6 @@ struct ContentView: View {
                 PartyModeTokens.globalAfterglintStartTime
                     + PartyModeTokens.afterglintDuration * 0.18
             ),
-            (
-                "mixr-party-live-afterglint-late.png",
-                PartyModeTokens.globalAfterglintStartTime
-                    + PartyModeTokens.afterglintDuration * 0.78
-            ),
         ]
         var frames: [PartyModeVisualQACapture.Frame] = []
 
