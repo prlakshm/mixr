@@ -725,6 +725,20 @@ enum AutoRemixPlanner {
             maxStretch: tuning.maxStretch
         )
 
+        // Duo: preservation-first, compatibility-driven (no montage).
+        if ordered.count == 2 {
+            if var duo = duoMashupPlan(
+                anchor: ordered[0], incoming: ordered[1],
+                tuning: tuning, seed: seed,
+                preDecisions: preDecisions
+            ) {
+                duo.warnings.insert(contentsOf: preWarnings, at: 0)
+                return duo
+            }
+            // Fall through to the legacy path only if the duo planner
+            // could not build a valid arrangement.
+        }
+
         let slots: [Slot]
         switch ordered.count {
         case 2: slots = duoSlots()
@@ -745,6 +759,256 @@ enum AutoRemixPlanner {
         )
         plan?.warnings.insert(contentsOf: preWarnings, at: 0)
         return plan
+    }
+
+    // MARK: - Duo mashup (preservation-first, compatibility-driven)
+    //
+    // Two songs joined by ONE primary handoff (optional single justified
+    // return), each preserving its identity runway and first hook in
+    // source order. The join strategy is chosen from MEASURED tempo/key
+    // compatibility: a true equal-power overlap only when the grids lock,
+    // a filled effects-only tempo bridge when they can't beatmatch (the
+    // incoming song stays at native tempo, never forced onto the anchor's
+    // bar grid), or a clean phrase cut. No pre-drop silence; SFX ride the
+    // reveal with ducking.
+
+    private struct SongRun {
+        var profile: AutoSongProfile
+        var start: Double        // usable source start (silence-trimmed)
+        var hookEnd: Double      // through the first hook
+        var tempoRatio: Double
+    }
+
+    private static func songRun(_ profile: AutoSongProfile, tempoRatio: Double) -> SongRun? {
+        let analysis = profile.analysis
+        let bar = analysis.barSeconds
+        guard bar > 0.1, analysis.durationSeconds > bar * 8 else { return nil }
+
+        var start = 0.0
+        if let signal = analysis.signal, signal.overallConfidence >= 0.4,
+           signal.leadingSilenceSeconds > 0.35 {
+            start = max(0, signal.leadingSilenceSeconds - 0.15)
+        }
+
+        // Identity runway through the first hook: prefer the measured
+        // first chorus/drop; else the first 16 bars from the runway.
+        let firstHook = analysis.chorusOrDropCandidates
+            .filter { $0.startSeconds >= start - 0.01 }
+            .min { $0.startSeconds < $1.startSeconds }
+        let hookEnd: Double
+        if let firstHook {
+            hookEnd = min(analysis.durationSeconds, firstHook.endSeconds)
+        } else {
+            hookEnd = min(analysis.durationSeconds, start + bar * 16)
+        }
+        guard hookEnd - start >= bar * 6 else { return nil }
+        return SongRun(profile: profile, start: start, hookEnd: hookEnd, tempoRatio: tempoRatio)
+    }
+
+    private static func duoMashupPlan(
+        anchor: AutoSongProfile,
+        incoming: AutoSongProfile,
+        tuning: AutoTuning,
+        seed: UInt64,
+        preDecisions: [AutoDecision]
+    ) -> AutoRemixPlan? {
+        let targetBPM = anchor.analysis.bpm
+        let beat = 60.0 / max(targetBPM, 40)
+        let bar = beat * 4
+        let decision = AutoMashupCompatibility.decide(anchor: anchor, incoming: incoming, tuning: tuning)
+
+        guard let runA = songRun(anchor, tempoRatio: 1.0),
+              let runB = songRun(incoming, tempoRatio: decision.incomingTempoRatio)
+        else { return nil }
+
+        var decisions = preDecisions
+        var warnings: [String] = []
+        decisions.append(
+            AutoDecision(kind: .transformedZone, songTitle: incoming.title,
+                         detail: "Joined \(anchor.title) → \(incoming.title): \(decision.rationale).")
+        )
+
+        let letters: [UUID: String] = [anchor.songID: "A", incoming.songID: "B"]
+        var placements: [AutoClipPlacement] = []
+        var sfx: [AutoSFXEvent] = []
+        var timeline = 0.0
+        var slot = 0
+
+        func equalPower(_ seconds: Double) -> ClipTransition {
+            ClipTransition(type: .crossfade, duration: seconds / beat,
+                           curve: AutoTransitionEnvelope.equalPowerCurveName)
+        }
+
+        // ── Song A: identity runway + first hook, source order ──
+        // Opening card: gentle blur + small-room reverb over the first
+        // ~8 bars, then breathe (plain) through the hook.
+        let aRunwayEnd = min(runA.hookEnd, runA.start + bar * 8)
+        var introFX = ClipEffectSettings()
+        introFX.setLevel(30, for: MixrEffect.blur.rawValue)
+        introFX.setLevel(12, for: MixrEffect.reverb.rawValue)
+        introFX.reverbPreset = .smallRoom
+        let aVolume = AutoGainPolicy.songPlacementVolume(energy: 0.7)
+
+        if aRunwayEnd - runA.start >= tuning.minSegmentSeconds {
+            placements.append(AutoClipPlacement(
+                songID: anchor.songID, sourceStart: runA.start,
+                timelineStart: 0, timelineDuration: aRunwayEnd - runA.start,
+                tempoRatio: 1.0, volume: aVolume, fadeIn: .none, fadeOut: .none,
+                effects: AutoSupportedEffects.sanitize(introFX), role: .dominant, slotIndex: slot))
+            slot += 1
+            timeline = aRunwayEnd - runA.start
+            placements.append(AutoClipPlacement(
+                songID: anchor.songID, sourceStart: aRunwayEnd,
+                timelineStart: timeline, timelineDuration: runA.hookEnd - aRunwayEnd,
+                tempoRatio: 1.0, volume: aVolume, fadeIn: .none, fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: slot,
+                continuesPrevious: true))
+            slot += 1
+            timeline += runA.hookEnd - aRunwayEnd
+        } else {
+            placements.append(AutoClipPlacement(
+                songID: anchor.songID, sourceStart: runA.start,
+                timelineStart: 0, timelineDuration: runA.hookEnd - runA.start,
+                tempoRatio: 1.0, volume: aVolume, fadeIn: .none, fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: slot))
+            slot += 1
+            timeline = runA.hookEnd - runA.start
+        }
+
+        // A small early sweep so the runway isn't static.
+        if let sweep = SoundEffectLibrary.definition(for: "airSweep"),
+           timeline > bar * 6 {
+            sfx.append(AutoSFXEvent(assetID: "airSweep",
+                                    timelineStart: bar * 6 - sweep.durationSeconds,
+                                    purpose: "air sweep lifting the intro"))
+        }
+
+        // ── Transition into B ──
+        let bVolume = AutoGainPolicy.songPlacementVolume(energy: 0.85)
+        let bDuration = (runB.hookEnd - runB.start) / max(runB.tempoRatio, 0.0001)
+        var bTimelineStart = timeline
+        var bFadeIn: ClipTransition = .none
+
+        switch decision.strategy {
+        case .tempoCrossfade:
+            // True temporal overlap: A's tail and B's head play together
+            // (different tracks) with equal-power curves. No silence dip.
+            let overlap = min(bar * 4, timeline * 0.5, bDuration * 0.5)
+            if var lastA = placements.popLast() {
+                lastA.fadeOut = equalPower(overlap)
+                placements.append(lastA)
+            }
+            bTimelineStart = timeline - overlap
+            bFadeIn = equalPower(overlap)
+            addRevealSFX(&sfx, at: bTimelineStart, bar: bar, final: false)
+        case .tempoBridge:
+            // Filled effects bridge: EXTEND the anchor's own material
+            // (never a gap) under ambient reverb + echo + a closing
+            // low-pass so it always plays through the tempo change, then
+            // B enters with a riser + reverse cymbal. Never overlaps both
+            // full masters. Falls back to a shorter/zero bridge if the
+            // anchor has no source left.
+            let bridgeWanted = bar * 2
+            let sourceLeft = anchor.analysis.durationSeconds - 0.1 - runA.hookEnd
+            let bridge = max(0, min(bridgeWanted, sourceLeft))
+            if var lastA = placements.popLast() {
+                var tailFX = lastA.effects
+                tailFX.setLevel(35, for: MixrEffect.reverb.rawValue)
+                tailFX.reverbPreset = .ambient
+                tailFX.setLevel(24, for: MixrEffect.echo.rawValue)
+                tailFX.echoPreset = .classic
+                tailFX.setLevel(45, for: MixrEffect.blur.rawValue)   // pull the top/bass down
+                if bridge > 0.05 {
+                    // Bridge segment: continue A's source under the effects.
+                    lastA.effects = AutoSupportedEffects.sanitize(ClipEffectSettings())
+                    placements.append(lastA)
+                    placements.append(AutoClipPlacement(
+                        songID: anchor.songID, sourceStart: lastA.sourceEnd,
+                        timelineStart: lastA.timelineEnd, timelineDuration: bridge,
+                        tempoRatio: 1.0, volume: aVolume * 0.85,
+                        fadeIn: .none,
+                        fadeOut: ClipTransition(type: .echoOut, duration: 4),
+                        effects: AutoSupportedEffects.sanitize(tailFX),
+                        role: .dominant, slotIndex: slot, continuesPrevious: true))
+                    slot += 1
+                    timeline = lastA.timelineEnd + bridge
+                } else {
+                    lastA.fadeOut = ClipTransition(type: .echoOut, duration: 4)
+                    placements.append(lastA)
+                }
+            }
+            bTimelineStart = timeline
+            bFadeIn = ClipTransition(type: .crossfade, duration: 2,
+                                     curve: AutoTransitionEnvelope.equalPowerCurveName)
+            if let riser = SoundEffectLibrary.definition(for: "riser") {
+                sfx.append(AutoSFXEvent(assetID: "riser",
+                                        timelineStart: bTimelineStart - riser.durationSeconds,
+                                        purpose: "riser across the tempo bridge into \(incoming.title)"))
+            }
+            addRevealSFX(&sfx, at: bTimelineStart, bar: bar, final: false)
+            decisions.append(AutoDecision(kind: .addedRiserIntoDrop, songTitle: incoming.title,
+                                          detail: "filled tempo bridge (continuous anchor material under reverb + echo + filter)"))
+        case .cleanPhraseCut:
+            if var lastA = placements.popLast() {
+                lastA.fadeOut = ClipTransition(type: .fadeOut, duration: 0.05)  // anti-click microfade
+                placements.append(lastA)
+            }
+            bFadeIn = ClipTransition(type: .crossfade, duration: 0.05)
+            addRevealSFX(&sfx, at: bTimelineStart, bar: bar, final: false)
+        }
+
+        // ── Song B: native (or beatmatched) tempo, identity + hook ──
+        placements.append(AutoClipPlacement(
+            songID: incoming.songID, sourceStart: runB.start,
+            timelineStart: bTimelineStart, timelineDuration: bDuration,
+            tempoRatio: runB.tempoRatio, volume: bVolume, fadeIn: bFadeIn,
+            fadeOut: ClipTransition(type: .echoOut, duration: 6),
+            effects: ClipEffectSettings(), role: .dominant, slotIndex: slot))
+        slot += 1
+        let bEnd = bTimelineStart + bDuration
+        timeline = bEnd
+
+        // ── Sequence / handoff bookkeeping ──
+        let handoffs = 1
+        let sections = placements.map { p -> AutoSelectedSection in
+            AutoSelectedSection(songID: p.songID, sourceStart: p.sourceStart,
+                                sourceEnd: p.sourceEnd, phraseType: "run",
+                                barCount: Int((p.timelineDuration / bar).rounded()),
+                                hookScore: 0.8, energyScore: 0.7, vocalDensity: 0.5,
+                                compatibilityRole: .dominant,
+                                confidence: p.songID == anchor.songID
+                                    ? anchor.analysis.analysisConfidence
+                                    : incoming.analysis.analysisConfidence)
+        }
+
+        if decision.harmonicScore >= 0.85 {
+            decisions.append(AutoDecision(kind: .pitchCorrectedOverlap, songTitle: incoming.title,
+                detail: "relative major/minor — safe for short stem layering"))
+        }
+
+        return AutoRemixPlan(
+            mode: .mashup, targetBPM: targetBPM, targetDuration: timeline,
+            anchorSongIDs: [anchor.songID], selectedSections: sections,
+            placements: placements, sfxEvents: sfx, cutRecords: [],
+            intentionalGaps: [], handoffCount: handoffs,
+            songLetters: letters, sequence: ["A", "B"],
+            sequenceTitles: [anchor.title, incoming.title],
+            transitionsUsed: [], decisions: decisions, warnings: warnings,
+            confidence: min(anchor.analysis.analysisConfidence, incoming.analysis.analysisConfidence),
+            randomSeed: seed)
+    }
+
+    /// Reverse cymbal + one controlled impact on a reveal downbeat.
+    private static func addRevealSFX(
+        _ sfx: inout [AutoSFXEvent], at t: Double, bar: Double, final: Bool
+    ) {
+        if let cymbal = SoundEffectLibrary.definition(for: "reverseCymbal"), t - cymbal.durationSeconds >= 0 {
+            sfx.append(AutoSFXEvent(assetID: "reverseCymbal",
+                                    timelineStart: t - cymbal.durationSeconds,
+                                    purpose: "reverse cymbal into the reveal"))
+        }
+        sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t,
+                                purpose: final ? "final impact" : "impact landing the incoming song"))
     }
 
     /// A → B → A → B → A (roles switch; ≥3 handoffs; returns vary treatment).

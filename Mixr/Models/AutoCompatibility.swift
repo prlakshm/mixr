@@ -113,6 +113,95 @@ nonisolated enum AutoTempo {
     }
 }
 
+// MARK: - Mashup Strategy
+
+/// How two songs are joined in a duo mashup, chosen from MEASURED tempo /
+/// key / grid compatibility. Never lay a tempo-incompatible song on the
+/// other song's bar grid and call it phrase-aligned — pick a bridge.
+enum AutoMashupStrategy: String, Sendable, Equatable {
+    /// Grids beatmatch within the safe window — a true equal-power
+    /// temporal overlap of the two songs is possible.
+    case tempoCrossfade
+    /// Tempos cannot beatmatch — join through a filled, effects-only
+    /// tempo bridge (reverb/echo/riser tail) that also carries the tempo
+    /// change. Never overlaps both full masters.
+    case tempoBridge
+    /// Grids are close enough for a clean downbeat-aligned phrase cut
+    /// without a bridge, but a full overlap isn't warranted.
+    case cleanPhraseCut
+
+    /// True when the incoming song plays at its native tempo (no stretch).
+    var incomingNativeTempo: Bool { self != .tempoCrossfade }
+}
+
+enum AutoMashupCompatibility {
+
+    struct Decision: Sendable {
+        var strategy: AutoMashupStrategy
+        /// Beatmatch ratio for the incoming song (1.0 = native tempo).
+        var incomingTempoRatio: Double
+        /// Harmonic relationship score 0…1 (relative major/minor scores high).
+        var harmonicScore: Double
+        /// Human-readable rationale for the report.
+        var rationale: String
+    }
+
+    /// Decides how to join `incoming` after `anchor`, from measured
+    /// tempo and key. `confidence` gates aggressiveness: low confidence
+    /// prefers the safest join (bridge or clean cut, native tempo).
+    static func decide(
+        anchor: AutoSongProfile,
+        incoming: AutoSongProfile,
+        tuning: AutoTuning
+    ) -> Decision {
+        let fit = AutoTempo.fit(
+            songBPM: incoming.analysis.bpm,
+            targetBPM: anchor.analysis.bpm,
+            maxStretch: tuning.maxStretch
+        )
+        let harmonic = AutoKey.bestCorrection(
+            AutoKey.parse(anchor.analysis.key),
+            AutoKey.parse(incoming.analysis.key),
+            maxShift: 0
+        ).score
+        let confident = min(anchor.analysis.analysisConfidence, incoming.analysis.analysisConfidence)
+            >= tuning.lowConfidenceThreshold
+
+        if fit.gridAligned, confident {
+            // Grids lock: a real overlap is safe. A strong harmonic match
+            // supports a longer blend; otherwise a shorter crossfade.
+            let ratioPct = Int(((fit.ratio - 1) * 100).rounded())
+            return Decision(
+                strategy: .tempoCrossfade,
+                incomingTempoRatio: fit.ratio,
+                harmonicScore: harmonic,
+                rationale: fit.halfOrDoubleTime
+                    ? "tempos lock at half/double time — true crossfade"
+                    : "tempos within \(ratioPct)% — beatmatched true crossfade"
+            )
+        }
+
+        if !fit.gridAligned {
+            // Tempos cannot beatmatch (the Cut-to-the-Feeling × good 4 u
+            // case): a filled tempo bridge, incoming song at native tempo.
+            return Decision(
+                strategy: .tempoBridge,
+                incomingTempoRatio: 1.0,
+                harmonicScore: harmonic,
+                rationale: "tempos outside the ±\(Int(tuning.maxStretch * 100))% window — filled tempo bridge, incoming song kept at native tempo"
+            )
+        }
+
+        // Grid-aligned but low confidence: a clean phrase cut, no overlap.
+        return Decision(
+            strategy: .cleanPhraseCut,
+            incomingTempoRatio: fit.gridAligned ? fit.ratio : 1.0,
+            harmonicScore: harmonic,
+            rationale: "low analysis confidence — clean phrase-aligned cut"
+        )
+    }
+}
+
 // MARK: - Directional Compatibility
 
 /// Directional pairing verdict: how well `support` works UNDER `dominant`.

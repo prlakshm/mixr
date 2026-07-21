@@ -171,8 +171,16 @@ do {
     switch outcome {
     case .success(_, let plan, let summary):
         check("Two songs → Mashup mode", plan.mode == .mashup)
-        check("Two-song mashup handoffs ≥ 3", plan.handoffCount >= 3, "got \(plan.handoffCount)")
+        // Preservation-first duo: ONE primary handoff (optional single
+        // return) — never the old A→B→A→B→A montage.
+        check("Two-song duo mashup: at most 2 handoffs (no montage)",
+              plan.handoffCount <= 2, "got \(plan.handoffCount)")
+        check("Two-song duo mashup: at least one handoff", plan.handoffCount >= 1,
+              "got \(plan.handoffCount)")
         check("Summary sequence uses song names", summary.sequence.contains("Groove Anchor") || summary.sequence.contains("Vocal Feature"))
+        // No automatic pre-drop silence in the duo mashup.
+        check("Two-song duo mashup: no intentional pre-drop silence",
+              plan.intentionalGaps.isEmpty, "\(plan.intentionalGaps.count) gaps")
         let letters = AutoRemixPlanner.summary(for: plan, tracks: tracks)
         _ = letters
     case .failure(let message):

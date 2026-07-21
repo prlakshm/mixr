@@ -1511,6 +1511,149 @@ do {
     }
 }
 
+// MARK: - 22. Duo mashup: preservation-first, compatibility-driven
+//
+// The tempo-INCOMPATIBLE design pair (Cut-to-the-Feeling ~115 BPM ×
+// good-4-u ~85 BPM). The join must be a filled tempo bridge, the
+// incoming song at native tempo (never on the anchor's bar grid), one
+// handoff, identities preserved, no pre-drop silence, and the render
+// must pass every audio gate.
+
+func makeMashupSong(
+    title: String, bpm: Int, key: String, durationSeconds: Double
+) -> MixrTrack {
+    MixrTrack(
+        id: UUID(), title: title, artist: "Fixture", duration: "--:--",
+        durationSeconds: durationSeconds, bpm: bpm, bpmConfidence: nil,
+        key: key, keyConfidence: nil, color: .pink, volume: 1.0, isMuted: false,
+        url: nil, artworkData: nil,
+        clips: [MixrClip(id: UUID(), start: 0, length: MixrTimeline.units(fromSeconds: min(durationSeconds, 180)))]
+    )
+}
+
+do {
+    // Compatibility decision on the real tempo pair (metadata BPM).
+    let cut = makeMashupSong(title: "Cut To The Feeling", bpm: 115, key: "A", durationSeconds: 150)
+    let g4u = makeMashupSong(title: "good 4 u", bpm: 85, key: "F#m", durationSeconds: 150)
+    let cutProfile = AutoSectionCatalog.profile(track: cut)
+    let g4uProfile = AutoSectionCatalog.profile(track: g4u)
+    let decision = AutoMashupCompatibility.decide(anchor: cutProfile, incoming: g4uProfile, tuning: .standard)
+    check("Mashup: tempo-incompatible pair chooses a filled tempo bridge",
+          decision.strategy == .tempoBridge, "\(decision.strategy)")
+    check("Mashup: incompatible incoming song kept at native tempo",
+          abs(decision.incomingTempoRatio - 1.0) < 0.001,
+          String(format: "ratio %.3f", decision.incomingTempoRatio))
+    check("Mashup: relative major/minor scored harmonically compatible",
+          decision.harmonicScore >= 0.85, String(format: "%.2f", decision.harmonicScore))
+
+    let outcome = AutoRemixRunner.runEntireProject(tracks: [cut, g4u], seed: 20)
+    switch outcome {
+    case .success(let tracks, let plan, _):
+        check("Mashup: preservation-first duo (≤ 2 handoffs)",
+              plan.handoffCount <= 2, "got \(plan.handoffCount)")
+        check("Mashup: no automatic pre-drop silence", plan.intentionalGaps.isEmpty)
+
+        // Incoming song placed at native tempo (ratio 1.0), never on the
+        // anchor's bar grid.
+        let bPlacements = plan.placements.filter { $0.songID == g4u.id }
+        check("Mashup: incoming placements at native tempo",
+              bPlacements.allSatisfy { abs($0.tempoRatio - 1.0) < 0.001 },
+              "ratios \(bPlacements.map { String(format: "%.2f", $0.tempoRatio) })")
+
+        // Each song's run is internally contiguous — no unmasked internal
+        // cut within a song.
+        let cutsA = AutoRemixDiagnostics.internalCutBoundaries(
+            placements: plan.placements.filter { $0.songID == cut.id })
+        let cutsB = AutoRemixDiagnostics.internalCutBoundaries(placements: bPlacements)
+        check("Mashup: no unmasked internal cut inside either song",
+              cutsA.isEmpty && cutsB.isEmpty, "A \(cutsA.count), B \(cutsB.count)")
+
+        // Identity runway: song A starts at its beginning, not a teaser
+        // jump; song B starts near its beginning too.
+        let aFirst = plan.placements.filter { $0.songID == cut.id }
+            .min { $0.timelineStart < $1.timelineStart }
+        check("Mashup: anchor preserves its opening (starts near source 0)",
+              (aFirst?.sourceStart ?? 99) < 8, String(format: "src %.1fs", aFirst?.sourceStart ?? -1))
+        let bFirst = bPlacements.min { $0.timelineStart < $1.timelineStart }
+        check("Mashup: incoming preserves its opening identity",
+              (bFirst?.sourceStart ?? 99) < 40, String(format: "src %.1fs", bFirst?.sourceStart ?? -1))
+
+        // SFX present but bounded, and a riser lands the bridge.
+        check("Mashup: coordinated SFX present", !plan.sfxEvents.isEmpty)
+        let minutes = max(plan.targetDuration / 60, 0.01)
+        check("Mashup: SFX density bounded (≤ 8/min)",
+              Double(plan.sfxEvents.count) / minutes <= 8.0,
+              String(format: "%.1f/min", Double(plan.sfxEvents.count) / minutes))
+        check("Mashup: a riser carries the tempo bridge",
+              plan.sfxEvents.contains { $0.assetID == "riser" })
+
+        // ── Rendered PCM gates on the two-song mix ──
+        let sources = [
+            cut.id: AutoOfflineMixdown.Source(samples: syntheticSong(durationSeconds: 150, bpm: 115, flatAmplitude: 0.5), sampleRate: SR),
+            g4u.id: AutoOfflineMixdown.Source(samples: syntheticSong(durationSeconds: 150, bpm: 85, flatAmplitude: 0.5), sampleRate: SR),
+        ]
+        let result = AutoOfflineMixdown.render(plan: plan, sources: sources, sampleRate: SR)
+        let mix = result.mix
+        check("Mashup render: no clipped samples",
+              AutoRemixDiagnostics.clippedSampleCount(mix) == 0)
+        let truePeak = AutoRemixDiagnostics.truePeakDB(samples: mix, sampleRate: SR)
+        check("Mashup render: true peak ≤ −1 dBTP",
+              truePeak <= AutoGainPolicy.truePeakCeilingDB + 0.2, String(format: "%.2f dBTP", truePeak))
+        check("Mashup render: limiter GR ≤ 3 dB (headroom preserved)",
+              result.limiterGainReductionDB <= 3.0, String(format: "%.1f dB", result.limiterGainReductionDB))
+
+        let contentStart = plan.placements.map(\.timelineStart).min() ?? 0
+        let contentEnd = plan.placements.map(\.timelineEnd).max() ?? 0
+        let silences = AutoRemixDiagnostics.silenceRuns(
+            samples: mix, sampleRate: SR, thresholdDB: -45, minSeconds: 0.1
+        ).filter { $0.start > contentStart + 0.5 && $0.end < contentEnd - 0.5 }
+        check("Mashup render: no silence holes (bridge is filled)", silences.isEmpty,
+              silences.prefix(3).map { String(format: "%.1f–%.1fs", $0.start, $0.end) }.joined(separator: ", "))
+
+        // The A→B handoff boundary must not dip toward silence.
+        let handoffT = bFirst?.timelineStart ?? 0
+        let hb = AutoRemixDiagnostics.boundaryLoudness(samples: mix, sampleRate: SR, boundarySeconds: handoffT)
+        check("Mashup render: handoff holds level (trough ≤ 3 dB)",
+              hb.centerTroughDB <= 3.0, String(format: "trough %.1f dB", hb.centerTroughDB))
+
+        let click = AutoRemixDiagnostics.maxAdjacentSampleJump(samples: result.songBus, sampleRate: SR)
+        check("Mashup render: no click at the join (song bus)",
+              click.jump <= 0.5, String(format: "%.3f at %.1fs", click.jump, click.atSeconds))
+
+        _ = tracks
+    case .failure(let message):
+        check("Tempo-incompatible duo mashup plans", false, message)
+    }
+}
+
+// MARK: - 23. Duo mashup: tempo-COMPATIBLE pair uses a true overlap
+
+do {
+    let a = makeMashupSong(title: "Anchor Compat", bpm: 124, key: "Am", durationSeconds: 150)
+    let b = makeMashupSong(title: "Feature Compat", bpm: 126, key: "C", durationSeconds: 150)
+    let aP = AutoSectionCatalog.profile(track: a)
+    let bP = AutoSectionCatalog.profile(track: b)
+    let decision = AutoMashupCompatibility.decide(anchor: aP, incoming: bP, tuning: .standard)
+    check("Mashup: beatmatchable pair chooses a true crossfade",
+          decision.strategy == .tempoCrossfade, "\(decision.strategy)")
+
+    let outcome = AutoRemixRunner.runEntireProject(tracks: [a, b], seed: 21)
+    if case .success(_, let plan, _) = outcome {
+        // A real overlap: the incoming song's first placement starts
+        // BEFORE the anchor's last placement ends (both play together).
+        let aLast = plan.placements.filter { $0.songID == a.id }.max { $0.timelineEnd < $1.timelineEnd }
+        let bFirst = plan.placements.filter { $0.songID == b.id }.min { $0.timelineStart < $1.timelineStart }
+        let overlap = (aLast?.timelineEnd ?? 0) - (bFirst?.timelineStart ?? 0)
+        check("Mashup: compatible join has real temporal overlap",
+              overlap > 0.5, String(format: "%.2fs overlap", overlap))
+        check("Mashup: incoming beatmatched to the grid (ratio ≠ 1)",
+              plan.placements.filter { $0.songID == b.id }.allSatisfy { abs($0.tempoRatio - 1.0) > 0.001 }
+                  || abs(decision.incomingTempoRatio - 1.0) < 0.001)
+    } else {
+        check("Compatible duo mashup plans", false)
+    }
+}
+
 // MARK: - Diagnostics evidence (printed, not asserted)
 
 if let plan = confidentPlan, let song = confidentSong {
