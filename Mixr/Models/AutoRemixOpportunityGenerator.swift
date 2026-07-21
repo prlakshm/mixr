@@ -28,7 +28,14 @@ enum AutoRemixOpportunityGenerator {
         var out: [AutoRemixOpportunity] = []
         let bar = analysis.barSeconds
         let usable = structure.usableRange
-        let base = signal.overallConfidence * signal.beatConfidence
+        // Opportunity confidence is the CALIBRATED analysis confidence —
+        // NOT overallConfidence × beatConfidence, which compounds toward
+        // zero on real audio (two ~0.6 signals → 0.36, below every
+        // selection floor). Real songs measure analysisConfidence ≈
+        // 0.55–1.0. Per-cut beat/phrase reliability is enforced
+        // separately by the recipe planner's LOCAL grid check, so this
+        // number should reflect overall trust, not be double-penalised.
+        let base = max(analysis.analysisConfidence, signal.overallConfidence)
         let hop = signal.hopSeconds
 
         func energyMean(_ from: Double, _ to: Double) -> Double {

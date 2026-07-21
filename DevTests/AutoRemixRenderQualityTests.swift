@@ -1101,10 +1101,12 @@ do {
 
         // Protected first hook untouched by any transformation.
         let chorus1 = popSectionRange(script, name: "chorus1")
-        let hookTouched = recipe.selected.contains {
-            zonesOverlap($0.zoneStart, $0.zoneEnd, chorus1.start, chorus1.end)
+        // The first hook is never STRUCTURALLY removed/restructured;
+        // DSP enhancement over it is allowed (preserves identity).
+        let hookStructurallyTouched = recipe.selected.contains {
+            $0.kind.isStructural && zonesOverlap($0.zoneStart, $0.zoneEnd, chorus1.start, chorus1.end)
         }
-        check("Recipe: first full hook left untouched", !hookTouched)
+        check("Recipe: first full hook never structurally removed", !hookStructurallyTouched)
 
         // One continuous ≥ 32-bar passage untouched.
         let barSec = 240.0 / popBPM
@@ -1651,6 +1653,72 @@ do {
                   || abs(decision.incomingTempoRatio - 1.0) < 0.001)
     } else {
         check("Compatible duo mashup plans", false)
+    }
+}
+
+// MARK: - 25. Real-audio confidence levels still produce transformations
+//
+// Regression for the calibration bug that made real songs (Levitating,
+// Heat Waves) return untouched: (a) opportunity confidence must not be
+// the compounding product overallConfidence×beatConfidence (two ~0.6
+// signals → 0.36, below every floor), and (b) a confident but gentle
+// song with smooth dynamics must still get a DSP floor.
+
+do {
+    // Structured song, but confidences forced to REAL-AUDIO levels where
+    // the old overall×beat product (0.72×0.50 = 0.36) fell below floors.
+    let base = SongSignalAnalyzer.extract(samples: popPCM, sampleRate: SR, bpmHint: popBPM)
+    var real = base
+    real.overallConfidence = 0.72
+    real.beatConfidence = 0.50            // both individually clear the tier gate
+    let song = makeSong(title: "Real-Confidence Pop", bpm: Int(popBPM),
+                        durationSeconds: Double(popPCM.count) / SR)
+    let outcome = AutoRemixRunner.runEntireProject(tracks: [song], seed: 70, signals: [song.id: real])
+    if case .success(_, let plan, _) = outcome, let recipe = plan.remixRecipe {
+        check("Real-conf: full tier still selects transformations (no compounding to zero)",
+              recipe.selected.count >= 2, "got \(recipe.selected.count) selected")
+        check("Real-conf: at least one audible effect placement",
+              plan.placements.contains { $0.effects.hasAnyActiveEffect })
+        check("Real-conf: coordinated SFX present", !plan.sfxEvents.isEmpty)
+    } else {
+        check("Real-conf: full tier still selects transformations (no compounding to zero)",
+              false, "no recipe")
+    }
+}
+
+do {
+    // Confident but GENTLE: high confidence, nearly flat energy (few
+    // rises). Must still get the safe-DSP floor, not an untouched song.
+    let duration = 150.0
+    let hop = SongSignalAnalyzer.hopSeconds
+    let hops = Int(duration / hop)
+    var energy = [Double](repeating: 0.55, count: hops)
+    // one gentle swell only — below the old absolute rise threshold
+    for i in 0..<hops where Double(i) * hop >= 80 && Double(i) * hop < 110 { energy[i] = 0.62 }
+    let gentle = SongSignalFeatures(
+        sampleRate: SR, durationSeconds: duration,
+        rmsCurveDB: [Double](repeating: -14, count: hops),
+        onsetStrength: [Double](repeating: 0.4, count: hops), hopSeconds: hop,
+        downbeatOffsetSeconds: 0.5, beatConfidence: 0.9,
+        leadingSilenceSeconds: 0, trailingSilenceSeconds: 0, quietRegions: [],
+        energyCurve: energy, bassEnergyCurve: [Double](repeating: 0.5, count: hops),
+        vocalPresenceCurve: [Double](repeating: 0.4, count: hops),
+        noveltyCurve: [Double](repeating: 0.1, count: hops),
+        drumConfidence: 0.8, overallConfidence: 0.95,
+        beatPhaseWindows: [], gridDriftFractionOfBeat: 0.05)
+    let song = makeSong(title: "Gentle Song", bpm: 120, key: "C", durationSeconds: duration)
+    let outcome = AutoRemixRunner.runEntireProject(tracks: [song], seed: 71, signals: [song.id: gentle])
+    if case .success(_, let plan, _) = outcome {
+        check("Gentle-but-confident: still gets a DSP floor (not untouched)",
+              plan.placements.contains { $0.effects.hasAnyActiveEffect },
+              "\(plan.placements.filter { $0.effects.hasAnyActiveEffect }.count) effected")
+        check("Gentle-but-confident: no clipping in render", {
+            let src = AutoOfflineMixdown.Source(samples: syntheticSong(durationSeconds: duration, flatAmplitude: 0.5), sampleRate: SR)
+            return AutoRemixDiagnostics.clippedSampleCount(
+                AutoOfflineMixdown.render(plan: plan, sources: [song.id: src], sampleRate: SR).mix) == 0
+        }())
+    } else {
+        check("Gentle-but-confident: plans", false)
     }
 }
 

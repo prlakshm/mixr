@@ -72,33 +72,40 @@ enum AutoRemixRecipePlanner {
                 continue
             }
             if candidate.kind.isStructural {
+                // A cut needs a stable grid AT ITS EDGES — the LOCAL
+                // measure. Global drift alone must not veto a cut: real
+                // songs measure 0.3–0.5 drift end-to-end (bridges, rubato)
+                // while being rock-solid where the cut actually lands.
+                // localBeatConfidence already collapses in a drifting
+                // region (neighbouring windows disagree), so it is the
+                // correct guard.
                 let edgeConfidence = min(
                     structure.localBeatConfidence(at: candidate.zoneStart),
                     structure.localBeatConfidence(at: candidate.zoneEnd)
                 )
-                if edgeConfidence < localGridFloor
-                    || structure.gridDriftFractionOfBeat > 0.1
-                       && edgeConfidence < 0.75 {
+                if edgeConfidence < localGridFloor {
                     reject(candidate, .gridUnstable)
                     continue
                 }
             }
 
-            // Hook protection: nothing touches the protected FIRST
-            // instance; structural edits never touch any protected
-            // (non-near-duplicate) instance.
+            // Hook protection: the protected FIRST instance is never
+            // REMOVED or restructured; DSP treatments (filtered builds,
+            // reverb swells) may still ENHANCE it — enhancement preserves
+            // identity, so only STRUCTURAL edits are blocked. Structural
+            // edits also never touch any protected (non-near-duplicate)
+            // instance.
             var hookBlocked = false
             var notNearDuplicate = false
             for (index, instance) in structure.hookInstances.enumerated() {
                 let overlaps = max(candidate.zoneStart, instance.startSeconds)
                     < min(candidate.zoneEnd, instance.endSeconds) - 0.01
                 guard overlaps else { continue }
-                if index == 0 {
-                    hookBlocked = true
-                } else if candidate.kind == .shortenRepeat, instance.differentiation != .nearDuplicate {
+                if candidate.kind == .shortenRepeat, index > 0,
+                   instance.differentiation != .nearDuplicate {
                     notNearDuplicate = true
                 } else if candidate.kind.isStructural, candidate.kind != .loopStutter,
-                          instance.isProtected {
+                          (index == 0 || instance.isProtected) {
                     hookBlocked = true
                 }
             }

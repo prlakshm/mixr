@@ -268,11 +268,20 @@ enum AutoRemixPlanner {
                 usableRange: usableStart...usableEnd,
                 tuning: tuning
             )
-            let opportunities = AutoRemixOpportunityGenerator.opportunities(
+            var opportunities = AutoRemixOpportunityGenerator.opportunities(
                 structure: structure,
                 analysis: analysis,
                 tuning: tuning
             )
+            // Guarantee a DSP floor: even a confident but gentle song
+            // (smooth dynamics → few structural/vocal candidates) always
+            // has energy-relative filtered builds + a final swell to
+            // choose from, so Auto never returns an untouched song.
+            if let signal {
+                opportunities += safeDspOpportunities(
+                    analysis: analysis, signal: signal, structure: structure,
+                    usableStart: usableStart, usableEnd: usableEnd, bar: bar)
+            }
             recipe = AutoRemixRecipePlanner.recipe(
                 from: opportunities,
                 structure: structure,
@@ -285,7 +294,7 @@ enum AutoRemixPlanner {
             // so a well-recorded song whose beat/section analysis is
             // uncertain still gets audible movement — never a cut.
             let safe = safeDspOpportunities(
-                analysis: analysis, signal: signal,
+                analysis: analysis, signal: signal, structure: structure,
                 usableStart: usableStart, usableEnd: usableEnd, bar: bar
             )
             recipe = AutoRemixRecipe(
@@ -696,6 +705,7 @@ enum AutoRemixPlanner {
     private static func safeDspOpportunities(
         analysis: SongAnalysis,
         signal: SongSignalFeatures,
+        structure: AutoRemixStructureMap,
         usableStart: Double,
         usableEnd: Double,
         bar: Double
@@ -710,8 +720,11 @@ enum AutoRemixPlanner {
             var s = 0.0; for i in a..<b { s += curve[i] }
             return s / Double(b - a)
         }
+        func region(_ t: Double) -> Int { structure.regions.isEmpty ? 0 : structure.regionIndex(of: t) }
 
-        // Scan for the two biggest sustained energy rises, spaced apart.
+        // Scan sustained energy changes; keep the biggest RELATIVE to the
+        // song (a gentle song still has a loudest lift), so smooth songs
+        // get movement instead of nothing.
         var rises: [(t: Double, rise: Double)] = []
         var t = usableStart + bar * 4
         while t < usableEnd - bar * 4 {
@@ -722,8 +735,11 @@ enum AutoRemixPlanner {
             t += bar
         }
         rises.sort { $0.rise > $1.rise }
+        // Relative floor: at least a small measured rise, but always take
+        // the top candidates even when dynamics are smooth.
+        let riseFloor = max(0.04, (rises.first?.rise ?? 0) * 0.5)
         var chosen: [Double] = []
-        for r in rises where r.rise >= 0.12 {
+        for r in rises where r.rise >= riseFloor {
             if chosen.allSatisfy({ abs($0 - r.t) >= bar * 8 }) { chosen.append(r.t) }
             if chosen.count == 2 { break }
         }
@@ -734,11 +750,11 @@ enum AutoRemixPlanner {
             let zoneEnergy = mean(zoneStart, anchor)
             out.append(AutoRemixOpportunity(
                 kind: .filteredBuild, zoneStart: zoneStart, zoneEnd: anchor,
-                anchorDownbeat: anchor, region: 0,
-                score: 0.6, confidence: signal.overallConfidence, vocalSafe: true,
-                evidence: [AutoRemixEvidence(name: "energyRise", value: 0.15, measured: true)],
+                anchorDownbeat: anchor, region: region(anchor),
+                score: 0.6, confidence: base(analysis, signal), vocalSafe: true,
+                evidence: [AutoRemixEvidence(name: "energyRise", value: max(0.05, riseFloor), measured: true)],
                 audibility: AudibilityContract(
-                    musicalJustification: "measured energy rise (safe-effects tier)",
+                    musicalJustification: "measured energy lift",
                     expectedConsequence: "high frequencies sweep closed then reopen at the lift",
                     measuredFeature: .hfEnergy,
                     predictedDelta: 16 * min(1, zoneEnergy + 0.3),
@@ -750,16 +766,21 @@ enum AutoRemixPlanner {
         if swellStart > usableStart + bar * 4 {
             out.append(AutoRemixOpportunity(
                 kind: .finalChorusLift, zoneStart: swellStart, zoneEnd: usableEnd,
-                anchorDownbeat: swellStart, region: 0,
-                score: 0.55, confidence: signal.overallConfidence, vocalSafe: true,
+                anchorDownbeat: swellStart, region: region(swellStart),
+                score: 0.55, confidence: base(analysis, signal), vocalSafe: true,
                 evidence: [AutoRemixEvidence(name: "finalSection", value: 1, measured: true)],
                 audibility: AudibilityContract(
-                    musicalJustification: "shape the final section (safe-effects tier)",
+                    musicalJustification: "shape the final section",
                     expectedConsequence: "reverb and echo swell into the ending",
                     measuredFeature: .echoTailEnergy,
                     predictedDelta: -12, minimumRequiredDelta: -22)))
         }
         return out.sorted { $0.zoneStart < $1.zoneStart }
+    }
+
+    /// Non-compounding base confidence (matches the opportunity generator).
+    private static func base(_ analysis: SongAnalysis, _ signal: SongSignalFeatures) -> Double {
+        max(analysis.analysisConfidence, signal.overallConfidence)
     }
 
     /// User-facing sentence for one applied transformation.
