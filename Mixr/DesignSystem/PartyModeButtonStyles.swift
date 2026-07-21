@@ -28,50 +28,68 @@ struct PartyModePlayButtonSurface: View {
 private struct PartyModePlayButtonModifier: ViewModifier {
     @Environment(\.partyModeRenderState) private var renderState
 
+    private var ringReveal: Double {
+        let phase = renderState.animationPhase(for: .play, offset: .none)
+        if phase.isTransient {
+            return phase.traceProgress >= 0.995 ? 1 : 0
+        }
+        return renderState.settledBorderOpacity
+    }
+
     func body(content: Content) -> some View {
+        let ringOpacity = renderState.chromeOpacity * ringReveal
+
         content
             .overlay {
-                if renderState.chromeOpacity > 0.001 {
+                if ringOpacity > 0.001 {
                     ZStack {
                         Circle()
-                            .strokeBorder(
+                            .stroke(
                                 LinearGradient(
                                     colors: [
-                                        PartyModeTokens.glintWhite.opacity(0.90),
+                                        PartyModeTokens.glintWhite,
                                         PartyModeTokens.lavender,
                                         PartyModeTokens.violet,
+                                        PartyModeTokens.magenta.opacity(0.84),
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
-                                lineWidth: 1.35
+                                lineWidth: 1.12
                             )
-                            .padding(0.45)
+                            .padding(PartyModeTokens.playOuterRimInset)
                         Circle()
                             .strokeBorder(
                                 LinearGradient(
                                     colors: [
-                                        PartyModeTokens.lavender.opacity(0.58),
-                                        PartyModeTokens.violet.opacity(0.78),
+                                        PartyModeTokens.glintWhite.opacity(0.88),
+                                        PartyModeTokens.lavender.opacity(0.74),
+                                        PartyModeTokens.violet.opacity(0.88),
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
-                                lineWidth: 0.58
+                                lineWidth: 0.72
                             )
-                            .padding(3.6)
+                            .padding(PartyModeTokens.playInnerRingInset)
+                        Circle()
+                            .strokeBorder(
+                                PartyModeTokens.lavender.opacity(0.46),
+                                lineWidth: 0.52
+                            )
+                            .padding(5.2)
                     }
-                    .opacity(renderState.chromeOpacity)
+                    .opacity(ringOpacity)
                     .allowsHitTesting(false)
                 }
             }
             .shadow(
-                color: PartyModeTokens.violet.opacity(0.42 * renderState.chromeOpacity),
-                radius: 6
+                color: PartyModeTokens.violet.opacity(0.46 * ringOpacity),
+                radius: PartyModeTokens.playNearAuraRadius
             )
             .shadow(
-                color: PartyModeTokens.lavender.opacity(0.12 * renderState.chromeOpacity),
-                radius: 10
+                color: PartyModeTokens.lavender.opacity(0.16 * ringOpacity),
+                radius: PartyModeTokens.playAmbientAuraRadius
             )
             .partyModeBorder(
                 shape: Circle(),

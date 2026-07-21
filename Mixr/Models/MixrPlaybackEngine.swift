@@ -54,6 +54,22 @@ final class MixrPlaybackEngine: ObservableObject {
     private var projectBPM: Double = 124
     private var audioSessionReady = false
 
+    /// Visual QA runs with a populated project in Simulator, where the current
+    /// CoreAudio host can abort on an output-node RPC timeout. This Debug-only
+    /// launch argument keeps screenshot capture deterministic without changing
+    /// normal builds or the project/playback state visible to the UI.
+    private var isPartyModeScreenshotVerification: Bool {
+#if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("-MixrPartyModeScreenshot")
+            || arguments.contains("-MixrVisualQAScreenshot")
+            || arguments.contains("-MixrPartyModeCaptureProgress")
+            || arguments.contains("-MixrPartyModeCaptureSequence")
+#else
+        false
+#endif
+    }
+
     // MARK: - Per-track effect chain
 
     private final class TrackChain {
@@ -132,6 +148,8 @@ final class MixrPlaybackEngine: ObservableObject {
             currentTimeSeconds = totalDurationSeconds
             if isPlaying { pause() }
         }
+
+        guard !isPartyModeScreenshotVerification else { return }
 
         // Remove chains whose track was deleted
         let live = Set(tracks.map(\.id))

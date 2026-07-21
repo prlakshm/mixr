@@ -78,11 +78,22 @@ enum GlassLevel {
         case .strong: 0.18
         }
     }
+
+    var partyModeDepthOpacity: Double {
+        switch self {
+        case .default: 0.035
+        case .selected: 0.025
+        case .elevated: 0.07
+        case .strong: 0.13
+        }
+    }
 }
 
 struct GlassBackground: View {
     let level: GlassLevel
     let cornerRadius: CGFloat
+
+    @Environment(\.partyModeRenderState) private var renderState
 
     init(level: GlassLevel = .default, cornerRadius: CGFloat = MixrRadius.glass) {
         self.level = level
@@ -126,6 +137,13 @@ struct GlassBackground: View {
                         center: UnitPoint(x: 0.10, y: 0.05),
                         startRadius: 0,
                         endRadius: 260
+                    )
+                )
+            }
+            .overlay {
+                shape.fill(
+                    Color.black.opacity(
+                        level.partyModeDepthOpacity * renderState.chromeOpacity
                     )
                 )
             }

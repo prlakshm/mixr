@@ -483,6 +483,11 @@ struct TimelineScreen: View {
                 .frame(width: geo.size.width, height: geo.size.height)
                 .clipped()
 
+                PartyModeMainChromeOverlay(
+                    screenSize: geo.size,
+                    effectsHeight: effectsH
+                )
+
                 floatingOverlays(screenSize: geo.size)
 
                 if isPortrait {
@@ -1012,12 +1017,6 @@ private struct TLTransportBar: View {
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
         }
-        .partyModeBorder(
-            shape: Rectangle(),
-            role: .majorPanel,
-            lighting: .violetTrailing,
-            glintOffset: .none
-        )
     }
 
     // MARK: - Project title
@@ -2134,37 +2133,6 @@ private struct TLTrackArea: View {
                 .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .overlay {
-                HStack(spacing: 0) {
-                    Color.clear
-                        .frame(width: TLK.sidebarWidth)
-                        .partyModeBorder(
-                            shape: Rectangle(),
-                            role: .majorPanel,
-                            lighting: .coolLeading,
-                            glintOffset: .near
-                        )
-
-                    Color.clear
-                        .frame(width: laneVW)
-                        .partyModeBorder(
-                            shape: Rectangle(),
-                            role: .majorPanel,
-                            lighting: .shared,
-                            glintOffset: .none
-                        )
-
-                    Color.clear
-                        .frame(width: TLK.smColumnWidth)
-                        .partyModeBorder(
-                            shape: Rectangle(),
-                            role: .majorPanel,
-                            lighting: .violetTrailing,
-                            glintOffset: .far
-                        )
-                }
-                .allowsHitTesting(false)
-            }
             .onAppear {
                 currentContentW = contentW
                 currentContentUnits = contentUnits
@@ -3940,12 +3908,6 @@ private struct TLEffectsPanel: View {
         }
         .contentShape(Rectangle())
         .gesture(effectsDragGesture)
-        .partyModeBorder(
-            shape: Rectangle(),
-            role: .majorPanel,
-            lighting: .counterClockwise,
-            glintOffset: .far
-        )
         .onChange(of: hasTarget) { _, hasClip in
             if !hasClip {
                 withAnimation(expandAnimation) {
