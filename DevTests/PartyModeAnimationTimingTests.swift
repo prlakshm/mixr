@@ -54,6 +54,14 @@ struct PartyModeAnimationTimingTests {
             0.42 / 0.75
         )
 
+        let afterglintStart = PartyModeTokens.afterglintTravelPosition(for: 0)
+        let afterglintEnd = PartyModeTokens.afterglintTravelPosition(for: 1)
+        checkClose(
+            "Afterglint fades after exactly 75 percent of a lap",
+            TimeInterval(afterglintEnd - afterglintStart),
+            0.75
+        )
+
         let finalTraceEnd = 0.075 + 0.96 / 0.75
         let globalGlintStart = finalTraceEnd + 0.10
         let expectedSequenceEnd = globalGlintStart + 0.50 / 0.75

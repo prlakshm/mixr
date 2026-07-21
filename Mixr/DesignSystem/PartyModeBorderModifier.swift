@@ -643,7 +643,7 @@ private struct PartyModeAfterglint<S: InsettableShape>: View {
     }
 
     var body: some View {
-        let travel = 0.015 + progress * 0.80
+        let travel = PartyModeTokens.afterglintTravelPosition(for: progress)
         let trail = PartyModeTokens.afterglintInitialTrail
             + (PartyModeTokens.afterglintFinalTrail - PartyModeTokens.afterglintInitialTrail)
                 * pow(progress, 1.18)

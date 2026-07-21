@@ -81,6 +81,14 @@ check(
 )
 
 check(
+    "Returning glint travels exactly 75 percent of the perimeter",
+    matches(#"afterglintTravelFraction\s*:\s*CGFloat\s*=\s*0\.75"#, in: tokensSource)
+        && tokensSource.contains("afterglintTravelPosition")
+        && modifierSource.contains("PartyModeTokens.afterglintTravelPosition")
+        && !modifierSource.contains("progress * 0.80")
+)
+
+check(
     "Returning glints use one global post-connection start",
     tokensSource.contains("globalAfterglintStartTime")
         && tokensSource.contains("activationSequenceDuration =")

@@ -287,3 +287,17 @@ both ended before device discovery because this sandboxed `simctl` client lost
 CoreSimulator XPC while `simdiskimaged` was unavailable. Round 10 therefore
 relies on the production SwiftUI renderer frames above rather than claiming a
 new live-app capture.
+
+## Round 11 — 75% returning-glint travel
+
+The second-phase glint now advances exactly 75% of each eligible perimeter
+from its existing 1.5% optical start offset, then reaches zero opacity through
+the unchanged nonlinear fizzle. Its synchronized post-connection start,
+duration, trail contraction, glow decay, palette, and settled border are
+unchanged.
+
+Fresh production-modifier frames are in
+`PartyModeQAArtifacts/round11-glint-75/`. The early and late glint hashes differ
+from Round 10 at the expected head positions, while trace, reconnection,
+settled 1×/2×/3×, and normal-mode outputs remain unchanged. The 3× normal
+baseline and inactive Party modifier are still byte-identical.

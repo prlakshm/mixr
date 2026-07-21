@@ -42,6 +42,8 @@ enum PartyModeTokens {
     static let traceTrailLength: CGFloat = 0.095
     static let afterglintInitialTrail: CGFloat = 0.12
     static let afterglintFinalTrail: CGFloat = 0.024
+    static let afterglintStartPosition: CGFloat = 0.015
+    static let afterglintTravelFraction: CGFloat = 0.75
 
     static let playOuterRimInset: CGFloat = 0.08
     static let playInnerRingInset: CGFloat = 2.7
@@ -56,6 +58,10 @@ enum PartyModeTokens {
         _ baselineDuration: TimeInterval
     ) -> TimeInterval {
         baselineDuration / motionVelocity
+    }
+
+    static func afterglintTravelPosition(for progress: CGFloat) -> CGFloat {
+        afterglintStartPosition + progress * afterglintTravelFraction
     }
 
     static func delay(for offset: PartyModeGlintOffset) -> TimeInterval {
