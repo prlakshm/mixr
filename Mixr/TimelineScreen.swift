@@ -866,6 +866,11 @@ private struct TLTransportBar: View {
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
 
+    /// Fixed width for the nav project-name label so the title bar never grows
+    /// or shrinks with the project name — long names truncate with an ellipsis,
+    /// keeping the undo/redo group locked in place (matches the reference nav).
+    private static let projectTitleLabelWidth: CGFloat = 84
+
     var body: some View {
         ZStack {
             // Home group — Mixr + project + undo/redo
@@ -1080,6 +1085,8 @@ private struct TLTransportBar: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(MixrColors.textPrimary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: Self.projectTitleLabelWidth, alignment: .leading)
                     .background {
                         GeometryReader { geo in
                             Color.clear.preference(
