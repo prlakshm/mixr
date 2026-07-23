@@ -157,6 +157,14 @@ Glass panels should use:
 
 Do not use solid flat panels unless needed.
 
+## Responsive Layouts
+
+Every UI adjustment must apply to all responsive layouts and breakpoints (compact and regular widths, collapsed and expanded Effects, phone landscape sizes).
+
+- Prefer shared components and layout metrics over size-specific forks.
+- Do not fix a visual issue for only one screen size unless the user explicitly scopes it.
+- When editing chrome (borders, spacing, materials, typography), verify the change lives in the shared path used by every layout.
+
 ## Cursor Behavior
 
 Before writing code:

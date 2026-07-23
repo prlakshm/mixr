@@ -4383,8 +4383,12 @@ private struct TLEffectsPanel: View {
         .background {
             ZStack(alignment: .top) {
                 MixrColors.backgroundSecondary
+                // Extend past the bottom so glass strokeBorder / edge rims
+                // clip away — no hairline at the screen edge on any size.
                 GlassBackground(level: .strong, cornerRadius: 0)
+                    .padding(.bottom, -3)
             }
+            .clipped()
         }
         .overlay(alignment: .top) {
             MixrColors.backgroundSecondary.frame(height: 1)
