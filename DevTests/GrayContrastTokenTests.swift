@@ -48,7 +48,7 @@ check(
         && timelineSource.contains("initialCaretX")
         && timelineSource.contains("placeInitialCaret(in:")
         && timelineSource.contains(".truncationMode(.tail)")
-        && timelineSource.contains("static let width: CGFloat = 168")
+        && timelineSource.contains("static let width: CGFloat = 76")
         && timelineSource.contains("static var controlWidth: CGFloat")
         && matches(
             #"private var projectTitleControl:[\s\S]{0,3500}\.frame\(\s*width: TLProjectTitleMetrics\.controlWidth"#,

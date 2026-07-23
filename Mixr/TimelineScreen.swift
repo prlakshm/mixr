@@ -849,9 +849,8 @@ private struct ProjectTitleFrameKey: PreferenceKey {
 }
 
 private enum TLProjectTitleMetrics {
-    /// Pre-session rename field width (`.frame(maxWidth: 168)`).
-    /// Always used — idle truncates here; rename scrolls here; undo/redo stay put.
-    static let width: CGFloat = 168
+    /// Fixed title column — idle truncates here; rename scrolls here; undo/redo stay put.
+    static let width: CGFloat = 76
     static let fieldHeight: CGFloat = 18
     static let chevronSlotWidth: CGFloat = 12
     static let titleToChevronSpacing: CGFloat = 4
