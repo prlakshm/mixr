@@ -334,7 +334,8 @@ struct TimelineScreen: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var envUndoManager
     @State private var showFilePicker = false
-    @State private var isEffectsCollapsed = false
+    @SceneStorage("editor.effects.isCollapsed")
+    private var isEffectsCollapsed = false
 
     // Selected clip — shared by the timeline, effects panel, and Auto.
     @State private var selectedClipID: UUID?
@@ -345,8 +346,6 @@ struct TimelineScreen: View {
     @State private var isAutoRunning = false
     @State private var isExporting = false
     @State private var autoErrorMessage: String?
-    @State private var showProjectMenu = false
-    @State private var projectTitleFrame: CGRect = .zero
     @State private var showDeleteProjectConfirm = false
 
     // Playhead drag state
@@ -375,10 +374,10 @@ struct TimelineScreen: View {
 
     var body: some View {
         GeometryReader { geo in
-            let isPortrait    = geo.size.height > geo.size.width
-            let effectsH = isEffectsCollapsed
-                ? TLK.effectsCollapsedHeight
-                : TLK.effectsExpandedHeight
+            let layout = EditorLayoutMetrics(
+                containerSize: geo.size,
+                effectsState: EditorEffectsState(isCollapsed: isEffectsCollapsed)
+            )
 
             ZStack {
                 MixrColors.background.ignoresSafeArea()
@@ -387,19 +386,22 @@ struct TimelineScreen: View {
                     TLTransportBar(
                         playback: playback,
                         library: library,
+                        layoutMode: layout.mode,
                         displayTimeSeconds: displayTimeSeconds,
-                        isProjectMenuOpen: showProjectMenu,
                         isExporting: $isExporting,
-                        onProjectTapped: {
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                                showProjectMenu.toggle()
-                            }
+                        onProjectSelected: { id in
+                            selectedClipID = nil
+                            library.switchProject(to: id)
                         },
-                        onProjectRenameBegan: {
-                            dismissProjectMenu()
+                        onProjectCreated: {
+                            selectedClipID = nil
+                            library.createProject()
+                        },
+                        onDeleteProject: {
+                            showDeleteProjectConfirm = true
                         }
                     )
-                    .frame(height: TLK.transportHeight)
+                    .frame(height: layout.transportHeight)
                     .zIndex(1)
 
                     TLTrackArea(
@@ -409,12 +411,21 @@ struct TimelineScreen: View {
                         effectivePlayheadUnit: effectivePlayheadUnit,
                         maxPlayheadUnit: maxPlayheadUnit,
                         isPlayheadDragging: isPlayheadDragging,
-                        bottomOverlayAllowance: effectsH,
+                        bottomOverlayAllowance: layout.effectsHeight,
+                        sidebarWidth: layout.tracksWidth,
+                        controlsWidth: layout.controlsWidth,
+                        importFooterHeight: layout.importFooterHeight,
                         showFilePicker: $showFilePicker,
-                        onOpenSFXLibrary: {
-                            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                showSFXPanel = true
-                            }
+                        showSFXPanel: $showSFXPanel,
+                        sfxPresentationStyle: EditorPresentationRules.style(
+                            availableWidth: geo.size.width
+                        ),
+                        onSelectSoundEffect: { effect in
+                            library.addSoundEffect(
+                                effect,
+                                atPlayheadUnit: effectivePlayheadUnit
+                            )
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         },
                         onImportURLs: { urls in
                             library.addTracks(from: urls)
@@ -466,7 +477,8 @@ struct TimelineScreen: View {
                             playback.seek(to: MixrTimeline.seconds(fromUnits: unit))
                         }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: layout.timelineHeight)
                     .layoutPriority(1)
                     .zIndex(20)
 
@@ -485,7 +497,7 @@ struct TimelineScreen: View {
                             }
                         }
                     )
-                    .frame(height: effectsH)
+                    .frame(height: layout.effectsHeight)
                     .clipped()
                     .zIndex(0)
                 }
@@ -495,20 +507,54 @@ struct TimelineScreen: View {
 
                 PartyModeMainChromeOverlay(
                     screenSize: geo.size,
-                    effectsHeight: effectsH
+                    effectsHeight: layout.effectsHeight
                 )
 
-                floatingOverlays(screenSize: geo.size)
-
-                if isPortrait {
-                    TLRotateOverlay()
-                }
+                floatingOverlays
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .coordinateSpace(name: "timelineScreen")
-            .onPreferenceChange(ProjectTitleFrameKey.self) { projectTitleFrame = $0 }
+            .confirmationDialog(
+                "What should Auto remix?",
+                isPresented: $showAutoDialog,
+                titleVisibility: .visible
+            ) {
+                Button(selectedClipID == nil ? "Playhead Clips" : "Selected Clip") {
+                    if let selectedClipID {
+                        runAuto(scope: .selectedClip(selectedClipID))
+                    } else {
+                        runAuto(scope: .playheadClips)
+                    }
+                }
+                Button("Entire Project") {
+                    runAuto(scope: .entireProject)
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert(
+                "Delete “\(library.projectName)”?",
+                isPresented: $showDeleteProjectConfirm
+            ) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    selectedClipID = nil
+                    library.deleteCurrentProject()
+                }
+            }
+            .alert(
+                "Auto couldn’t finish",
+                isPresented: Binding(
+                    get: { autoErrorMessage != nil },
+                    set: { if !$0 { autoErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(autoErrorMessage ?? "")
+            }
         }
         .ignoresSafeArea()
+        .statusBarHidden(true)
         .preferredColorScheme(.dark)
         .task {
             library.attachPersistence(context: modelContext)
@@ -559,74 +605,10 @@ struct TimelineScreen: View {
         }
     }
 
-    // MARK: - Floating overlays (SFX library, Auto dialog/loading, project menu)
+    // MARK: - Floating overlays
 
     @ViewBuilder
-    private func floatingOverlays(screenSize: CGSize) -> some View {
-        // SFX library — large glass panel, like the import picker flow:
-        // opens over the timeline, closes after a selection.
-        if showSFXPanel {
-            ZStack(alignment: .center) {
-                Color.black.opacity(0.52)
-                    .ignoresSafeArea()
-                    .onTapGesture { dismissSFXPanel() }
-
-                SFXLibraryPanel(
-                    onSelect: { effect in
-                        library.addSoundEffect(effect, atPlayheadUnit: effectivePlayheadUnit)
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        dismissSFXPanel()
-                    },
-                    onClose: { dismissSFXPanel() }
-                )
-                .frame(
-                    width: screenSize.width * SFXMetrics.panelScreenWidthFraction,
-                    height: SFXMetrics.panelHeight(
-                        forWidth: screenSize.width * SFXMetrics.panelScreenWidthFraction
-                    )
-                )
-                .scaleEffect(SFXMetrics.panelDisplayScale, anchor: .center)
-                .offset(y: SFXMetrics.panelOpticalOffsetY)
-            }
-            .frame(
-                width: screenSize.width,
-                height: screenSize.height,
-                alignment: .center
-            )
-            .zIndex(60)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
-        }
-
-        // Auto scope dialog — nothing mutates until a scope is chosen;
-        // tapping outside dismisses with no timeline changes.
-        if showAutoDialog {
-            ZStack {
-                Color.black.opacity(0.52)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                            showAutoDialog = false
-                        }
-                    }
-
-                AutoScopeDialog(
-                    hasSelectedClip: selectedClipID != nil,
-                    onChooseFocused: {
-                        if let clipID = selectedClipID {
-                            runAuto(scope: .selectedClip(clipID))
-                        } else {
-                            runAuto(scope: .playheadClips)
-                        }
-                    },
-                    onChooseEntireProject: {
-                        runAuto(scope: .entireProject)
-                    }
-                )
-            }
-            .zIndex(70)
-            .transition(.opacity.combined(with: .scale(scale: 0.94)))
-        }
-
+    private var floatingOverlays: some View {
         // Auto / Export loading — same full-screen spinner.
         if isAutoRunning || isExporting {
             MixrAutoLoadingOverlay(
@@ -634,101 +616,6 @@ struct TimelineScreen: View {
             )
             .zIndex(80)
             .transition(.opacity)
-        }
-
-        // Entire Project Auto failure — timeline unchanged, no undo entry.
-        if let message = autoErrorMessage {
-            ZStack {
-                Color.black.opacity(0.52)
-                    .ignoresSafeArea()
-                    .onTapGesture { autoErrorMessage = nil }
-
-                AutoRemixErrorSheet(message: message) {
-                    autoErrorMessage = nil
-                }
-            }
-            .zIndex(86)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
-        }
-
-        // Project dropdown — aligned so menu labels share the nav title’s leading edge.
-        if showProjectMenu {
-            let menuX = max(
-                8,
-                (projectTitleFrame.minX > 0
-                    ? projectTitleFrame.minX
-                    : 96) - ProjectDropdownMenu.horizontalPadding
-            )
-            ZStack(alignment: .topLeading) {
-                Color.black.opacity(0.28)
-                    .ignoresSafeArea()
-                    .onTapGesture { dismissProjectMenu() }
-
-                ProjectDropdownMenu(
-                    projects: library.projects,
-                    currentProjectID: library.currentProjectSummaryID,
-                    currentName: library.projectName,
-                    onSelectProject: { id in
-                        selectedClipID = nil
-                        library.switchProject(to: id)
-                    },
-                    onCreateProject: {
-                        selectedClipID = nil
-                        library.createProject()
-                    },
-                    onDeleteProject: {
-                        dismissProjectMenu()
-                        showDeleteProjectConfirm = true
-                    },
-                    onDismiss: { dismissProjectMenu() }
-                )
-                .offset(x: menuX, y: TLK.transportHeight - 4)
-            }
-            .zIndex(90)
-            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
-        }
-
-        // Delete project confirm — same chrome as Auto scope dialog.
-        if showDeleteProjectConfirm {
-            ZStack {
-                Color.black.opacity(0.52)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                            showDeleteProjectConfirm = false
-                        }
-                    }
-
-                DeleteProjectConfirmDialog(
-                    projectName: library.projectName,
-                    onCancel: {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                            showDeleteProjectConfirm = false
-                        }
-                    },
-                    onDelete: {
-                        selectedClipID = nil
-                        library.deleteCurrentProject()
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                            showDeleteProjectConfirm = false
-                        }
-                    }
-                )
-            }
-            .zIndex(95)
-            .transition(.opacity.combined(with: .scale(scale: 0.94)))
-        }
-    }
-
-    private func dismissSFXPanel() {
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-            showSFXPanel = false
-        }
-    }
-
-    private func dismissProjectMenu() {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-            showProjectMenu = false
         }
     }
 
@@ -839,21 +726,18 @@ private struct TLRotateOverlay: View {
     }
 }
 
-// MARK: - Project Title Frame
-
-private struct ProjectTitleFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
-
 private enum TLProjectTitleMetrics {
     /// Fixed title column — idle truncates here; rename scrolls here; undo/redo stay put.
     static let width: CGFloat = 76
     static let fieldHeight: CGFloat = 18
     static let chevronSlotWidth: CGFloat = 12
     static let titleToChevronSpacing: CGFloat = 4
+    static var font: UIFont {
+        UIFontMetrics(forTextStyle: .subheadline).scaledFont(
+            for: .systemFont(ofSize: 13, weight: .semibold),
+            maximumPointSize: 15.5
+        )
+    }
     /// Full title control width so undo/redo stay parked after this slot.
     static var controlWidth: CGFloat {
         width + titleToChevronSpacing + chevronSlotWidth
@@ -866,11 +750,12 @@ private struct TLTransportBar: View {
     @Environment(AppAppearanceState.self) private var appearanceState
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
+    let layoutMode: EditorLayoutMode
     var displayTimeSeconds: Double = 0
-    var isProjectMenuOpen: Bool = false
     @Binding var isExporting: Bool
-    var onProjectTapped: () -> Void = {}
-    var onProjectRenameBegan: () -> Void = {}
+    var onProjectSelected: (UUID) -> Void = { _ in }
+    var onProjectCreated: () -> Void = {}
+    var onDeleteProject: () -> Void = {}
     @State private var exportedFile: TLExportedFile?
     @State private var exportErrorMessage: String?
 
@@ -880,165 +765,210 @@ private struct TLTransportBar: View {
     @State private var renameCaretX: CGFloat?
 
     var body: some View {
-        ZStack {
-            // Home group — Mixr + project + undo/redo
-            HStack(spacing: 24) {
-                Button {
-                    appearanceState.togglePartyMode()
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(MixrColors.primaryPurple)
-                            .partyModeIconGlow()
-                        Text("Mixr")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(MixrColors.textPrimary)
-                    }
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+        Group {
+            switch layoutMode {
+            case .regular:
+                ZStack {
+                    homeGroup
+                    exportButton
+                    transportControls
+                        .offset(x: 63)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Toggle Party Mode")
-                .accessibilityValue(appearanceState.isPartyModeEnabled ? "On" : "Off")
-
-                HStack(spacing: 18) {
-                    projectTitleControl
-
-                    // Undo / redo — part of the home group, next to the project name.
-                    HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
-                        TLToolbarHistoryCustomButton(isEnabled: library.canUndo) {
-                            library.undo()
-                        } icon: {
-                            MixrHistoryArrow(
-                                direction: .undo,
-                                width: TLToolbarHistoryMetrics.glyphWidth,
-                                height: TLToolbarHistoryMetrics.glyphHeight
-                            )
-                        }
-                        TLToolbarHistoryCustomButton(isEnabled: library.canRedo) {
-                            library.redo()
-                        } icon: {
-                            MixrHistoryArrow(
-                                direction: .redo,
-                                width: TLToolbarHistoryMetrics.glyphWidth,
-                                height: TLToolbarHistoryMetrics.glyphHeight
-                            )
-                        }
+            case .compact:
+                VStack(spacing: 0) {
+                    HStack(spacing: 4) {
+                        homeGroup
+                        exportButton
                     }
-                    .frame(height: TLToolbarHistoryMetrics.hitHeight)
-                    .offset(y: -0.8)
+                    .frame(height: EditorLayoutMetrics.regularTransportHeight)
+
+                    transportControls
+                        .frame(height: 44)
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.leading, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack {
-                Spacer()
-                Button { startExport() } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                        .frame(minWidth: 74)
-                }
-                .buttonStyle(MixrSecondaryGlassButtonStyle(partyRole: .export))
-                .fixedSize(horizontal: true, vertical: false)
-                .disabled(isExporting)
-                .padding(.trailing, 14)
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .sheet(item: $exportedFile) { file in
-                TLShareSheet(items: [file.url])
-            }
-            .alert(
-                "Export Failed",
-                isPresented: Binding(
-                    get: { exportErrorMessage != nil },
-                    set: { if !$0 { exportErrorMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(exportErrorMessage ?? "")
-            }
-
-            HStack(alignment: .center, spacing: 12) {
-                HStack(alignment: .center, spacing: 12) {
-                    Button {
-                        playback.skipToStart()
-                    } label: {
-                        Image(systemName: "backward.end.fill")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(MixrColors.textSecondary)
-                    }
-                    .frame(width: 28, height: 40)
-
-                    Button {
-                        playback.togglePlayPause()
-                    } label: {
-                        Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                            .offset(x: playback.isPlaying ? 0 : 1)
-                    }
-                    .frame(width: 40, height: 40)
-                    .background { PartyModePlayButtonSurface() }
-                    .shadow(color: MixrColors.primaryPurple.opacity(0.50), radius: 10)
-                    .partyModePlayButton()
-
-                    Button {
-                        playback.skipToEnd()
-                    } label: {
-                        Image(systemName: "forward.end.fill")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(MixrColors.textSecondary)
-                    }
-                    .frame(width: 28, height: 40)
-                }
-
-                HStack(spacing: 3) {
-                    Text(MixrTimeline.formattedTime(displayTimeSeconds))
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(MixrColors.textPrimary)
-                    Text("/")
-                        .font(.system(size: 11))
-                        .foregroundStyle(MixrColors.textSecondary)
-                    Text(MixrTimeline.formattedTime(playback.totalDurationSeconds))
-                        .font(.system(size: 13, weight: .regular, design: .monospaced))
-                        .foregroundStyle(MixrColors.textSecondary)
-                }
-                .frame(height: 40, alignment: .center)
-
-                HStack(alignment: .center, spacing: 10) {
-                    VStack(spacing: 0) {
-                        Text(library.projectBPMDisplay)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(MixrColors.textPrimary)
-                        Text("BPM")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(MixrColors.textSecondary)
-                            .kerning(0.5)
-                    }
-                    .frame(width: 30, height: 40)
-
-                    VStack(spacing: 0) {
-                        Text(library.displayKey)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(MixrColors.textPrimary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.65)
-                        Text("KEY")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(MixrColors.textSecondary)
-                            .kerning(0.5)
-                    }
-                    .frame(width: 56, height: 40)
-                }
-            }
-            .offset(x: 63)
         }
-        .frame(height: TLK.transportHeight)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
+        }
+        .sheet(item: $exportedFile) { file in
+            TLShareSheet(items: [file.url])
+        }
+        .alert(
+            "Export Failed",
+            isPresented: Binding(
+                get: { exportErrorMessage != nil },
+                set: { if !$0 { exportErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportErrorMessage ?? "")
+        }
+    }
+
+    private var homeGroup: some View {
+        HStack(spacing: layoutMode == .regular ? 24 : 10) {
+            Button {
+                appearanceState.togglePartyMode()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(MixrColors.primaryPurple)
+                        .partyModeIconGlow()
+                    Text("Mixr")
+                        .mixrScaledFont(
+                            size: 20,
+                            weight: .bold,
+                            relativeTo: .title2
+                        )
+                        .foregroundStyle(MixrColors.textPrimary)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Toggle Party Mode")
+            .accessibilityValue(appearanceState.isPartyModeEnabled ? "On" : "Off")
+
+            HStack(spacing: layoutMode == .regular ? 18 : 8) {
+                projectTitleControl
+
+                HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
+                    TLToolbarHistoryCustomButton(isEnabled: library.canUndo) {
+                        library.undo()
+                    } icon: {
+                        MixrHistoryArrow(
+                            direction: .undo,
+                            width: TLToolbarHistoryMetrics.glyphWidth,
+                            height: TLToolbarHistoryMetrics.glyphHeight
+                        )
+                    }
+                    .accessibilityLabel("Undo")
+
+                    TLToolbarHistoryCustomButton(isEnabled: library.canRedo) {
+                        library.redo()
+                    } icon: {
+                        MixrHistoryArrow(
+                            direction: .redo,
+                            width: TLToolbarHistoryMetrics.glyphWidth,
+                            height: TLToolbarHistoryMetrics.glyphHeight
+                        )
+                    }
+                    .accessibilityLabel("Redo")
+                }
+                .frame(height: TLToolbarHistoryMetrics.hitHeight)
+                .offset(y: -0.8)
+            }
+        }
+        .padding(.leading, layoutMode == .regular ? 14 : 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var exportButton: some View {
+        Button("Export", systemImage: "square.and.arrow.up", action: startExport)
+            .frame(minWidth: layoutMode == .regular ? 74 : 66)
+            .buttonStyle(MixrSecondaryGlassButtonStyle(partyRole: .export))
+            .fixedSize(horizontal: true, vertical: false)
+            .disabled(isExporting)
+            .padding(.trailing, layoutMode == .regular ? 14 : 8)
+            .frame(maxWidth: layoutMode == .regular ? .infinity : nil, alignment: .trailing)
+    }
+
+    private var transportControls: some View {
+        HStack(alignment: .center, spacing: layoutMode == .regular ? 12 : 9) {
+            HStack(alignment: .center, spacing: layoutMode == .regular ? 12 : 9) {
+                Button("Skip to Start", systemImage: "backward.end.fill") {
+                    playback.skipToStart()
+                }
+                .labelStyle(.iconOnly)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary)
+                .frame(minWidth: 44, minHeight: 44)
+
+                Button(
+                    playback.isPlaying ? "Pause" : "Play",
+                    systemImage: playback.isPlaying ? "pause.fill" : "play.fill"
+                ) {
+                    playback.togglePlayPause()
+                }
+                .labelStyle(.iconOnly)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background { PartyModePlayButtonSurface() }
+                .shadow(color: MixrColors.primaryPurple.opacity(0.50), radius: 10)
+                .partyModePlayButton()
+
+                Button("Skip to End", systemImage: "forward.end.fill") {
+                    playback.skipToEnd()
+                }
+                .labelStyle(.iconOnly)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary)
+                .frame(minWidth: 44, minHeight: 44)
+            }
+
+            HStack(spacing: 3) {
+                Text(MixrTimeline.formattedTime(displayTimeSeconds))
+                    .mixrScaledFont(
+                        size: 13,
+                        weight: .semibold,
+                        design: .monospaced
+                    )
+                    .foregroundStyle(MixrColors.textPrimary)
+                Text("/")
+                    .mixrScaledFont(size: 11)
+                    .foregroundStyle(MixrColors.textSecondary)
+                Text(MixrTimeline.formattedTime(playback.totalDurationSeconds))
+                    .mixrScaledFont(size: 13, design: .monospaced)
+                    .foregroundStyle(MixrColors.textSecondary)
+            }
+            .frame(height: 40, alignment: .center)
+
+            HStack(alignment: .center, spacing: layoutMode == .regular ? 10 : 7) {
+                VStack(spacing: 0) {
+                    Text(library.projectBPMDisplay)
+                        .mixrScaledFont(
+                            size: 14,
+                            weight: .bold,
+                            relativeTo: .headline
+                        )
+                        .foregroundStyle(MixrColors.textPrimary)
+                    Text("BPM")
+                        .mixrScaledFont(
+                            size: 8,
+                            weight: .semibold,
+                            relativeTo: .caption2
+                        )
+                        .foregroundStyle(MixrColors.textSecondary)
+                        .kerning(0.5)
+                }
+                .frame(width: 30, height: 40)
+
+                VStack(spacing: 0) {
+                    Text(library.displayKey)
+                        .mixrScaledFont(
+                            size: 14,
+                            weight: .bold,
+                            relativeTo: .headline
+                        )
+                        .foregroundStyle(MixrColors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                    Text("KEY")
+                        .mixrScaledFont(
+                            size: 8,
+                            weight: .semibold,
+                            relativeTo: .caption2
+                        )
+                        .foregroundStyle(MixrColors.textSecondary)
+                        .kerning(0.5)
+                }
+                .frame(width: 56, height: 40)
+            }
         }
     }
 
@@ -1060,37 +990,33 @@ private struct TLTransportBar: View {
                         if !focused { commitProjectRename() }
                     }
                 } else {
-                    Text(library.projectName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(MixrColors.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    TLNativeProjectMenuButton(
+                        projectName: library.projectName,
+                        projects: library.projects,
+                        currentProjectID: library.currentProjectSummaryID,
+                        onSelectProject: onProjectSelected,
+                        onCreateProject: onProjectCreated,
+                        onDeleteProject: onDeleteProject,
+                        onLongPress: beginProjectRename(at:)
+                    )
                 }
             }
             .frame(
-                width: TLProjectTitleMetrics.width,
+                width: isRenamingProject
+                    ? TLProjectTitleMetrics.width
+                    : TLProjectTitleMetrics.controlWidth,
                 height: TLProjectTitleMetrics.fieldHeight,
                 alignment: .leading
             )
             .clipped()
-            .background {
-                GeometryReader { geo in
-                    Color.clear.preference(
-                        key: ProjectTitleFrameKey.self,
-                        value: geo.frame(in: .named("timelineScreen"))
-                    )
-                }
-            }
 
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(MixrColors.textSecondary)
-                .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
-                .frame(
-                    width: TLProjectTitleMetrics.chevronSlotWidth,
-                    height: TLProjectTitleMetrics.fieldHeight
-                )
-                .allowsHitTesting(!isRenamingProject)
+            if isRenamingProject {
+                Color.clear
+                    .frame(
+                        width: TLProjectTitleMetrics.chevronSlotWidth,
+                        height: TLProjectTitleMetrics.fieldHeight
+                    )
+            }
         }
         .frame(
             width: TLProjectTitleMetrics.controlWidth,
@@ -1098,18 +1024,10 @@ private struct TLTransportBar: View {
             alignment: .leading
         )
         .fixedSize(horizontal: true, vertical: true)
-        .contentShape(Rectangle())
-        .modifier(TLProjectTitleInteractionModifier(
-            isRenaming: isRenamingProject,
-            onTap: onProjectTapped,
-            onLongPress: beginProjectRename(at:)
-        ))
-        .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
         .animation(nil, value: isRenamingProject)
     }
 
     private func beginProjectRename(at point: CGPoint) {
-        onProjectRenameBegan()
         renameText = library.projectName
         // Caret X is in the HStack; title column is leading at fixed width.
         renameCaretX = min(max(point.x, 0), TLProjectTitleMetrics.width)
@@ -1158,42 +1076,172 @@ private struct TLTransportBar: View {
     }
 }
 
-/// Applies tap/long-press only while not renaming so the inline field can
-/// receive selection and caret placement. Long-press reports its local point
-/// so the caret can open under the finger.
-private struct TLProjectTitleInteractionModifier: ViewModifier {
-    var isRenaming: Bool
-    var onTap: () -> Void
-    var onLongPress: (CGPoint) -> Void
-    @State private var suppressNextTap = false
+/// Native project picker with system menu semantics, pointer/keyboard support,
+/// destructive styling, and the existing long-press-to-rename interaction.
+private final class TLNativeProjectMenuControl: UIView {
+    let titleLabel = UILabel()
+    let chevronView = UIImageView()
+    let menuButton = UIButton(type: .system)
 
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isRenaming {
-            content
-        } else {
-            content
-                .onTapGesture {
-                    if suppressNextTap {
-                        suppressNextTap = false
-                        return
-                    }
-                    onTap()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        titleLabel.font = TLProjectTitleMetrics.font
+        titleLabel.adjustsFontForContentSizeCategory = true
+        titleLabel.textColor = UIColor(MixrColors.textPrimary)
+        titleLabel.lineBreakMode = .byTruncatingTail
+
+        let chevronConfiguration = UIImage.SymbolConfiguration(
+            pointSize: 9,
+            weight: .medium
+        )
+        chevronView.image = UIImage(
+            systemName: "chevron.down",
+            withConfiguration: chevronConfiguration
+        )
+        chevronView.tintColor = UIColor(MixrColors.textSecondary)
+        chevronView.contentMode = .center
+
+        menuButton.backgroundColor = .clear
+        menuButton.showsMenuAsPrimaryAction = true
+        menuButton.changesSelectionAsPrimaryAction = false
+        menuButton.isPointerInteractionEnabled = true
+        menuButton.accessibilityTraits = .button
+
+        addSubview(titleLabel)
+        addSubview(chevronView)
+        addSubview(menuButton)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(
+            width: TLProjectTitleMetrics.controlWidth,
+            height: TLProjectTitleMetrics.fieldHeight
+        )
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        titleLabel.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: TLProjectTitleMetrics.width,
+            height: bounds.height
+        )
+        chevronView.frame = CGRect(
+            x: TLProjectTitleMetrics.width
+                + TLProjectTitleMetrics.titleToChevronSpacing,
+            y: 0,
+            width: TLProjectTitleMetrics.chevronSlotWidth,
+            height: bounds.height
+        )
+        menuButton.frame = bounds
+    }
+}
+
+private struct TLNativeProjectMenuButton: UIViewRepresentable {
+    let projectName: String
+    let projects: [ProjectSummary]
+    let currentProjectID: UUID?
+    let onSelectProject: (UUID) -> Void
+    let onCreateProject: () -> Void
+    let onDeleteProject: () -> Void
+    let onLongPress: (CGPoint) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> TLNativeProjectMenuControl {
+        let control = TLNativeProjectMenuControl()
+        context.coordinator.control = control
+
+        let longPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPress.minimumPressDuration = 0.45
+        longPress.cancelsTouchesInView = true
+        control.menuButton.addGestureRecognizer(longPress)
+
+        update(control, coordinator: context.coordinator)
+        return control
+    }
+
+    func updateUIView(
+        _ control: TLNativeProjectMenuControl,
+        context: Context
+    ) {
+        context.coordinator.parent = self
+        update(control, coordinator: context.coordinator)
+    }
+
+    private func update(
+        _ control: TLNativeProjectMenuControl,
+        coordinator: Coordinator
+    ) {
+        control.titleLabel.text = projectName
+        control.titleLabel.font = TLProjectTitleMetrics.font
+        control.menuButton.menu = coordinator.makeMenu()
+        control.menuButton.accessibilityLabel = "Project: \(projectName)"
+        control.menuButton.accessibilityHint =
+            "Tap to choose a project. Touch and hold to rename."
+    }
+
+    final class Coordinator: NSObject {
+        var parent: TLNativeProjectMenuButton
+        weak var control: TLNativeProjectMenuControl?
+
+        init(_ parent: TLNativeProjectMenuButton) {
+            self.parent = parent
+        }
+
+        func makeMenu() -> UIMenu {
+            let projectActions = parent.projects.map { project in
+                let isCurrent = project.id == parent.currentProjectID
+                return UIAction(
+                    title: isCurrent ? parent.projectName : project.name,
+                    image: isCurrent ? UIImage(systemName: "checkmark") : nil,
+                    state: isCurrent ? .on : .off
+                ) { [weak self] _ in
+                    guard !isCurrent else { return }
+                    self?.parent.onSelectProject(project.id)
                 }
-                .highPriorityGesture(
-                    LongPressGesture(minimumDuration: 0.45)
-                        .sequenced(
-                            before: DragGesture(
-                                minimumDistance: 0,
-                                coordinateSpace: .local
-                            )
-                        )
-                        .onEnded { value in
-                            guard case .second(true, let drag) = value else { return }
-                            suppressNextTap = true
-                            onLongPress(drag?.location ?? .zero)
-                        }
-                )
+            }
+
+            let projectSection = UIMenu(
+                title: "Projects",
+                options: .displayInline,
+                children: projectActions
+            )
+            let delete = UIAction(
+                title: "Delete Project",
+                image: UIImage(systemName: "trash"),
+                attributes: .destructive
+            ) { [weak self] _ in
+                self?.parent.onDeleteProject()
+            }
+            let create = UIAction(
+                title: "New Project",
+                image: UIImage(systemName: "plus")
+            ) { [weak self] _ in
+                self?.parent.onCreateProject()
+            }
+            let actionSection = UIMenu(
+                options: .displayInline,
+                children: [delete, create]
+            )
+            return UIMenu(children: [projectSection, actionSection])
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let control else { return }
+            parent.onLongPress(gesture.location(in: control))
         }
     }
 }
@@ -1249,7 +1297,8 @@ private struct TLProjectNameField: UIViewRepresentable {
         field.spellCheckingType = .no
         field.textContentType = nil
         field.clearButtonMode = .never
-        field.font = .systemFont(ofSize: 13, weight: .semibold)
+        field.font = TLProjectTitleMetrics.font
+        field.adjustsFontForContentSizeCategory = true
         field.textColor = .white
         // Match TLSpeedValueField caret tint.
         field.tintColor = UIColor(white: 0.62, alpha: 1)
@@ -1259,7 +1308,7 @@ private struct TLProjectNameField: UIViewRepresentable {
             string: "Project name",
             attributes: [
                 .foregroundColor: UIColor(MixrColors.textPlaceholder),
-                .font: UIFont.systemFont(ofSize: 13, weight: .semibold),
+                .font: TLProjectTitleMetrics.font,
             ]
         )
         if #available(iOS 17.0, *) {
@@ -1278,7 +1327,7 @@ private struct TLProjectNameField: UIViewRepresentable {
         if field.text != text {
             field.text = text
         }
-        field.font = .systemFont(ofSize: 13, weight: .semibold)
+        field.font = TLProjectTitleMetrics.font
         field.textColor = .white
         field.tintColor = UIColor(white: 0.62, alpha: 1)
 
@@ -1358,6 +1407,63 @@ private struct TLShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+private struct TLSFXLibraryPresentation: ViewModifier {
+    @Binding var isPresented: Bool
+    let style: EditorPresentationStyle
+    let onSelect: (SoundEffectDefinition) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch style {
+        case .popover:
+            content.popover(
+                isPresented: $isPresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .bottom
+            ) {
+                let width: CGFloat = 560
+                panel
+                    .frame(
+                        width: width,
+                        height: SFXMetrics.panelHeight(forWidth: width)
+                    )
+                    .padding(12)
+                    .presentationCompactAdaptation(.sheet)
+            }
+        case .sheet:
+            content.sheet(isPresented: $isPresented) {
+                GeometryReader { proxy in
+                    let width = max(320, min(680, proxy.size.width - 32))
+                    let height = min(
+                        proxy.size.height - 32,
+                        SFXMetrics.panelHeight(forWidth: width)
+                    )
+
+                    panel
+                        .frame(width: width, height: max(260, height))
+                        .position(
+                            x: proxy.size.width / 2,
+                            y: proxy.size.height / 2
+                        )
+                }
+                .presentationBackground(.clear)
+            }
+        }
+    }
+
+    private var panel: some View {
+        SFXLibraryPanel(
+            onSelect: { effect in
+                onSelect(effect)
+                isPresented = false
+            },
+            onClose: {
+                isPresented = false
+            }
+        )
+    }
 }
 
 // MARK: - Toolbar History Button (undo / redo)
@@ -1539,8 +1645,13 @@ private struct TLTrackArea: View {
     let maxPlayheadUnit: CGFloat
     let isPlayheadDragging: Bool
     let bottomOverlayAllowance: CGFloat
+    let sidebarWidth: CGFloat
+    let controlsWidth: CGFloat
+    let importFooterHeight: CGFloat
     @Binding var showFilePicker: Bool
-    let onOpenSFXLibrary: () -> Void
+    @Binding var showSFXPanel: Bool
+    let sfxPresentationStyle: EditorPresentationStyle
+    let onSelectSoundEffect: (SoundEffectDefinition) -> Void
     let onImportURLs: ([URL]) -> Void
     let onDeleteTrack: (UUID) -> Void
     let onReorder: (IndexSet, Int) -> Void
@@ -1882,13 +1993,13 @@ private struct TLTrackArea: View {
         guard clipDragState == nil, let f = findClip(clipID) else { return }
 
         let xOffset = (f.clip.start / currentContentUnits) * currentContentW
-        let grabScreenPx = startAreaX - TLK.sidebarWidth - xOffset + hScrollOffset
+        let grabScreenPx = startAreaX - sidebarWidth - xOffset + hScrollOffset
         let clipTopAreaY = TLK.rulerHeight
             + CGFloat(f.trackIdx) * TLK.trackRowHeight
             + (TLK.trackRowHeight - TLK.waveformHeight) / 2
             - vScrollOffset
         let grabScreenPy = startAreaY - clipTopAreaY
-        let initialLeadingEdgePx = cursorAreaX - TLK.sidebarWidth + hScrollOffset - grabScreenPx
+        let initialLeadingEdgePx = cursorAreaX - sidebarWidth + hScrollOffset - grabScreenPx
 
         clipDragArmed = nil
         clipDragArmedAt = nil
@@ -1917,7 +2028,7 @@ private struct TLTrackArea: View {
         drag.cursorAreaX = cursorAreaX
         drag.cursorAreaY = cursorAreaY
         drag.proposedLeadingEdgePx =
-            cursorAreaX - TLK.sidebarWidth + drag.scrollX - drag.grabScreenPx
+            cursorAreaX - sidebarWidth + drag.scrollX - drag.grabScreenPx
 
         guard let ti = tracks.firstIndex(where: { $0.id == drag.trackID }) else { return }
         let wasSnapped = drag.isIndicatorSnapped
@@ -1984,8 +2095,8 @@ private struct TLTrackArea: View {
         clipDragScrollTask = Task { @MainActor in
             while isDraggingClip, !Task.isCancelled {
                 guard let drag = clipDragState else { break }
-                let viewportLeft = TLK.sidebarWidth
-                let viewportRight = TLK.sidebarWidth + currentLaneVW
+                let viewportLeft = sidebarWidth
+                let viewportRight = sidebarWidth + currentLaneVW
                 let movingClipW = currentContentUnits > 0
                     ? (drag.originalClip.length / currentContentUnits) * currentContentW
                     : 0
@@ -2011,7 +2122,7 @@ private struct TLTrackArea: View {
                     var updatedDrag = drag
                     updatedDrag.scrollX = newScrollX
                     updatedDrag.proposedLeadingEdgePx =
-                        drag.cursorAreaX - TLK.sidebarWidth + newScrollX - drag.grabScreenPx
+                        drag.cursorAreaX - sidebarWidth + newScrollX - drag.grabScreenPx
                     if let ti = tracks.firstIndex(where: { $0.id == updatedDrag.trackID }) {
                         _ = updatedDrag.updateIndicatorTarget(
                             contentUnits: currentContentUnits,
@@ -2113,7 +2224,7 @@ private struct TLTrackArea: View {
                   let f = findClip(armedID) {
             let clipW = max(1, (f.clip.length / contentUnits) * contentW)
             let contentX = (f.clip.start / contentUnits) * contentW
-            let screenX = TLK.sidebarWidth + contentX - hScrollOffset
+            let screenX = sidebarWidth + contentX - hScrollOffset
             let clipTopY = TLK.rulerHeight
                 + CGFloat(f.trackIdx) * TLK.trackRowHeight
                 + (TLK.trackRowHeight - TLK.waveformHeight) / 2
@@ -2140,7 +2251,7 @@ private struct TLTrackArea: View {
                 insertStart: drag.resolvedInsertStart,
                 contentUnits: currentContentUnits,
                 contentW: currentContentW,
-                sidebarWidth: TLK.sidebarWidth
+                sidebarWidth: sidebarWidth
             )
             let trackTopY = TLK.rulerHeight
                 + CGFloat(drag.trackIdx) * TLK.trackRowHeight
@@ -2154,7 +2265,7 @@ private struct TLTrackArea: View {
                 .allowsHitTesting(false)
         } else if let armedID = clipDragArmed,
                   let f = findClip(armedID) {
-            let screenX = TLK.sidebarWidth
+            let screenX = sidebarWidth
                 + (f.clip.start / currentContentUnits) * currentContentW
                 - hScrollOffset
             let trackTopY = TLK.rulerHeight
@@ -2172,7 +2283,7 @@ private struct TLTrackArea: View {
 
     var body: some View {
         GeometryReader { geo in
-            let laneVW   = max(0, geo.size.width - TLK.sidebarWidth - TLK.smColumnWidth)
+            let laneVW = max(1, geo.size.width - sidebarWidth - controlsWidth)
             let baseContentUnits = MixrTimeline.contentUnits(for: tracks)
             let baseContentW = max(laneVW, baseContentUnits * TLK.timelineUnitWidth)
             let dragContentUnits = clipDragState.map { drag in
@@ -2195,9 +2306,9 @@ private struct TLTrackArea: View {
             ZStack(alignment: .topLeading) {
                 // Full-area background
                 HStack(spacing: 0) {
-                    MixrColors.backgroundSecondary.frame(width: TLK.sidebarWidth)
+                    MixrColors.backgroundSecondary.frame(width: sidebarWidth)
                     MixrColors.backgroundSecondary
-                    MixrColors.backgroundSecondary.frame(width: TLK.smColumnWidth)
+                    MixrColors.backgroundSecondary.frame(width: controlsWidth)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
 
@@ -2304,7 +2415,7 @@ private struct TLTrackArea: View {
 
                 // Floating clip-editing overlays — outside all scroll views, above sidebar/controls
                 clipEditingFloatingOverlay(
-                    sidebarW: TLK.sidebarWidth,
+                    sidebarW: sidebarWidth,
                     contentW: currentContentW,
                     contentUnits: currentContentUnits,
                     laneVW:   laneVW,
@@ -2315,7 +2426,7 @@ private struct TLTrackArea: View {
                 .zIndex(300)
 
                 floatingPlayheadHandle(
-                    sidebarW: TLK.sidebarWidth,
+                    sidebarW: sidebarWidth,
                     contentW: currentContentW,
                     contentUnits: currentContentUnits,
                     laneVW: laneVW,
@@ -2334,9 +2445,9 @@ private struct TLTrackArea: View {
                 // Import footer (fixed to sidebar bottom)
                 VStack(spacing: 0) {
                     Spacer()
-                    importFooter.frame(width: TLK.sidebarWidth)
+                    importFooter.frame(width: sidebarWidth)
                 }
-                .frame(width: TLK.sidebarWidth, height: geo.size.height)
+                .frame(width: sidebarWidth, height: geo.size.height)
                 .zIndex(1)
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -2364,7 +2475,11 @@ private struct TLTrackArea: View {
     private func columnHeader(_ title: String, leadingInset: CGFloat) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 11.5, weight: .semibold))
+                .mixrScaledFont(
+                    size: 11.5,
+                    weight: .semibold,
+                    relativeTo: .subheadline
+                )
                 .foregroundStyle(MixrColors.textSecondary.opacity(0.73))
             Spacer(minLength: 0)
         }
@@ -2375,28 +2490,28 @@ private struct TLTrackArea: View {
         VStack(spacing: 0) {
             // Label — matches ruler height
             MixrColors.backgroundSecondary
-                .frame(width: TLK.sidebarWidth, height: TLK.rulerHeight)
+                .frame(width: sidebarWidth, height: TLK.rulerHeight)
                 .overlay { columnHeader("Tracks", leadingInset: 10.5) }
                 .overlay(alignment: .bottom) { MixrColors.divider.frame(height: 0.5) }
                 .overlay(alignment: .trailing) { MixrColors.divider.frame(width: 0.5) }
 
             sidebarTrackRows
         }
-        .frame(width: TLK.sidebarWidth)
+        .frame(width: sidebarWidth)
     }
 
     private func controlsColumn() -> some View {
         VStack(spacing: 0) {
             // Label — matches ruler height
             MixrColors.backgroundSecondary
-                .frame(width: TLK.smColumnWidth, height: TLK.rulerHeight)
+                .frame(width: controlsWidth, height: TLK.rulerHeight)
                 .overlay { columnHeader("Controls", leadingInset: 10.5) }
                 .overlay(alignment: .bottom) { MixrColors.divider.frame(height: 0.5) }
                 .overlay(alignment: .leading) { MixrColors.divider.frame(width: 0.5) }
 
             controlsTrackRows
         }
-        .frame(width: TLK.smColumnWidth)
+        .frame(width: controlsWidth)
     }
 
     // MARK: Sidebar track rows
@@ -2406,6 +2521,7 @@ private struct TLTrackArea: View {
             ForEach(Array(tracks.enumerated()), id: \.element.id) { _, track in
                 TLSongRow(
                     track: track,
+                    rowWidth: sidebarWidth,
                     isSelected: track.id == selectedTrackID,
                     onDragChanged: { delta in
                         if draggingID == nil { draggingID = track.id }
@@ -2446,9 +2562,9 @@ private struct TLTrackArea: View {
                 )
             }
 
-            Color.clear.frame(height: TLK.importFooterHeight)
+            Color.clear.frame(height: importFooterHeight)
         }
-        .frame(width: TLK.sidebarWidth)
+        .frame(width: sidebarWidth)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .trailing) {
             MixrColors.divider.frame(width: 0.5)
@@ -2538,6 +2654,10 @@ private struct TLTrackArea: View {
             if tracks.isEmpty {
                 TLEmptyTimelineState(
                     isDropTarget: isTimelineDropTarget,
+                    maximumButtonWidth: min(
+                        TLK.sidebarImportSongsWidth,
+                        max(96, viewportW - 24)
+                    ),
                     onImport: { showFilePicker = true }
                 )
                     .frame(width: min(contentW, viewportW), height: lanesH)
@@ -2715,6 +2835,7 @@ private struct TLTrackArea: View {
             ForEach(Array(tracks.enumerated()), id: \.element.id) { idx, track in
                 TLTrackControlRow(
                     track: track,
+                    availableWidth: controlsWidth,
                     volume: $tracks[idx].volume,
                     onToggleSolo: { onToggleSolo(track.id) },
                     onToggleMute: { onToggleMute(track.id) },
@@ -2746,7 +2867,7 @@ private struct TLTrackArea: View {
         }
         .padding(.leading, 7.5)
         .padding(.trailing, 8)
-        .frame(width: TLK.smColumnWidth)
+        .frame(width: controlsWidth)
         .background(MixrColors.backgroundSecondary)
         .overlay(alignment: .leading) {
             MixrColors.divider.frame(width: 0.5)
@@ -2762,7 +2883,7 @@ private struct TLTrackArea: View {
                 .offset(y: 1.5)
             Spacer(minLength: 0)
         }
-        .frame(height: TLK.importFooterHeight)
+        .frame(height: importFooterHeight)
         .frame(maxWidth: .infinity)
         .background(
             MixrColors.backgroundSecondary
@@ -2773,46 +2894,70 @@ private struct TLTrackArea: View {
     }
 
     private var importButton: some View {
-        HStack(spacing: TLK.importFooterButtonSpacing) {
-            Button {
-                showFilePicker = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("Import Songs")
-                        .mixrFont(.button)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+        Group {
+            if importFooterHeight > EditorLayoutMetrics.regularImportFooterHeight {
+                VStack(spacing: 6) {
+                    importSongsButton
+                    sfxButton
                 }
-                .foregroundStyle(MixrColors.textMuted.opacity(0.82))
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, MixrSpacing.sm)
-                .padding(.vertical, MixrLayout.buttonPaddingV)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+            } else {
+                HStack(spacing: TLK.importFooterButtonSpacing) {
+                    importSongsButton
+                    sfxButton
                 }
-                .partyModeBorder(
-                    shape: RoundedRectangle(cornerRadius: 8, style: .continuous),
-                    role: .button,
-                    lighting: .coolLeading,
-                    glintOffset: .near
-                )
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .layoutPriority(1)
-
-            Button {
-                onOpenSFXLibrary()
-            } label: {
-                MixrSFXOutlineButtonLabel(style: .d)
-            }
-            .buttonStyle(.plain)
-            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, TLK.importFooterHorizontalPadding)
+    }
+
+    private var importSongsButton: some View {
+        Button {
+            showFilePicker = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Import Songs")
+                    .mixrFont(.button)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(MixrColors.textMuted.opacity(0.82))
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, MixrSpacing.sm)
+            .padding(.vertical, MixrLayout.buttonPaddingV)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(MixrColors.divider, lineWidth: 0.5)
+            }
+            .partyModeBorder(
+                shape: RoundedRectangle(cornerRadius: 8),
+                role: .button,
+                lighting: .coolLeading,
+                glintOffset: .near
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .layoutPriority(1)
+    }
+
+    private var sfxButton: some View {
+        Button {
+            showSFXPanel = true
+        } label: {
+            MixrSFXOutlineButtonLabel(style: .d)
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("Sound Effects")
+        .modifier(
+            TLSFXLibraryPresentation(
+                isPresented: $showSFXPanel,
+                style: sfxPresentationStyle,
+                onSelect: onSelectSoundEffect
+            )
+        )
     }
 
     // MARK: Audio drop importing
@@ -2884,6 +3029,7 @@ private struct TLTrackArea: View {
 
 private struct TLSongRow: View {
     let track: MixrTrack
+    let rowWidth: CGFloat
     var isSelected: Bool = false
     var onDragChanged: ((CGFloat) -> Void)? = nil
     var onDragEnded: ((CGFloat) -> Void)?   = nil
@@ -2907,7 +3053,7 @@ private struct TLSongRow: View {
 
             rowContent
                 .background(MixrTrackRowBackground(isSFXTrack: track.isSFXTrack))
-                .offset(x: isDeleting ? -TLK.sidebarWidth : swipeOffset)
+                .offset(x: isDeleting ? -rowWidth : swipeOffset)
                 .opacity(isDeleting ? 0.72 : 1)
                 .contentShape(Rectangle())
                 .overlay {
@@ -2962,12 +3108,16 @@ private struct TLSongRow: View {
     private var titleRow: some View {
         HStack(spacing: 0) {
             Text(track.title)
-                .font(.system(size: 12, weight: .semibold))
+                .mixrScaledFont(
+                    size: 12,
+                    weight: .semibold,
+                    relativeTo: .subheadline
+                )
                 .foregroundStyle(MixrColors.textPrimary)
                 .lineLimit(1)
             Spacer()
             Text(track.duration)
-                .font(.system(size: 10, weight: .regular))
+                .mixrScaledFont(size: 10, relativeTo: .caption)
                 .foregroundStyle(MixrColors.textSecondary)
         }
     }
@@ -2975,14 +3125,14 @@ private struct TLSongRow: View {
     private var metadataRow: some View {
         HStack(spacing: 0) {
             Text(track.artist)
-                .font(.system(size: 11, weight: .regular))
+                .mixrScaledFont(size: 11, relativeTo: .caption)
                 .foregroundStyle(MixrColors.textSecondary)
                 .lineLimit(1)
             Spacer()
             Text(track.isSFXTrack
                 ? "\(track.clips.count) clip\(track.clips.count == 1 ? "" : "s")"
                 : "\(track.bpmDisplay) BPM")
-                .font(.system(size: 10, weight: .regular))
+                .mixrScaledFont(size: 10, relativeTo: .caption)
                 .foregroundStyle(MixrColors.textSecondary)
         }
     }
@@ -2995,7 +3145,11 @@ private struct TLSongRow: View {
                 Image(systemName: "trash.fill")
                     .font(.system(size: 12, weight: .semibold))
                 Text("Delete")
-                    .font(.system(size: 10, weight: .semibold))
+                    .mixrScaledFont(
+                        size: 10,
+                        weight: .semibold,
+                        relativeTo: .caption
+                    )
             }
             .foregroundStyle(.white)
             .frame(width: deleteActionWidth, height: TLK.trackRowHeight)
@@ -3008,7 +3162,7 @@ private struct TLSongRow: View {
     private func performDelete() {
         withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
             isDeleting = true
-            swipeOffset = -TLK.sidebarWidth
+            swipeOffset = -rowWidth
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
@@ -3289,18 +3443,22 @@ private struct TLTimelineSurface: View {
 
 private struct TLEmptyTimelineState: View {
     let isDropTarget: Bool
+    let maximumButtonWidth: CGFloat
     let onImport: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 6) {
                 Text(isDropTarget ? "Drop audio files to import" : "Import songs to start a remix")
-                    .font(.system(size: 13, weight: .medium))
+                    .mixrScaledFont(
+                        size: 13,
+                        weight: .medium
+                    )
                     .foregroundStyle(MixrColors.textSecondary.opacity(isDropTarget ? 0.86 : 0.73))
 
                 if !isDropTarget {
                     Text("Drag audio files here or use Import Songs")
-                        .font(.system(size: 10, weight: .regular))
+                        .mixrScaledFont(size: 10, relativeTo: .caption)
                         .foregroundStyle(MixrColors.textSecondary.opacity(0.73))
                 }
             }
@@ -3315,7 +3473,7 @@ private struct TLEmptyTimelineState: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                     }
-                    .foregroundStyle(MixrColors.textMuted.opacity(0.82))
+                    .foregroundStyle(MixrColors.textMuted.opacity(0.84))
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, MixrSpacing.sm)
                     .padding(.vertical, MixrLayout.buttonPaddingV)
@@ -3336,7 +3494,7 @@ private struct TLEmptyTimelineState: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(width: TLK.sidebarImportSongsWidth)
+                .frame(width: maximumButtonWidth)
                 .padding(.top, MixrSpacing.md)
             }
         }
@@ -4034,6 +4192,7 @@ private struct TLPlayheadHandle: Shape {
 
 private struct TLTrackControlRow: View {
     let track: MixrTrack
+    let availableWidth: CGFloat
     @Binding var volume: Double
     var onToggleSolo: () -> Void = {}
     var onToggleMute: () -> Void = {}
@@ -4041,47 +4200,79 @@ private struct TLTrackControlRow: View {
     var onMixSettingsChanged: () -> Void = {}
 
     var body: some View {
+        Group {
+            if availableWidth >= 116 {
+                horizontalControls
+            } else {
+                compactControls
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private var horizontalControls: some View {
+        HStack(spacing: 5) {
+            trackToggles
+            volumeControl
+                .padding(.leading, 4)
+        }
+    }
+
+    private var compactControls: some View {
+        VStack(spacing: 0) {
+            trackToggles
+            volumeControl
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.vertical, 1)
+    }
+
+    private var trackToggles: some View {
         HStack(spacing: 5) {
             TLTrackToggle(
                 label: "S",
                 isActive: track.isSoloed,
                 accent: MixrColors.secondaryPurple,
-                action: {
-                    onToggleSolo()
-                    onMixSettingsChanged()
-                }
+                action: toggleSolo
             )
 
             TLTrackToggle(
                 label: "M",
                 isActive: track.isMuted,
                 accent: MixrColors.primaryPurple,
-                action: {
-                    onToggleMute()
-                    onMixSettingsChanged()
-                }
+                action: toggleMute
             )
-
-            HStack(spacing: 4) {
-                Image(systemName: volumeIcon)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(MixrColors.textSecondary.opacity(0.85))
-                    .frame(width: 11)
-
-                TLVolumeSlider(
-                    value: $volume,
-                    accentColor: track.color.volumeAccentColor,
-                    trackColor:  track.color.volumeTrackColor,
-                    onEditingChanged: onVolumeEditingChanged
-                )
-                .frame(maxWidth: .infinity)
-                .onChange(of: volume) { _, _ in
-                    onMixSettingsChanged()
-                }
-            }
-            .padding(.leading, 4)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private var volumeControl: some View {
+        HStack(spacing: 4) {
+            Image(systemName: volumeIcon)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary.opacity(0.85))
+                .frame(width: 11)
+
+            TLVolumeSlider(
+                value: $volume,
+                accentColor: track.color.volumeAccentColor,
+                trackColor: track.color.volumeTrackColor,
+                onEditingChanged: onVolumeEditingChanged
+            )
+            .frame(maxWidth: .infinity)
+            .onChange(of: volume) { _, _ in
+                onMixSettingsChanged()
+            }
+        }
+    }
+
+    private func toggleSolo() {
+        onToggleSolo()
+        onMixSettingsChanged()
+    }
+
+    private func toggleMute() {
+        onToggleMute()
+        onMixSettingsChanged()
     }
 
     private var volumeIcon: String {
@@ -4238,17 +4429,22 @@ private struct TLEffectsPanel: View {
 
                         // Keep every card in-layout so open/close is a push, not a fade.
                         HStack(spacing: gap) {
-                            TLCompactEffectCard(
-                                effect: effect,
-                                isSelected: isFocus
-                            )
-                            .frame(width: cardWidth, alignment: .leading)
+                            Button {
+                                handleCardTap(effect)
+                            } label: {
+                                TLCompactEffectCard(
+                                    effect: effect,
+                                    isSelected: isFocus
+                                )
+                                .frame(width: cardWidth, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
                             .opacity(isAway ? 0 : restingOpacity)
                             .animation(
                                 isAway ? siblingFadeOutAnimation : siblingFadeInAnimation,
                                 value: isAway
                             )
-                            .onTapGesture { handleCardTap(effect) }
+                            .accessibilityValue(isFocus ? "Selected" : "Not selected")
 
                             // Only on the focused card — grows right and pushes trailing cards out.
                             if isFocus, effect.isAdjustable {
@@ -4385,51 +4581,61 @@ private struct TLEffectsPanel: View {
     }
 
     private var effectsHeader: some View {
-        VStack(spacing: 0) {
-            Capsule()
-                .fill(MixrColors.interactiveHandle)
-                .frame(width: 36, height: 4)
-                .padding(.top, 5)
-                .offset(y: 5)
-
-            HStack {
-                Text("Effects")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(MixrColors.textPrimary)
-
-                Spacer()
-
-                if !isCollapsed && !hasTarget {
-                    Text("Select a clip to shape its effects")
-                        .font(.system(size: EffectCardMetrics.titleFontSize, weight: .semibold))
-                        .foregroundStyle(MixrColors.textSecondary.opacity(0.87))
-                        .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 3)
-            .padding(.bottom, isCollapsed ? 6 : 0)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
+        Button {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                isCollapsed.toggle()
+                isCollapsed = EditorEffectsInteraction.toggled(isCollapsed)
             }
+        } label: {
+            VStack(spacing: 0) {
+                Capsule()
+                    .fill(MixrColors.interactiveHandle)
+                    .frame(width: 36, height: 4)
+                    .padding(.top, 5)
+                    .offset(y: 5)
+
+                HStack {
+                    Text("Effects")
+                        .mixrScaledFont(
+                            size: 13,
+                            weight: .semibold,
+                            relativeTo: .headline
+                        )
+                        .foregroundStyle(MixrColors.textPrimary)
+
+                    Spacer()
+
+                    if !isCollapsed && !hasTarget {
+                        Text("Select a clip to shape its effects")
+                            .mixrScaledFont(
+                                size: EffectCardMetrics.titleFontSize,
+                                weight: .semibold,
+                                relativeTo: .subheadline
+                            )
+                            .foregroundStyle(MixrColors.textSecondary.opacity(0.87))
+                            .transition(.opacity)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 3)
+                .padding(.bottom, isCollapsed ? 6 : 0)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isCollapsed ? "Expand Effects" : "Collapse Effects")
     }
 
     private var effectsDragGesture: some Gesture {
         DragGesture(minimumDistance: 12)
             .onEnded { value in
-                let vertical = value.translation.height
-                guard abs(vertical) > abs(value.translation.width) else { return }
+                let resolved = EditorEffectsInteraction.collapsedState(
+                    afterDrag: value.translation,
+                    current: isCollapsed
+                )
+                guard resolved != isCollapsed else { return }
 
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                    if vertical > 24 {
-                        isCollapsed = true
-                    } else if vertical < -24 {
-                        isCollapsed = false
-                    }
+                    isCollapsed = resolved
                 }
             }
     }

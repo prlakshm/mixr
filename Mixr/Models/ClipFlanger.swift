@@ -1,5 +1,6 @@
 import AVFoundation
 import AudioToolbox
+import CoreAudio
 
 // MARK: - Flanger
 //

@@ -253,13 +253,21 @@ struct SFXCard: View {
 
                 VStack(spacing: 4) {
                     Text(effect.title)
-                        .font(.system(size: titleSize, weight: .semibold))
+                        .mixrScaledFont(
+                            size: titleSize,
+                            weight: .semibold,
+                            relativeTo: .subheadline
+                        )
                         .foregroundStyle(Color.white.opacity(0.96))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
 
                     Text(Self.durationLabel(effect.durationSeconds))
-                        .font(.system(size: titleSize * 0.78, weight: .medium))
+                        .mixrScaledFont(
+                            size: titleSize * 0.78,
+                            weight: .medium,
+                            relativeTo: .caption
+                        )
                         .foregroundStyle(durationColor)
                         .shadow(color: durationGlowColor, radius: durationGlowRadius)
                 }

@@ -18,7 +18,7 @@ func matches(_ pattern: String) -> Bool {
 check(
     "Empty timeline adds a working import action while keeping the group centered",
     matches(
-        #"TLEmptyTimelineState\(\s*isDropTarget:\s*isTimelineDropTarget,\s*onImport:\s*\{\s*showFilePicker\s*=\s*true\s*\}\s*\)"#
+        #"TLEmptyTimelineState\(\s*isDropTarget:\s*isTimelineDropTarget,\s*maximumButtonWidth:[\s\S]{0,180}onImport:\s*\{\s*showFilePicker\s*=\s*true\s*\}\s*\)"#
     )
         && source.contains(
             ".position(x: min(contentW, viewportW) / 2, y: lanesH / 2)"
@@ -47,7 +47,7 @@ check(
 check(
     "Left import button remains at its existing opacity",
     matches(
-        #"private var importButton:[\s\S]{0,900}\.foregroundStyle\(MixrColors\.textMuted\.opacity\(0\.82\)\)"#
+        #"private var importSongsButton:[\s\S]{0,900}\.foregroundStyle\(MixrColors\.textMuted\.opacity\(0\.82\)\)"#
     )
 )
 
@@ -67,10 +67,10 @@ check(
             ".foregroundStyle(MixrColors.textSecondary.opacity(isDropTarget ? 0.86 : 0.73))"
         )
         && matches(
-            #"Text\(\"Drag audio files here or use Import Songs\"\)[\s\S]{0,180}textSecondary\.opacity\(0\.73\)"#
+            #"Text\(\"Drag audio files here or use Import Songs\"\)[\s\S]{0,360}textSecondary\.opacity\(0\.73\)"#
         )
         && matches(
-            #"Text\(\"Select a clip to shape its effects\"\)[\s\S]{0,220}textSecondary\.opacity\(0\.87\)"#
+            #"Text\(\"Select a clip to shape its effects\"\)[\s\S]{0,420}textSecondary\.opacity\(0\.87\)"#
         )
 )
 
@@ -80,7 +80,7 @@ check(
         #"let restingOpacity:\s*Double\s*=\s*effect\.isAdjustable\s*&&\s*!hasTarget\s*\?\s*0\.45\s*:\s*1"#
     )
         && matches(
-            #"TLCompactEffectCard\([\s\S]{0,260}\.opacity\(isAway\s*\?\s*0\s*:\s*restingOpacity\)"#
+            #"TLCompactEffectCard\([\s\S]{0,520}\.opacity\(isAway\s*\?\s*0\s*:\s*restingOpacity\)"#
         )
 )
 

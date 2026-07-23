@@ -45,6 +45,17 @@ enum MixrTextStyle {
         case .caption: 3
         }
     }
+
+    var relativeTextStyle: Font.TextStyle {
+        switch self {
+        case .displayLogo: .largeTitle
+        case .sectionTitle: .headline
+        case .songTitle: .subheadline
+        case .body, .button, .timecode: .body
+        case .metadata: .caption
+        case .caption: .caption2
+        }
+    }
 }
 
 extension Font {
@@ -55,16 +66,81 @@ extension Font {
 
 struct MixrFontModifier: ViewModifier {
     let style: MixrTextStyle
+    @ScaledMetric private var scaledSize: CGFloat
+
+    init(style: MixrTextStyle) {
+        self.style = style
+        _scaledSize = ScaledMetric(
+            wrappedValue: style.size,
+            relativeTo: style.relativeTextStyle
+        )
+    }
 
     func body(content: Content) -> some View {
         content
-            .font(.mixr(style))
+            .font(
+                .system(
+                    size: min(scaledSize, style.size * 1.35),
+                    weight: style.weight,
+                    design: style.design
+                )
+            )
             .lineSpacing(style.lineSpacing)
+    }
+}
+
+struct MixrScaledSystemFontModifier: ViewModifier {
+    let baseSize: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
+    let maximumScale: CGFloat
+    @ScaledMetric private var scaledSize: CGFloat
+
+    init(
+        size: CGFloat,
+        weight: Font.Weight,
+        design: Font.Design,
+        relativeTo textStyle: Font.TextStyle,
+        maximumScale: CGFloat
+    ) {
+        baseSize = size
+        self.weight = weight
+        self.design = design
+        self.maximumScale = maximumScale
+        _scaledSize = ScaledMetric(wrappedValue: size, relativeTo: textStyle)
+    }
+
+    func body(content: Content) -> some View {
+        content.font(
+            .system(
+                size: min(scaledSize, baseSize * maximumScale),
+                weight: weight,
+                design: design
+            )
+        )
     }
 }
 
 extension View {
     func mixrFont(_ style: MixrTextStyle) -> some View {
         modifier(MixrFontModifier(style: style))
+    }
+
+    func mixrScaledFont(
+        size: CGFloat,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default,
+        relativeTo textStyle: Font.TextStyle = .body,
+        maximumScale: CGFloat = 1.35
+    ) -> some View {
+        modifier(
+            MixrScaledSystemFontModifier(
+                size: size,
+                weight: weight,
+                design: design,
+                relativeTo: textStyle,
+                maximumScale: maximumScale
+            )
+        )
     }
 }

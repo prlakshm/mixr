@@ -33,10 +33,12 @@ let compactProfileSource = String(iconProfileSource[compactProfileStart...])
 let cardStart = source.range(of: "struct SFXCard: View")?.lowerBound ?? source.startIndex
 let cardEnd = source.range(of: "// MARK: - SFX Library Panel")?.lowerBound ?? source.endIndex
 let cardSource = String(source[cardStart..<cardEnd])
-let overlayStart = timelineSource.range(of: "if showSFXPanel")?.lowerBound
+let overlayStart = timelineSource.range(
+    of: "private struct TLSFXLibraryPresentation"
+)?.lowerBound
     ?? timelineSource.startIndex
 let overlayEnd = timelineSource.range(
-    of: "// Auto scope dialog",
+    of: "// MARK: - Toolbar History Button",
     range: overlayStart..<timelineSource.endIndex
 )?.lowerBound ?? timelineSource.endIndex
 let sfxOverlaySource = String(timelineSource[overlayStart..<overlayEnd])
@@ -61,17 +63,11 @@ check(
 )
 
 check(
-    "SFX menu scales uniformly with a ten point upward optical correction",
-    sfxOverlaySource.contains("ZStack(alignment: .center)")
-        && sfxOverlaySource.contains(
-            ".scaleEffect(SFXMetrics.panelDisplayScale, anchor: .center)"
-        )
+    "SFX menu uses adaptive native presentation with compact sheet adaptation",
+    sfxOverlaySource.contains("content.popover(")
+        && sfxOverlaySource.contains("content.sheet(isPresented:")
+        && sfxOverlaySource.contains(".presentationCompactAdaptation(.sheet)")
         && matches(#"panelOpticalOffsetY\s*:\s*CGFloat\s*=\s*-10"#)
-        && sfxOverlaySource.contains(".offset(y: SFXMetrics.panelOpticalOffsetY)")
-        && matches(
-            #"\.frame\(\s*width:\s*screenSize\.width,\s*height:\s*screenSize\.height,\s*alignment:\s*\.center\s*\)"#,
-            in: sfxOverlaySource
-        )
 )
 
 check(
@@ -92,7 +88,9 @@ check(
         && source.contains("let padH = SFXMetrics.panelPadH")
         && source.contains(".padding(.horizontal, padH)")
         && source.contains(".padding(.top, SFXMetrics.panelCloseClearance + padV)")
-        && source.contains(".padding(.bottom, padV)")
+        && source.contains(
+            ".padding(.bottom, padV + SFXMetrics.pageIndicatorCardLift)"
+        )
 )
 
 check(
@@ -331,7 +329,7 @@ check(
         && colorsSource.contains("default: peakColor")
         && colorsSource.contains("default: color")
         && timelineSource.contains("accentColor: track.color.volumeAccentColor")
-        && timelineSource.contains("trackColor:  track.color.volumeTrackColor")
+        && timelineSource.contains("trackColor: track.color.volumeTrackColor")
         && designPreviewSource.contains("accentColor: sample.color.volumeAccentColor")
         && designPreviewSource.contains("trackColor: sample.color.volumeTrackColor")
         && designPreviewSource.contains("accentColor: color.volumeAccentColor")
@@ -346,7 +344,8 @@ check(
 
 check(
     "SFX type follows the reference hierarchy",
-    cardSource.contains(".font(.system(size: titleSize, weight: .semibold))")
+    cardSource.contains("size: titleSize,")
+        && cardSource.contains("relativeTo: .subheadline")
         && cardSource.contains(".foregroundStyle(durationColor)")
         && cardSource.contains("VStack(spacing: 4)")
         && cardSource.contains("VStack(spacing: height * 0.10)")
@@ -354,8 +353,9 @@ check(
 )
 
 check(
-    "SFX backdrop keeps the timeline sharp behind the original dim overlay",
-    sfxOverlaySource.contains("Color.black.opacity(0.52)")
+    "SFX uses the system presentation backdrop without a custom blur overlay",
+    sfxOverlaySource.contains(".presentationBackground(.clear)")
+        && !sfxOverlaySource.contains("Color.black.opacity(0.52)")
         && !sfxOverlaySource.contains(".fill(.ultraThinMaterial)")
 )
 

@@ -47,11 +47,12 @@ check(
         && timelineSource.contains("private final class TLProjectNameTextField: UITextField")
         && timelineSource.contains("initialCaretX")
         && timelineSource.contains("placeInitialCaret(in:")
-        && timelineSource.contains(".truncationMode(.tail)")
+        && timelineSource.contains("titleLabel.lineBreakMode = .byTruncatingTail")
+        && timelineSource.contains("private struct TLNativeProjectMenuButton: UIViewRepresentable")
         && timelineSource.contains("static let width: CGFloat = 76")
         && timelineSource.contains("static var controlWidth: CGFloat")
         && matches(
-            #"private var projectTitleControl:[\s\S]{0,3500}\.frame\(\s*width: TLProjectTitleMetrics\.controlWidth"#,
+            #"private var projectTitleControl:[\s\S]{0,5000}\.frame\(\s*width:\s*TLProjectTitleMetrics\.controlWidth"#,
             in: timelineSource
         )
         && matches(
@@ -83,7 +84,7 @@ check(
 check(
     "Effects handle uses the shared interactive affordance role",
     matches(
-        #"private var effectsHeader:[\s\S]{0,180}Capsule\(\)[\s\n]*\.fill\(MixrColors\.interactiveHandle\)"#,
+        #"private var effectsHeader:[\s\S]{0,420}Capsule\(\)[\s\n]*\.fill\(MixrColors\.interactiveHandle\)"#,
         in: timelineSource
     )
 )

@@ -433,13 +433,21 @@ struct EffectCard: View {
             GlassIconTile(effect: effect, isSelected: isActive)
             VStack(alignment: .leading, spacing: 1) {
                 Text(effect.title)
-                    .font(.system(size: EffectCardMetrics.titleFontSize, weight: .semibold))
+                    .mixrScaledFont(
+                        size: EffectCardMetrics.titleFontSize,
+                        weight: .semibold,
+                        relativeTo: .subheadline
+                    )
                     .foregroundStyle(MixrColors.textPrimary)
                     .lineLimit(1)
 
                 if let subtitle = effect.subtitle {
                     Text(subtitle)
-                        .font(.system(size: 10, weight: .medium))
+                        .mixrScaledFont(
+                            size: 10,
+                            weight: .medium,
+                            relativeTo: .caption
+                        )
                         .foregroundStyle(MixrColors.textSecondary.opacity(0.92))
                         .lineLimit(1)
                 }
