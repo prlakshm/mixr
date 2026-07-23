@@ -119,8 +119,8 @@ struct ProjectDropdownMenu: View {
                 Text(isCurrent ? currentName : project.name)
                     .font(.system(size: Self.labelFontSize, weight: .regular))
                     .lineLimit(1)
-
-                Spacer(minLength: 0)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Image(systemName: "checkmark")
                     .font(.system(size: Self.iconFontSize, weight: .semibold))

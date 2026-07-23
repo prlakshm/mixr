@@ -848,6 +848,19 @@ private struct ProjectTitleFrameKey: PreferenceKey {
     }
 }
 
+private enum TLProjectTitleMetrics {
+    /// Pre-session rename field width (`.frame(maxWidth: 168)`).
+    /// Always used — idle truncates here; rename scrolls here; undo/redo stay put.
+    static let width: CGFloat = 168
+    static let fieldHeight: CGFloat = 18
+    static let chevronSlotWidth: CGFloat = 12
+    static let titleToChevronSpacing: CGFloat = 4
+    /// Full title control width so undo/redo stay parked after this slot.
+    static var controlWidth: CGFloat {
+        width + titleToChevronSpacing + chevronSlotWidth
+    }
+}
+
 // MARK: - Transport Bar
 
 private struct TLTransportBar: View {
@@ -864,7 +877,8 @@ private struct TLTransportBar: View {
 
     @State private var isRenamingProject = false
     @State private var renameText = ""
-    @FocusState private var renameFieldFocused: Bool
+    @State private var renameFieldFocused = false
+    @State private var renameCaretX: CGFloat?
 
     var body: some View {
         ZStack {
@@ -1033,79 +1047,73 @@ private struct TLTransportBar: View {
 
     @ViewBuilder
     private var projectTitleControl: some View {
-        if isRenamingProject {
-            TextField(
-                "Project name",
-                text: $renameText,
-                prompt: Text("Project name")
-                    .foregroundStyle(MixrColors.textPlaceholder)
+        // Hard outer width, then fixedSize — otherwise HStack collapses to glyph width.
+        HStack(spacing: TLProjectTitleMetrics.titleToChevronSpacing) {
+            Group {
+                if isRenamingProject {
+                    TLProjectNameField(
+                        text: $renameText,
+                        isFocused: $renameFieldFocused,
+                        initialCaretX: renameCaretX,
+                        onSubmit: commitProjectRename
+                    )
+                    .onChange(of: renameFieldFocused) { _, focused in
+                        if !focused { commitProjectRename() }
+                    }
+                } else {
+                    Text(library.projectName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(MixrColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .frame(
+                width: TLProjectTitleMetrics.width,
+                height: TLProjectTitleMetrics.fieldHeight,
+                alignment: .leading
             )
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(MixrColors.textPrimary)
-                .textFieldStyle(.plain)
-                .focused($renameFieldFocused)
-                .submitLabel(.done)
-                .onSubmit { commitProjectRename() }
-                .frame(maxWidth: 168)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
-                        }
+            .clipped()
+            .background {
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ProjectTitleFrameKey.self,
+                        value: geo.frame(in: .named("timelineScreen"))
+                    )
                 }
-                .partyModeBorder(
-                    shape: RoundedRectangle(cornerRadius: 6, style: .continuous),
-                    role: .compactControl,
-                    lighting: .violetTrailing,
-                    glintOffset: .far
-                )
-                .background {
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: ProjectTitleFrameKey.self,
-                            value: geo.frame(in: .named("timelineScreen"))
-                        )
-                    }
-                }
-                .onChange(of: renameFieldFocused) { _, focused in
-                    if !focused { commitProjectRename() }
-                }
-        } else {
-            HStack(spacing: 4) {
-                Text(library.projectName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(MixrColors.textPrimary)
-                    .lineLimit(1)
-                    .background {
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: ProjectTitleFrameKey.self,
-                                value: geo.frame(in: .named("timelineScreen"))
-                            )
-                        }
-                    }
+            }
 
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(MixrColors.textSecondary)
-                    .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { onProjectTapped() }
-            .onLongPressGesture(minimumDuration: 0.45) {
-                beginProjectRename()
-            }
-            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary)
+                .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
+                .frame(
+                    width: TLProjectTitleMetrics.chevronSlotWidth,
+                    height: TLProjectTitleMetrics.fieldHeight
+                )
+                .allowsHitTesting(!isRenamingProject)
         }
+        .frame(
+            width: TLProjectTitleMetrics.controlWidth,
+            height: TLProjectTitleMetrics.fieldHeight,
+            alignment: .leading
+        )
+        .fixedSize(horizontal: true, vertical: true)
+        .contentShape(Rectangle())
+        .modifier(TLProjectTitleInteractionModifier(
+            isRenaming: isRenamingProject,
+            onTap: onProjectTapped,
+            onLongPress: beginProjectRename(at:)
+        ))
+        .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isProjectMenuOpen)
+        .animation(nil, value: isRenamingProject)
     }
 
-    private func beginProjectRename() {
+    private func beginProjectRename(at point: CGPoint) {
         onProjectRenameBegan()
         renameText = library.projectName
+        // Caret X is in the HStack; title column is leading at fixed width.
+        renameCaretX = min(max(point.x, 0), TLProjectTitleMetrics.width)
         isRenamingProject = true
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         DispatchQueue.main.async {
@@ -1118,6 +1126,7 @@ private struct TLTransportBar: View {
         library.renameCurrentProject(to: renameText)
         isRenamingProject = false
         renameFieldFocused = false
+        renameCaretX = nil
     }
 
     /// Bounces the project offline with the exact per-clip effect settings
@@ -1146,6 +1155,190 @@ private struct TLTransportBar: View {
                     exportErrorMessage = error.localizedDescription
                 }
             }
+        }
+    }
+}
+
+/// Applies tap/long-press only while not renaming so the inline field can
+/// receive selection and caret placement. Long-press reports its local point
+/// so the caret can open under the finger.
+private struct TLProjectTitleInteractionModifier: ViewModifier {
+    var isRenaming: Bool
+    var onTap: () -> Void
+    var onLongPress: (CGPoint) -> Void
+    @State private var suppressNextTap = false
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isRenaming {
+            content
+        } else {
+            content
+                .onTapGesture {
+                    if suppressNextTap {
+                        suppressNextTap = false
+                        return
+                    }
+                    onTap()
+                }
+                .highPriorityGesture(
+                    LongPressGesture(minimumDuration: 0.45)
+                        .sequenced(
+                            before: DragGesture(
+                                minimumDistance: 0,
+                                coordinateSpace: .local
+                            )
+                        )
+                        .onEnded { value in
+                            guard case .second(true, let drag) = value else { return }
+                            suppressNextTap = true
+                            onLongPress(drag?.location ?? .zero)
+                        }
+                )
+        }
+    }
+}
+
+/// Zero-inset field so title metrics match the SwiftUI label (chevron stays put).
+private final class TLProjectNameTextField: UITextField {
+    /// Report no intrinsic width so UIKit never stretches the SwiftUI title.
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: 18)
+    }
+
+    override func textRect(forBounds bounds: CGRect) -> CGRect { bounds }
+    override func editingRect(forBounds bounds: CGRect) -> CGRect { bounds }
+    override func placeholderRect(forBounds bounds: CGRect) -> CGRect { bounds }
+
+    override func canPerformAction(
+        _ action: Selector,
+        withSender sender: Any?
+    ) -> Bool {
+        // Keep Paste available even when simulator pasteboard syncing lags
+        // (same idea as the speed toolbar field). Copy/Cut follow selection.
+        if action == #selector(paste(_:)) {
+            return true
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+}
+
+/// Inline project-title editor — same look as the label, gray caret like the
+/// speed toolbar field (no bordered/filled text-field chrome).
+private struct TLProjectNameField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    /// Local X in the title slot where the long-press began; nil → caret at end.
+    var initialCaretX: CGFloat? = nil
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> TLProjectNameTextField {
+        let field = TLProjectNameTextField()
+        field.delegate = context.coordinator
+        field.borderStyle = .none
+        field.backgroundColor = .clear
+        field.clipsToBounds = true
+        field.returnKeyType = .done
+        field.textAlignment = .left
+        field.contentVerticalAlignment = .center
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .words
+        field.spellCheckingType = .no
+        field.textContentType = nil
+        field.clearButtonMode = .never
+        field.font = .systemFont(ofSize: 13, weight: .semibold)
+        field.textColor = .white
+        // Match TLSpeedValueField caret tint.
+        field.tintColor = UIColor(white: 0.62, alpha: 1)
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.attributedPlaceholder = NSAttributedString(
+            string: "Project name",
+            attributes: [
+                .foregroundColor: UIColor(MixrColors.textPlaceholder),
+                .font: UIFont.systemFont(ofSize: 13, weight: .semibold),
+            ]
+        )
+        if #available(iOS 17.0, *) {
+            field.inlinePredictionType = .no
+        }
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
+        return field
+    }
+
+    func updateUIView(_ field: TLProjectNameTextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text {
+            field.text = text
+        }
+        field.font = .systemFont(ofSize: 13, weight: .semibold)
+        field.textColor = .white
+        field.tintColor = UIColor(white: 0.62, alpha: 1)
+
+        if isFocused, !field.isFirstResponder {
+            DispatchQueue.main.async {
+                field.becomeFirstResponder()
+                context.coordinator.placeInitialCaret(in: field)
+            }
+        } else if !isFocused, field.isFirstResponder {
+            DispatchQueue.main.async { field.resignFirstResponder() }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: TLProjectNameField
+        private var didPlaceInitialCaret = false
+
+        init(_ parent: TLProjectNameField) {
+            self.parent = parent
+        }
+
+        @objc func textChanged(_ field: UITextField) {
+            parent.text = field.text ?? ""
+        }
+
+        func placeInitialCaret(in field: UITextField) {
+            guard !didPlaceInitialCaret else { return }
+            didPlaceInitialCaret = true
+
+            if let x = parent.initialCaretX {
+                let point = CGPoint(x: x, y: field.bounds.midY)
+                if let position = field.closestPosition(to: point) {
+                    field.selectedTextRange = field.textRange(from: position, to: position)
+                    return
+                }
+            }
+
+            let end = field.endOfDocument
+            field.selectedTextRange = field.textRange(from: end, to: end)
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            placeInitialCaret(in: textField)
+            DispatchQueue.main.async {
+                self.parent.isFocused = true
+            }
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            didPlaceInitialCaret = false
+            DispatchQueue.main.async {
+                self.parent.isFocused = false
+            }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onSubmit()
+            textField.resignFirstResponder()
+            return true
         }
     }
 }

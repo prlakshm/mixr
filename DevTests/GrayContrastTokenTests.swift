@@ -9,6 +9,10 @@ let timelineSource = try String(
     contentsOf: rootURL.appendingPathComponent("Mixr/TimelineScreen.swift"),
     encoding: .utf8
 )
+let clipEditingSource = try String(
+    contentsOf: rootURL.appendingPathComponent("Mixr/DesignSystem/ClipEditingUI.swift"),
+    encoding: .utf8
+)
 
 var failures = 0
 
@@ -34,15 +38,46 @@ check(
 check(
     "Semantic gray roles use the approved minimum opacities",
     colorsSource.contains("static let textPlaceholder = textSecondary.opacity(0.79)")
-        && colorsSource.contains("static let interactiveHandle = textSecondary.opacity(0.64)")
+        && colorsSource.contains("static let interactiveHandle = textSecondary.opacity(0.70)")
 )
 
 check(
-    "Project rename explicitly uses the shared placeholder role",
+    "Project rename uses an inline UITextField, not a SwiftUI TextField chrome morph",
+    timelineSource.contains("private struct TLProjectNameField: UIViewRepresentable")
+        && timelineSource.contains("private final class TLProjectNameTextField: UITextField")
+        && timelineSource.contains("initialCaretX")
+        && timelineSource.contains("placeInitialCaret(in:")
+        && timelineSource.contains(".truncationMode(.tail)")
+        && timelineSource.contains("static let width: CGFloat = 168")
+        && timelineSource.contains("static var controlWidth: CGFloat")
+        && matches(
+            #"private var projectTitleControl:[\s\S]{0,3500}\.frame\(\s*width: TLProjectTitleMetrics\.controlWidth"#,
+            in: timelineSource
+        )
+        && matches(
+            #"private var projectTitleControl:[\s\S]{0,4000}\.fixedSize\(horizontal: true, vertical: true\)"#,
+            in: timelineSource
+        )
+        && !matches(
+            #"if isRenamingProject \{[\s\S]{0,80}TextField\([\s\n]*"Project name""#,
+            in: timelineSource
+        )
+        && !matches(
+            #"isRenamingProject[\s\S]{0,400}RoundedRectangle\(cornerRadius: 6"#,
+            in: timelineSource
+        )
+)
+
+check(
+    "Project rename caret matches the speed toolbar gray tint",
     matches(
-        #"TextField\([\s\n]*"Project name",[\s\n]*text:\s*\$renameText,[\s\n]*prompt:\s*Text\("Project name"\)[\s\n]*\.foregroundStyle\(MixrColors\.textPlaceholder\)[\s\n]*\)"#,
+        #"field\.tintColor = UIColor\(white: 0\.62, alpha: 1\)"#,
         in: timelineSource
     )
+        && matches(
+            #"field\.tintColor = UIColor\(white: 0\.62, alpha: 1\)"#,
+            in: clipEditingSource
+        )
 )
 
 check(
