@@ -77,6 +77,13 @@ struct MixrSFXOutlineButtonLabel: View {
     private var markWidth: CGFloat { layoutMarkWidth * 0.90 * 1.05 }
     private var markHeight: CGFloat { layoutMarkHeight * 0.90 * 1.05 }
 
+    /// Total chrome width (mark slot + horizontal padding) — used to size
+    /// the sibling Import Songs button in the tracks footer.
+    static var chromeWidth: CGFloat {
+        let layoutMarkWidth: CGFloat = 22 * 0.95
+        return layoutMarkWidth * 1.10 + 5 * 2
+    }
+
     var body: some View {
         MixrSFXMark(style: style, width: markWidth, height: markHeight)
             // Button chrome 10% wider; icon stays the same drawn size.

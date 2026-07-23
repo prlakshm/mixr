@@ -26,6 +26,16 @@ enum TLK {
     static let compactEffectCardHeight: CGFloat    = 66
     static let markerUnits: [CGFloat]     = [0, 17, 33, 49, 65, 81, 97, 113, 129]
     static let importFooterHeight: CGFloat = 46
+    static let importFooterHorizontalPadding: CGFloat = 12
+    static let importFooterButtonSpacing: CGFloat = 7
+    /// Exact width of the tracks-footer Import Songs control (sidebar minus
+    /// padding, gap, and SFX chrome) — reused by the empty-timeline CTA.
+    static var sidebarImportSongsWidth: CGFloat {
+        sidebarWidth
+            - importFooterHorizontalPadding * 2
+            - importFooterButtonSpacing
+            - MixrSFXOutlineButtonLabel.chromeWidth
+    }
     static let timelineDurationSeconds: CGFloat = 240
     static let gridLineStepSeconds: CGFloat = 10
     static let rulerLabelStepSeconds: CGFloat = 30
@@ -1024,7 +1034,12 @@ private struct TLTransportBar: View {
     @ViewBuilder
     private var projectTitleControl: some View {
         if isRenamingProject {
-            TextField("Project name", text: $renameText)
+            TextField(
+                "Project name",
+                text: $renameText,
+                prompt: Text("Project name")
+                    .foregroundStyle(MixrColors.textPlaceholder)
+            )
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(MixrColors.textPrimary)
                 .textFieldStyle(.plain)
@@ -2158,7 +2173,7 @@ private struct TLTrackArea: View {
         HStack {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(MixrColors.textSecondary.opacity(0.45))
+                .foregroundStyle(MixrColors.textSecondary.opacity(0.73))
             Spacer(minLength: 0)
         }
         .padding(.leading, leadingInset)
@@ -2329,10 +2344,12 @@ private struct TLTrackArea: View {
             }
 
             if tracks.isEmpty {
-                TLEmptyTimelineState(isDropTarget: isTimelineDropTarget)
+                TLEmptyTimelineState(
+                    isDropTarget: isTimelineDropTarget,
+                    onImport: { showFilePicker = true }
+                )
                     .frame(width: min(contentW, viewportW), height: lanesH)
                     .position(x: min(contentW, viewportW) / 2, y: lanesH / 2)
-                    .allowsHitTesting(false)
             }
         }
         .frame(width: contentW, height: lanesH)
@@ -2564,7 +2581,7 @@ private struct TLTrackArea: View {
     }
 
     private var importButton: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: TLK.importFooterButtonSpacing) {
             Button {
                 showFilePicker = true
             } label: {
@@ -2603,7 +2620,7 @@ private struct TLTrackArea: View {
             .buttonStyle(.plain)
             .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, TLK.importFooterHorizontalPadding)
     }
 
     // MARK: Audio drop importing
@@ -3080,20 +3097,103 @@ private struct TLTimelineSurface: View {
 
 private struct TLEmptyTimelineState: View {
     let isDropTarget: Bool
+    let onImport: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            Text(isDropTarget ? "Drop audio files to import" : "Import songs to start a remix")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(MixrColors.textSecondary.opacity(isDropTarget ? 0.86 : 0.68))
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                Text(isDropTarget ? "Drop audio files to import" : "Import songs to start a remix")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(MixrColors.textSecondary.opacity(isDropTarget ? 0.86 : 0.73))
+
+                if !isDropTarget {
+                    Text("Drag audio files here or use Import Songs")
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundStyle(MixrColors.textSecondary.opacity(0.73))
+                }
+            }
 
             if !isDropTarget {
-                Text("Drag audio files here or use Import Songs")
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(MixrColors.textSecondary.opacity(0.46))
+                Button(action: onImport) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Import Songs")
+                            .mixrFont(.button)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                    .foregroundStyle(MixrColors.textMuted.opacity(0.82))
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, MixrSpacing.sm)
+                    .padding(.vertical, MixrLayout.buttonPaddingV)
+                    .background { TLEmptyImportSongsGlass() }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                MixrColors.importCTABorder.opacity(0.38),
+                                lineWidth: 0.6
+                            )
+                    }
+                    .partyModeBorder(
+                        shape: RoundedRectangle(cornerRadius: 8, style: .continuous),
+                        role: .button,
+                        lighting: .coolLeading,
+                        glintOffset: .near
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(width: TLK.sidebarImportSongsWidth)
+                .padding(.top, MixrSpacing.md)
             }
         }
         .multilineTextAlignment(.center)
+    }
+}
+
+/// Secondary frosted Import Songs chrome — dark navy-purple fill with
+/// dimensional top glow and depth, plus party-mode rim from the caller.
+private struct TLEmptyImportSongsGlass: View {
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+    }
+
+    var body: some View {
+        shape
+            .fill(MixrColors.importCTAFill.opacity(0.78))
+            .background {
+                shape
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.14)
+                    .environment(\.colorScheme, .dark)
+            }
+            .overlay {
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            MixrColors.importCTAGlow.opacity(0.14),
+                            MixrColors.importCTAGlow.opacity(0.05),
+                            Color.clear,
+                        ],
+                        startPoint: .top,
+                        endPoint: UnitPoint(x: 0.5, y: 0.72)
+                    )
+                )
+            }
+            .overlay {
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.025),
+                            Color.clear,
+                            Color.black.opacity(0.14),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
     }
 }
 
@@ -3942,7 +4042,7 @@ private struct TLEffectsPanel: View {
                         let isFocus = selectedEffect == effect
                         let isAway = isExpanded && !isFocus
                         let restingOpacity: Double =
-                            effect.isAdjustable && !hasTarget ? 0.55 : 1
+                            effect.isAdjustable && !hasTarget ? 0.45 : 1
 
                         // Keep every card in-layout so open/close is a push, not a fade.
                         HStack(spacing: gap) {
@@ -4095,9 +4195,9 @@ private struct TLEffectsPanel: View {
     private var effectsHeader: some View {
         VStack(spacing: 0) {
             Capsule()
-                .fill(MixrColors.textSecondary.opacity(0.30))
+                .fill(MixrColors.interactiveHandle)
                 .frame(width: 36, height: 4)
-                .padding(.top, 4)
+                .padding(.top, 5)
                 .offset(y: 5)
 
             HStack {
@@ -4110,7 +4210,7 @@ private struct TLEffectsPanel: View {
                 if !isCollapsed && !hasTarget {
                     Text("Select a clip to shape its effects")
                         .font(.system(size: EffectCardMetrics.titleFontSize, weight: .semibold))
-                        .foregroundStyle(MixrColors.textSecondary.opacity(0.75))
+                        .foregroundStyle(MixrColors.textSecondary.opacity(0.87))
                         .transition(.opacity)
                 }
             }

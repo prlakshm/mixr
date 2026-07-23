@@ -31,6 +31,11 @@ enum SFXMetrics {
     static let panelCloseClearance: CGFloat = 28
     static let panelCloseTopInset: CGFloat = 4
     static let panelCloseTrailingInset: CGFloat = 6
+    static let pageIndicatorDotSize: CGFloat = 4
+    static let pageIndicatorSpacing: CGFloat = 5
+    static let pageIndicatorBottomInset: CGFloat = 6
+    /// Extra space under the card grid so page dots have breathing room.
+    static let pageIndicatorCardLift: CGFloat = 5
 
     static func cardWidth(forPanelWidth width: CGFloat) -> CGFloat {
         let columns = CGFloat(libraryColumns)
@@ -43,6 +48,7 @@ enum SFXMetrics {
         let cardHeight = cardWidth(forPanelWidth: width) / cardAspectRatio
         return panelCloseClearance
             + panelPadV * 2
+            + pageIndicatorCardLift
             + cardHeight * rows
             + panelCardSpacing * (rows - 1)
     }
@@ -416,6 +422,8 @@ struct SFXLibraryPanel: View {
     var onSelect: (SoundEffectDefinition) -> Void = { _ in }
     var onClose: () -> Void = {}
 
+    @State private var selectedPage: Int? = 0
+
     /// Display order — first page matches the reference set; remaining
     /// effects follow on the next horizontal page.
     private static let displayOrder: [String] = [
@@ -450,7 +458,7 @@ struct SFXLibraryPanel: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 0) {
-                        ForEach(Array(Self.pages.enumerated()), id: \.offset) { _, page in
+                        ForEach(Array(Self.pages.enumerated()), id: \.offset) { index, page in
                             LazyVGrid(
                                 columns: Array(
                                     repeating: GridItem(.fixed(cardWidth), spacing: spacing),
@@ -466,13 +474,15 @@ struct SFXLibraryPanel: View {
                             }
                             .padding(.horizontal, padH)
                             .padding(.top, SFXMetrics.panelCloseClearance + padV)
-                            .padding(.bottom, padV)
+                            .padding(.bottom, padV + SFXMetrics.pageIndicatorCardLift)
                             .frame(width: pageWidth, height: geo.size.height)
+                            .id(index)
                         }
                     }
                     .scrollTargetLayout()
                 }
                 .scrollTargetBehavior(.paging)
+                .scrollPosition(id: $selectedPage)
             }
 
             Button(action: onClose) {
@@ -489,6 +499,25 @@ struct SFXLibraryPanel: View {
             .accessibilityLabel("Close")
             .padding(.top, SFXMetrics.panelCloseTopInset)
             .padding(.trailing, SFXMetrics.panelCloseTrailingInset)
+        }
+        .overlay(alignment: .bottom) {
+            HStack(spacing: SFXMetrics.pageIndicatorSpacing) {
+                ForEach(Self.pages.indices, id: \.self) { page in
+                    Circle()
+                        .fill(
+                            page == (selectedPage ?? 0)
+                                ? MixrColors.textPrimary.opacity(0.86)
+                                : MixrColors.sfxMenuLavender.opacity(0.34)
+                        )
+                        .frame(
+                            width: SFXMetrics.pageIndicatorDotSize,
+                            height: SFXMetrics.pageIndicatorDotSize
+                        )
+                }
+            }
+            .padding(.bottom, SFXMetrics.pageIndicatorBottomInset)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .background { panelGlass }
         .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))

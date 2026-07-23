@@ -69,7 +69,11 @@ enum MixrColors {
 
     static let textPrimary = Color(hex: "FFFFFF")
     static let textSecondary = Color(hex: "9CA3AF")
-    static let textTertiary = Color(hex: "6B7280")
+    static let textTertiary = Color(hex: "7F8694")
+    static let textPlaceholder = textSecondary.opacity(0.79)
+    /// Matches Effects “Select a clip…” optically — solid capsules read
+    /// brighter than text at the same opacity, so this sits slightly darker.
+    static let interactiveHandle = textSecondary.opacity(0.70)
     static let textMuted = Color(hex: "E5E7EB")
 
     static let divider = Color(hex: "2A3142")
@@ -114,6 +118,11 @@ enum MixrColors {
     static let glassRimHighlight = Color.white.opacity(0.10)
     static let glassEdgeCool = Color(hex: "8B9DC2").opacity(0.08)
     static let glassAmbientPurple = Color(hex: "8B5CF6").opacity(0.04)
+
+    // Empty-timeline Import Songs — secondary frosted navy-purple control
+    static let importCTAFill = Color(hex: "1A1830")
+    static let importCTABorder = Color(hex: "7E6DCC")
+    static let importCTAGlow = Color(hex: "B8A8FF")
 }
 
 // MARK: - Waveform Colors

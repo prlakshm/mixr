@@ -359,6 +359,30 @@ check(
         && !sfxOverlaySource.contains(".fill(.ultraThinMaterial)")
 )
 
+check(
+    "SFX menu tracks its two horizontal pages",
+    source.contains("@State private var selectedPage: Int? = 0")
+        && source.contains(".scrollPosition(id: $selectedPage)")
+        && matches(
+            #"ForEach\(Array\(Self\.pages\.enumerated\(\)\), id:\s*\\\.offset\)\s*\{\s*index, page in"#
+        )
+        && source.contains(".id(index)")
+)
+
+check(
+    "SFX menu shows exactly one small dot per available page at the bottom",
+    matches(#"pageIndicatorDotSize\s*:\s*CGFloat\s*=\s*4"#)
+        && matches(#"pageIndicatorSpacing\s*:\s*CGFloat\s*=\s*5"#)
+        && matches(#"pageIndicatorBottomInset\s*:\s*CGFloat\s*=\s*6"#)
+        && source.contains(".overlay(alignment: .bottom)")
+        && matches(
+            #"ForEach\(Self\.pages\.indices, id:\s*\\\.self\)\s*\{\s*page in"#
+        )
+        && matches(
+            #"\.frame\(\s*width:\s*SFXMetrics\.pageIndicatorDotSize,\s*height:\s*SFXMetrics\.pageIndicatorDotSize\s*\)"#
+        )
+)
+
 if failures > 0 {
     exit(1)
 }
