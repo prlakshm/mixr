@@ -384,8 +384,8 @@ struct SFXIconBoxSurface: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color(hex: "272337").opacity(profile.baseTopOpacity),
-                        Color(hex: "161724").opacity(profile.baseBottomOpacity),
+                        profile.baseTopColor.opacity(profile.baseTopOpacity),
+                        profile.baseBottomColor.opacity(profile.baseBottomOpacity),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -439,9 +439,9 @@ struct SFXIconBoxSurface: View {
                     RadialGradient(
                         colors: [
                             Color.clear,
-                            Color(hex: "C78BC4").opacity(profile.radialPrimaryOpacity * 0.35),
+                            profile.radialPrimaryColor.opacity(profile.radialPrimaryOpacity * 0.35),
                             profile.radialSecondaryColor.opacity(profile.radialSecondaryOpacity),
-                            Color(hex: "C78BC4").opacity(profile.radialPrimaryOpacity),
+                            profile.radialPrimaryColor.opacity(profile.radialPrimaryOpacity),
                         ],
                         center: .center,
                         startRadius: bloomEndRadius * 0.18,
