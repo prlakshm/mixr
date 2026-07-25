@@ -369,6 +369,7 @@ struct SFXCard: View {
 }
 
 /// Shared card/chip surface so the SFX track chip cannot drift from the menu icons.
+/// Liquid-glass stack: clear dark pane, edge-weighted color, specular rim.
 struct SFXIconBoxSurface: View {
     let cornerRadius: CGFloat
     let bloomEndRadius: CGFloat
@@ -383,13 +384,45 @@ struct SFXIconBoxSurface: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color(hex: "272337").opacity(0.90),
-                        Color(hex: "161724").opacity(0.96),
+                        Color(hex: "272337").opacity(profile.baseTopOpacity),
+                        Color(hex: "161724").opacity(profile.baseBottomOpacity),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
+            .background {
+                tileShape
+                    .fill(.ultraThinMaterial)
+                    .opacity(profile.materialOpacity)
+                    .environment(\.colorScheme, .dark)
+            }
+            .overlay {
+                tileShape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.07),
+                            Color.white.opacity(0.015),
+                            Color.black.opacity(0.16),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
+            .overlay {
+                tileShape.fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(0.05),
+                            Color.clear,
+                        ],
+                        center: UnitPoint(x: 0.18, y: 0.08),
+                        startRadius: 0,
+                        endRadius: bloomEndRadius * 0.85
+                    )
+                )
+            }
             .overlay {
                 tileShape.fill(
                     profile.luminanceWashColor.opacity(profile.luminanceWashOpacity)
@@ -401,24 +434,60 @@ struct SFXIconBoxSurface: View {
                 )
             }
             .overlay {
+                // Edge-weighted bloom — color at the rim, clear center.
                 tileShape.fill(
                     RadialGradient(
                         colors: [
-                            Color(hex: "C78BC4").opacity(profile.radialPrimaryOpacity),
-                            profile.radialSecondaryColor.opacity(profile.radialSecondaryOpacity),
                             Color.clear,
+                            Color(hex: "C78BC4").opacity(profile.radialPrimaryOpacity * 0.35),
+                            profile.radialSecondaryColor.opacity(profile.radialSecondaryOpacity),
+                            Color(hex: "C78BC4").opacity(profile.radialPrimaryOpacity),
                         ],
                         center: .center,
-                        startRadius: 0,
+                        startRadius: bloomEndRadius * 0.18,
                         endRadius: bloomEndRadius
                     )
                 )
             }
-            .overlay {
-                tileShape.strokeBorder(profile.borderColor, lineWidth: 0.75)
-            }
+            .overlay { glassRim }
             .shadow(color: profile.outerGlowColor, radius: profile.outerGlowRadius)
-            .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
+            .shadow(color: .black.opacity(0.22), radius: 3, x: 0, y: 1.2)
+    }
+
+    private var glassRim: some View {
+        let rim = profile.rimStrength
+        return ZStack {
+            tileShape.strokeBorder(Color.white.opacity(0.08 * rim), lineWidth: 0.55)
+
+            tileShape.strokeBorder(profile.borderColor, lineWidth: 0.75)
+
+            // Top-leading specular lip
+            tileShape
+                .strokeBorder(Color.white.opacity(0.42 * rim), lineWidth: 0.65)
+                .mask {
+                    LinearGradient(
+                        colors: [
+                            Color.white,
+                            Color.white.opacity(0.45),
+                            Color.clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: UnitPoint(x: 0.62, y: 0.55)
+                    )
+                }
+
+            // Bottom-trailing dark rim catch
+            tileShape
+                .strokeBorder(Color.black.opacity(0.30 * rim), lineWidth: 0.55)
+                .mask {
+                    LinearGradient(
+                        colors: [Color.clear, Color.black.opacity(0.9)],
+                        startPoint: UnitPoint(x: 0.35, y: 0.35),
+                        endPoint: .bottomTrailing
+                    )
+                }
+        }
+        .allowsHitTesting(false)
     }
 }
 
