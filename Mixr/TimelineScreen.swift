@@ -340,6 +340,16 @@ struct TimelineScreen: View {
     // Selected clip — shared by the timeline, effects panel, and Auto.
     @State private var selectedClipID: UUID?
 
+    /// Window chrome the editor keeps clear of — notch, home indicator, status
+    /// bar, Mac title bar. Reported by the window, not the SwiftUI safe area.
+    @State private var windowSafeArea: EditorSafeArea = .currentWindow
+    /// Drives the status-bar rule, which lives outside the geometry reader.
+    @State private var containerHeight: CGFloat = 0
+
+    private var prefersStatusBarHidden: Bool {
+        EditorLayoutMetrics.prefersStatusBarHidden(containerHeight: containerHeight)
+    }
+
     // Floating panel / dialog state
     @State private var showSFXPanel = false
     @State private var showAutoDialog = false
@@ -376,8 +386,10 @@ struct TimelineScreen: View {
 
     var body: some View {
         GeometryReader { geo in
+            let safeArea = windowSafeArea.resolved
+            let contentSize = safeArea.contentSize(in: geo.size)
             let layout = EditorLayoutMetrics(
-                containerSize: geo.size,
+                containerSize: contentSize,
                 effectsState: EditorEffectsState(isCollapsed: isEffectsCollapsed)
             )
 
@@ -389,6 +401,9 @@ struct TimelineScreen: View {
                         playback: playback,
                         library: library,
                         layoutMode: layout.mode,
+                        density: layout.density,
+                        transportPlacement: layout.transport,
+                        chromeBleed: safeArea,
                         displayTimeSeconds: displayTimeSeconds,
                         isProjectMenuOpen: showProjectMenu,
                         isExporting: $isExporting,
@@ -486,6 +501,10 @@ struct TimelineScreen: View {
                         isCollapsed: $isEffectsCollapsed,
                         tracks: $library.tracks,
                         selectedClipID: selectedClipID,
+                        cardWidth: layout.effectCardWidth,
+                        cardHeight: layout.effectCardHeight,
+                        contentScale: layout.contentScale,
+                        chromeBleed: safeArea,
                         playheadUnit: effectivePlayheadUnit,
                         onEditBegin: { name, scope in
                             library.beginGestureEdit(name, scope: scope)
@@ -502,54 +521,36 @@ struct TimelineScreen: View {
                     .zIndex(0)
                 }
                 .animation(.spring(response: 0.34, dampingFraction: 0.86), value: isEffectsCollapsed)
-                .frame(width: geo.size.width, height: geo.size.height)
+                .frame(width: contentSize.width, height: contentSize.height)
                 .clipped()
+                .overlay {
+                    PartyModeMainChromeOverlay(
+                        screenSize: contentSize,
+                        transportHeight: layout.transportHeight,
+                        effectsHeight: layout.effectsHeight
+                    )
+                }
+                .overlay(alignment: .topLeading) {
+                    projectMenuOverlay(layout: layout, safeArea: safeArea)
+                }
+                // Content lives inside the notch / home indicator / title bar
+                // bands; only the background and the fades reach the edges.
+                .padding(safeArea.edgeInsets)
 
-                PartyModeMainChromeOverlay(
-                    screenSize: geo.size,
+                EditorEdgeFade(
+                    safeArea: safeArea,
+                    transportHeight: layout.transportHeight,
                     effectsHeight: layout.effectsHeight
                 )
-
-                if showProjectMenu {
-                    let menuX = max(
-                        8,
-                        (projectTitleFrame.minX > 0 ? projectTitleFrame.minX : 96)
-                            - ProjectDropdownMenu.horizontalPadding
-                    )
-
-                    ZStack(alignment: .topLeading) {
-                        Color.black.opacity(0.28)
-                            .ignoresSafeArea()
-                            .onTapGesture { dismissProjectMenu() }
-
-                        ProjectDropdownMenu(
-                            projects: library.projects,
-                            currentProjectID: library.currentProjectSummaryID,
-                            currentName: library.projectName,
-                            onSelectProject: { id in
-                                selectedClipID = nil
-                                library.switchProject(to: id)
-                            },
-                            onCreateProject: {
-                                selectedClipID = nil
-                                library.createProject()
-                            },
-                            onDeleteProject: {
-                                dismissProjectMenu()
-                                showDeleteProjectConfirm = true
-                            },
-                            onDismiss: { dismissProjectMenu() }
-                        )
-                        .offset(x: menuX, y: layout.transportHeight - 4)
-                    }
-                    .zIndex(95)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
-                }
+                .ignoresSafeArea()
 
                 floatingOverlays
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .coordinateSpace(name: "timelineScreen")
+            .onChange(of: geo.size.height, initial: true) { _, height in
+                containerHeight = height
+            }
             .onPreferenceChange(ProjectTitleFrameKey.self) {
                 projectTitleFrame = $0
             }
@@ -593,7 +594,10 @@ struct TimelineScreen: View {
             }
         }
         .ignoresSafeArea()
-        .statusBarHidden(true)
+        .onWindowSafeAreaChange { windowSafeArea = $0 }
+        // A phone in landscape keeps its edge-to-edge bar; anywhere the editor
+        // is tall enough, the clock stays visible above the toolbar.
+        .statusBarHidden(prefersStatusBarHidden)
         .preferredColorScheme(.dark)
         .task {
             library.attachPersistence(context: modelContext)
@@ -641,6 +645,53 @@ struct TimelineScreen: View {
         ) { result in
             guard case .success(let urls) = result else { return }
             library.addTracks(from: urls)
+        }
+    }
+
+    // MARK: - Project menu
+
+    /// Anchored under the nav title. Laid out inside the editor content, so its
+    /// offsets stay in content space no matter how deep the safe-area bands are.
+    @ViewBuilder
+    private func projectMenuOverlay(
+        layout: EditorLayoutMetrics,
+        safeArea: EditorSafeArea
+    ) -> some View {
+        if showProjectMenu {
+            let menuX = max(
+                8,
+                (projectTitleFrame.minX > 0 ? projectTitleFrame.minX : 96)
+                    - safeArea.leading
+                    - ProjectDropdownMenu.horizontalPadding
+            )
+
+            ZStack(alignment: .topLeading) {
+                Color.black.opacity(0.28)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissProjectMenu() }
+
+                ProjectDropdownMenu(
+                    projects: library.projects,
+                    currentProjectID: library.currentProjectSummaryID,
+                    currentName: library.projectName,
+                    onSelectProject: { id in
+                        selectedClipID = nil
+                        library.switchProject(to: id)
+                    },
+                    onCreateProject: {
+                        selectedClipID = nil
+                        library.createProject()
+                    },
+                    onDeleteProject: {
+                        dismissProjectMenu()
+                        showDeleteProjectConfirm = true
+                    },
+                    onDismiss: { dismissProjectMenu() }
+                )
+                .offset(x: menuX, y: layout.transportHeight - 4)
+            }
+            .zIndex(95)
+            .transition(.opacity.combined(with: .scale(scale: 0.94)))
         }
     }
 
@@ -774,33 +825,66 @@ private struct TLRotateOverlay: View {
 private struct ProjectTitleFrameKey: PreferenceKey {
     static var defaultValue: CGRect = .zero
 
+    /// Only the title column reports a real frame; every other view in the
+    /// subtree contributes the empty default, which must not overwrite it.
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
+        let next = nextValue()
+        guard next != .zero else { return }
+        value = next
     }
 }
 
-private enum TLProjectTitleMetrics {
+/// Nav-title geometry. Every number is the phone baseline multiplied by the
+/// toolbar scale, so a tablet or desktop bar keeps the same proportions — and
+/// the same chevron rhythm — at a larger size.
+private struct TLProjectTitleMetrics {
+    /// 1.0 on a phone; roomier screens pass the toolbar scale.
+    var scale: CGFloat = 1
+
+    static let standard = TLProjectTitleMetrics()
+
     /// Cap for the title column — idle truncates here, rename scrolls here, and
     /// the chevron never travels past it. Short names hug their text instead.
     /// Sized so "My Remix 12" (79.2pt at 13pt semibold) still fits whole.
-    static let maxTitleWidth: CGFloat = 80
+    static let baseMaxTitleWidth: CGFloat = 80
     /// Floor so a near-empty name still has a caret and a tap target.
-    static let minTitleWidth: CGFloat = 22
-    static let fieldHeight: CGFloat = 18
-    static let chevronSlotWidth: CGFloat = 12
+    static let baseMinTitleWidth: CGFloat = 22
+    static let baseFieldHeight: CGFloat = 18
+    static let baseChevronSlotWidth: CGFloat = 12
     /// Tight so the chevron tucks right up against short names.
-    static let titleToChevronSpacing: CGFloat = 4.25
+    static let baseTitleToChevronSpacing: CGFloat = 4.25
     /// Breathing room for the end-of-text caret while renaming.
-    static let caretSlack: CGFloat = 2
-    static var font: UIFont {
+    static let baseCaretSlack: CGFloat = 2
+    static let baseFontSize: CGFloat = 13
+    static let baseChevronFontSize: CGFloat = 9
+
+    var maxTitleWidth: CGFloat { Self.baseMaxTitleWidth * scale }
+    var minTitleWidth: CGFloat { Self.baseMinTitleWidth * scale }
+    var fieldHeight: CGFloat { (Self.baseFieldHeight * scale).rounded() }
+    var chevronSlotWidth: CGFloat { Self.baseChevronSlotWidth * scale }
+    var titleToChevronSpacing: CGFloat { Self.baseTitleToChevronSpacing * scale }
+    var caretSlack: CGFloat { Self.baseCaretSlack * scale }
+    var chevronFontSize: CGFloat { Self.baseChevronFontSize * scale }
+
+    var font: UIFont {
         UIFontMetrics(forTextStyle: .subheadline).scaledFont(
-            for: .systemFont(ofSize: 13, weight: .semibold),
-            maximumPointSize: 15.5
+            for: .systemFont(ofSize: Self.baseFontSize * scale, weight: .semibold),
+            maximumPointSize: 15.5 * scale
         )
     }
+
+    /// The label renders with the same font the column is measured against —
+    /// `UIFontMetrics` rounds point sizes, and a fraction of a point of
+    /// disagreement truncates a whole glyph.
+    var labelFont: Font { Font(font as CTFont) }
+
+    /// Sub-point layout slack so a name that measures exactly to the column
+    /// never loses its last glyph to an ellipsis.
+    static let measurementEpsilon: CGFloat = 0.5
+
     /// Full title control width so undo/redo stay parked after this slot,
     /// whatever the name measures — unchanged from the fixed-column layout.
-    static var controlWidth: CGFloat {
+    var controlWidth: CGFloat {
         maxTitleWidth + titleToChevronSpacing + chevronSlotWidth
     }
 
@@ -808,15 +892,15 @@ private enum TLProjectTitleMetrics {
     private static let legacySlotWidth: CGFloat = 92
     /// Wider names claim room from the gap after the control, so undo/redo stay
     /// parked and the chevron-to-undo air matches the fixed-column layout.
-    static var trailingSpacingReduction: CGFloat {
-        max(0, controlWidth - legacySlotWidth)
+    var trailingSpacingReduction: CGFloat {
+        max(0, controlWidth - Self.legacySlotWidth * scale)
     }
 
     /// Rendered width of `name`, clamped into the column's min/max.
-    static func titleWidth(for name: String, extraSlack: CGFloat = 0) -> CGFloat {
-        let measured = (name as NSString)
+    func titleWidth(for name: String, extraSlack: CGFloat = 0) -> CGFloat {
+        let measured = ((name as NSString)
             .size(withAttributes: [.font: font])
-            .width
+            .width + Self.measurementEpsilon)
             .rounded(.up)
         return min(max(measured + extraSlack, minTitleWidth), maxTitleWidth)
     }
@@ -829,6 +913,16 @@ private struct TLTransportBar: View {
     @ObservedObject var playback: MixrPlaybackEngine
     @ObservedObject var library: TrackLibrary
     let layoutMode: EditorLayoutMode
+    var density: EditorLayoutDensity = .roomy
+    /// Where the centre cluster sits — solved once by the layout model so the
+    /// play button owns the middle of the bar without ever colliding with the
+    /// title, undo/redo, or Export.
+    var transportPlacement: EditorTransportLayout = EditorTransportLayout(
+        contentWidth: 932,
+        density: .roomy
+    )
+    /// Full-bleed background allowance for the safe-area bands behind the bar.
+    var chromeBleed: EditorSafeArea = .zero
     var displayTimeSeconds: Double = 0
     var isProjectMenuOpen: Bool = false
     @Binding var isExporting: Bool
@@ -850,7 +944,7 @@ private struct TLTransportBar: View {
                     homeGroup
                     exportButton
                     transportControls
-                        .offset(x: 63)
+                        .offset(x: transportPlacement.centreOffset)
                 }
             case .compact:
                 VStack(spacing: 0) {
@@ -866,7 +960,19 @@ private struct TLTransportBar: View {
                 }
             }
         }
-        .background(MixrColors.backgroundSecondary)
+        // Reaches under the notch / title-bar bands so the toolbar surface
+        // fades out at the edges instead of stopping in a hard line.
+        .background {
+            MixrColors.backgroundSecondary
+                .padding(
+                    EdgeInsets(
+                        top: -chromeBleed.top,
+                        leading: -chromeBleed.leading,
+                        bottom: 0,
+                        trailing: -chromeBleed.trailing
+                    )
+                )
+        }
         .overlay(alignment: .bottom) {
             MixrColors.divider.frame(height: 0.5)
         }
@@ -887,18 +993,18 @@ private struct TLTransportBar: View {
     }
 
     private var homeGroup: some View {
-        HStack(spacing: layoutMode == .regular ? 24 : 10) {
+        HStack(spacing: layoutMode == .regular ? density.toolbarLogoGap : 10) {
             Button {
                 appearanceState.togglePartyMode()
             } label: {
-                HStack(spacing: 7) {
+                HStack(spacing: 7 * toolbarScale) {
                     Image(systemName: "waveform")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 16 * toolbarScale, weight: .bold))
                         .foregroundStyle(MixrColors.primaryPurple)
                         .partyModeIconGlow()
                     Text("Mixr")
                         .mixrScaledFont(
-                            size: 20,
+                            size: 20 * toolbarScale,
                             weight: .bold,
                             relativeTo: .title2
                         )
@@ -912,62 +1018,75 @@ private struct TLTransportBar: View {
             .accessibilityValue(appearanceState.isPartyModeEnabled ? "On" : "Off")
 
             HStack(
-                spacing: (layoutMode == .regular ? 18 : 8)
-                    - TLProjectTitleMetrics.trailingSpacingReduction
+                spacing: (layoutMode == .regular ? density.toolbarTitleGap : 8)
+                    - titleMetrics.trailingSpacingReduction
             ) {
                 projectTitleControl
 
                 HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
-                    TLToolbarHistoryCustomButton(isEnabled: library.canUndo) {
+                    TLToolbarHistoryCustomButton(
+                        isEnabled: library.canUndo,
+                        scale: toolbarScale
+                    ) {
                         library.undo()
                     } icon: {
                         MixrHistoryArrow(
                             direction: .undo,
-                            width: TLToolbarHistoryMetrics.glyphWidth,
-                            height: TLToolbarHistoryMetrics.glyphHeight
+                            width: TLToolbarHistoryMetrics.glyphWidth * toolbarScale,
+                            height: TLToolbarHistoryMetrics.glyphHeight * toolbarScale
                         )
                     }
                     .accessibilityLabel("Undo")
 
-                    TLToolbarHistoryCustomButton(isEnabled: library.canRedo) {
+                    TLToolbarHistoryCustomButton(
+                        isEnabled: library.canRedo,
+                        scale: toolbarScale
+                    ) {
                         library.redo()
                     } icon: {
                         MixrHistoryArrow(
                             direction: .redo,
-                            width: TLToolbarHistoryMetrics.glyphWidth,
-                            height: TLToolbarHistoryMetrics.glyphHeight
+                            width: TLToolbarHistoryMetrics.glyphWidth * toolbarScale,
+                            height: TLToolbarHistoryMetrics.glyphHeight * toolbarScale
                         )
                     }
                     .accessibilityLabel("Redo")
                 }
-                .frame(height: TLToolbarHistoryMetrics.hitHeight)
+                .frame(height: TLToolbarHistoryMetrics.hitHeight * toolbarScale)
                 .offset(y: -0.8)
             }
         }
-        .padding(.leading, layoutMode == .regular ? 14 : 8)
+        .padding(.leading, layoutMode == .regular ? density.toolbarEdgePadding : 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var exportButton: some View {
         Button("Export", systemImage: "square.and.arrow.up", action: startExport)
-            .frame(minWidth: layoutMode == .regular ? 74 : 66)
-            .buttonStyle(MixrSecondaryGlassButtonStyle(partyRole: .export))
+            .frame(minWidth: (layoutMode == .regular ? 74 : 66) * toolbarScale)
+            .buttonStyle(
+                MixrSecondaryGlassButtonStyle(partyRole: .export, scale: toolbarScale)
+            )
             .fixedSize(horizontal: true, vertical: false)
             .disabled(isExporting)
-            .padding(.trailing, layoutMode == .regular ? 14 : 8)
+            .padding(.trailing, layoutMode == .regular ? density.toolbarEdgePadding : 8)
             .frame(maxWidth: layoutMode == .regular ? .infinity : nil, alignment: .trailing)
     }
 
     private var transportControls: some View {
-        HStack(alignment: .center, spacing: layoutMode == .regular ? 12 : 9) {
-            HStack(alignment: .center, spacing: layoutMode == .regular ? 12 : 9) {
+        HStack(alignment: .center, spacing: transportSpacing) {
+            HStack(alignment: .center, spacing: transportSpacing) {
                 Button("Skip to Start", systemImage: "backward.end.fill") {
                     playback.skipToStart()
                 }
+                // Plain everywhere — Mac Catalyst otherwise draws its own
+                // bordered pill behind each glyph.
+                .buttonStyle(.plain)
                 .labelStyle(.iconOnly)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14 * toolbarScale, weight: .medium))
                 .foregroundStyle(MixrColors.textSecondary)
                 .frame(minWidth: 44, minHeight: 44)
+                .frame(width: transportControlSize, height: transportControlSize)
+                .contentShape(Rectangle())
 
                 Button(
                     playback.isPlaying ? "Pause" : "Play",
@@ -975,10 +1094,13 @@ private struct TLTransportBar: View {
                 ) {
                     playback.togglePlayPause()
                 }
+                .buttonStyle(.plain)
                 .labelStyle(.iconOnly)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 14 * toolbarScale, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
+                .frame(width: transportControlSize, height: transportControlSize)
+                .contentShape(Circle())
                 .background { PartyModePlayButtonSurface() }
                 .shadow(color: MixrColors.primaryPurple.opacity(0.50), radius: 10)
                 .partyModePlayButton()
@@ -986,53 +1108,64 @@ private struct TLTransportBar: View {
                 Button("Skip to End", systemImage: "forward.end.fill") {
                     playback.skipToEnd()
                 }
+                .buttonStyle(.plain)
                 .labelStyle(.iconOnly)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14 * toolbarScale, weight: .medium))
                 .foregroundStyle(MixrColors.textSecondary)
                 .frame(minWidth: 44, minHeight: 44)
+                .frame(width: transportControlSize, height: transportControlSize)
+                .contentShape(Rectangle())
             }
 
             HStack(spacing: 3) {
                 Text(MixrTimeline.formattedTime(displayTimeSeconds))
                     .mixrScaledFont(
-                        size: 13,
+                        size: 13 * toolbarScale,
                         weight: .semibold,
                         design: .monospaced
                     )
                     .foregroundStyle(MixrColors.textPrimary)
                 Text("/")
-                    .mixrScaledFont(size: 11)
+                    .mixrScaledFont(size: 11 * toolbarScale)
                     .foregroundStyle(MixrColors.textSecondary)
                 Text(MixrTimeline.formattedTime(playback.totalDurationSeconds))
-                    .mixrScaledFont(size: 13, design: .monospaced)
+                    .mixrScaledFont(size: 13 * toolbarScale, design: .monospaced)
                     .foregroundStyle(MixrColors.textSecondary)
             }
-            .frame(height: 40, alignment: .center)
+            .frame(height: 40 * toolbarScale, alignment: .center)
 
-            HStack(alignment: .center, spacing: layoutMode == .regular ? 10 : 7) {
+            HStack(
+                alignment: .center,
+                spacing: layoutMode == .regular
+                    ? EditorTransportMetrics.readoutGap
+                    : 7
+            ) {
                 VStack(spacing: 0) {
                     Text(library.projectBPMDisplay)
                         .mixrScaledFont(
-                            size: 14,
+                            size: 14 * toolbarScale,
                             weight: .bold,
                             relativeTo: .headline
                         )
                         .foregroundStyle(MixrColors.textPrimary)
                     Text("BPM")
                         .mixrScaledFont(
-                            size: 8,
+                            size: 8 * toolbarScale,
                             weight: .semibold,
                             relativeTo: .caption2
                         )
                         .foregroundStyle(MixrColors.textSecondary)
                         .kerning(0.5)
                 }
-                .frame(width: 30, height: 40)
+                .frame(
+                    width: EditorTransportMetrics.bpmWidth * toolbarScale,
+                    height: 40 * toolbarScale
+                )
 
                 VStack(spacing: 0) {
                     Text(library.displayKey)
                         .mixrScaledFont(
-                            size: 14,
+                            size: 14 * toolbarScale,
                             weight: .bold,
                             relativeTo: .headline
                         )
@@ -1041,28 +1174,53 @@ private struct TLTransportBar: View {
                         .minimumScaleFactor(0.65)
                     Text("KEY")
                         .mixrScaledFont(
-                            size: 8,
+                            size: 8 * toolbarScale,
                             weight: .semibold,
                             relativeTo: .caption2
                         )
                         .foregroundStyle(MixrColors.textSecondary)
                         .kerning(0.5)
                 }
-                .frame(width: 56, height: 40)
+                .frame(
+                    width: density.readoutKeyWidth * toolbarScale,
+                    height: 40 * toolbarScale
+                )
             }
         }
+        .frame(width: layoutMode == .regular ? transportPlacement.clusterWidth : nil)
+    }
+
+    /// One-row bars tighten with density; the two-row bar keeps its own rhythm.
+    private var transportSpacing: CGFloat {
+        layoutMode == .regular ? density.transportSpacing : 9
+    }
+
+    /// Chrome scale for this bar — the phone baseline is 1.0.
+    private var toolbarScale: CGFloat {
+        layoutMode == .regular ? transportPlacement.scale : 1
+    }
+
+    /// Transport hit target: 44pt on a phone, proportionally larger elsewhere.
+    private var transportControlSize: CGFloat {
+        max(44, (EditorTransportMetrics.transportButtonWidth * toolbarScale).rounded())
     }
 
     // MARK: - Project title
 
+    /// Nav-title geometry at this bar's scale.
+    private var titleMetrics: TLProjectTitleMetrics {
+        TLProjectTitleMetrics(scale: toolbarScale)
+    }
+
     @ViewBuilder
     private var projectTitleControl: some View {
-        HStack(spacing: TLProjectTitleMetrics.titleToChevronSpacing) {
+        HStack(spacing: titleMetrics.titleToChevronSpacing) {
             Group {
                 if isRenamingProject {
                     TLProjectNameField(
                         text: $renameText,
                         isFocused: $renameFieldFocused,
+                        font: titleMetrics.font,
                         initialCaretX: renameCaretX,
                         onSubmit: commitProjectRename
                     )
@@ -1071,7 +1229,7 @@ private struct TLTransportBar: View {
                     }
                 } else {
                     Text(library.projectName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(titleMetrics.labelFont)
                         .foregroundStyle(MixrColors.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -1079,7 +1237,7 @@ private struct TLTransportBar: View {
             }
             .frame(
                 width: titleColumnWidth,
-                height: TLProjectTitleMetrics.fieldHeight,
+                height: titleMetrics.fieldHeight,
                 alignment: .leading
             )
             .clipped()
@@ -1093,16 +1251,16 @@ private struct TLTransportBar: View {
             }
 
             Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: titleMetrics.chevronFontSize, weight: .medium))
                 .foregroundStyle(MixrColors.textSecondary)
                 .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
                 .frame(
-                    width: TLProjectTitleMetrics.chevronSlotWidth,
-                    height: TLProjectTitleMetrics.fieldHeight
+                    width: titleMetrics.chevronSlotWidth,
+                    height: titleMetrics.fieldHeight
                 )
                 .allowsHitTesting(!isRenamingProject)
         }
-        .frame(height: TLProjectTitleMetrics.fieldHeight)
+        .frame(height: titleMetrics.fieldHeight)
         .fixedSize(horizontal: true, vertical: true)
         .contentShape(Rectangle())
         .modifier(
@@ -1125,17 +1283,18 @@ private struct TLTransportBar: View {
         )
         // Fixed footprint so undo/redo stay parked while the title hugs its text.
         .frame(
-            width: TLProjectTitleMetrics.controlWidth,
-            height: TLProjectTitleMetrics.fieldHeight,
+            width: titleMetrics.controlWidth,
+            height: titleMetrics.fieldHeight,
             alignment: .leading
         )
     }
 
     /// Hugs the current name, capped at the column max.
     private var titleColumnWidth: CGFloat {
-        TLProjectTitleMetrics.titleWidth(
+        let metrics = titleMetrics
+        return metrics.titleWidth(
             for: isRenamingProject ? renameText : library.projectName,
-            extraSlack: isRenamingProject ? TLProjectTitleMetrics.caretSlack : 0
+            extraSlack: isRenamingProject ? metrics.caretSlack : 0
         )
     }
 
@@ -1257,6 +1416,8 @@ private final class TLProjectNameTextField: UITextField {
 private struct TLProjectNameField: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
+    /// Matches the idle label at this bar's scale.
+    var font: UIFont = TLProjectTitleMetrics.standard.font
     /// Local X in the title slot where the long-press began; nil → caret at end.
     var initialCaretX: CGFloat? = nil
     var onSubmit: () -> Void
@@ -1279,7 +1440,7 @@ private struct TLProjectNameField: UIViewRepresentable {
         field.spellCheckingType = .no
         field.textContentType = nil
         field.clearButtonMode = .never
-        field.font = TLProjectTitleMetrics.font
+        field.font = font
         field.adjustsFontForContentSizeCategory = true
         field.textColor = .white
         // Match TLSpeedValueField caret tint.
@@ -1290,7 +1451,7 @@ private struct TLProjectNameField: UIViewRepresentable {
             string: "Project name",
             attributes: [
                 .foregroundColor: UIColor(MixrColors.textPlaceholder),
-                .font: TLProjectTitleMetrics.font,
+                .font: font,
             ]
         )
         if #available(iOS 17.0, *) {
@@ -1309,7 +1470,7 @@ private struct TLProjectNameField: UIViewRepresentable {
         if field.text != text {
             field.text = text
         }
-        field.font = TLProjectTitleMetrics.font
+        field.font = font
         field.textColor = .white
         field.tintColor = UIColor(white: 0.62, alpha: 1)
 
@@ -1554,15 +1715,19 @@ struct TLToolbarHistoryButton: View {
 /// Same chrome as `TLToolbarHistoryButton`, for custom mock / preview icons.
 struct TLToolbarHistoryCustomButton<Icon: View>: View {
     let isEnabled: Bool
+    /// Toolbar scale — 1.0 on a phone, larger on tablets and desktop windows.
+    var scale: CGFloat = 1
     let action: () -> Void
     private let icon: () -> Icon
 
     init(
         isEnabled: Bool,
+        scale: CGFloat = 1,
         action: @escaping () -> Void = {},
         @ViewBuilder icon: @escaping () -> Icon
     ) {
         self.isEnabled = isEnabled
+        self.scale = scale
         self.action = action
         self.icon = icon
     }
@@ -1571,8 +1736,8 @@ struct TLToolbarHistoryCustomButton<Icon: View>: View {
         Button(action: action) {
             icon()
                 .frame(
-                    width: TLToolbarHistoryMetrics.hitWidth,
-                    height: TLToolbarHistoryMetrics.hitHeight
+                    width: TLToolbarHistoryMetrics.hitWidth * scale,
+                    height: TLToolbarHistoryMetrics.hitHeight * scale
                 )
                 .contentShape(Rectangle())
         }
@@ -4295,6 +4460,12 @@ private struct TLEffectsPanel: View {
     @Binding var isCollapsed: Bool
     @Binding var tracks: [MixrTrack]
     let selectedClipID: UUID?
+    /// Card size and panel rhythm both come from the layout model, so a tablet
+    /// or desktop window gets a panel proportional to its screen.
+    var cardWidth: CGFloat = TLK.compactEffectCardWidth
+    var cardHeight: CGFloat = TLK.compactEffectCardHeight
+    var contentScale: CGFloat = 1
+    var chromeBleed: EditorSafeArea = .zero
     let playheadUnit: CGFloat
     var onEditBegin: (String, TimelineEditScope) -> Void = { _, _ in }
     var onEditCommit: () -> Void = {}
@@ -4371,6 +4542,16 @@ private struct TLEffectsPanel: View {
                     .padding(.bottom, -3)
             }
             .clipped()
+            // Reach under the home-indicator band so the panel surface fades
+            // out at the edge rather than stopping in a hard line.
+            .padding(
+                EdgeInsets(
+                    top: 0,
+                    leading: -chromeBleed.leading,
+                    bottom: -chromeBleed.bottom,
+                    trailing: -chromeBleed.trailing
+                )
+            )
         }
         .overlay(alignment: .top) {
             MixrColors.backgroundSecondary.frame(height: 1)
@@ -4390,11 +4571,11 @@ private struct TLEffectsPanel: View {
     private var effectsContent: some View {
         GeometryReader { geo in
             // Match effectsHeader title inset so the focused card lines up with "Effects".
-            let leadingPad: CGFloat = 16
-            let trailingPad: CGFloat = 16
-            let gap: CGFloat = 8
+            let leadingPad: CGFloat = horizontalInset
+            let trailingPad: CGFloat = horizontalInset
+            let gap: CGFloat = (8 * contentScale).rounded()
             let contentWidth = max(0, geo.size.width - leadingPad - trailingPad)
-            let cardWidth = TLK.compactEffectCardWidth
+            let cardWidth = self.cardWidth
             let trayWidth = max(0, contentWidth - cardWidth - gap)
             let isExpanded = selectedEffect?.isAdjustable == true && targetClipPath != nil
             let focusIndex = selectedEffect.flatMap { MixrEffect.allCases.firstIndex(of: $0) } ?? 0
@@ -4420,7 +4601,9 @@ private struct TLEffectsPanel: View {
                             } label: {
                                 TLCompactEffectCard(
                                     effect: effect,
-                                    isSelected: isFocus
+                                    isSelected: isFocus,
+                                    width: cardWidth,
+                                    height: cardHeight
                                 )
                                 .frame(width: cardWidth, alignment: .leading)
                             }
@@ -4448,8 +4631,8 @@ private struct TLEffectsPanel: View {
                 }
                 .padding(.leading, leadingPad)
                 .padding(.trailing, isExpanded ? trailingPad : 32)
-                .padding(.top, 6)
-                .padding(.bottom, 10)
+                .padding(.top, (6 * contentScale).rounded())
+                .padding(.bottom, (10 * contentScale).rounded())
                 .offset(x: rowOffset)
                 .animation(expandAnimation, value: selectedEffect)
             }
@@ -4478,8 +4661,12 @@ private struct TLEffectsPanel: View {
             }
             .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: TLK.compactEffectCardHeight + 22)
+        .frame(maxWidth: .infinity, maxHeight: cardHeight + (22 * contentScale).rounded())
     }
+
+    /// Header inset and card row share one gutter so the focused card lands
+    /// flush under "Effects" at every scale.
+    private var horizontalInset: CGFloat { (16 * contentScale).rounded() }
 
     @ViewBuilder
     private func traySlot(
@@ -4532,6 +4719,7 @@ private struct TLEffectsPanel: View {
             reverbPreset: clip.effects.reverbPreset,
             echoPreset: clip.effects.echoPreset,
             pitchDirection: clip.effects.pitchDirection,
+            height: cardHeight,
             onLevelChanged: { value in
                 tracks[path.trackIdx].clips[path.clipIdx].effects
                     .setLevel(value, for: effect.rawValue)
@@ -4575,14 +4763,14 @@ private struct TLEffectsPanel: View {
             VStack(spacing: 0) {
                 Capsule()
                     .fill(MixrColors.interactiveHandle)
-                    .frame(width: 36, height: 4)
+                    .frame(width: (36 * contentScale).rounded(), height: 4)
                     .padding(.top, 5)
                     .offset(y: 5)
 
                 HStack {
                     Text("Effects")
                         .mixrScaledFont(
-                            size: 13,
+                            size: 13 * contentScale,
                             weight: .semibold,
                             relativeTo: .headline
                         )
@@ -4593,7 +4781,7 @@ private struct TLEffectsPanel: View {
                     if !isCollapsed && !hasTarget {
                         Text("Select a clip to shape its effects")
                             .mixrScaledFont(
-                                size: EffectCardMetrics.titleFontSize,
+                                size: EffectCardMetrics.titleFontSize * contentScale,
                                 weight: .semibold,
                                 relativeTo: .subheadline
                             )
@@ -4601,7 +4789,7 @@ private struct TLEffectsPanel: View {
                             .transition(.opacity)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, horizontalInset)
                 .padding(.top, 3)
                 .padding(.bottom, isCollapsed ? 6 : 0)
             }
@@ -4630,15 +4818,20 @@ private struct TLEffectsPanel: View {
 private struct TLCompactEffectCard: View {
     let effect: MixrEffect
     var isSelected: Bool
+    /// Target size on this screen — the card's art direction is tuned at the
+    /// phone baseline and scaled as a whole so every glow and inset keeps its
+    /// proportions.
+    var width: CGFloat = TLK.compactEffectCardWidth
+    var height: CGFloat = TLK.compactEffectCardHeight
+
+    private var scale: CGFloat {
+        TLK.compactEffectScale * (width / EditorLayoutMetrics.baseEffectCardWidth)
+    }
 
     var body: some View {
         EffectCard(effect: effect, isSelected: isSelected)
-            .scaleEffect(TLK.compactEffectScale, anchor: .topLeading)
-            .frame(
-                width: TLK.compactEffectCardWidth,
-                height: TLK.compactEffectCardHeight,
-                alignment: .topLeading
-            )
+            .scaleEffect(scale, anchor: .topLeading)
+            .frame(width: width, height: height, alignment: .topLeading)
     }
 }
 

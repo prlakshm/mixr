@@ -29,16 +29,44 @@ checkClose("Approved phone gives remaining width to the timeline", approvedPhone
 checkClose("Expanded Effects uses the approved height", approvedPhone.effectsHeight, 118)
 checkClose("Regular transport uses the approved height", approvedPhone.transportHeight, 50)
 
+checkClose("Approved phone keeps the phone-baseline toolbar", approvedPhone.transport.scale, 1)
+checkClose("Approved phone keeps the phone-baseline card", approvedPhone.effectCardWidth, 152)
+check("Approved phone leaves the transport uncramped", !approvedPhone.transport.isCramped)
+
 let largeTablet = EditorLayoutMetrics(
     containerSize: CGSize(width: 1366, height: 1024),
     effectsState: .expanded
 )
-checkClose("Tracks stops growing at its ideal width", largeTablet.tracksWidth, 208)
-checkClose("Controls stops growing at its ideal width", largeTablet.controlsWidth, 130)
+checkClose("Tracks grows to its maximum on a tablet", largeTablet.tracksWidth, 224)
+checkClose("Controls grows to its maximum on a tablet", largeTablet.controlsWidth, 144)
 check(
     "Additional tablet width goes to the timeline",
     largeTablet.timelineWidth > approvedPhone.timelineWidth
 )
+check("Tablets take the large toolbar density", largeTablet.density == .large)
+checkClose(
+    "Tablet effects reach the content-scale ceiling",
+    largeTablet.contentScale,
+    EditorLayoutMetrics.contentScaleCeiling
+)
+check(
+    "Tablet effect cards are ~145% of the phone card",
+    largeTablet.effectCardWidth == 220 && largeTablet.effectCardHeight == 96
+)
+check(
+    "Tablet effects panel grows with its cards",
+    largeTablet.effectsHeight > approvedPhone.effectsHeight * 1.3
+)
+check(
+    "Effects never take more than the panel share ceiling",
+    largeTablet.effectsHeight
+        <= largeTablet.containerSize.height * EditorLayoutMetrics.effectsHeightShareCeiling
+)
+check(
+    "Tablet toolbar grows, but slower than the effects panel",
+    largeTablet.transport.scale > 1.2 && largeTablet.transport.scale < largeTablet.contentScale
+)
+check("Tablet transport bar grows with its controls", largeTablet.transportHeight > 56)
 
 let narrowWindow = EditorLayoutMetrics(
     containerSize: CGSize(width: 600, height: 744),
@@ -99,6 +127,97 @@ check(
 check(
     "Regular presentation contexts choose an anchored popover",
     EditorPresentationRules.style(availableWidth: 600) == .popover
+)
+
+// MARK: - Safe-area bands
+
+let phoneLandscapeChrome = EditorSafeArea(top: 0, leading: 62, bottom: 20, trailing: 62)
+    .resolved
+checkClose(
+    "Phone landscape keeps its edge-to-edge toolbar",
+    phoneLandscapeChrome.top,
+    0
+)
+checkClose(
+    "Dynamic Island bands stay out of the editor",
+    phoneLandscapeChrome.horizontal,
+    124
+)
+let catalystChrome = EditorSafeArea(top: 32, leading: 0, bottom: 0, trailing: 0).resolved
+checkClose("A Mac title bar keeps its full band", catalystChrome.top, 32)
+let tabletChrome = EditorSafeArea(top: 24, leading: 0, bottom: 20, trailing: 0).resolved
+checkClose(
+    "A tablet status bar grows to the minimum chrome band",
+    tabletChrome.top,
+    EditorSafeArea.minimumTopChrome
+)
+let phoneContent = phoneLandscapeChrome.contentSize(
+    in: CGSize(width: 874, height: 402)
+)
+check(
+    "Phone landscape still fits the one-row transport after insetting",
+    EditorLayoutMetrics(containerSize: phoneContent, effectsState: .expanded).mode
+        == .regular
+)
+check(
+    "Phone landscape effects stay at the approved size after insetting",
+    EditorLayoutMetrics(containerSize: phoneContent, effectsState: .expanded)
+        .effectCardWidth == 152
+)
+check(
+    "Short screens hide the status bar; taller ones keep the clock visible",
+    EditorLayoutMetrics.prefersStatusBarHidden(containerHeight: 402)
+        && !EditorLayoutMetrics.prefersStatusBarHidden(containerHeight: 736)
+)
+check(
+    "An unmeasured container keeps the status bar rather than flashing hidden",
+    !EditorLayoutMetrics.prefersStatusBarHidden(containerHeight: 0)
+)
+
+// MARK: - Transport placement sweep
+
+var overlaps: [CGFloat] = []
+var offCentre: [CGFloat] = []
+var width: CGFloat = EditorLayoutMetrics.regularTransportMinimumWidth
+while width <= 1600 {
+    let metrics = EditorLayoutMetrics(
+        containerSize: CGSize(width: width, height: 900),
+        effectsState: .expanded
+    )
+    let placement = metrics.transport
+    let home = EditorTransportMetrics.homeGroupWidth(
+        metrics.density,
+        scale: placement.scale
+    )
+    let export = EditorTransportMetrics.exportGroupWidth(
+        metrics.density,
+        scale: placement.scale
+    )
+    let leadingGap = placement.clusterLeading - home
+    let trailingGap = (width - export)
+        - (placement.clusterLeading + placement.clusterWidth)
+    if min(leadingGap, trailingGap) < EditorTransportMetrics.minimumClusterGap - 0.01 {
+        overlaps.append(width)
+    }
+    // Wide bars can afford to put the play button dead centre.
+    if width >= 1000, abs(placement.playCentreX - width / 2) > 0.5 {
+        offCentre.append(width)
+    }
+    if placement.scale < 1 { overlaps.append(width) }
+    width += 1
+}
+check(
+    "Transport groups never collide at any one-row width",
+    overlaps.isEmpty
+)
+check(
+    "Roomy bars centre the play button on the editor",
+    offCentre.isEmpty
+)
+check(
+    "The narrowest one-row width is the phone landscape content width",
+    EditorLayoutMetrics.regularTransportMinimumWidth
+        >= EditorTransportMetrics.minimumOneRowWidth(.tight)
 )
 
 if failures > 0 {

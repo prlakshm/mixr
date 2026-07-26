@@ -5,12 +5,15 @@ import SwiftUI
 /// content masks without changing any normal-mode layout or hit testing.
 struct PartyModeMainChromeOverlay: View {
     let screenSize: CGSize
+    /// Matches the live toolbar — the one-row and two-row bars differ, and both
+    /// grow on roomier screens.
+    var transportHeight: CGFloat = TLK.transportHeight
     let effectsHeight: CGFloat
 
     var body: some View {
         VStack(spacing: 0) {
             Color.clear
-                .frame(height: TLK.transportHeight)
+                .frame(height: transportHeight)
                 .partyModeBorder(
                     shape: Rectangle(),
                     role: .majorPanel,
@@ -22,7 +25,7 @@ struct PartyModeMainChromeOverlay: View {
                 .frame(
                     height: max(
                         0,
-                        screenSize.height - TLK.transportHeight - effectsHeight
+                        screenSize.height - transportHeight - effectsHeight
                     )
                 )
 

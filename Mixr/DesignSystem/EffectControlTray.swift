@@ -57,6 +57,8 @@ struct EffectControlTray: View {
     var reverbPreset: ReverbPreset = .smallRoom
     var echoPreset: EchoPreset = .classic
     var pitchDirection: PitchDirection = .up
+    /// Matches the effect card it grows out of, which scales with the screen.
+    var height: CGFloat = EffectTrayMetrics.height
     var onLevelChanged: (Double) -> Void = { _ in }
     /// true on drag start, false on drag end — for undo commits.
     var onEditingChanged: (Bool) -> Void = { _ in }
@@ -116,7 +118,7 @@ struct EffectControlTray: View {
             )
         }
         .frame(maxWidth: .infinity)
-        .frame(height: EffectTrayMetrics.height)
+        .frame(height: height)
         .background { trayGlass }
         .clipShape(RoundedRectangle(cornerRadius: EffectTrayMetrics.cornerRadius, style: .continuous))
         .overlay {

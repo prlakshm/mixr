@@ -59,6 +59,63 @@ check(
 )
 
 check(
+    "Effects panel size comes from the layout model, not the screen it is on",
+    layoutSource.contains("baseEffectCardWidth")
+        && layoutSource.contains("effectsHeightShareCeiling")
+        && timelineSource.contains("cardWidth: layout.effectCardWidth")
+        && timelineSource.contains("cardHeight: layout.effectCardHeight")
+        && timelineSource.contains("contentScale: layout.contentScale")
+)
+
+check(
+    "Editor content is laid out inside the window's chrome bands",
+    layoutSource.contains("struct EditorSafeArea")
+        && layoutSource.contains("minimumTopChrome")
+        && timelineSource.contains("onWindowSafeAreaChange")
+        && timelineSource.contains(".padding(safeArea.edgeInsets)")
+        && timelineSource.contains("EditorEdgeFade(")
+        && timelineSource.contains("safeArea: safeArea,")
+        && timelineSource.contains(".statusBarHidden(prefersStatusBarHidden)")
+)
+
+check(
+    "Toolbar groups are placed by the tested transport model",
+    layoutSource.contains("struct EditorTransportLayout")
+        && layoutSource.contains("minimumClusterGap")
+        && timelineSource.contains("transportPlacement: layout.transport")
+        && timelineSource.contains(".offset(x: transportPlacement.centreOffset)")
+        // The old fixed nudge must not come back.
+        && !timelineSource.contains(".offset(x: 63)")
+)
+
+check(
+    "Transport buttons stay plain so Mac Catalyst adds no bordered chrome",
+    timelineSource.contains("Button(\"Skip to Start\", systemImage: \"backward.end.fill\")")
+        && timelineSource.range(
+            of: "playback.skipToStart\\(\\)[\\s\\S]{0,240}buttonStyle\\(\\.plain\\)",
+            options: .regularExpression
+        ) != nil
+        && timelineSource.range(
+            of: "playback.togglePlayPause\\(\\)[\\s\\S]{0,240}buttonStyle\\(\\.plain\\)",
+            options: .regularExpression
+        ) != nil
+        && timelineSource.range(
+            of: "playback.skipToEnd\\(\\)[\\s\\S]{0,240}buttonStyle\\(\\.plain\\)",
+            options: .regularExpression
+        ) != nil
+)
+
+check(
+    "The nav-title frame preference ignores empty sibling contributions",
+    timelineSource.contains("guard next != .zero else { return }")
+)
+
+check(
+    "Debug-only QA state hooks never ship in the editor",
+    !timelineSource.contains("-MixrQA")
+)
+
+check(
     "Destructive project confirmation uses a native alert",
     timelineSource.contains(".alert(")
         && timelineSource.contains("Button(\"Delete\", role: .destructive")

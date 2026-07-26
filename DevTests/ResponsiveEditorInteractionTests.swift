@@ -57,8 +57,19 @@ let collapsedAfterResize = EditorLayoutMetrics(
 check(
     "Effects collapse state survives a regular-to-compact resize",
     collapsedAfterResize.effectsState == .collapsed
+        // The handle band grows a little with the panel scale, but stays a
+        // handle — never the expanded panel.
         && collapsedAfterResize.effectsHeight
-            == EditorLayoutMetrics.collapsedEffectsHeight
+            >= EditorLayoutMetrics.collapsedEffectsHeight
+        && collapsedAfterResize.effectsHeight
+            <= EditorLayoutMetrics.collapsedEffectsHeight + 12
+)
+check(
+    "A collapsed handle band still clears its scaled title",
+    EditorLayoutMetrics(
+        containerSize: CGSize(width: 1366, height: 1024),
+        effectsState: .collapsed
+    ).effectsHeight >= 48
 )
 check(
     "Resizing still switches the surrounding transport layout",

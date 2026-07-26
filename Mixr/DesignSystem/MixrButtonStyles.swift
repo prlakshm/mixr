@@ -20,14 +20,21 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
 
 struct MixrSecondaryGlassButtonStyle: ButtonStyle {
     var partyRole: PartyModeSurfaceRole = .button
+    /// Toolbar chrome scale — 1.0 on a phone, larger on tablets and desktop.
+    var scale: CGFloat = 1
 
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous)
         configuration.label
-            .mixrFont(.button)
+            .mixrScaledFont(
+                size: MixrTextStyle.button.size * scale,
+                weight: MixrTextStyle.button.weight,
+                design: MixrTextStyle.button.design,
+                relativeTo: MixrTextStyle.button.relativeTextStyle
+            )
             .foregroundStyle(MixrColors.textPrimary)
-            .padding(.horizontal, MixrLayout.buttonPaddingH)
-            .padding(.vertical, MixrLayout.buttonPaddingV)
+            .padding(.horizontal, MixrLayout.buttonPaddingH * scale)
+            .padding(.vertical, MixrLayout.buttonPaddingV * scale)
             .background {
                 GlassBackground(level: .default, cornerRadius: MixrRadius.button)
             }
