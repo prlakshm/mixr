@@ -74,12 +74,13 @@ check(
 )
 
 check(
-    "Project selection uses a native menu while preserving long-press rename",
-    timelineSource.contains("private struct TLNativeProjectMenuButton: UIViewRepresentable")
-        && timelineSource.contains("showsMenuAsPrimaryAction = true")
-        && timelineSource.contains("attributes: .destructive")
-        && timelineSource.contains("UILongPressGestureRecognizer")
-        && !timelineSource.contains("ProjectDropdownMenu(")
+    "Project selection uses the custom Mixr menu while preserving long-press rename",
+    timelineSource.contains("@State private var showProjectMenu = false")
+        && timelineSource.contains("ProjectDropdownMenu(")
+        && timelineSource.contains("ProjectTitleFrameKey.self")
+        && timelineSource.contains("TLProjectTitleInteractionModifier(")
+        && timelineSource.contains("y: layout.transportHeight - 4")
+        && !timelineSource.contains("TLNativeProjectMenuButton")
 )
 
 check(

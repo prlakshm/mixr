@@ -346,6 +346,8 @@ struct TimelineScreen: View {
     @State private var isAutoRunning = false
     @State private var isExporting = false
     @State private var autoErrorMessage: String?
+    @State private var showProjectMenu = false
+    @State private var projectTitleFrame: CGRect = .zero
     @State private var showDeleteProjectConfirm = false
 
     // Playhead drag state
@@ -388,17 +390,15 @@ struct TimelineScreen: View {
                         library: library,
                         layoutMode: layout.mode,
                         displayTimeSeconds: displayTimeSeconds,
+                        isProjectMenuOpen: showProjectMenu,
                         isExporting: $isExporting,
-                        onProjectSelected: { id in
-                            selectedClipID = nil
-                            library.switchProject(to: id)
+                        onProjectTapped: {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                showProjectMenu.toggle()
+                            }
                         },
-                        onProjectCreated: {
-                            selectedClipID = nil
-                            library.createProject()
-                        },
-                        onDeleteProject: {
-                            showDeleteProjectConfirm = true
+                        onProjectRenameBegan: {
+                            dismissProjectMenu()
                         }
                     )
                     .frame(height: layout.transportHeight)
@@ -510,10 +510,49 @@ struct TimelineScreen: View {
                     effectsHeight: layout.effectsHeight
                 )
 
+                if showProjectMenu {
+                    let menuX = max(
+                        8,
+                        (projectTitleFrame.minX > 0 ? projectTitleFrame.minX : 96)
+                            - ProjectDropdownMenu.horizontalPadding
+                    )
+
+                    ZStack(alignment: .topLeading) {
+                        Color.black.opacity(0.28)
+                            .ignoresSafeArea()
+                            .onTapGesture { dismissProjectMenu() }
+
+                        ProjectDropdownMenu(
+                            projects: library.projects,
+                            currentProjectID: library.currentProjectSummaryID,
+                            currentName: library.projectName,
+                            onSelectProject: { id in
+                                selectedClipID = nil
+                                library.switchProject(to: id)
+                            },
+                            onCreateProject: {
+                                selectedClipID = nil
+                                library.createProject()
+                            },
+                            onDeleteProject: {
+                                dismissProjectMenu()
+                                showDeleteProjectConfirm = true
+                            },
+                            onDismiss: { dismissProjectMenu() }
+                        )
+                        .offset(x: menuX, y: layout.transportHeight - 4)
+                    }
+                    .zIndex(95)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                }
+
                 floatingOverlays
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .coordinateSpace(name: "timelineScreen")
+            .onPreferenceChange(ProjectTitleFrameKey.self) {
+                projectTitleFrame = $0
+            }
             .confirmationDialog(
                 "What should Auto remix?",
                 isPresented: $showAutoDialog,
@@ -616,6 +655,12 @@ struct TimelineScreen: View {
             )
             .zIndex(80)
             .transition(.opacity)
+        }
+    }
+
+    private func dismissProjectMenu() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            showProjectMenu = false
         }
     }
 
@@ -726,6 +771,14 @@ private struct TLRotateOverlay: View {
     }
 }
 
+private struct ProjectTitleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
 private enum TLProjectTitleMetrics {
     /// Fixed title column — idle truncates here; rename scrolls here; undo/redo stay put.
     static let width: CGFloat = 76
@@ -752,10 +805,10 @@ private struct TLTransportBar: View {
     @ObservedObject var library: TrackLibrary
     let layoutMode: EditorLayoutMode
     var displayTimeSeconds: Double = 0
+    var isProjectMenuOpen: Bool = false
     @Binding var isExporting: Bool
-    var onProjectSelected: (UUID) -> Void = { _ in }
-    var onProjectCreated: () -> Void = {}
-    var onDeleteProject: () -> Void = {}
+    var onProjectTapped: () -> Void = {}
+    var onProjectRenameBegan: () -> Void = {}
     @State private var exportedFile: TLExportedFile?
     @State private var exportErrorMessage: String?
 
@@ -976,7 +1029,6 @@ private struct TLTransportBar: View {
 
     @ViewBuilder
     private var projectTitleControl: some View {
-        // Hard outer width, then fixedSize — otherwise HStack collapses to glyph width.
         HStack(spacing: TLProjectTitleMetrics.titleToChevronSpacing) {
             Group {
                 if isRenamingProject {
@@ -990,33 +1042,37 @@ private struct TLTransportBar: View {
                         if !focused { commitProjectRename() }
                     }
                 } else {
-                    TLNativeProjectMenuButton(
-                        projectName: library.projectName,
-                        projects: library.projects,
-                        currentProjectID: library.currentProjectSummaryID,
-                        onSelectProject: onProjectSelected,
-                        onCreateProject: onProjectCreated,
-                        onDeleteProject: onDeleteProject,
-                        onLongPress: beginProjectRename(at:)
-                    )
+                    Text(library.projectName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(MixrColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             .frame(
-                width: isRenamingProject
-                    ? TLProjectTitleMetrics.width
-                    : TLProjectTitleMetrics.controlWidth,
+                width: TLProjectTitleMetrics.width,
                 height: TLProjectTitleMetrics.fieldHeight,
                 alignment: .leading
             )
             .clipped()
-
-            if isRenamingProject {
-                Color.clear
-                    .frame(
-                        width: TLProjectTitleMetrics.chevronSlotWidth,
-                        height: TLProjectTitleMetrics.fieldHeight
+            .background {
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ProjectTitleFrameKey.self,
+                        value: geo.frame(in: .named("timelineScreen"))
                     )
+                }
             }
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary)
+                .rotationEffect(.degrees(isProjectMenuOpen ? 180 : 0))
+                .frame(
+                    width: TLProjectTitleMetrics.chevronSlotWidth,
+                    height: TLProjectTitleMetrics.fieldHeight
+                )
+                .allowsHitTesting(!isRenamingProject)
         }
         .frame(
             width: TLProjectTitleMetrics.controlWidth,
@@ -1024,10 +1080,23 @@ private struct TLTransportBar: View {
             alignment: .leading
         )
         .fixedSize(horizontal: true, vertical: true)
+        .contentShape(Rectangle())
+        .modifier(
+            TLProjectTitleInteractionModifier(
+                isRenaming: isRenamingProject,
+                onTap: onProjectTapped,
+                onLongPress: beginProjectRename(at:)
+            )
+        )
+        .animation(
+            .spring(response: 0.25, dampingFraction: 0.85),
+            value: isProjectMenuOpen
+        )
         .animation(nil, value: isRenamingProject)
     }
 
     private func beginProjectRename(at point: CGPoint) {
+        onProjectRenameBegan()
         renameText = library.projectName
         // Caret X is in the HStack; title column is leading at fixed width.
         renameCaretX = min(max(point.x, 0), TLProjectTitleMetrics.width)
@@ -1076,172 +1145,41 @@ private struct TLTransportBar: View {
     }
 }
 
-/// Native project picker with system menu semantics, pointer/keyboard support,
-/// destructive styling, and the existing long-press-to-rename interaction.
-private final class TLNativeProjectMenuControl: UIView {
-    let titleLabel = UILabel()
-    let chevronView = UIImageView()
-    let menuButton = UIButton(type: .system)
+private struct TLProjectTitleInteractionModifier: ViewModifier {
+    var isRenaming: Bool
+    var onTap: () -> Void
+    var onLongPress: (CGPoint) -> Void
+    @State private var suppressNextTap = false
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-
-        titleLabel.font = TLProjectTitleMetrics.font
-        titleLabel.adjustsFontForContentSizeCategory = true
-        titleLabel.textColor = UIColor(MixrColors.textPrimary)
-        titleLabel.lineBreakMode = .byTruncatingTail
-
-        let chevronConfiguration = UIImage.SymbolConfiguration(
-            pointSize: 9,
-            weight: .medium
-        )
-        chevronView.image = UIImage(
-            systemName: "chevron.down",
-            withConfiguration: chevronConfiguration
-        )
-        chevronView.tintColor = UIColor(MixrColors.textSecondary)
-        chevronView.contentMode = .center
-
-        menuButton.backgroundColor = .clear
-        menuButton.showsMenuAsPrimaryAction = true
-        menuButton.changesSelectionAsPrimaryAction = false
-        menuButton.isPointerInteractionEnabled = true
-        menuButton.accessibilityTraits = .button
-
-        addSubview(titleLabel)
-        addSubview(chevronView)
-        addSubview(menuButton)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var intrinsicContentSize: CGSize {
-        CGSize(
-            width: TLProjectTitleMetrics.controlWidth,
-            height: TLProjectTitleMetrics.fieldHeight
-        )
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        titleLabel.frame = CGRect(
-            x: 0,
-            y: 0,
-            width: TLProjectTitleMetrics.width,
-            height: bounds.height
-        )
-        chevronView.frame = CGRect(
-            x: TLProjectTitleMetrics.width
-                + TLProjectTitleMetrics.titleToChevronSpacing,
-            y: 0,
-            width: TLProjectTitleMetrics.chevronSlotWidth,
-            height: bounds.height
-        )
-        menuButton.frame = bounds
-    }
-}
-
-private struct TLNativeProjectMenuButton: UIViewRepresentable {
-    let projectName: String
-    let projects: [ProjectSummary]
-    let currentProjectID: UUID?
-    let onSelectProject: (UUID) -> Void
-    let onCreateProject: () -> Void
-    let onDeleteProject: () -> Void
-    let onLongPress: (CGPoint) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    func makeUIView(context: Context) -> TLNativeProjectMenuControl {
-        let control = TLNativeProjectMenuControl()
-        context.coordinator.control = control
-
-        let longPress = UILongPressGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleLongPress(_:))
-        )
-        longPress.minimumPressDuration = 0.45
-        longPress.cancelsTouchesInView = true
-        control.menuButton.addGestureRecognizer(longPress)
-
-        update(control, coordinator: context.coordinator)
-        return control
-    }
-
-    func updateUIView(
-        _ control: TLNativeProjectMenuControl,
-        context: Context
-    ) {
-        context.coordinator.parent = self
-        update(control, coordinator: context.coordinator)
-    }
-
-    private func update(
-        _ control: TLNativeProjectMenuControl,
-        coordinator: Coordinator
-    ) {
-        control.titleLabel.text = projectName
-        control.titleLabel.font = TLProjectTitleMetrics.font
-        control.menuButton.menu = coordinator.makeMenu()
-        control.menuButton.accessibilityLabel = "Project: \(projectName)"
-        control.menuButton.accessibilityHint =
-            "Tap to choose a project. Touch and hold to rename."
-    }
-
-    final class Coordinator: NSObject {
-        var parent: TLNativeProjectMenuButton
-        weak var control: TLNativeProjectMenuControl?
-
-        init(_ parent: TLNativeProjectMenuButton) {
-            self.parent = parent
-        }
-
-        func makeMenu() -> UIMenu {
-            let projectActions = parent.projects.map { project in
-                let isCurrent = project.id == parent.currentProjectID
-                return UIAction(
-                    title: isCurrent ? parent.projectName : project.name,
-                    image: isCurrent ? UIImage(systemName: "checkmark") : nil,
-                    state: isCurrent ? .on : .off
-                ) { [weak self] _ in
-                    guard !isCurrent else { return }
-                    self?.parent.onSelectProject(project.id)
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isRenaming {
+            content
+        } else {
+            content
+                .onTapGesture {
+                    if suppressNextTap {
+                        suppressNextTap = false
+                        return
+                    }
+                    onTap()
                 }
-            }
-
-            let projectSection = UIMenu(
-                title: "Projects",
-                options: .displayInline,
-                children: projectActions
-            )
-            let delete = UIAction(
-                title: "Delete Project",
-                image: UIImage(systemName: "trash"),
-                attributes: .destructive
-            ) { [weak self] _ in
-                self?.parent.onDeleteProject()
-            }
-            let create = UIAction(
-                title: "New Project",
-                image: UIImage(systemName: "plus")
-            ) { [weak self] _ in
-                self?.parent.onCreateProject()
-            }
-            let actionSection = UIMenu(
-                options: .displayInline,
-                children: [delete, create]
-            )
-            return UIMenu(children: [projectSection, actionSection])
-        }
-
-        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
-            guard gesture.state == .began, let control else { return }
-            parent.onLongPress(gesture.location(in: control))
+                .highPriorityGesture(
+                    LongPressGesture(minimumDuration: 0.45)
+                        .sequenced(
+                            before: DragGesture(
+                                minimumDistance: 0,
+                                coordinateSpace: .local
+                            )
+                        )
+                        .onEnded { value in
+                            guard case .second(true, let drag) = value else {
+                                return
+                            }
+                            suppressNextTap = true
+                            onLongPress(drag?.location ?? .zero)
+                        }
+                )
         }
     }
 }
