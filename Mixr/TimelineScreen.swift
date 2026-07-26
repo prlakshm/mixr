@@ -780,20 +780,45 @@ private struct ProjectTitleFrameKey: PreferenceKey {
 }
 
 private enum TLProjectTitleMetrics {
-    /// Fixed title column — idle truncates here; rename scrolls here; undo/redo stay put.
-    static let width: CGFloat = 76
+    /// Cap for the title column — idle truncates here, rename scrolls here, and
+    /// the chevron never travels past it. Short names hug their text instead.
+    /// Sized so "My Remix 12" (79.2pt at 13pt semibold) still fits whole.
+    static let maxTitleWidth: CGFloat = 80
+    /// Floor so a near-empty name still has a caret and a tap target.
+    static let minTitleWidth: CGFloat = 22
     static let fieldHeight: CGFloat = 18
     static let chevronSlotWidth: CGFloat = 12
-    static let titleToChevronSpacing: CGFloat = 4
+    /// Tight so the chevron tucks right up against short names.
+    static let titleToChevronSpacing: CGFloat = 4.25
+    /// Breathing room for the end-of-text caret while renaming.
+    static let caretSlack: CGFloat = 2
     static var font: UIFont {
         UIFontMetrics(forTextStyle: .subheadline).scaledFont(
             for: .systemFont(ofSize: 13, weight: .semibold),
             maximumPointSize: 15.5
         )
     }
-    /// Full title control width so undo/redo stay parked after this slot.
+    /// Full title control width so undo/redo stay parked after this slot,
+    /// whatever the name measures — unchanged from the fixed-column layout.
     static var controlWidth: CGFloat {
-        width + titleToChevronSpacing + chevronSlotWidth
+        maxTitleWidth + titleToChevronSpacing + chevronSlotWidth
+    }
+
+    /// The slot the control occupied when the title column was a fixed 76pt.
+    private static let legacySlotWidth: CGFloat = 92
+    /// Wider names claim room from the gap after the control, so undo/redo stay
+    /// parked and the chevron-to-undo air matches the fixed-column layout.
+    static var trailingSpacingReduction: CGFloat {
+        max(0, controlWidth - legacySlotWidth)
+    }
+
+    /// Rendered width of `name`, clamped into the column's min/max.
+    static func titleWidth(for name: String, extraSlack: CGFloat = 0) -> CGFloat {
+        let measured = (name as NSString)
+            .size(withAttributes: [.font: font])
+            .width
+            .rounded(.up)
+        return min(max(measured + extraSlack, minTitleWidth), maxTitleWidth)
     }
 }
 
@@ -886,7 +911,10 @@ private struct TLTransportBar: View {
             .accessibilityLabel("Toggle Party Mode")
             .accessibilityValue(appearanceState.isPartyModeEnabled ? "On" : "Off")
 
-            HStack(spacing: layoutMode == .regular ? 18 : 8) {
+            HStack(
+                spacing: (layoutMode == .regular ? 18 : 8)
+                    - TLProjectTitleMetrics.trailingSpacingReduction
+            ) {
                 projectTitleControl
 
                 HStack(spacing: TLToolbarHistoryMetrics.buttonSpacing) {
@@ -1050,7 +1078,7 @@ private struct TLTransportBar: View {
                 }
             }
             .frame(
-                width: TLProjectTitleMetrics.width,
+                width: titleColumnWidth,
                 height: TLProjectTitleMetrics.fieldHeight,
                 alignment: .leading
             )
@@ -1074,11 +1102,7 @@ private struct TLTransportBar: View {
                 )
                 .allowsHitTesting(!isRenamingProject)
         }
-        .frame(
-            width: TLProjectTitleMetrics.controlWidth,
-            height: TLProjectTitleMetrics.fieldHeight,
-            alignment: .leading
-        )
+        .frame(height: TLProjectTitleMetrics.fieldHeight)
         .fixedSize(horizontal: true, vertical: true)
         .contentShape(Rectangle())
         .modifier(
@@ -1093,13 +1117,33 @@ private struct TLTransportBar: View {
             value: isProjectMenuOpen
         )
         .animation(nil, value: isRenamingProject)
+        .animation(
+            isRenamingProject
+                ? nil
+                : .spring(response: 0.25, dampingFraction: 0.85),
+            value: titleColumnWidth
+        )
+        // Fixed footprint so undo/redo stay parked while the title hugs its text.
+        .frame(
+            width: TLProjectTitleMetrics.controlWidth,
+            height: TLProjectTitleMetrics.fieldHeight,
+            alignment: .leading
+        )
+    }
+
+    /// Hugs the current name, capped at the column max.
+    private var titleColumnWidth: CGFloat {
+        TLProjectTitleMetrics.titleWidth(
+            for: isRenamingProject ? renameText : library.projectName,
+            extraSlack: isRenamingProject ? TLProjectTitleMetrics.caretSlack : 0
+        )
     }
 
     private func beginProjectRename(at point: CGPoint) {
         onProjectRenameBegan()
         renameText = library.projectName
         // Caret X is in the HStack; title column is leading at fixed width.
-        renameCaretX = min(max(point.x, 0), TLProjectTitleMetrics.width)
+        renameCaretX = min(max(point.x, 0), titleColumnWidth)
         isRenamingProject = true
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         DispatchQueue.main.async {

@@ -28,9 +28,9 @@ struct MixrSFXMark: View {
     var width: CGFloat = 32
     var height: CGFloat = 22
     var color: Color = MixrColors.textMuted.opacity(0.92)
-    /// Horizontal squeeze at constant height — another 5% narrower so the mark
-    /// doesn’t read stretched (chip + footer button share this).
-    var widthScale: CGFloat = 0.95 * 0.95
+    /// Horizontal squeeze at constant height — chip + footer button share this.
+    /// Cumulative: 5% × 5% × 7% narrower so the stencil doesn’t read stretched.
+    var widthScale: CGFloat = 0.95 * 0.95 * 0.93
 
     var body: some View {
         Image("SFXMarkStencil")
