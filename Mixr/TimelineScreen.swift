@@ -553,44 +553,6 @@ struct TimelineScreen: View {
             .onPreferenceChange(ProjectTitleFrameKey.self) {
                 projectTitleFrame = $0
             }
-            .confirmationDialog(
-                "What should Auto remix?",
-                isPresented: $showAutoDialog,
-                titleVisibility: .visible
-            ) {
-                Button(selectedClipID == nil ? "Playhead Clips" : "Selected Clip") {
-                    if let selectedClipID {
-                        runAuto(scope: .selectedClip(selectedClipID))
-                    } else {
-                        runAuto(scope: .playheadClips)
-                    }
-                }
-                Button("Entire Project") {
-                    runAuto(scope: .entireProject)
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .alert(
-                "Delete “\(library.projectName)”?",
-                isPresented: $showDeleteProjectConfirm
-            ) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    selectedClipID = nil
-                    library.deleteCurrentProject()
-                }
-            }
-            .alert(
-                "Auto couldn’t finish",
-                isPresented: Binding(
-                    get: { autoErrorMessage != nil },
-                    set: { if !$0 { autoErrorMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(autoErrorMessage ?? "")
-            }
         }
         .ignoresSafeArea()
         .statusBarHidden(true)
@@ -648,6 +610,36 @@ struct TimelineScreen: View {
 
     @ViewBuilder
     private var floatingOverlays: some View {
+        // Auto scope dialog — nothing mutates until a scope is chosen;
+        // tapping outside dismisses with no timeline changes.
+        if showAutoDialog {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showAutoDialog = false
+                        }
+                    }
+
+                AutoScopeDialog(
+                    hasSelectedClip: selectedClipID != nil,
+                    onChooseFocused: {
+                        if let clipID = selectedClipID {
+                            runAuto(scope: .selectedClip(clipID))
+                        } else {
+                            runAuto(scope: .playheadClips)
+                        }
+                    },
+                    onChooseEntireProject: {
+                        runAuto(scope: .entireProject)
+                    }
+                )
+            }
+            .zIndex(70)
+            .transition(.opacity.combined(with: .scale(scale: 0.94)))
+        }
+
         // Auto / Export loading — same full-screen spinner.
         if isAutoRunning || isExporting {
             MixrAutoLoadingOverlay(
@@ -655,6 +647,52 @@ struct TimelineScreen: View {
             )
             .zIndex(80)
             .transition(.opacity)
+        }
+
+        // Entire Project Auto failure — timeline unchanged, no undo entry.
+        if let message = autoErrorMessage {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture { autoErrorMessage = nil }
+
+                AutoRemixErrorSheet(message: message) {
+                    autoErrorMessage = nil
+                }
+            }
+            .zIndex(86)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
+        // Delete project confirm — same chrome as the Auto scope dialog.
+        if showDeleteProjectConfirm {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeleteProjectConfirm = false
+                        }
+                    }
+
+                DeleteProjectConfirmDialog(
+                    projectName: library.projectName,
+                    onCancel: {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeleteProjectConfirm = false
+                        }
+                    },
+                    onDelete: {
+                        selectedClipID = nil
+                        library.deleteCurrentProject()
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            showDeleteProjectConfirm = false
+                        }
+                    }
+                )
+            }
+            .zIndex(95)
+            .transition(.opacity.combined(with: .scale(scale: 0.94)))
         }
     }
 

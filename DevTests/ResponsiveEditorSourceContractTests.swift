@@ -58,19 +58,31 @@ check(
         && !timelineSource.contains("scaleEffect(layout")
 )
 
+// The editor's modals are the hand-built Mixr alert chrome, not system
+// alerts — they carry the app's glass, party-mode borders, and press styling.
 check(
-    "Destructive project confirmation uses a native alert",
-    timelineSource.contains(".alert(")
-        && timelineSource.contains("Button(\"Delete\", role: .destructive")
-        && !timelineSource.contains("DeleteProjectConfirmDialog(")
+    "Destructive project confirmation uses the Mixr confirm dialog",
+    timelineSource.contains("DeleteProjectConfirmDialog(")
+        && timelineSource.contains("projectName: library.projectName")
+        && !timelineSource.contains("Button(\"Delete\", role: .destructive")
 )
 
 check(
-    "Auto scope uses a native confirmation dialog",
-    timelineSource.contains(".confirmationDialog(")
-        && timelineSource.contains("Button(\"Entire Project\")")
-        && timelineSource.contains("Button(\"Cancel\", role: .cancel)")
-        && !timelineSource.contains("AutoScopeDialog(")
+    "Auto scope uses the Mixr scope dialog",
+    timelineSource.contains("AutoScopeDialog(")
+        && timelineSource.contains("hasSelectedClip: selectedClipID != nil")
+        && !timelineSource.contains(".confirmationDialog(")
+)
+
+check(
+    "Auto failure uses the Mixr error sheet",
+    timelineSource.contains("AutoRemixErrorSheet(message: message)")
+        && !timelineSource.contains("\"Auto couldn’t finish\",")
+)
+
+check(
+    "Every editor modal dismisses on a scrim tap",
+    timelineSource.contains("Color.black.opacity(0.52)")
 )
 
 check(
