@@ -862,6 +862,18 @@ private enum TLProjectTitleMetrics {
 
 // MARK: - Transport Bar
 
+/// Where the play button sits inside the transport cluster: skip button,
+/// spacing, then half the play button. Derived from the same numbers the stack
+/// lays out with, so the bar stays centred if those spacings ever change.
+private enum TLTransportPlacement {
+    static let controlSize: CGFloat = 44
+    static let controlSpacing: CGFloat = 12
+
+    static var playCentreFromLeading: CGFloat {
+        controlSize + controlSpacing + controlSize / 2
+    }
+}
+
 private struct TLTransportBar: View {
     @Environment(AppAppearanceState.self) private var appearanceState
     @ObservedObject var playback: MixrPlaybackEngine
@@ -888,7 +900,12 @@ private struct TLTransportBar: View {
                     homeGroup
                     exportButton
                     transportControls
-                        .offset(x: 63)
+                        // Centre the play button on the bar rather than the
+                        // whole cluster — the time and BPM/KEY readouts trail
+                        // it, so centring the group drags the button left.
+                        .alignmentGuide(HorizontalAlignment.center) { _ in
+                            TLTransportPlacement.playCentreFromLeading
+                        }
                 }
             case .compact:
                 VStack(spacing: 0) {
