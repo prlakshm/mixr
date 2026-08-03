@@ -417,9 +417,6 @@ struct TimelineScreen: View {
                         importFooterHeight: layout.importFooterHeight,
                         showFilePicker: $showFilePicker,
                         showSFXPanel: $showSFXPanel,
-                        sfxPresentationStyle: EditorPresentationRules.style(
-                            availableWidth: geo.size.width
-                        ),
                         onSelectSoundEffect: { effect in
                             library.addSoundEffect(
                                 effect,
@@ -610,6 +607,42 @@ struct TimelineScreen: View {
 
     @ViewBuilder
     private var floatingOverlays: some View {
+        // SFX library — the panel carries its own glass, so it floats over a
+        // dimmed timeline rather than inside a system sheet or popover slab.
+        if showSFXPanel {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissSFXPanel() }
+
+                GeometryReader { geo in
+                    let width = min(560, max(300, geo.size.width * SFXMetrics.panelScreenWidthFraction))
+
+                    SFXLibraryPanel(
+                        onSelect: { effect in
+                            library.addSoundEffect(
+                                effect,
+                                atPlayheadUnit: effectivePlayheadUnit
+                            )
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            dismissSFXPanel()
+                        },
+                        onClose: { dismissSFXPanel() }
+                    )
+                    .frame(
+                        width: width,
+                        height: min(
+                            geo.size.height - 24,
+                            SFXMetrics.panelHeight(forWidth: width)
+                        )
+                    )
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                }
+            }
+            .zIndex(60)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
         // Auto scope dialog — nothing mutates until a scope is chosen;
         // tapping outside dismisses with no timeline changes.
         if showAutoDialog {
@@ -693,6 +726,12 @@ struct TimelineScreen: View {
             }
             .zIndex(95)
             .transition(.opacity.combined(with: .scale(scale: 0.94)))
+        }
+    }
+
+    private func dismissSFXPanel() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            showSFXPanel = false
         }
     }
 
@@ -1446,63 +1485,6 @@ private struct TLShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
-private struct TLSFXLibraryPresentation: ViewModifier {
-    @Binding var isPresented: Bool
-    let style: EditorPresentationStyle
-    let onSelect: (SoundEffectDefinition) -> Void
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        switch style {
-        case .popover:
-            content.popover(
-                isPresented: $isPresented,
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .bottom
-            ) {
-                let width: CGFloat = 560
-                panel
-                    .frame(
-                        width: width,
-                        height: SFXMetrics.panelHeight(forWidth: width)
-                    )
-                    .padding(12)
-                    .presentationCompactAdaptation(.sheet)
-            }
-        case .sheet:
-            content.sheet(isPresented: $isPresented) {
-                GeometryReader { proxy in
-                    let width = max(320, min(680, proxy.size.width - 32))
-                    let height = min(
-                        proxy.size.height - 32,
-                        SFXMetrics.panelHeight(forWidth: width)
-                    )
-
-                    panel
-                        .frame(width: width, height: max(260, height))
-                        .position(
-                            x: proxy.size.width / 2,
-                            y: proxy.size.height / 2
-                        )
-                }
-                .presentationBackground(.clear)
-            }
-        }
-    }
-
-    private var panel: some View {
-        SFXLibraryPanel(
-            onSelect: { effect in
-                onSelect(effect)
-                isPresented = false
-            },
-            onClose: {
-                isPresented = false
-            }
-        )
-    }
-}
-
 // MARK: - Toolbar History Button (undo / redo)
 
 private enum TLToolbarHistoryMetrics {
@@ -1687,7 +1669,6 @@ private struct TLTrackArea: View {
     let importFooterHeight: CGFloat
     @Binding var showFilePicker: Bool
     @Binding var showSFXPanel: Bool
-    let sfxPresentationStyle: EditorPresentationStyle
     let onSelectSoundEffect: (SoundEffectDefinition) -> Void
     let onImportURLs: ([URL]) -> Void
     let onDeleteTrack: (UUID) -> Void
@@ -2988,13 +2969,6 @@ private struct TLTrackArea: View {
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel("Sound Effects")
-        .modifier(
-            TLSFXLibraryPresentation(
-                isPresented: $showSFXPanel,
-                style: sfxPresentationStyle,
-                onSelect: onSelectSoundEffect
-            )
-        )
     }
 
     // MARK: Audio drop importing
