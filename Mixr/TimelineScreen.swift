@@ -3626,7 +3626,7 @@ private struct TLEmptyTimelineState: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                     }
-                    .foregroundStyle(MixrColors.textMuted.opacity(0.84))
+                    .foregroundStyle(MixrColors.textMuted.opacity(0.95))
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, MixrSpacing.sm)
                     .padding(.vertical, MixrLayout.buttonPaddingV)
@@ -3634,7 +3634,7 @@ private struct TLEmptyTimelineState: View {
                     .overlay {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
-                                MixrColors.importCTABorder.opacity(0.38),
+                                MixrColors.importCTABorder.opacity(0.52),
                                 lineWidth: 0.6
                             )
                     }
@@ -3664,7 +3664,7 @@ private struct TLEmptyImportSongsGlass: View {
 
     var body: some View {
         shape
-            .fill(MixrColors.importCTAFill.opacity(0.78))
+            .fill(MixrColors.importCTAFill.opacity(0.86))
             .background {
                 shape
                     .fill(.ultraThinMaterial)
@@ -3675,8 +3675,8 @@ private struct TLEmptyImportSongsGlass: View {
                 shape.fill(
                     LinearGradient(
                         colors: [
-                            MixrColors.importCTAGlow.opacity(0.14),
-                            MixrColors.importCTAGlow.opacity(0.05),
+                            MixrColors.importCTAGlow.opacity(0.20),
+                            MixrColors.importCTAGlow.opacity(0.075),
                             Color.clear,
                         ],
                         startPoint: .top,
