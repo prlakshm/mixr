@@ -5,6 +5,8 @@ import SwiftUI
 /// Compact Apple-style alert shown before Auto touches the timeline.
 /// The presenter dims the background and dismisses on outside taps.
 struct AutoScopeDialog: View {
+    /// 1.0 on a phone; roomier screens pass the layout's alert scale.
+    var scale: CGFloat = 1
     /// When a clip is selected the left action targets it; otherwise it
     /// targets the clips around the playhead.
     var hasSelectedClip: Bool
@@ -18,13 +20,13 @@ struct AutoScopeDialog: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("What should Auto remix?")
-                .font(.system(size: MixrAlertChrome.titleFontSize, weight: .semibold))
+                .font(.system(size: MixrAlertChrome.titleFontSize * scale, weight: .semibold))
                 .foregroundStyle(MixrColors.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, MixrAlertChrome.horizontalPadding)
+                .padding(.horizontal, MixrAlertChrome.horizontalPadding * scale)
                 .frame(maxWidth: .infinity)
-                .frame(height: MixrAlertChrome.titleHeight)
-                .padding(.bottom, MixrAlertChrome.titleBottomExtraPadding)
+                .frame(height: MixrAlertChrome.titleHeight * scale)
+                .padding(.bottom, MixrAlertChrome.titleBottomExtraPadding * scale)
 
             Rectangle()
                 .fill(Color.white.opacity(0.12))
@@ -41,15 +43,15 @@ struct AutoScopeDialog: View {
                 Button("Entire Project", action: onChooseEntireProject)
                     .buttonStyle(AutoScopeAlertActionStyle(weight: .semibold, isPreferred: true))
             }
-            .frame(height: MixrAlertChrome.actionHeight)
+            .frame(height: MixrAlertChrome.actionHeight * scale)
         }
-        .frame(width: MixrAlertChrome.alertWidth)
+        .frame(width: MixrAlertChrome.alertWidth * scale)
         .fixedSize(horizontal: true, vertical: true)
         .background { MixrAlertChrome.background() }
-        .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius * scale, style: .continuous))
         .partyModeBorder(
             shape: RoundedRectangle(
-                cornerRadius: MixrAlertChrome.cornerRadius,
+                cornerRadius: MixrAlertChrome.cornerRadius * scale,
                 style: .continuous
             ),
             role: .dialog,

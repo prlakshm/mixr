@@ -115,19 +115,37 @@ check(
     !timelineSource.contains("-MixrQA")
 )
 
+// The editor's modals are the hand-built Mixr alert chrome, not system
+// alerts — they carry the app's glass, party-mode borders and press styling,
+// and they scale with the layout the way the rest of the chrome does.
 check(
-    "Destructive project confirmation uses a native alert",
-    timelineSource.contains(".alert(")
-        && timelineSource.contains("Button(\"Delete\", role: .destructive")
-        && !timelineSource.contains("DeleteProjectConfirmDialog(")
+    "Destructive project confirmation uses the Mixr confirm dialog",
+    timelineSource.contains("DeleteProjectConfirmDialog(")
+        && timelineSource.contains("projectName: library.projectName")
+        && !timelineSource.contains("Button(\"Delete\", role: .destructive")
 )
 
 check(
-    "Auto scope uses a native confirmation dialog",
-    timelineSource.contains(".confirmationDialog(")
-        && timelineSource.contains("Button(\"Entire Project\")")
-        && timelineSource.contains("Button(\"Cancel\", role: .cancel)")
-        && !timelineSource.contains("AutoScopeDialog(")
+    "Auto scope uses the Mixr scope dialog",
+    timelineSource.contains("AutoScopeDialog(")
+        && timelineSource.contains("hasSelectedClip: selectedClipID != nil")
+        && !timelineSource.contains(".confirmationDialog(")
+)
+
+check(
+    "Auto failure uses the Mixr error sheet",
+    timelineSource.contains("AutoRemixErrorSheet(")
+        && !timelineSource.contains("\"Auto couldn't finish\",")
+)
+
+let alertURL = root.appendingPathComponent("Mixr/DesignSystem/MixrAlertChrome.swift")
+let alertSource = (try? String(contentsOf: alertURL, encoding: .utf8)) ?? ""
+check(
+    "Alert chrome scales with the layout, capped short of it",
+    alertSource.contains("static func scale(forContentScale")
+        && alertSource.contains("maximumScale")
+        && timelineSource.contains("MixrAlertChrome.scale(forContentScale:")
+        && timelineSource.contains("scale: alertScale")
 )
 
 check(

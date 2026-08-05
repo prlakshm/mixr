@@ -247,6 +247,8 @@ private struct ProjectMenuPressStyle: ButtonStyle {
 
 /// Same chrome as `AutoScopeDialog` — Cancel (left, gray) / Delete (right, red).
 struct DeleteProjectConfirmDialog: View {
+    /// 1.0 on a phone; roomier screens pass the layout's alert scale.
+    var scale: CGFloat = 1
     var projectName: String
     var onCancel: () -> Void = {}
     var onDelete: () -> Void = {}
@@ -254,13 +256,13 @@ struct DeleteProjectConfirmDialog: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("Delete “\(projectName)”?")
-                .font(.system(size: MixrAlertChrome.titleFontSize, weight: .semibold))
+                .font(.system(size: MixrAlertChrome.titleFontSize * scale, weight: .semibold))
                 .foregroundStyle(MixrColors.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, MixrAlertChrome.horizontalPadding)
+                .padding(.horizontal, MixrAlertChrome.horizontalPadding * scale)
                 .frame(maxWidth: .infinity)
-                .frame(height: MixrAlertChrome.titleHeight)
-                .padding(.bottom, MixrAlertChrome.titleBottomExtraPadding)
+                .frame(height: MixrAlertChrome.titleHeight * scale)
+                .padding(.bottom, MixrAlertChrome.titleBottomExtraPadding * scale)
 
             Rectangle()
                 .fill(Color.white.opacity(0.12))
@@ -268,24 +270,24 @@ struct DeleteProjectConfirmDialog: View {
 
             HStack(spacing: 0) {
                 Button("Cancel", action: onCancel)
-                    .buttonStyle(MixrAlertActionPressStyle(kind: .cancel))
+                    .buttonStyle(MixrAlertActionPressStyle(kind: .cancel, scale: scale))
 
                 Rectangle()
                     .fill(Color.white.opacity(0.12))
                     .frame(width: 0.5)
 
                 Button("Delete", action: onDelete)
-                    .buttonStyle(MixrAlertActionPressStyle(kind: .destructive))
+                    .buttonStyle(MixrAlertActionPressStyle(kind: .destructive, scale: scale))
             }
-            .frame(height: MixrAlertChrome.actionHeight)
+            .frame(height: MixrAlertChrome.actionHeight * scale)
         }
-        .frame(width: MixrAlertChrome.alertWidth)
+        .frame(width: MixrAlertChrome.alertWidth * scale)
         .fixedSize(horizontal: true, vertical: true)
         .background { MixrAlertChrome.background() }
-        .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius * scale, style: .continuous))
         .partyModeBorder(
             shape: RoundedRectangle(
-                cornerRadius: MixrAlertChrome.cornerRadius,
+                cornerRadius: MixrAlertChrome.cornerRadius * scale,
                 style: .continuous
             ),
             role: .dialog,

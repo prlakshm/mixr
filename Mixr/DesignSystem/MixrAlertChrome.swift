@@ -16,6 +16,17 @@ enum MixrAlertChrome {
     static let messageFontSize: CGFloat = 13
     static let messageVerticalPadding: CGFloat = 16
 
+    /// iOS sizes a system alert the same on every device, but Mixr's own
+    /// chrome scales with the screen, so a 268pt dialog reads undersized next
+    /// to a tablet-sized toolbar and effects panel. The alert follows the
+    /// layout's content scale, capped well short of it — an alert is a focused
+    /// interruption, not a panel, and should never become a billboard.
+    static let maximumScale: CGFloat = 1.25
+
+    static func scale(forContentScale contentScale: CGFloat) -> CGFloat {
+        min(maximumScale, max(1, contentScale))
+    }
+
     static func background(cornerRadius: CGFloat = cornerRadius) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return shape
@@ -73,6 +84,7 @@ enum MixrAlertActionKind {
 struct MixrAlertActionPressStyle: ButtonStyle {
     var kind: MixrAlertActionKind
     var weight: Font.Weight? = nil
+    var scale: CGFloat = 1
 
     func makeBody(configuration: Configuration) -> some View {
         let resting: Color
@@ -95,7 +107,7 @@ struct MixrAlertActionPressStyle: ButtonStyle {
         }
 
         return configuration.label
-            .font(.system(size: MixrAlertChrome.actionFontSize, weight: resolvedWeight))
+            .font(.system(size: MixrAlertChrome.actionFontSize * scale, weight: resolvedWeight))
             .foregroundStyle(configuration.isPressed ? pressed : resting)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
