@@ -11,6 +11,8 @@ enum TLK {
     static let rulerHeight: CGFloat       = 20
     static let trackRowHeight: CGFloat    = 46
     static let waveformHeight: CGFloat    = 34
+    /// Waveform keeps its share of the row at every row height.
+    static var waveformHeightRatio: CGFloat { waveformHeight / trackRowHeight }
     static let smColumnWidth: CGFloat     = 130
     static let trackToggleSize: CGFloat   = 28
     static let effectsExpandedHeight: CGFloat   = 118
@@ -420,6 +422,11 @@ struct TimelineScreen: View {
                     .zIndex(1)
 
                     TLTrackArea(
+                        rowHeight: EditorLayoutMetrics.trackRowHeight(
+                            timelineHeight: layout.timelineHeight,
+                            rulerHeight: TLK.rulerHeight,
+                            trackCount: library.tracks.count
+                        ),
                         tracks: $library.tracks,
                         selectedClipID: $selectedClipID,
                         selectedTrackID: library.selectedTrackID,
@@ -432,9 +439,6 @@ struct TimelineScreen: View {
                         importFooterHeight: layout.importFooterHeight,
                         showFilePicker: $showFilePicker,
                         showSFXPanel: $showSFXPanel,
-                        sfxPresentationStyle: EditorPresentationRules.style(
-                            availableWidth: geo.size.width
-                        ),
                         onSelectSoundEffect: { effect in
                             library.addSoundEffect(
                                 effect,
@@ -699,6 +703,42 @@ struct TimelineScreen: View {
 
     @ViewBuilder
     private var floatingOverlays: some View {
+        // SFX library — the panel carries its own glass, so it floats over a
+        // dimmed timeline rather than inside a system sheet or popover slab.
+        if showSFXPanel {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissSFXPanel() }
+
+                GeometryReader { geo in
+                    let width = min(560, max(300, geo.size.width * SFXMetrics.panelScreenWidthFraction))
+
+                    SFXLibraryPanel(
+                        onSelect: { effect in
+                            library.addSoundEffect(
+                                effect,
+                                atPlayheadUnit: effectivePlayheadUnit
+                            )
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            dismissSFXPanel()
+                        },
+                        onClose: { dismissSFXPanel() }
+                    )
+                    .frame(
+                        width: width,
+                        height: min(
+                            geo.size.height - 24,
+                            SFXMetrics.panelHeight(forWidth: width)
+                        )
+                    )
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                }
+            }
+            .zIndex(60)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
         // Auto / Export loading — same full-screen spinner.
         if isAutoRunning || isExporting {
             MixrAutoLoadingOverlay(
@@ -706,6 +746,12 @@ struct TimelineScreen: View {
             )
             .zIndex(80)
             .transition(.opacity)
+        }
+    }
+
+    private func dismissSFXPanel() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            showSFXPanel = false
         }
     }
 
@@ -1187,7 +1233,13 @@ private struct TLTransportBar: View {
                 )
             }
         }
-        .frame(width: layoutMode == .regular ? transportPlacement.clusterWidth : nil)
+        // Leading, not centred: the modelled cluster width is a measured
+        // estimate, and centring inside it would push the play button off the
+        // bar's centre by half of whatever slack the estimate carries.
+        .frame(
+            width: layoutMode == .regular ? transportPlacement.clusterWidth : nil,
+            alignment: .leading
+        )
     }
 
     /// One-row bars tighten with density; the two-row bar keeps its own rhythm.
@@ -1552,63 +1604,6 @@ private struct TLShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
-private struct TLSFXLibraryPresentation: ViewModifier {
-    @Binding var isPresented: Bool
-    let style: EditorPresentationStyle
-    let onSelect: (SoundEffectDefinition) -> Void
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        switch style {
-        case .popover:
-            content.popover(
-                isPresented: $isPresented,
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .bottom
-            ) {
-                let width: CGFloat = 560
-                panel
-                    .frame(
-                        width: width,
-                        height: SFXMetrics.panelHeight(forWidth: width)
-                    )
-                    .padding(12)
-                    .presentationCompactAdaptation(.sheet)
-            }
-        case .sheet:
-            content.sheet(isPresented: $isPresented) {
-                GeometryReader { proxy in
-                    let width = max(320, min(680, proxy.size.width - 32))
-                    let height = min(
-                        proxy.size.height - 32,
-                        SFXMetrics.panelHeight(forWidth: width)
-                    )
-
-                    panel
-                        .frame(width: width, height: max(260, height))
-                        .position(
-                            x: proxy.size.width / 2,
-                            y: proxy.size.height / 2
-                        )
-                }
-                .presentationBackground(.clear)
-            }
-        }
-    }
-
-    private var panel: some View {
-        SFXLibraryPanel(
-            onSelect: { effect in
-                onSelect(effect)
-                isPresented = false
-            },
-            onClose: {
-                isPresented = false
-            }
-        )
-    }
-}
-
 // MARK: - Toolbar History Button (undo / redo)
 
 private enum TLToolbarHistoryMetrics {
@@ -1785,6 +1780,11 @@ private struct TLToolbarHistoryPressStyle: ButtonStyle {
 // MARK: - Track Area (unified three-column scrollable layout)
 
 private struct TLTrackArea: View {
+    /// Row height for this screen — the timeline shares itself out across the
+    /// project's tracks instead of holding every screen to the phone's 46pt.
+    var rowHeight: CGFloat = TLK.trackRowHeight
+    private var waveformHeight: CGFloat { rowHeight * TLK.waveformHeightRatio }
+
     @Binding var tracks: [MixrTrack]
     @Binding var selectedClipID: UUID?
     let selectedTrackID: UUID?
@@ -1797,7 +1797,6 @@ private struct TLTrackArea: View {
     let importFooterHeight: CGFloat
     @Binding var showFilePicker: Bool
     @Binding var showSFXPanel: Bool
-    let sfxPresentationStyle: EditorPresentationStyle
     let onSelectSoundEffect: (SoundEffectDefinition) -> Void
     let onImportURLs: ([URL]) -> Void
     let onDeleteTrack: (UUID) -> Void
@@ -2142,8 +2141,8 @@ private struct TLTrackArea: View {
         let xOffset = (f.clip.start / currentContentUnits) * currentContentW
         let grabScreenPx = startAreaX - sidebarWidth - xOffset + hScrollOffset
         let clipTopAreaY = TLK.rulerHeight
-            + CGFloat(f.trackIdx) * TLK.trackRowHeight
-            + (TLK.trackRowHeight - TLK.waveformHeight) / 2
+            + CGFloat(f.trackIdx) * rowHeight
+            + (rowHeight - waveformHeight) / 2
             - vScrollOffset
         let grabScreenPy = startAreaY - clipTopAreaY
         let initialLeadingEdgePx = cursorAreaX - sidebarWidth + hScrollOffset - grabScreenPx
@@ -2357,7 +2356,7 @@ private struct TLTrackArea: View {
            let track = tracks.first(where: { $0.id == drag.trackID }) {
             let clipW = max(1, (drag.originalClip.length / contentUnits) * contentW)
             WaveformClip(waveformColor: track.color)
-                .frame(height: TLK.waveformHeight)
+                .frame(height: waveformHeight)
                 .frame(width: clipW)
                 .shadow(color: .black.opacity(0.55), radius: TLK.clipDragShadowRadius, x: 0, y: TLK.clipDragShadowY)
                 .shadow(color: track.color.color.opacity(0.44), radius: 14)
@@ -2373,11 +2372,11 @@ private struct TLTrackArea: View {
             let contentX = (f.clip.start / contentUnits) * contentW
             let screenX = sidebarWidth + contentX - hScrollOffset
             let clipTopY = TLK.rulerHeight
-                + CGFloat(f.trackIdx) * TLK.trackRowHeight
-                + (TLK.trackRowHeight - TLK.waveformHeight) / 2
+                + CGFloat(f.trackIdx) * rowHeight
+                + (rowHeight - waveformHeight) / 2
                 - vScrollOffset
             WaveformClip(waveformColor: f.track.color)
-                .frame(height: TLK.waveformHeight)
+                .frame(height: waveformHeight)
                 .frame(width: clipW)
                 .shadow(color: .black.opacity(0.55), radius: TLK.clipDragShadowRadius, x: 0, y: TLK.clipDragShadowY)
                 .shadow(color: f.track.color.color.opacity(0.44), radius: 14)
@@ -2401,12 +2400,12 @@ private struct TLTrackArea: View {
                 sidebarWidth: sidebarWidth
             )
             let trackTopY = TLK.rulerHeight
-                + CGFloat(drag.trackIdx) * TLK.trackRowHeight
+                + CGFloat(drag.trackIdx) * rowHeight
                 - vScrollOffset
 
             RoundedRectangle(cornerRadius: 1, style: .continuous)
                 .fill(track.color.color.opacity(0.85))
-                .frame(width: 2, height: TLK.trackRowHeight)
+                .frame(width: 2, height: rowHeight)
                 .shadow(color: track.color.color.opacity(0.60), radius: 6)
                 .offset(x: screenX - 1, y: trackTopY)
                 .allowsHitTesting(false)
@@ -2416,12 +2415,12 @@ private struct TLTrackArea: View {
                 + (f.clip.start / currentContentUnits) * currentContentW
                 - hScrollOffset
             let trackTopY = TLK.rulerHeight
-                + CGFloat(f.trackIdx) * TLK.trackRowHeight
+                + CGFloat(f.trackIdx) * rowHeight
                 - vScrollOffset
 
             RoundedRectangle(cornerRadius: 1, style: .continuous)
                 .fill(f.track.color.color.opacity(0.85))
-                .frame(width: 2, height: TLK.trackRowHeight)
+                .frame(width: 2, height: rowHeight)
                 .shadow(color: f.track.color.color.opacity(0.60), radius: 6)
                 .offset(x: screenX - 1, y: trackTopY)
                 .allowsHitTesting(false)
@@ -2444,9 +2443,9 @@ private struct TLTrackArea: View {
             } ?? baseContentUnits
             let contentUnits = max(baseContentUnits, dragContentUnits)
             let contentW = max(laneVW, contentUnits * TLK.timelineUnitWidth)
-            let rowsH    = CGFloat(tracks.count) * TLK.trackRowHeight
+            let rowsH    = CGFloat(tracks.count) * rowHeight
             let lanesH   = tracks.isEmpty
-                ? max(geo.size.height - TLK.rulerHeight, TLK.trackRowHeight)
+                ? max(geo.size.height - TLK.rulerHeight, rowHeight)
                 : max(rowsH, geo.size.height - TLK.rulerHeight)
             let totalH   = TLK.rulerHeight + lanesH
 
@@ -2667,6 +2666,7 @@ private struct TLTrackArea: View {
         VStack(spacing: 0) {
             ForEach(Array(tracks.enumerated()), id: \.element.id) { _, track in
                 TLSongRow(
+                    rowHeight: rowHeight,
                     track: track,
                     rowWidth: sidebarWidth,
                     isSelected: track.id == selectedTrackID,
@@ -2684,7 +2684,7 @@ private struct TLTrackArea: View {
                         onSelectTrack(track.id)
                     }
                 )
-                .frame(height: TLK.trackRowHeight)
+                .frame(height: rowHeight)
                 .overlay(alignment: .bottom) {
                     MixrColors.divider.frame(height: 0.5)
                 }
@@ -2746,6 +2746,7 @@ private struct TLTrackArea: View {
                         || (clipDragArmed != nil && track.clips.contains { $0.id == clipDragArmed })
 
                     TLTrackLane(
+                        rowHeight: rowHeight,
                         track:          track,
                         timelineWidth:  contentW,
                         contentUnits:   contentUnits,
@@ -2791,7 +2792,7 @@ private struct TLTrackArea: View {
                             cancelClipDrag()
                         }
                     )
-                    .frame(height: TLK.trackRowHeight)
+                    .frame(height: rowHeight)
                     .offset(y: rowOffset(trackID: track.id))
                     .animation(.easeOut(duration: TLK.clipDragScrimAnim), value: isDraggingClip)
                     .zIndex(laneHasSelectedClip ? 5 : (draggingID == track.id ? 1 : (isDraggingClip && isThisDragTrack ? 3 : 0)))
@@ -2844,8 +2845,8 @@ private struct TLTrackArea: View {
                 + TLClipEditingMetrics.toolbarPointerH
             let playheadContentX = (effectivePlayheadUnit / contentUnits) * contentW
             let tbSX   = screenXFor(playheadContentX)
-            let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * TLK.trackRowHeight - vScrollOffset
-            let tbTopY    = trackTopY + TLK.trackRowHeight * 0.03 - tbH * 0.5 - 6
+            let trackTopY = TLK.rulerHeight + CGFloat(f.trackIdx) * rowHeight - vScrollOffset
+            let tbTopY    = trackTopY + rowHeight * 0.03 - tbH * 0.5 - 6
             TLClipContextToolbar(
                 trackColor: f.track.color.color,
                 mode: mode,
@@ -2995,7 +2996,7 @@ private struct TLTrackArea: View {
                     },
                     onMixSettingsChanged: onMixSettingsChanged
                 )
-                .frame(height: TLK.trackRowHeight)
+                .frame(height: rowHeight)
                 .overlay(alignment: .bottom) {
                     MixrColors.divider.frame(height: 0.5)
                 }
@@ -3098,13 +3099,6 @@ private struct TLTrackArea: View {
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel("Sound Effects")
-        .modifier(
-            TLSFXLibraryPresentation(
-                isPresented: $showSFXPanel,
-                style: sfxPresentationStyle,
-                onSelect: onSelectSoundEffect
-            )
-        )
     }
 
     // MARK: Audio drop importing
@@ -3144,7 +3138,7 @@ private struct TLTrackArea: View {
               let fromIdx = tracks.firstIndex(where: { $0.id == dragID })
         else { return 0 }
 
-        let steps    = Int((dragTranslation / TLK.trackRowHeight).rounded())
+        let steps    = Int((dragTranslation / rowHeight).rounded())
         let insertAt = max(0, min(tracks.count - 1, fromIdx + steps))
 
         if trackID == dragID { return dragTranslation }
@@ -3152,8 +3146,8 @@ private struct TLTrackArea: View {
         guard let thisIdx = tracks.firstIndex(where: { $0.id == trackID }) else { return 0 }
 
         // Rows between the original position and insertion point shift to open the gap
-        if fromIdx < insertAt, thisIdx > fromIdx, thisIdx <= insertAt { return -TLK.trackRowHeight }
-        if fromIdx > insertAt, thisIdx >= insertAt, thisIdx < fromIdx { return  TLK.trackRowHeight }
+        if fromIdx < insertAt, thisIdx > fromIdx, thisIdx <= insertAt { return -rowHeight }
+        if fromIdx > insertAt, thisIdx >= insertAt, thisIdx < fromIdx { return  rowHeight }
         return 0
     }
 
@@ -3165,7 +3159,7 @@ private struct TLTrackArea: View {
             }
         }
         guard let fromIdx = tracks.firstIndex(where: { $0.id == fromID }) else { return }
-        let steps    = Int((translation / TLK.trackRowHeight).rounded())
+        let steps    = Int((translation / rowHeight).rounded())
         let insertAt = max(0, min(tracks.count - 1, fromIdx + steps))
         guard insertAt != fromIdx else { return }
         onReorder(IndexSet([fromIdx]), insertAt > fromIdx ? insertAt + 1 : insertAt)
@@ -3175,6 +3169,8 @@ private struct TLTrackArea: View {
 // MARK: - Song Row
 
 private struct TLSongRow: View {
+    var rowHeight: CGFloat = TLK.trackRowHeight
+
     let track: MixrTrack
     let rowWidth: CGFloat
     var isSelected: Bool = false
@@ -3213,12 +3209,21 @@ private struct TLSongRow: View {
                 }
                 .zIndex(1)
         }
-        .frame(height: TLK.trackRowHeight)
+        .frame(height: rowHeight)
         .clipped()
         .onChange(of: track.id) { _, _ in
             swipeOffset = 0
             isDeleting = false
         }
+    }
+
+    /// Artwork keeps a constant share of the row, so tall lanes don't strand a
+    /// small chip in empty space. Floored at the phone's chip size, which is
+    /// already a larger share of its shorter row.
+    private static let artworkRowShare: CGFloat = 0.57
+
+    private var artworkSize: CGFloat {
+        max(34, (rowHeight * Self.artworkRowShare).rounded())
     }
 
     private var rowContent: some View {
@@ -3235,7 +3240,8 @@ private struct TLSongRow: View {
                 color: track.color,
                 artworkData: track.artworkData,
                 icon: "music.note",
-                usesSFXMark: track.isSFXTrack
+                usesSFXMark: track.isSFXTrack,
+                size: artworkSize
             )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -3245,7 +3251,7 @@ private struct TLSongRow: View {
         }
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: TLK.trackRowHeight)
+        .frame(height: rowHeight)
         .contentShape(Rectangle())
         .onTapGesture {
             onSelect?()
@@ -3299,7 +3305,7 @@ private struct TLSongRow: View {
                     )
             }
             .foregroundStyle(.white)
-            .frame(width: deleteActionWidth, height: TLK.trackRowHeight)
+            .frame(width: deleteActionWidth, height: rowHeight)
             .background(Color(.systemRed))
             .contentShape(Rectangle())
         }
@@ -3865,6 +3871,9 @@ private struct TLClipMoveGestureBridge: UIViewRepresentable {
 // MARK: - Track Lane
 
 private struct TLTrackLane: View {
+    var rowHeight: CGFloat = TLK.trackRowHeight
+    private var waveformHeight: CGFloat { rowHeight * TLK.waveformHeightRatio }
+
     let track:          MixrTrack
     let timelineWidth:  CGFloat
     let contentUnits:   CGFloat
@@ -3991,7 +4000,7 @@ private struct TLTrackLane: View {
                 // isEnabled stays true for the actively-dragged clip so that .changed / .ended
                 // events continue to fire even after clipDragState is set.
                 Color.clear
-                    .frame(width: origClipW, height: TLK.trackRowHeight)
+                    .frame(width: origClipW, height: rowHeight)
                     .contentShape(Rectangle())
                     .overlay {
                         GeometryReader { proxy in
@@ -4011,7 +4020,7 @@ private struct TLTrackLane: View {
                             )
                         }
                     }
-                    .position(x: origXOffset + origClipW / 2, y: TLK.trackRowHeight / 2)
+                    .position(x: origXOffset + origClipW / 2, y: rowHeight / 2)
                     .zIndex(isDraggingThis ? 3 : 0)
 
                 // SFX clips have no transitions — no grips.
@@ -4028,11 +4037,11 @@ private struct TLTrackLane: View {
                 let xOffset = (ghost.start / contentUnits) * timelineWidth
                 let clipW   = max(1, (ghost.length / contentUnits) * timelineWidth)
                 WaveformClip(waveformColor: track.color)
-                    .frame(height: TLK.waveformHeight)
+                    .frame(height: waveformHeight)
                     .frame(width: clipW)
                     .opacity(TLK.clipDragGhostOpacity)
                     .allowsHitTesting(false)
-                    .position(x: xOffset + clipW / 2, y: TLK.trackRowHeight / 2)
+                    .position(x: xOffset + clipW / 2, y: rowHeight / 2)
                     .zIndex(0)
             }
         }
@@ -4065,10 +4074,10 @@ private struct TLTrackLane: View {
         isDraggingThis: Bool,
         isArmedThis: Bool
     ) -> some View {
-        let selectedBorderHeight = TLK.trackRowHeight - 2
+        let selectedBorderHeight = rowHeight - 2
 
         WaveformClip(waveformColor: track.color)
-            .frame(height: TLK.waveformHeight)
+            .frame(height: waveformHeight)
             .frame(width: clipW)
             .overlay {
                 if isSel && !isDraggingThis {
@@ -4121,7 +4130,7 @@ private struct TLTrackLane: View {
                     radius: 7, x: 0, y: 4)
             .opacity(isArmedThis ? 0 : segment.opacity)
             .allowsHitTesting(false)
-            .position(x: xOffset + clipW / 2, y: TLK.trackRowHeight / 2)
+            .position(x: xOffset + clipW / 2, y: rowHeight / 2)
             .animation(.spring(response: 0.28, dampingFraction: 0.75), value: segment.start)
             .animation(.spring(response: TLK.clipInsertPreviewResponse, dampingFraction: 0.82), value: segment.length)
             .zIndex(isSel ? 2 : 0)
@@ -4140,7 +4149,11 @@ private struct TLTrackLane: View {
                 }
             )
             .frame(width: gripHit, height: gripHit)
-            .position(x: xOffset, y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
+            // The waveform is centred in the row, so the grip belongs on the
+            // row's centre line. (The old form leaned on gripHit happening to
+            // match the phone's 34pt waveform; once the waveform scales with
+            // the row, that coincidence drifts the grip downwards.)
+            .position(x: xOffset, y: rowHeight / 2)
             .animation(.spring(response: 0.28, dampingFraction: 0.75), value: first.start)
             .zIndex(TLK.timelineGripZIndex)
         }
@@ -4157,7 +4170,7 @@ private struct TLTrackLane: View {
                 }
             )
             .frame(width: gripHit, height: gripHit)
-            .position(x: xOffset + clipW, y: (TLK.trackRowHeight + TLK.waveformHeight - gripHit) / 2)
+            .position(x: xOffset + clipW, y: rowHeight / 2)
             .animation(.spring(response: 0.28, dampingFraction: 0.75), value: last.start)
             .zIndex(TLK.timelineGripZIndex)
         }

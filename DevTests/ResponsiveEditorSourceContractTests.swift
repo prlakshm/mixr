@@ -140,12 +140,14 @@ check(
         && !timelineSource.contains("TLNativeProjectMenuButton")
 )
 
+// The library panel brings its own glass, so it is presented as an in-app
+// overlay — a system sheet or popover would draw an opaque slab behind it.
 check(
-    "SFX presentation adapts between native popover and sheet",
-    timelineSource.contains("private struct TLSFXLibraryPresentation: ViewModifier")
-        && timelineSource.contains("content.popover(")
-        && timelineSource.contains("content.sheet(isPresented:")
-        && timelineSource.contains(".presentationCompactAdaptation(.sheet)")
+    "SFX library is presented as an in-app overlay over a dimmed timeline",
+    timelineSource.contains("SFXLibraryPanel(")
+        && timelineSource.contains("dismissSFXPanel()")
+        && !timelineSource.contains("TLSFXLibraryPresentation")
+        && !timelineSource.contains(".presentationCompactAdaptation(")
 )
 
 check(

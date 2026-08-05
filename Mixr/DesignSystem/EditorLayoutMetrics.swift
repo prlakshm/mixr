@@ -164,13 +164,15 @@ enum EditorTransportMetrics {
     static let exportWidth: CGFloat = 96
     /// Clearance the centre cluster keeps from the side groups.
     static let minimumClusterGap: CGFloat = 10
-    /// Toolbar chrome grows more slowly than the effects panel — a bar that
-    /// tracked `contentScale` outright would dominate a tablet.
-    static let scaleDamping: CGFloat = 0.55
+    /// The bar keeps the same share of the editor's height on every screen, so
+    /// a tablet's toolbar reads as substantial as a desktop window's instead of
+    /// shrinking to a phone-sized strip on a much taller display.
+    static let toolbarHeightBasis: CGFloat = 590
+    static let toolbarScaleCeiling: CGFloat = 1.7
 
-    /// Toolbar scale wanted on a screen with this content scale.
-    static func desiredScale(contentScale: CGFloat) -> CGFloat {
-        1 + (contentScale - 1) * scaleDamping
+    /// Toolbar scale wanted on a screen of this content height.
+    static func desiredScale(contentHeight: CGFloat) -> CGFloat {
+        min(toolbarScaleCeiling, max(1, contentHeight / toolbarHeightBasis))
     }
 
     static func homeGroupWidth(
@@ -267,7 +269,35 @@ struct EditorTransportLayout: Equatable {
         let fittingScale = scalable > 0
             ? (contentWidth - fixed) / scalable
             : desiredScale
-        let scale = max(1, min(desiredScale, fittingScale))
+
+        // Fitting alone isn't enough: the bar must be able to seat the play
+        // button on the centre line with clearance on both sides. Solve each
+        // side for the largest scale that still allows it, and let a slightly
+        // smaller toolbar win over an off-centre play button.
+        let half = contentWidth / 2
+        let sideGroups = EditorTransportMetrics.logoWidth
+            + EditorTransportMetrics.projectTitleWidth
+            + EditorTransportMetrics.historyWidth
+        let playHalfSpan = EditorTransportMetrics.transportButtonWidth * 1.5
+        let leadingHeadroom = half
+            - density.transportSpacing
+            - density.toolbarEdgePadding
+            - density.toolbarLogoGap
+            - density.toolbarTitleGap
+            - EditorTransportMetrics.minimumClusterGap
+        let trailingHeadroom = half
+            + density.transportSpacing
+            - EditorTransportMetrics.clusterFixedWidth(density)
+            - density.toolbarEdgePadding
+            - EditorTransportMetrics.minimumClusterGap
+        let leadingCentringScale = leadingHeadroom / (playHalfSpan + sideGroups)
+        let trailingCentringScale = trailingHeadroom
+            / (EditorTransportMetrics.clusterScalableWidth(density)
+                + EditorTransportMetrics.exportWidth
+                - playHalfSpan)
+        let centringScale = min(leadingCentringScale, trailingCentringScale)
+
+        let scale = max(1, min(min(desiredScale, fittingScale), centringScale))
 
         let width = EditorTransportMetrics.clusterWidth(density, scale: scale)
         let playCentre = EditorTransportMetrics.playCentreInCluster(
@@ -310,11 +340,17 @@ struct EditorTransportLayout: Equatable {
 struct EditorLayoutMetrics: Equatable {
     static let minimumTracksWidth: CGFloat = 148
     static let idealTracksWidth: CGFloat = 208
-    static let maximumTracksWidth: CGFloat = 224
+    static let maximumTracksWidth: CGFloat = 360
 
     static let minimumControlsWidth: CGFloat = 104
     static let idealControlsWidth: CGFloat = 130
-    static let maximumControlsWidth: CGFloat = 144
+    static let maximumControlsWidth: CGFloat = 220
+
+    /// Side panels hold the share of the editor the desktop window uses, so a
+    /// wider screen widens the panels instead of pouring everything into the
+    /// timeline and leaving phone-width columns on a tablet.
+    static let tracksWidthShare: CGFloat = 0.219
+    static let controlsWidthShare: CGFloat = 0.141
 
     /// A phone in landscape keeps the one-row transport after its Dynamic
     /// Island bands are removed — that is the narrowest bar the groups fit on
@@ -338,6 +374,42 @@ struct EditorLayoutMetrics: Equatable {
     /// Phone-baseline effect card — scaled up by `contentScale`.
     static let baseEffectCardWidth: CGFloat = 152
     static let baseEffectCardHeight: CGFloat = 66
+    static let baseEffectCardGap: CGFloat = 8
+    /// Cards span the panel at the phone's rhythm — five and a half across, so
+    /// the last card is always half-cut and the row reads as scrollable.
+    static let effectCardsAcrossPanel: CGFloat = 5.5
+    /// Gutter either side of the card row (see TLEffectsPanel.horizontalInset).
+    static let effectRowInset: CGFloat = 16
+
+    /// Panel width one baseline card's worth of row occupies, inset and gaps
+    /// included — dividing by this gives the scale that lands the cut cleanly.
+    static var effectRowSpanPerCard: CGFloat {
+        effectRowInset
+            + effectCardsAcrossPanel * (baseEffectCardWidth + baseEffectCardGap)
+    }
+
+    /// Track rows share out the timeline so a full project fills the editor
+    /// instead of stranding a phone-sized stack at the top of a tablet.
+    static let baseTrackRowHeight: CGFloat = 46
+    static let maximumTrackRowHeight: CGFloat = 132
+    /// Share of the timeline a full track stack should occupy.
+    static let trackStackHeightShare: CGFloat = 0.86
+    /// Rows stop growing below this count, so one or two tracks don't become
+    /// enormous on a tall screen.
+    static let trackRowGrowthFloorCount: CGFloat = 5
+
+    /// Row height that gives `trackCount` rows the target share of the
+    /// timeline, held between the phone baseline and a sane maximum.
+    static func trackRowHeight(
+        timelineHeight: CGFloat,
+        rulerHeight: CGFloat,
+        trackCount: Int
+    ) -> CGFloat {
+        let lanes = max(CGFloat(trackCount), trackRowGrowthFloorCount)
+        let available = max(0, timelineHeight - rulerHeight)
+        let ideal = available * trackStackHeightShare / lanes
+        return min(maximumTrackRowHeight, max(baseTrackRowHeight, ideal.rounded()))
+    }
 
     static let roomyDensityWidth: CGFloat = 900
     static let largeDensityWidth: CGFloat = 1150
@@ -408,15 +480,14 @@ struct EditorLayoutMetrics: Equatable {
         let tracksWidth: CGFloat
         let controlsWidth: CGFloat
         if mode == .regular {
-            // Past the ideals the columns grow with the content scale, up to
-            // their maximums, so a tablet does not run phone-width panels.
+            // Never narrower than the phone's ideals, never wider than the caps.
             tracksWidth = min(
                 Self.maximumTracksWidth,
-                Self.idealTracksWidth * contentScale
+                max(Self.idealTracksWidth, width * Self.tracksWidthShare)
             )
             controlsWidth = min(
                 Self.maximumControlsWidth,
-                Self.idealControlsWidth * contentScale
+                max(Self.idealControlsWidth, width * Self.controlsWidthShare)
             )
         } else {
             let interpolationRange =
@@ -435,7 +506,7 @@ struct EditorLayoutMetrics: Equatable {
             contentWidth: width,
             density: density,
             desiredScale: mode == .regular
-                ? EditorTransportMetrics.desiredScale(contentScale: contentScale)
+                ? EditorTransportMetrics.desiredScale(contentHeight: height)
                 : 1
         )
         let transportHeight = mode == .regular
@@ -444,12 +515,15 @@ struct EditorLayoutMetrics: Equatable {
         let importFooterHeight = mode == .regular
             ? Self.regularImportFooterHeight
             : Self.compactImportFooterHeight
-        // Cards and the panel band grow together, then the growth is capped so
-        // the panel can never crowd out the timeline on a short window.
+        // Cards span the panel at the phone's rhythm, so a wider screen shows
+        // the same "five and a bit" row rather than the same small cards on a
+        // longer runway. Growth is then capped so the panel can never crowd out
+        // the timeline on a short window.
+        let cardsFitScale = width / Self.effectRowSpanPerCard
         let cardScale = max(
             1,
             min(
-                contentScale,
+                cardsFitScale,
                 height * Self.effectsHeightShareCeiling / Self.expandedEffectsHeight
             )
         )

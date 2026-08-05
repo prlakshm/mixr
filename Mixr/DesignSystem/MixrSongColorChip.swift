@@ -9,6 +9,8 @@ struct MixrSongColorChip: View {
     var icon: String = "music.note"
     /// When true, shows the AE-stencil sfx monogram instead of `icon`.
     var usesSFXMark: Bool = false
+    /// Edge length — grows with the track row on roomier screens.
+    var size: CGFloat = 34
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -36,7 +38,7 @@ struct MixrSongColorChip: View {
                 defaultChipContent
             }
         }
-        .frame(width: 34, height: 34)
+        .frame(width: size, height: size)
         .clipShape(shape)
         .overlay {
             if isReducedGlowChip {
@@ -127,10 +129,10 @@ struct MixrSongColorChip: View {
             )
 
             SFXCard.pearlIconFill
-                .frame(width: 34, height: 34)
+                .frame(width: size, height: size)
                 .mask {
-                    MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95, color: .white)
-                        .frame(width: 34, height: 34)
+                    MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95 * (size / 34), color: .white)
+                        .frame(width: size, height: size)
                 }
                 .shadow(
                     color: Color.white.opacity(profile.iconCoreGlowOpacity),
@@ -141,7 +143,7 @@ struct MixrSongColorChip: View {
                     radius: profile.iconBloomRadius
                 )
         }
-        .frame(width: 34, height: 34)
+        .frame(width: size, height: size)
         .partyModeBorder(
             shape: shape,
             role: .trackChip,

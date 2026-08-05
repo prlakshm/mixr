@@ -18,14 +18,17 @@ func checkClose(
     check(name, abs(actual - expected) <= tolerance)
 }
 
+// iPhone 17 Pro landscape once the Dynamic Island bands are removed — the
+// geometry the phone actually renders, and the baseline every other screen
+// scales up from.
 let approvedPhone = EditorLayoutMetrics(
-    containerSize: CGSize(width: 932, height: 430),
+    containerSize: CGSize(width: 750, height: 382),
     effectsState: .expanded
 )
 check("Approved phone uses the regular one-row transport", approvedPhone.mode == .regular)
 checkClose("Approved phone keeps the Tracks ideal width", approvedPhone.tracksWidth, 208)
 checkClose("Approved phone keeps the Controls ideal width", approvedPhone.controlsWidth, 130)
-checkClose("Approved phone gives remaining width to the timeline", approvedPhone.timelineWidth, 594)
+checkClose("Approved phone gives remaining width to the timeline", approvedPhone.timelineWidth, 412)
 checkClose("Expanded Effects uses the approved height", approvedPhone.effectsHeight, 118)
 checkClose("Regular transport uses the approved height", approvedPhone.transportHeight, 50)
 
@@ -37,21 +40,62 @@ let largeTablet = EditorLayoutMetrics(
     containerSize: CGSize(width: 1366, height: 1024),
     effectsState: .expanded
 )
-checkClose("Tracks grows to its maximum on a tablet", largeTablet.tracksWidth, 224)
-checkClose("Controls grows to its maximum on a tablet", largeTablet.controlsWidth, 144)
+checkClose(
+    "Tracks keeps the desktop share of a tablet's width",
+    largeTablet.tracksWidth,
+    1366 * EditorLayoutMetrics.tracksWidthShare
+)
+checkClose(
+    "Controls keeps the desktop share of a tablet's width",
+    largeTablet.controlsWidth,
+    1366 * EditorLayoutMetrics.controlsWidthShare
+)
+check(
+    "Side panels never fall below the phone's ideals",
+    EditorLayoutMetrics(
+        containerSize: CGSize(width: 750, height: 382),
+        effectsState: .expanded
+    ).tracksWidth == EditorLayoutMetrics.idealTracksWidth
+)
+check(
+    "A full track stack fills most of the timeline on a tablet",
+    (0.8...0.92).contains(
+        6 * EditorLayoutMetrics.trackRowHeight(
+            timelineHeight: largeTablet.timelineHeight,
+            rulerHeight: 20,
+            trackCount: 6
+        ) / (largeTablet.timelineHeight - 20)
+    )
+)
+check(
+    "The phone keeps its 46pt rows",
+    EditorLayoutMetrics.trackRowHeight(
+        timelineHeight: 214, rulerHeight: 20, trackCount: 6
+    ) == EditorLayoutMetrics.baseTrackRowHeight
+)
 check(
     "Additional tablet width goes to the timeline",
     largeTablet.timelineWidth > approvedPhone.timelineWidth
 )
 check("Tablets take the large toolbar density", largeTablet.density == .large)
-checkClose(
-    "Tablet effects reach the content-scale ceiling",
-    largeTablet.contentScale,
-    EditorLayoutMetrics.contentScaleCeiling
+check(
+    "Tablet cards span the panel at the phone's rhythm",
+    abs(
+        largeTablet.effectCardWidth
+            - 1366 / EditorLayoutMetrics.effectRowSpanPerCard
+            * EditorLayoutMetrics.baseEffectCardWidth
+    ) <= 1
 )
 check(
-    "Tablet effect cards are ~145% of the phone card",
-    largeTablet.effectCardWidth == 220 && largeTablet.effectCardHeight == 96
+    "Five and a half cards span the panel, so the last is always half-cut",
+    {
+        let inset = (EditorLayoutMetrics.effectRowInset * largeTablet.contentScale)
+            .rounded()
+        let gap = (EditorLayoutMetrics.baseEffectCardGap * largeTablet.contentScale)
+            .rounded()
+        let across = (1366 - inset) / (largeTablet.effectCardWidth + gap)
+        return (5.2...5.8).contains(across)
+    }()
 )
 check(
     "Tablet effects panel grows with its cards",
@@ -63,8 +107,18 @@ check(
         <= largeTablet.containerSize.height * EditorLayoutMetrics.effectsHeightShareCeiling
 )
 check(
-    "Tablet toolbar grows, but slower than the effects panel",
-    largeTablet.transport.scale > 1.2 && largeTablet.transport.scale < largeTablet.contentScale
+    "Toolbar keeps a constant share of the editor's height",
+    abs(
+        largeTablet.transportHeight / largeTablet.containerSize.height
+            - approvedPhone.transportHeight / 590
+    ) < 0.02
+)
+check(
+    "A desktop-sized window keeps the toolbar it already had",
+    EditorLayoutMetrics(
+        containerSize: CGSize(width: 1024, height: 736),
+        effectsState: .expanded
+    ).transportHeight == 62
 )
 check("Tablet transport bar grows with its controls", largeTablet.transportHeight > 56)
 
@@ -101,7 +155,7 @@ check(
 )
 
 let collapsedPhone = EditorLayoutMetrics(
-    containerSize: CGSize(width: 932, height: 430),
+    containerSize: CGSize(width: 750, height: 382),
     effectsState: .collapsed
 )
 checkClose("Collapsed Effects uses the approved handle-only height", collapsedPhone.effectsHeight, 42)
