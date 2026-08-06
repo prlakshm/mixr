@@ -1,20 +1,20 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.00000,0.53333,1.00000,1.00000"
   },
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "image-name" : "mixr logo2.png",
-          "name" : "mixr logo2",
-          "position-specializations" : [
+          "image-name": "mixr logo2.png",
+          "name": "mixr logo2",
+          "position-specializations": [
             {
-              "idiom" : "square",
-              "value" : {
-                "scale" : 0.84,
-                "translation-in-points" : [
-                  -11,
+              "idiom": "square",
+              "value": {
+                "scale": 0.84,
+                "translation-in-points": [
+                  0,
                   0
                 ]
               }
@@ -22,20 +22,20 @@
           ]
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
+      "translucency": {
+        "enabled": true,
+        "value": 0.5
       }
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
+  "supported-platforms": {
+    "circles": [
       "watchOS"
     ],
-    "squares" : "shared"
+    "squares": "shared"
   }
 }
