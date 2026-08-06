@@ -87,21 +87,31 @@ enum MixrColors {
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
 
-    /// Refined B — darker pearl-lavender SFX clip presentation.
+    // Refined B — darker pearl-lavender SFX clip presentation, collapsed to
+    // five values. The palette used to carry eight, but three of them sat
+    // within ΔE 2.7–4.6 of a neighbour and only ever rendered at 8–48%
+    // opacity, so the distinction never reached the screen. Each value below
+    // is at least 6 ΔE from the next.
     static let sfxClipBodyTint = Color(hex: "8A839D")
     static let sfxClipInnerTint = Color(hex: "B9B0D2")
-    static let sfxWaveformTop = Color(hex: "E4DBFA")
-    static let sfxWaveformBottom = Color(hex: "CFC6EE")
-    static let sfxOutline = Color(hex: "CDC2F4")
-    static let sfxWaveformGlow = Color(hex: "E6E1F4")
+    /// The SFX identity — track, slider, clip outline and library menu.
     static let sfxMenuLavender = Color(hex: "C9B9F4")
-
-    /// Compatibility aliases for existing SFX-only accents and transitions.
-    static let sfxPrimary = sfxWaveformBottom
-    static let sfxSecondary = sfxClipBodyTint
-    static let sfxFill = sfxClipBodyTint
+    static let sfxWaveformTop = Color(hex: "E4DBFA")
     /// Resting clip ambient glow.
     static let sfxGlow = Color(hex: "E7EDF5")
+
+    /// Folded onto the identity lavender — was #CDC2F4 (ΔE 2.8).
+    static let sfxOutline = sfxMenuLavender
+    /// Folded onto the identity lavender — was #CFC6EE (ΔE 2.7). The waveform
+    /// gradient now runs from `sfxWaveformTop` down to the SFX colour itself.
+    static let sfxWaveformBottom = sfxMenuLavender
+    /// Folded onto the gradient's top stop — was #E6E1F4 (ΔE 4.6).
+    static let sfxWaveformGlow = sfxWaveformTop
+
+    /// Compatibility aliases for existing SFX-only accents and transitions.
+    static let sfxPrimary = sfxMenuLavender
+    static let sfxSecondary = sfxClipBodyTint
+    static let sfxFill = sfxClipBodyTint
     /// Alias for the Sound Effects track color (`sfxPrimary`).
     static let waveformSilver = sfxPrimary
 
