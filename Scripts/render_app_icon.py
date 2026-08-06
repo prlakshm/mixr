@@ -40,6 +40,16 @@ BAR_HEIGHTS = np.array([250.0, 632.0, 880.0, 390.0, 634.0, 250.0])
 # nearer 52%, which lands ~56% of the rendered tile at Icon Composer scale.
 MARK_WIDTH_FRACTION = 0.524
 
+# Put every bar on one horizontal axis.
+#
+# In the spec the bars' vertical centres are 635/628/635/657/627/635 — five of
+# them inside an 8px band and bar 4 hanging 25px below the rest. That one bar
+# is what tilts the mark: fit a line through the six centres and the slope is
+# +0.0040, drop bar 4 and it is -0.0013, i.e. flat. A waveform reads off a
+# shared centre line, so the drop is drift rather than intent, and correcting
+# it removes the slant without touching any bar's height or order.
+ALIGN_BAR_CENTRES = True
+
 BAR_GRADIENT = (
     [(0xA4, 0x5C, 0xFF), (0x7E, 0x2B, 0xEA), (0x5C, 0x23, 0xBE), (0x46, 0x10, 0xAD)],
     [0.0, 0.12, 0.58, 1.0],
@@ -78,6 +88,10 @@ def solve_geometry():
     width = BAR_WIDTH * scale
     tops = mid + (BAR_TOPS - mid) * scale
     heights = BAR_HEIGHTS * scale
+
+    if ALIGN_BAR_CENTRES:
+        axis = (tops + heights / 2.0).mean()
+        tops = axis - heights / 2.0
 
     # Optical centring: balance area, not bounding box.
     area_x = (centres * heights).sum() / heights.sum()
