@@ -60,31 +60,41 @@ struct SFXIconBoxRenderingProfile {
         outerGlowRadius: 0
     )
 
-    /// Sidebar song chip — purple stops match `MixrTrackRowBackground` SFX row.
+    /// Sidebar song chip — an elevated pane resting on the SFX row.
+    ///
+    /// This used to reuse `MixrTrackRowBackground`'s purple stops verbatim
+    /// (#241A39 / #090B13 / #162239 with #A281BC accents), which made the chip
+    /// dissolve into the card behind it — same hues, and a rim weaker than the
+    /// surface it sat on. It now takes the SFX library panel's glossy dark
+    /// blue (#171927 → #0B0E19), carried at near-full opacity so it reads as a
+    /// solid pane rather than a wash, with the rim at full strength so its
+    /// edge is brighter than the row's.
     static let compact = Self(
-        baseTopColor: Color(hex: "241A39"),
-        baseBottomColor: Color(hex: "162239"),
-        baseTopOpacity: 0.52,
-        baseBottomOpacity: 0.58,
-        materialOpacity: 0.03,
-        navyWashColor: Color(hex: "090B13"),
-        navyWashOpacity: 0.22,
-        luminanceWashColor: Color(hex: "A281BC"),
-        luminanceWashOpacity: 0.06,
-        radialPrimaryColor: Color(hex: "A281BC"),
-        radialPrimaryOpacity: 0.12,
-        radialSecondaryColor: Color(hex: "765A92"),
+        baseTopColor: Color(hex: "171927"),
+        baseBottomColor: Color(hex: "0B0E19"),
+        baseTopOpacity: 0.88,
+        baseBottomOpacity: 0.94,
+        materialOpacity: 0.16,
+        navyWashColor: MixrColors.glassNavyDefault,
+        navyWashOpacity: 0.10,
+        luminanceWashColor: Color(hex: "8C7DAA"),
+        luminanceWashOpacity: 0.05,
+        // The panel's own cool bloom, not the row's warm purple.
+        radialPrimaryColor: Color(hex: "8C7DAA"),
+        radialPrimaryOpacity: 0.14,
+        radialSecondaryColor: Color(hex: "6E7CA8"),
         radialSecondaryOpacity: 0.08,
-        borderTint: Color(hex: "A281BC"),
-        // Prior 0.18, then −20% opacity for the small square chip only.
-        borderOpacity: 0.144,
-        rimStrength: 0.40,
+        // Matches the SFX panel's own hairline.
+        borderTint: .white,
+        borderOpacity: 0.14,
+        rimStrength: 1.0,
         usesActiveColorwayBorder: false,
         iconBloomColor: Color(hex: "A281BC").opacity(0.35),
-        iconCoreGlowOpacity: 0.34,
+        // Lifted slightly — the glyph now sits on a darker box.
+        iconCoreGlowOpacity: 0.42,
         iconCoreGlowRadius: 1.6,
         iconBloomRadius: 2.5,
-        outerGlowColor: Color(hex: "A281BC").opacity(0.08),
-        outerGlowRadius: 3
+        outerGlowColor: Color(hex: "8C7DAA").opacity(0.10),
+        outerGlowRadius: 4
     )
 }

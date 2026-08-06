@@ -118,39 +118,164 @@ struct MixrSongColorChip: View {
         )
     }
 
+    /// The SFX chip is the same object as an effects-card icon tile, in the SFX
+    /// colourway — see `GlassIconTile` in EffectCard.swift, which this mirrors
+    /// layer for layer.
+    ///
+    /// How those tiles actually work: the base is near-opaque black glass
+    /// (#111521 → #05070D at 0.96/0.99), and all the colour arrives as *light
+    /// trapped inside it* — two radial blooms whose centres sit outside the
+    /// tile, one entering the top edge and a brighter one rising from the
+    /// bottom, leaving the middle darkest. Over that go a white specular sheen
+    /// masked to the top-leading diagonal, a short straight gleam line near the
+    /// top, and a rim that runs white → colour → dimmer colour along the same
+    /// diagonal. Nothing tints the fill; that is why they read as solid lit
+    /// blocks rather than coloured panels, and it is what the chip was missing.
     private var sfxChipContent: some View {
-        let profile = SFXIconBoxRenderingProfile.compact
+        // The tile is authored at 46pt; every dimension scales from that so the
+        // chip is a true miniature rather than an approximation.
+        let s = size / EffectCardMetrics.iconTileSize
+        let tint = MixrColors.sfxMenuLavender
+        let tileShape = sfxTileShape
 
         return ZStack {
-            SFXIconBoxSurface(
-                cornerRadius: 7,
-                bloomEndRadius: 34 * 0.62,
-                profile: profile
+            // The one place this deliberately departs from `GlassIconTile`.
+            //
+            // That tile carries its base at 0.96/0.99 — effectively opaque —
+            // which is fine on an effects card, where the backdrop is flat
+            // glass. Here the backdrop is `MixrTrackRowBackground`'s horizontal
+            // gradient (#241A39 → #090B13 → #162239), and an opaque black base
+            // punches a hole straight through it. Carried at a low opacity
+            // instead, the glass darkens and cools whatever the row happens to
+            // be doing underneath, so the chip follows the gradient at its own
+            // position rather than replacing it.
+            tileShape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "111521").opacity(0.34),
+                            Color(hex: "05070D").opacity(0.52),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            // Colour entering the top edge.
+            tileShape.fill(
+                RadialGradient(
+                    colors: [
+                        tint.opacity(0.60),
+                        tint.opacity(0.24),
+                        tint.opacity(0.055),
+                        .clear,
+                    ],
+                    center: UnitPoint(x: 0.24, y: -0.08),
+                    startRadius: 0,
+                    endRadius: size * 0.54
+                )
             )
 
-            SFXCard.pearlIconFill
-                .frame(width: size, height: size)
+            // The one rising from the bottom. Held back from the tile's own
+            // 0.98/0.42/0.11 because the SFX lavender is far lighter than the
+            // effect colours (L* 78 vs Echo's 57) — at the authored opacities
+            // it blows out to white instead of reading as tint.
+            //
+            // Seated as the top bloom's reflection: x 0.24 mirrors to 0.76,
+            // nudged to 0.78 so the pair is near-symmetric rather than exactly
+            // so. This sits just outside the effect tiles' 0.38–0.66 range —
+            // deliberate, since those blooms sit under a centred SF Symbol
+            // while this one clears a wider, left-weighted stencil.
+            tileShape.fill(
+                RadialGradient(
+                    colors: [
+                        tint.opacity(0.60),
+                        tint.opacity(0.26),
+                        tint.opacity(0.07),
+                        .clear,
+                    ],
+                    center: UnitPoint(x: 0.78, y: 1.02),
+                    startRadius: 0,
+                    endRadius: size * 0.42
+                )
+            )
+
+            // Specular sheen along the top-leading diagonal.
+            tileShape
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.55 * s)
                 .mask {
-                    MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95 * (size / 34), color: .white)
-                        .frame(width: size, height: size)
+                    LinearGradient(
+                        colors: [.white, .white.opacity(0.15), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 }
-                .shadow(
-                    color: Color.white.opacity(profile.iconCoreGlowOpacity),
-                    radius: profile.iconCoreGlowRadius
-                )
-                .shadow(
-                    color: profile.iconBloomColor,
-                    radius: profile.iconBloomRadius
-                )
+
+            // The straight gleam across the top face.
+            Path { path in
+                path.move(to: CGPoint(x: size * 0.18, y: size * 0.08))
+                path.addLine(to: CGPoint(x: size * 0.78, y: size * 0.08))
+            }
+            .stroke(
+                Color.white.opacity(0.13),
+                style: StrokeStyle(lineWidth: 0.8 * s, lineCap: .round)
+            )
+
+            // Crisp coloured rim — white at the lit corner, colour through the
+            // diagonal, dimmer colour where it turns away.
+            tileShape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.12),
+                        tint.opacity(0.58),
+                        tint.opacity(0.30),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.9 * s
+            )
+
+            sfxGlyph(tint: tint, scale: s)
         }
         .frame(width: size, height: size)
         .partyModeBorder(
-            shape: shape,
+            shape: tileShape,
             role: .trackChip,
             lighting: .counterClockwise,
             semanticColor: MixrColors.sfxGlow,
             glintOffset: .far
         )
+    }
+
+    /// Corner radius carried over from the effects tile (12 on 46), so the chip
+    /// keeps the family silhouette rather than the sidebar's tighter 7.
+    private var sfxTileShape: RoundedRectangle {
+        RoundedRectangle(
+            cornerRadius: size * (EffectCardMetrics.iconTileRadius / EffectCardMetrics.iconTileSize),
+            style: .continuous
+        )
+    }
+
+
+    /// The sfx monogram — deliberately *not* on the effects-tile icon scale.
+    ///
+    /// This mark is sized against the footer SFX button's stencil
+    /// (`MixrSFXOutlineButtonLabel`, ~19.7 × 13.5), so the two SFX entry points
+    /// in the timeline read as the same glyph. Driving it from
+    /// `EffectCardMetrics.iconSize` instead made it ~19% larger and broke that
+    /// pairing. The tile recipe governs the box; the button governs the mark.
+    private func sfxGlyph(tint: Color, scale s: CGFloat) -> some View {
+        SFXCard.pearlIconFill
+            .frame(width: size, height: size)
+            .mask {
+                MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95 * (size / 34), color: .white)
+                    .frame(width: size, height: size)
+            }
+            // Tight white core plus a soft lavender bloom — the original
+            // treatment, kept at its authored radii.
+            .shadow(color: Color.white.opacity(0.42), radius: 1.6)
+            .shadow(color: Color(hex: "A281BC").opacity(0.35), radius: 2.5)
     }
 
     private var defaultChipContent: some View {
