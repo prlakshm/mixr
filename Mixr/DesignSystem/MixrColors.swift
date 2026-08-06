@@ -78,11 +78,11 @@ enum MixrColors {
 
     static let divider = Color(hex: "2A3142")
 
-    static let primaryPurple = Color(hex: "7C3AED")
-    static let secondaryPurple = Color(hex: "8B5CF6")
+    static let primaryPurple = Color(hex: "7231DD")
+    static let secondaryPurple = Color(hex: "9873EB")
 
     static let waveformPink = Color(hex: "FF5FA2")
-    static let waveformPurple = Color(hex: "8B5CF6")
+    static let waveformPurple = Color(hex: "9873EB")
     static let waveformRed = Color(hex: "EF4444")
     static let waveformYellow = Color(hex: "EAB308")
     static let waveformBlue = Color(hex: "0EA5E9")
