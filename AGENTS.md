@@ -2,21 +2,30 @@
 
 ## Product principle
 
-For one-song Auto Remix, preserve the song before transforming it. The default result should sound like a polished alternate version of the original—not a shuffled highlight reel.
+For one-song Auto Remix, preserve the song's identity while creating a clearly edited alternate arrangement. The default result should sound like a polished alternate version of the original—not a shuffled highlight reel.
+
+Preservation is a constraint on identity, not a ban on edits. SFX alone do not count as transformation.
+
+## Confidence ladder (cuts vs preservation)
+
+Apply aggressiveness from measured analysis confidence:
+
+1. **Low confidence** (weak section/beat/phrase evidence): default to zero internal cuts. Permit edge trimming and effects that do not require precise structure. Do not invent cuts to hit transformation quotas.
+2. **Medium confidence**: prefer continuous placement; allow a small number of phrase-aligned cuts only with strong local evidence and filled transitions.
+3. **High confidence** (song ≳ 2.5 minutes with reliable section/beat/phrase analysis): target 3–5 transformation zones across at least three structural regions, including at least two non-SFX transformations. Prefer arrangement changes when repeat evidence supports them. Preserve at least one complete primary hook and one substantial continuous passage. These are planning targets, not unconditional quotas—explain fewer edits.
+
+Never cut merely to increase variety, handoffs, effect count, or SFX density. When uncertain, keep the audio continuous.
 
 ## Structural edits
 
 - Begin with the original source order.
-- Default to zero internal cuts.
 - Trim beginnings and endings only with signal-derived evidence.
-- Never cut merely to increase variety, handoffs, effect count, or SFX density.
 - Every internal cut requires:
   - a musical reason;
   - sufficient analysis confidence;
   - phrase/downbeat-aligned boundaries;
   - an explicitly filled or layered transition;
   - passing audio-quality validation.
-- When uncertain, keep the audio continuous.
 
 ## Transitions
 

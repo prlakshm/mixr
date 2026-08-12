@@ -7,6 +7,8 @@ description: >-
   auditing remix decisions, or implementing Auto Remix planning logic.
 ---
 
+> **Policy source of truth:** Mixr root `AGENTS.md` confidence ladder. This skill provides planning procedure; if guidance conflicts, AGENTS.md wins.
+
 # DJ Remix Planning
 
 ## Product intent

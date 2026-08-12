@@ -1,183 +1,67 @@
 ---
-description: Mixr iOS app rules
+description: Mixr iOS app UI and engineering conventions. Audio product rules live in AGENTS.md.
 alwaysApply: true
 ---
 
 # Mixr Rules
 
-You are building a SwiftUI iPhone app called Mixr.
+You are building Mixr, a SwiftUI iPhone DJ / Auto Remix app.
 
-The current goal is to recreate the attached reference image as a static high-fidelity SwiftUI prototype.
+## Source of truth
 
-Do not implement real audio, file import, backend logic, AVAudioEngine, export, or AI yet.
+- **Audio / Auto Remix behavior:** root `AGENTS.md` (and `dj-remix-planning` skill when planning remixes).
+- **UI craft:** this file for visual tokens and layout. Do not invent a new visual language.
+- **Stack gates:** SwiftUI / AVFoundation / Instruments for app code. Do not apply web Motion, Tailwind, or React EDT patterns to Swift files.
 
 ## Stack
 
-- SwiftUI
-- iOS 18+
+- SwiftUI, iOS 18+
 - MVVM
-- Mock data only for now
+- Real audio, import, export, and Auto Remix are in scope when the task asks for them
 
-## Visual Source of Truth
+## Design language
 
-The attached Mixr screenshot is the visual specification.
+Apple Music meets Linear: premium dark mode, Apple-style glass, subtle blur, translucent panels, thin borders, soft shadows, restrained purple glow, high contrast text.
 
-Do not redesign it.
-
-Do not simplify it.
-
-Do not invent a new style.
-
-Prioritize faithful recreation of:
-
-- layout
-- spacing
-- proportions
-- typography
-- glass materials
-- waveform colors
-- timeline density
-- button styling
-- drawer styling
-
-## Current Build Goal
-
-Build in this order:
-
-1. Design system
-2. Glass material system
-3. Waveform clip component
-4. Static layout
-5. Mock interactions later
-
-Do not build the whole app at once.
-
-## Design Language
-
-The UI should feel like:
-
-Apple Music meets Linear.
-
-Use:
-
-- premium dark mode
-- Apple-style glass
-- subtle blur
-- translucent panels
-- thin borders
-- soft shadows
-- restrained purple glow
-- high contrast text
-
-Avoid:
-
-- neon gamer aesthetics
-- flat black panels
-- rainbow gradients
-- excessive glow
-- generic AI-generated UI
-- skeuomorphic DJ controls
+Avoid: neon gamer aesthetics, flat black panels, rainbow gradients, excessive glow, generic AI UI, skeuomorphic DJ controls.
 
 ## Colors
 
-Background: #050816
-Background Secondary: #080B16
+Background: #050816  
+Background Secondary: #080B16  
+Surface: #111827  
+Elevated Surface: #171E2E  
+Primary Purple: #7C3AED  
+Secondary Purple: #8B5CF6  
+Text Primary: #FFFFFF  
+Text Secondary: #9CA3AF  
+Divider: #2A3142  
+Waveform Pink: #FF5FA2  
+Waveform Purple: #8B5CF6  
+Waveform Red: #EF4444  
+Waveform Yellow: #EAB308  
+Waveform Blue: #0EA5E9  
 
-Surface: #111827
-Elevated Surface: #171E2E
-
-Primary Purple: #7C3AED Secondary Purple: #8B5CF6
-
-Text Primary: #FFFFFF
-Text Secondary: #9CA3AF
-
-Divider: #2A3142
-
-Waveform Pink: #FF5FA2
-Waveform Purple: #8B5CF6
-Waveform Red: #EF4444
-Waveform Yellow: #EAB308
-Waveform Blue: #0EA5E9
+Mixr's purple brand is intentional. Global anti-purple "AI slop" guidance does not apply to these tokens.
 
 ## Typography
 
-Use Apple system fonts.
+Apple system fonts. SF Pro Display for logo / section titles / top bar. SF Pro Text for song titles, metadata, buttons, controls.
 
-SF Pro Display style for:
-
-- logo
-- section titles
-- top bar labels
-
-SF Pro Text style for:
-
-- song titles
-- artist names
-- metadata
-- buttons
-- controls
-
-Suggested scale:
-
-- App title: 24pt bold
-- Section title: 15pt semibold
-- Song title: 13pt semibold
-- Body: 12pt regular
-- Metadata: 10pt medium
+Suggested scale: App title 24 bold · Section 15 semibold · Song 13 semibold · Body 12 · Metadata 10 medium.
 
 ## Layout
 
-Landscape for iPhone only. Rotate display shows when vertical.
+Landscape for iPhone; rotate prompt when vertical. Main screen keeps sidebar, playback controls, waveform timeline, solo/mute, tools drawer, AI Suggestions, and export visible. No tab bar. No navigation-stack chrome. No modal-heavy UI.
 
-Main screen must include:
+## Materials
 
-- left song sidebar
-- top playback controls
-- large waveform timeline
-- right-side solo/mute buttons
-- bottom tools drawer
-- AI Suggestions button
-- export button
+Glass: translucent dark surfaces, subtle blur, thin light border, soft inner depth, restrained shadows. Prefer shared layout metrics over size-specific forks. UI chrome fixes must land in the shared path used by every breakpoint.
 
-Everything important should remain visible.
+## Coding behavior
 
-No tab bar.
-No navigation stack.
-No modal-heavy interface.
-
-## Material System
-
-Glass panels should use:
-
-- translucent dark surfaces
-- subtle blur
-- thin light border
-- soft inner depth
-- restrained shadows
-
-Do not use solid flat panels unless needed.
-
-## Responsive Layouts
-
-Every UI adjustment must apply to all responsive layouts and breakpoints (compact and regular widths, collapsed and expanded Effects, phone landscape sizes).
-
-- Prefer shared components and layout metrics over size-specific forks.
-- Do not fix a visual issue for only one screen size unless the user explicitly scopes it.
-- When editing chrome (borders, spacing, materials, typography), verify the change lives in the shared path used by every layout.
-
-## Cursor Behavior
-
-Before writing code:
-
-1. Explain implementation plan.
-2. List files to create or edit.
-3. Wait for approval.
-
-When coding:
-
-- Modify only relevant files.
-- Keep files small.
-- Use reusable SwiftUI components.
-- Do not rewrite unrelated code.
+- Prefer small, reusable SwiftUI components.
+- Modify only relevant files; no drive-by refactors.
 - Do not add dependencies unless asked.
-- Do not implement real app functionality yet.
+- For multi-step features: brief plan, then implement. Do not block on approval unless the user asks.
+- For audio changes: follow `AGENTS.md` completion standard (tests, render, diagnostics, audition, evidence).
