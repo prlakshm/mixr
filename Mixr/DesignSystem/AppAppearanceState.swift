@@ -13,4 +13,12 @@ final class AppAppearanceState {
             partyModeActivationID &+= 1
         }
     }
+
+#if DEBUG
+    /// Editor surface requested by a visual-QA launch argument ("sfx",
+    /// "delete", "hscroll"). `ContentView` sets it after launch settles;
+    /// `TimelineScreen` opens the matching surface so headless capture can
+    /// screenshot states that normally need interaction.
+    var editorVisualQAState: String?
+#endif
 }

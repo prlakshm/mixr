@@ -49,6 +49,22 @@ struct ContentView: View {
             return
         }
 
+        // Editor-surface capture: `-MixrEditorVisualQA <state>` opens one
+        // interactive surface (see AppAppearanceState.editorVisualQAState)
+        // and screenshots it, so states that need a tap are testable from
+        // the command line.
+        if let flagIndex = arguments.firstIndex(of: "-MixrEditorVisualQA"),
+           arguments.indices.contains(flagIndex + 1) {
+            let state = arguments[flagIndex + 1]
+            try? await Task.sleep(for: .seconds(2))
+            appearanceState.editorVisualQAState = state
+            try? await Task.sleep(for: .seconds(1.6))
+            _ = try? PartyModeVisualQACapture.capture(
+                filename: "mixr-editor-qa-\(state).png"
+            )
+            return
+        }
+
         if arguments.contains("-MixrPartyModeCaptureSequence") {
             await captureLiveActivationSequence()
             return
