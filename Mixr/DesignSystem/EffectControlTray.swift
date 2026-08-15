@@ -33,6 +33,13 @@ enum EffectTrayMetrics {
     static let presetSegmentedHeight: CGFloat = 28
     /// Nudge slider + presets slightly lower in the tray.
     static let presetContentDownshift: CGFloat = 3.5
+
+    /// Tray label / preset type. The phone keeps its dense 9.5pt; above phone
+    /// scale the tray matches the transition menu's segmented control (10.5 —
+    /// see `TLTransitionMenu`'s curve control) so the two menus read as one
+    /// family.
+    static let compactControlFontSize: CGFloat = 9.5
+    static let regularControlFontSize: CGFloat = 10.5
     /// Slow ease for card slide / tray grow / sibling push (+10% from 0.62).
     static let expandAnimationDuration: Double = 0.682
 
@@ -59,6 +66,8 @@ struct EffectControlTray: View {
     var pitchDirection: PitchDirection = .up
     /// Matches the effect card it grows out of, which scales with the screen.
     var height: CGFloat = EffectTrayMetrics.height
+    /// 9.5 on phones; the transition-menu segmented size above phone scale.
+    var controlFontSize: CGFloat = EffectTrayMetrics.compactControlFontSize
     var onLevelChanged: (Double) -> Void = { _ in }
     /// true on drag start, false on drag end — for undo commits.
     var onEditingChanged: (Bool) -> Void = { _ in }
@@ -144,7 +153,7 @@ struct EffectControlTray: View {
     private var sliderRow: some View {
         HStack(spacing: 8) {
             Text("0")
-                .font(.system(size: 9.5, weight: .medium))
+                .font(.system(size: controlFontSize, weight: .medium))
                 .foregroundStyle(MixrColors.textSecondary)
 
             TLVolumeSlider(
@@ -162,9 +171,13 @@ struct EffectControlTray: View {
             .frame(maxWidth: .infinity)
 
             Text(showsCurrentValue ? "\(Int(level.rounded()))" : "100")
-                .font(.system(size: 9.5, weight: showsCurrentValue ? .semibold : .medium))
+                .font(.system(size: controlFontSize, weight: showsCurrentValue ? .semibold : .medium))
                 .foregroundStyle(showsCurrentValue ? MixrColors.textPrimary : MixrColors.textSecondary)
-                .frame(width: 22, alignment: .trailing)
+                .frame(
+                    width: (22 * controlFontSize / EffectTrayMetrics.compactControlFontSize)
+                        .rounded(.up),
+                    alignment: .trailing
+                )
         }
     }
 
@@ -177,7 +190,7 @@ struct EffectControlTray: View {
                 options: ReverbPreset.allCases,
                 selected: reverbPreset,
                 trackColor: effect.color,
-                fontSize: 9.5,
+                fontSize: controlFontSize,
                 selectionSpringResponse: 0.30,
                 title: { option, _ in option.title },
                 onSelect: onReverbPreset
@@ -187,7 +200,7 @@ struct EffectControlTray: View {
                 options: EchoPreset.allCases,
                 selected: echoPreset,
                 trackColor: effect.color,
-                fontSize: 9.5,
+                fontSize: controlFontSize,
                 selectionSpringResponse: 0.30,
                 title: { option, _ in option.title },
                 onSelect: onEchoPreset
@@ -198,7 +211,7 @@ struct EffectControlTray: View {
                 options: PitchDirection.allCases,
                 selected: pitchDirection,
                 trackColor: effect.color,
-                fontSize: 9.5,
+                fontSize: controlFontSize,
                 selectionSpringResponse: 0.30,
                 title: { option, isSelected in option.label(isSelected: isSelected) },
                 onSelect: onPitchDirection

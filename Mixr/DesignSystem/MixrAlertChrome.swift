@@ -21,7 +21,11 @@ enum MixrAlertChrome {
     /// to a tablet-sized toolbar and effects panel. The alert follows the
     /// layout's content scale, capped well short of it — an alert is a focused
     /// interruption, not a panel, and should never become a billboard.
-    static let maximumScale: CGFloat = 1.25
+    /// Apple's alerts are a fixed 270pt on every device. 1.25 put ours at
+    /// 335pt, which read as a panel rather than an alert next to system UI;
+    /// 1.12 lands at ~300pt — still visibly ours, but inside the size family
+    /// a system alert occupies.
+    static let maximumScale: CGFloat = 1.12
 
     static func scale(forContentScale contentScale: CGFloat) -> CGFloat {
         min(maximumScale, max(1, contentScale))

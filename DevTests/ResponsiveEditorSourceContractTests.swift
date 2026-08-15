@@ -212,6 +212,51 @@ check(
         && timelineSource.contains(".mixrScaledFont(")
 )
 
+// The only resting line above the ruler timestamps is the toolbar's own
+// full-width divider — the lane viewport must not draw a second idle border.
+check(
+    "Lane viewport keeps only the drop-target stroke, no idle border",
+    !timelineSource.contains("MixrColors.divider.opacity(0.95)")
+        && timelineSource.contains("opacity(isTimelineDropTarget ? 0.52 : 0)")
+)
+
+check(
+    "Play circle draws smaller than its hit target to clear the bar divider",
+    timelineSource.contains("playButtonDiameter")
+        && timelineSource.contains("(transportControlSize * 0.88).rounded()")
+)
+
+let trayURL = root.appendingPathComponent("Mixr/DesignSystem/EffectControlTray.swift")
+let traySource = (try? String(contentsOf: trayURL, encoding: .utf8)) ?? ""
+check(
+    "Effects tray type matches the transition menu above phone scale",
+    traySource.contains("regularControlFontSize: CGFloat = 10.5")
+        && traySource.contains("compactControlFontSize: CGFloat = 9.5")
+        && !traySource.contains("size: 9.5")
+        && timelineSource.contains("controlFontSize: contentScale > 1.001")
+)
+
+check(
+    "SFX library scales with the editor beyond phones",
+    timelineSource.contains("func sfxPanelWidth(")
+        && timelineSource.contains("0.72 - 0.09 * narrow - 0.02 * wide")
+        && !timelineSource.contains("min(560, max(300, geo.size.width")
+)
+
+let bridgeURL = root.appendingPathComponent("Mixr/DesignSystem/EditorPointerScrollBridge.swift")
+let bridgeSource = (try? String(contentsOf: bridgeURL, encoding: .utf8)) ?? ""
+check(
+    "Catalyst routes pointer scrolls into the lane scroll position",
+    bridgeSource.contains("allowedScrollTypesMask = .all")
+        && bridgeSource.contains("maximumNumberOfTouches = 0")
+        && timelineSource.contains("EditorPointerScrollBridge(")
+)
+
+check(
+    "Alerts cap near the system alert size",
+    alertSource.contains("maximumScale: CGFloat = 1.12")
+)
+
 if failures > 0 {
     exit(1)
 }

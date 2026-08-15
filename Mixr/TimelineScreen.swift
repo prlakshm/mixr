@@ -335,6 +335,9 @@ struct TimelineScreen: View {
     @StateObject private var playback = MixrPlaybackEngine()
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var envUndoManager
+#if DEBUG
+    @Environment(AppAppearanceState.self) private var visualQAAppearanceState
+#endif
     @State private var showFilePicker = false
     @SceneStorage("editor.effects.isCollapsed")
     private var isEffectsCollapsed = false
@@ -571,6 +574,11 @@ struct TimelineScreen: View {
         // is tall enough, the clock stays visible above the toolbar.
         .statusBarHidden(prefersStatusBarHidden)
         .preferredColorScheme(.dark)
+#if DEBUG
+        .onChange(of: visualQAAppearanceState.editorVisualQAState) { _, state in
+            applyEditorVisualQAState(state)
+        }
+#endif
         .task {
             library.attachPersistence(context: modelContext)
             library.attachUndoManager(envUndoManager)
@@ -680,7 +688,10 @@ struct TimelineScreen: View {
                     .onTapGesture { dismissSFXPanel() }
 
                 GeometryReader { geo in
-                    let width = min(560, max(300, geo.size.width * SFXMetrics.panelScreenWidthFraction))
+                    let width = sfxPanelWidth(
+                        editorWidth: geo.size.width,
+                        editorHeight: geo.size.height
+                    )
 
                     SFXLibraryPanel(
                         onSelect: { effect in
@@ -799,6 +810,60 @@ struct TimelineScreen: View {
         withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
             showSFXPanel = false
         }
+    }
+
+#if DEBUG
+    /// Opens the surface a `-MixrEditorVisualQA` launch argument asked for,
+    /// so headless capture can screenshot states that normally need a tap.
+    private func applyEditorVisualQAState(_ state: String?) {
+        switch state {
+        case "sfx":
+            showSFXPanel = true
+        case "delete":
+            showDeleteProjectConfirm = true
+        default:
+            // "hscroll" is applied inside TLTrackArea, which owns the
+            // horizontal scroll position.
+            break
+        }
+    }
+#endif
+
+    /// SFX library width for the current surface.
+    ///
+    /// Phones keep the original screen-fraction size — the panel already fills
+    /// a phone well. Tablets and desktop scale with the editor instead of
+    /// stopping at the old 560pt cap, which left the panel looking like a
+    /// phone artifact in a desktop window: roughly 80% of the editor in a
+    /// windowed / narrow layout, easing to 60% at full-screen widths, with the
+    /// ramp between them keeping resize continuous. Cards derive from panel
+    /// width, so they grow in step.
+    private func sfxPanelWidth(
+        editorWidth: CGFloat,
+        editorHeight: CGFloat
+    ) -> CGFloat {
+        let phoneWidth = min(560, max(300, editorWidth * SFXMetrics.panelScreenWidthFraction))
+        guard UIDevice.current.userInterfaceIdiom != .phone else {
+            return phoneWidth
+        }
+
+        // ~64% of the editor at typical desktop widths. The narrowest windows
+        // ease toward 0.72 so the panel never collapses with its window, and
+        // very wide (full-screen) editors settle a touch lower so the panel
+        // stops short of billboard.
+        let narrow = min(1, max(0, (editorWidth - 820) / 204))
+        let wide = min(1, max(0, (editorWidth - 1200) / 300))
+        let fraction = 0.72 - 0.09 * narrow - 0.02 * wide
+        var width = editorWidth * fraction
+
+        // Never taller than the editor allows — shrink to fit, since height
+        // follows width through the fixed 3 × 2 card page.
+        let available = editorHeight - 24
+        let height = SFXMetrics.panelHeight(forWidth: width)
+        if height > available, height > 0 {
+            width *= available / height
+        }
+        return max(phoneWidth, width)
     }
 
     private func dismissProjectMenu() {
@@ -1191,11 +1256,15 @@ private struct TLTransportBar: View {
                 .font(.system(size: 14 * toolbarScale, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
-                .frame(width: transportControlSize, height: transportControlSize)
-                .contentShape(Circle())
+                // The circle draws at 88% of the control so it clears the
+                // toolbar's bottom hairline (fill plus glow were reaching the
+                // divider); the full-size outer frame keeps the 44pt+ target.
+                .frame(width: playButtonDiameter, height: playButtonDiameter)
                 .background { PartyModePlayButtonSurface() }
                 .shadow(color: MixrColors.primaryPurple.opacity(0.50), radius: 10)
                 .partyModePlayButton()
+                .frame(width: transportControlSize, height: transportControlSize)
+                .contentShape(Circle())
 
                 Button("Skip to End", systemImage: "forward.end.fill") {
                     playback.skipToEnd()
@@ -1301,6 +1370,13 @@ private struct TLTransportBar: View {
     /// Transport hit target: 44pt on a phone, proportionally larger elsewhere.
     private var transportControlSize: CGFloat {
         max(44, (EditorTransportMetrics.transportButtonWidth * toolbarScale).rounded())
+    }
+
+    /// Rendered diameter of the play circle — deliberately smaller than the
+    /// hit target so the fill and its glow stay clear of the toolbar's bottom
+    /// divider at every scale.
+    private var playButtonDiameter: CGFloat {
+        (transportControlSize * 0.88).rounded()
     }
 
     // MARK: - Project title
@@ -1878,6 +1954,9 @@ private struct TLTrackArea: View {
     @State private var hScrollOffset: CGFloat = 0
     @State private var vScrollOffset: CGFloat = 0
     @State private var hScrollPosition = ScrollPosition()
+#if DEBUG
+    @Environment(AppAppearanceState.self) private var visualQAAppearanceState
+#endif
 
     // Duplicate auto-scroll — scrollAnchorUnit is recomputed into an exact offset at scroll time.
     @State private var scrollAnchorUnit: CGFloat = 0
@@ -2571,12 +2650,16 @@ private struct TLTrackArea: View {
                         .frame(width: laneVW, height: totalH)
                         .zIndex(1)
                         .overlay {
+                            // Drop-target highlight only. The idle border this
+                            // used to draw doubled the toolbar's own bottom
+                            // divider with a second line right above the ruler
+                            // timestamps — the single full-width Tracks →
+                            // Controls hairline is the only resting line.
                             RoundedRectangle(cornerRadius: 0, style: .continuous)
                                 .strokeBorder(
-                                    isTimelineDropTarget
-                                        ? MixrColors.primaryPurple.opacity(0.52)
-                                        : MixrColors.divider.opacity(0.95),
-                                    lineWidth: isTimelineDropTarget ? 1.2 : 0.55
+                                    MixrColors.primaryPurple
+                                        .opacity(isTimelineDropTarget ? 0.52 : 0),
+                                    lineWidth: 1.2
                                 )
                                 .animation(.easeInOut(duration: 0.18), value: isTimelineDropTarget)
                         }
@@ -2604,6 +2687,22 @@ private struct TLTrackArea: View {
                 }
                 .scrollDisabled(isDraggingClip || clipDragArmed != nil)
                 .frame(width: geo.size.width, height: geo.size.height)
+
+#if targetEnvironment(macCatalyst)
+                // Trackpad / wheel scrolling for the lanes — see the bridge's
+                // header for why the nested scroll views need this on a Mac.
+                EditorPointerScrollBridge(
+                    isEnabled: !showSFXPanel
+                        && !isDraggingClip
+                        && clipDragArmed == nil,
+                    maximumOffset: max(0, currentContentW - currentLaneVW),
+                    currentOffset: hScrollOffset,
+                    onScroll: { hScrollPosition.scrollTo(x: $0) }
+                )
+                .frame(width: laneVW, height: geo.size.height)
+                .position(x: sidebarWidth + laneVW / 2, y: geo.size.height / 2)
+                .allowsHitTesting(false)
+#endif
 
                 // Floating clip-editing overlays — outside all scroll views, above sidebar/controls
                 clipEditingFloatingOverlay(
@@ -2656,6 +2755,15 @@ private struct TLTrackArea: View {
                     scrollToTimelineStart()
                 }
             }
+#if DEBUG
+            // Visual QA: exercises the same programmatic path the Catalyst
+            // pointer bridge drives, and visibly shifts the ruler on capture.
+            .onChange(of: visualQAAppearanceState.editorVisualQAState) { _, state in
+                if state == "hscroll" {
+                    hScrollPosition.scrollTo(x: 400)
+                }
+            }
+#endif
             // Name this coordinate space so clip drag gestures (deep inside both
             // scroll views) can report stable screen positions regardless of scroll.
             .coordinateSpace(name: "tlareaRoot")
@@ -4779,6 +4887,12 @@ private struct TLEffectsPanel: View {
             echoPreset: clip.effects.echoPreset,
             pitchDirection: clip.effects.pitchDirection,
             height: cardHeight,
+            // Above phone scale the tray's labels and presets match the
+            // transition menu's segmented type instead of staying at the
+            // phone's 9.5pt.
+            controlFontSize: contentScale > 1.001
+                ? EffectTrayMetrics.regularControlFontSize
+                : EffectTrayMetrics.compactControlFontSize,
             onLevelChanged: { value in
                 tracks[path.trackIdx].clips[path.clipIdx].effects
                     .setLevel(value, for: effect.rawValue)
