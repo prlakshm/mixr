@@ -582,14 +582,13 @@ do {
 do {
     let song = makeSong(title: "stupid song", bpm: 128, key: "C")
         // Confidence blend: metadata*0.4 + signal*0.6. Use a very low signal
-        // confidence so analysisConfidence lands under the low-confidence gate
-        // (mirrors the crate's weak structure without inventing cuts).
+        // confidence so analysisConfidence lands under the low-confidence gate.
         let feat = crateFeatures(duration: 180, bpm: 128, drum: 0.19, bass: 0.46, vocal: 0.51, confidence: 0.10)
         switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 11, signals: [song.id: feat]) {
     case .success(_, let plan, _):
         check("stupid song remix writes pulse", plan.pulsePolicy?.writesKick == true)
         check("stupid song keeps house 128", abs(plan.targetBPM - 128) < 0.5, "bpm=\(plan.targetBPM)")
-        check("stupid song used energy-curve fallback",
+        check("stupid song used low-confidence club path",
               plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
         let expectedBuildOut = AutoGainPolicy.songPlacementVolume(energy: 0.50)
         let expectedDrop = AutoGainPolicy.songPlacementVolume(energy: 1.0)
@@ -604,6 +603,16 @@ do {
               "vols=\(plan.placements.map { String(format: "%.2f", $0.volume) })")
         check("stupid song build-out quieter than drop (energy curve)",
               (quiet.map { $0.volume }.max() ?? 1) + 0.05 < (loud.map { $0.volume }.min() ?? 0))
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        if let first = drops.first {
+            let bar = first.timelineStart / plan.barSeconds
+            check("stupid song Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+                  String(format: "bar=%.1f", bar))
+        } else {
+            check("stupid song has a drop", false)
+        }
+        let cymbals = plan.sfxEvents.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
+        check("stupid song cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
     case .failure(let message):
         check("stupid song remix", false, message)
     }
@@ -622,7 +631,12 @@ do {
                   abs(drops[0].timelineStart / plan.barSeconds
                       - (drops[0].timelineStart / plan.barSeconds).rounded()) < 0.08,
                   String(format: "t=%.3f bars=%.3f", drops[0].timelineStart, drops[0].timelineStart / plan.barSeconds))
+            let bar = drops[0].timelineStart / plan.barSeconds
+            check("All I Wanted Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+                  String(format: "bar=%.1f", bar))
         }
+        let cymbals = plan.sfxEvents.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
+        check("All I Wanted cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
     case .failure(let message):
         check("All I Wanted remix", false, message)
     }
@@ -989,6 +1003,28 @@ do {
         check("Club remix has impact+crash stacks",
               musical.contains { $0.assetID == "impact" }
                 && musical.contains { $0.assetID == "crash" })
+        let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
+        check("Club remix cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        if let first = drops.first {
+            let bar = first.timelineStart / plan.barSeconds
+            check("Club remix Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+                  String(format: "bar=%.1f", bar))
+        }
+        // Drop 1 should be a high-hook chorus island, not a verse.
+        if let dropPlacement = plan.placements.first(where: {
+            abs($0.timelineStart - (drops.first?.timelineStart ?? -1)) < 0.05
+        }) {
+            let hooks = AutoSectionCatalog.profile(
+                track: song,
+                signal: feat
+            ).candidates.filter { $0.label == .chorus || $0.label == .teaser }
+            let matched = hooks.contains {
+                abs($0.startSeconds - dropPlacement.sourceStart) < 0.5
+            }
+            check("Club remix Drop 1 is a chorus/teaser island", matched || dropPlacement.sourceStart > 1.0,
+                  String(format: "sourceStart=%.1f", dropPlacement.sourceStart))
+        }
         let buildOutFX = plan.placements.filter {
             $0.effects.level(for: MixrEffect.blur.rawValue) >= 45
                 || $0.fadeOut.type == .echoOut

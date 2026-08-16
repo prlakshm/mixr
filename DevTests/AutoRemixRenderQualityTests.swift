@@ -639,7 +639,7 @@ do {
     }
 }
 
-// MARK: - 9. Low confidence → energy curve without invented structural cuts
+// MARK: - 9. Low confidence → early hook drops (not 50 bars of verse)
 
 do {
     let song = makeSong(title: "Unknown Tempo", bpm: nil, key: nil, durationSeconds: 150)
@@ -647,11 +647,22 @@ do {
     switch outcome {
     case .success(_, let plan, _):
         let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
-        check("Low confidence: zero internal source cuts", cuts.isEmpty, "got \(cuts.count)")
-        // Timeline may pause for a pre-drop void; source order stays continuous.
-        check("Low confidence: source order monotonic",
-              AutoRemixDiagnostics.sourceOrderIsMonotonic(placements: plan.placements))
-        check("Low confidence: still imposes club energy curve",
+        // Hook jumps to Drop 1/2 are allowed; decorative verse chops are not.
+        let unjustified = cuts.filter { cut in
+            !plan.cutRecords.contains {
+                abs($0.timelineAt - cut) < 0.15 && $0.reason == .hookReturn
+            }
+        }
+        check("Low confidence: only justified hook-return cuts",
+              unjustified.isEmpty, "unjustified=\(unjustified.count) totalCuts=\(cuts.count)")
+        check("Low confidence: source order monotonic unless hook return",
+              AutoRemixDiagnostics.sourceOrderIsMonotonic(
+                  placements: plan.placements,
+                  justifiedReturnStarts: plan.cutRecords
+                      .filter { $0.reason == .hookReturn }
+                      .map(\.timelineAt)
+              ))
+        check("Low confidence: still uses low-confidence club path",
               plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
         check("Low confidence: pulse / filter energy present",
               !plan.pulseRegions.isEmpty || plan.placements.contains { $0.effects.level(for: "blur") > 0.5 })
@@ -667,6 +678,14 @@ do {
         check("Low confidence: drop stacks include impact+crash",
               musical.contains { $0.assetID == "impact" }
                 && musical.contains { $0.assetID == "crash" })
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        if let first = drops.first {
+            let bar = first.timelineStart / plan.barSeconds
+            check("Low confidence: Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+                  String(format: "bar=%.1f", bar))
+        }
+        let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
+        check("Low confidence: cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
     case .failure(let message):
         check("Low-confidence one-song input still produces a remix", false, message)
     }
