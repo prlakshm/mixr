@@ -49,21 +49,27 @@ nonisolated enum AutoClubPulse {
         var timelineEnd: Double
     }
 
-    /// Drum / bass thresholds for the one-kick rule (measured 0…1).
+    /// Drum thresholds for the one-kick rule (measured 0…1).
+    /// Strong drums alone mean the kit already owns the kick — bass can
+    /// read low on sparse pop arrangements (Britney bass ≈ 0.37) without
+    /// making the song "thin."
     static let slammingDrumThreshold = 0.70
-    static let slammingBassThreshold = 0.55
     static let thinDrumThreshold = 0.45
-    static let thinBassThreshold = 0.40
+    /// Festival/rock beds with uncertain analysis must not get a house kick.
+    static let uncertainConfidenceCeiling = 0.75
 
     static func policy(
         drumStrength: Double,
-        bassDensity: Double
+        bassDensity: Double,
+        bpm: Double? = nil,
+        analysisConfidence: Double = 1.0
     ) -> Policy {
-        let slamming = drumStrength >= slammingDrumThreshold
-            && bassDensity >= slammingBassThreshold
-        let thin = drumStrength < thinDrumThreshold || bassDensity < thinBassThreshold
+        _ = bassDensity // retained for call-site compatibility / future nuance
+        let pocket = bpm.flatMap { AutoClubTempo.classify($0) }
+        let strongDrums = drumStrength >= slammingDrumThreshold
 
-        if slamming {
+        // Strong drums → source already owns the kick (ignore bass).
+        if strongDrums {
             return Policy(
                 sourceHasClubKick: true,
                 writesKick: false,
@@ -72,7 +78,21 @@ nonisolated enum AutoClubPulse {
                 detail: "source already slams — no pulse kick (use existing SFX one-shots only)"
             )
         }
-        if thin {
+
+        // Festival/rock pocket: never invent a four-on-the-floor house kick
+        // when drum analysis is uncertain (Paramore-class mis-reads).
+        if pocket == .festival, analysisConfidence < uncertainConfidenceCeiling {
+            return Policy(
+                sourceHasClubKick: true,
+                writesKick: false,
+                writesBass: false,
+                duckSourceLowEnd: false,
+                detail: "festival / rock pocket — no house pulse when drum analysis is uncertain"
+            )
+        }
+
+        // Thin ONLY when drums are actually weak (piano / sparse kit).
+        if drumStrength < thinDrumThreshold {
             return Policy(
                 sourceHasClubKick: false,
                 writesKick: true,
@@ -81,6 +101,7 @@ nonisolated enum AutoClubPulse {
                 detail: "thin source — four-on-the-floor kick+bass; ducking original low end"
             )
         }
+
         // Mid kits keep their own drums — do not invent a competing pulse.
         return Policy(
             sourceHasClubKick: false,

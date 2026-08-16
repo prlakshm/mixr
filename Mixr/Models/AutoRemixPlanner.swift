@@ -228,7 +228,9 @@ enum AutoRemixPlanner {
 
         let pulse = AutoClubPulse.policy(
             drumStrength: analysis.drumStrength,
-            bassDensity: analysis.bassDensity
+            bassDensity: analysis.bassDensity,
+            bpm: analysis.bpm,
+            analysisConfidence: analysis.analysisConfidence
         )
         if AutoClubPulse.violatesOneKickRule(policy: pulse) {
             // Defensive — policy() never emits this, but keep the invariant.
@@ -366,25 +368,32 @@ enum AutoRemixPlanner {
                 buildBodyBars = slot.bars - 4
             }
 
-            // Intentional pre-drop void before each hard hype cut into a drop.
+            // Intentional pre-drop void: last beat(s) of the previous bar.
+            // Drop stays on the downbeat (bar boundary) — do not shift cursor.
             if slot.entry == .hardHypeCut, cursor > 0 {
                 let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
                 let voidSec = voidBeats * beat
-                if voidSec > 0.05 {
-                    intentionalGaps.append(
-                        AutoIntentionalGap(start: cursor, end: cursor + voidSec, reason: "pre-drop void")
+                if voidSec > 0.05, cursor > voidSec {
+                    let dropStart = cursor
+                    let voidStart = dropStart - voidSec
+                    carvePredropVoid(
+                        voidStart: voidStart,
+                        dropStart: dropStart,
+                        placements: &placements,
+                        pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
+                        minSegmentSeconds: tuning.minSegmentSeconds
                     )
-                    pulseRegions.append(
-                        AutoClubPulse.Region(role: .void, timelineStart: cursor, timelineEnd: cursor + voidSec)
-                    )
+                    if let last = placements.last {
+                        lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
+                    }
                     decisions.append(
                         AutoDecision(
                             kind: .allowedPredropVoid,
                             songTitle: profile.title,
-                            detail: String(format: "%.2f beats before drop", voidBeats)
+                            detail: String(format: "%.2f beats before drop (drop on downbeat)", voidBeats)
                         )
                     )
-                    cursor += voidSec
                 }
             }
 
@@ -394,8 +403,8 @@ enum AutoRemixPlanner {
             let segments: [(bars: Int, pulse: AutoClubPulse.RegionRole, energy: Double)]
             if slot.role == .build, buildBodyBars < timelineBars {
                 segments = [
-                    (buildBodyBars, .build, slot.energy),
-                    (timelineBars - buildBodyBars, .buildOut, slot.energy * 0.55),
+                    (buildBodyBars, .build, slot.energy * 0.85),
+                    (timelineBars - buildBodyBars, .buildOut, 0.18),
                 ]
             } else {
                 segments = [(timelineBars, regionRole, slot.energy)]
@@ -449,7 +458,10 @@ enum AutoRemixPlanner {
 
                 let sourceStart = section.startSeconds + Double(segCursor - cursor) * ratio
                 var volume = AutoGainPolicy.songPlacementVolume(energy: seg.energy)
-                if pulse.duckSourceLowEnd { volume *= AutoGainPolicy.pulseDuckedSongVolumeScale }
+                // Blur ducks low end on pulse; do not also quiet drop/build volumes.
+                if pulse.duckSourceLowEnd, seg.pulse == .groove || seg.pulse == .introTease {
+                    volume *= AutoGainPolicy.pulseDuckedSongVolumeScale
+                }
 
                 let continues = lastSourceEnd.map { abs(sourceStart - $0) < 0.05 } ?? false
                 let discontinuity = lastSourceEnd.map { abs(sourceStart - $0) > 0.05 } ?? false
@@ -624,26 +636,50 @@ enum AutoRemixPlanner {
         }
         let timelineDur = span / max(ratio, 0.0001)
 
-        // Continuous placement split into energy-curve segments (no source jumps).
-        let boundaries = [0.0, 0.18, 0.32, 0.48, 0.62, 0.78, 0.92, 1.0]
-        let energies: [Double] = [0.4, 0.55, 0.7, 1.0, 0.4, 0.75, 0.95, 0.5]
+        // Continuous placement on a bar-snapped energy curve (no source jumps).
+        // Build-out must be quieter than the drop (subtraction → payoff).
+        struct CurveSeg {
+            var fracEnd: Double
+            var energy: Double
+            var role: AutoClubPulse.RegionRole
+        }
+        let curve: [CurveSeg] = [
+            .init(fracEnd: 0.16, energy: 0.42, role: .introTease),
+            .init(fracEnd: 0.30, energy: 0.55, role: .groove),
+            .init(fracEnd: 0.40, energy: 0.62, role: .build),
+            .init(fracEnd: 0.48, energy: 0.18, role: .buildOut), // subtraction
+            .init(fracEnd: 0.62, energy: 1.00, role: .drop),
+            .init(fracEnd: 0.72, energy: 0.32, role: .breakdown),
+            .init(fracEnd: 0.80, energy: 0.58, role: .build),
+            .init(fracEnd: 0.86, energy: 0.18, role: .buildOut),
+            .init(fracEnd: 0.96, energy: 1.00, role: .drop),
+            .init(fracEnd: 1.00, energy: 0.45, role: .outro),
+        ]
         var placements: [AutoClipPlacement] = []
         var pulseRegions: [AutoClubPulse.Region] = []
         var intentionalGaps: [AutoIntentionalGap] = []
         var sfx: [AutoSFXEvent] = []
         var decisions = decisions
 
-        for i in 0..<(boundaries.count - 1) {
-            let a = boundaries[i], b = boundaries[i + 1]
-            var t0 = timelineDur * a
-            let t1 = timelineDur * b
-            // Intentional pre-drop void: open a real timeline gap before drop 1.
-            // This PAUSES playback (source does not advance during the void).
-            if i == 3 {
+        func snapToBar(_ t: Double) -> Double {
+            (t / max(bar, 0.001)).rounded() * bar
+        }
+
+        var fracStart = 0.0
+        for (i, seg) in curve.enumerated() {
+            var t0 = snapToBar(timelineDur * fracStart)
+            var t1 = snapToBar(timelineDur * seg.fracEnd)
+            if t1 <= t0 { t1 = t0 + bar }
+            fracStart = seg.fracEnd
+
+            // Pre-drop void: carve last beat of previous bar; drop stays on downbeat.
+            if seg.role == .drop, t0 > beat {
                 let voidSec = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats) * beat
-                if voidSec > 0.05, t0 > voidSec {
+                if voidSec > 0.05 {
+                    let dropStart = t0
+                    let voidStart = dropStart - voidSec
                     if let prev = placements.indices.last {
-                        let newEnd = t0 - voidSec
+                        let newEnd = voidStart
                         if newEnd > placements[prev].timelineStart + tuning.minSegmentSeconds * 0.5 {
                             placements[prev].timelineDuration = newEnd - placements[prev].timelineStart
                             if let lastRegion = pulseRegions.indices.last {
@@ -652,39 +688,25 @@ enum AutoRemixPlanner {
                         }
                     }
                     intentionalGaps.append(
-                        AutoIntentionalGap(start: t0 - voidSec, end: t0, reason: "pre-drop void")
+                        AutoIntentionalGap(start: voidStart, end: dropStart, reason: "pre-drop void")
                     )
                     pulseRegions.append(
-                        AutoClubPulse.Region(role: .void, timelineStart: t0 - voidSec, timelineEnd: t0)
+                        AutoClubPulse.Region(role: .void, timelineStart: voidStart, timelineEnd: dropStart)
                     )
-                    decisions.append(
-                        AutoDecision(
-                            kind: .allowedPredropVoid,
-                            songTitle: profile.title,
-                            detail: "low-confidence energy curve"
+                    if i == curve.firstIndex(where: { $0.role == .drop }) {
+                        decisions.append(
+                            AutoDecision(
+                                kind: .allowedPredropVoid,
+                                songTitle: profile.title,
+                                detail: "low-confidence energy curve (drop on downbeat)"
+                            )
                         )
-                    )
+                    }
                 }
             }
-            let role: AutoClubPulse.RegionRole
-            switch i {
-            case 0: role = .introTease
-            case 1: role = .groove
-            case 2: role = .build
-            case 3: role = .drop
-            case 4: role = .breakdown
-            case 5: role = .build
-            case 6: role = .drop
-            default: role = .outro
-            }
-            // Last third of each build mutes kick+bass (build-out).
-            if role == .build {
-                let split = t0 + (t1 - t0) * 0.5
-                pulseRegions.append(AutoClubPulse.Region(role: .build, timelineStart: t0, timelineEnd: split))
-                pulseRegions.append(AutoClubPulse.Region(role: .buildOut, timelineStart: split, timelineEnd: t1))
-            } else {
-                pulseRegions.append(AutoClubPulse.Region(role: role, timelineStart: t0, timelineEnd: t1))
-            }
+
+            let role = seg.role
+            pulseRegions.append(AutoClubPulse.Region(role: role, timelineStart: t0, timelineEnd: t1))
 
             var fx = ClipEffectSettings()
             if role == .introTease || role == .breakdown {
@@ -694,22 +716,33 @@ enum AutoRemixPlanner {
                 fx.flangerAmount = 0.18
                 fx.setLevel(20, for: MixrEffect.echo.rawValue)
             }
+            if role == .buildOut {
+                fx.flangerAmount = 0.28
+                fx.setLevel(50, for: MixrEffect.blur.rawValue)
+                fx.setLevel(28, for: MixrEffect.echo.rawValue)
+            }
             if pulse.duckSourceLowEnd, role == .drop || role == .groove {
                 fx.setLevel(24, for: MixrEffect.blur.rawValue)
             }
             fx = AutoSupportedEffects.sanitize(fx)
 
-            var volume = AutoGainPolicy.songPlacementVolume(energy: energies[i])
-            if pulse.duckSourceLowEnd { volume *= AutoGainPolicy.pulseDuckedSongVolumeScale }
+            var volume = AutoGainPolicy.songPlacementVolume(energy: seg.energy)
+            // Pulse duck is for groove/intro low-end ownership — never quiet the drop.
+            if pulse.duckSourceLowEnd, role == .groove || role == .introTease {
+                volume *= AutoGainPolicy.pulseDuckedSongVolumeScale
+            }
 
             // Source follows timeline except across an intentional void, where
             // playback pauses (source does not skip ahead with the gap).
+            let acrossVoid = intentionalGaps.last.map { abs($0.end - t0) < 0.02 } ?? false
             let sourceStart: Double
-            if i > 0, let prev = placements.last,
-               intentionalGaps.last.map({ abs($0.end - t0) < 0.02 }) == true {
+            let sourceContinuous: Bool
+            if acrossVoid, let prev = placements.last {
                 sourceStart = prev.sourceEnd
+                sourceContinuous = true
             } else {
                 sourceStart = usableStart + t0 * ratio
+                sourceContinuous = placements.last.map { abs($0.sourceEnd - sourceStart) < 0.05 } ?? false
             }
 
             placements.append(
@@ -720,21 +753,22 @@ enum AutoRemixPlanner {
                     timelineDuration: t1 - t0,
                     tempoRatio: ratio,
                     volume: volume,
-                    fadeIn: i == 0 ? .none : .none,
-                    fadeOut: i == boundaries.count - 2
+                    fadeIn: .none,
+                    fadeOut: i == curve.count - 1
                         ? ClipTransition(type: .fadeOut, duration: 2, curve: AutoTransitionEnvelope.equalPowerCurveName)
                         : .none,
                     effects: fx,
                     role: .dominant,
                     slotIndex: i,
-                    continuesPrevious: i > 0 && (intentionalGaps.last.map { abs($0.end - t0) > 0.02 } ?? true)
+                    continuesPrevious: i > 0 && sourceContinuous
                 )
             )
 
             if role == .drop {
-                let asset = i == 3 ? "riser" : "snareBuild"
-                if let def = SoundEffectLibrary.definition(for: asset), t0 - def.durationSeconds >= 0 {
-                    sfx.append(AutoSFXEvent(assetID: asset, timelineStart: t0 - def.durationSeconds, purpose: "energy-curve \(asset)"))
+                let dropCount = pulseRegions.filter { $0.role == .drop }.count
+                let sfxAsset = dropCount <= 1 ? "riser" : "snareBuild"
+                if let def = SoundEffectLibrary.definition(for: sfxAsset), t0 - def.durationSeconds >= 0 {
+                    sfx.append(AutoSFXEvent(assetID: sfxAsset, timelineStart: t0 - def.durationSeconds, purpose: "energy-curve \(sfxAsset)"))
                 }
                 sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "energy-curve impact"))
             }
@@ -784,6 +818,38 @@ enum AutoRemixPlanner {
             warnings: warnings,
             confidence: profile.analysis.analysisConfidence,
             randomSeed: seed
+        )
+    }
+
+    /// Carve a pre-drop void from the end of the previous bar so the drop
+    /// remains on a downbeat (bar boundary). Does not advance the cursor.
+    private static func carvePredropVoid(
+        voidStart: Double,
+        dropStart: Double,
+        placements: inout [AutoClipPlacement],
+        pulseRegions: inout [AutoClubPulse.Region],
+        intentionalGaps: inout [AutoIntentionalGap],
+        minSegmentSeconds: Double
+    ) {
+        if let idx = placements.indices.last {
+            let newDur = voidStart - placements[idx].timelineStart
+            if newDur >= minSegmentSeconds {
+                placements[idx].timelineDuration = newDur
+            }
+        }
+        for i in pulseRegions.indices where pulseRegions[i].timelineEnd > voidStart + 0.001 {
+            if pulseRegions[i].timelineStart >= voidStart - 0.001 {
+                pulseRegions[i].timelineEnd = pulseRegions[i].timelineStart
+            } else {
+                pulseRegions[i].timelineEnd = voidStart
+            }
+        }
+        pulseRegions.removeAll { $0.timelineEnd - $0.timelineStart < 0.02 }
+        intentionalGaps.append(
+            AutoIntentionalGap(start: voidStart, end: dropStart, reason: "pre-drop void")
+        )
+        pulseRegions.append(
+            AutoClubPulse.Region(role: .void, timelineStart: voidStart, timelineEnd: dropStart)
         )
     }
 
@@ -887,8 +953,9 @@ enum AutoRemixPlanner {
             _ = dropped
         }
 
-        // ONE club bed: most mixable drums / pocket / simplest harmony.
-        guard let bed = pool.max(by: { bedScore($0) < bedScore($1) }) else { return nil }
+        // ONE club bed: prefer the pocket that keeps guests legal, then
+        // same-pocket groove/kit vs strongest-hook vocal (not raw drum max).
+        guard let bed = chooseClubBed(pool: pool, tuning: tuning) else { return nil }
         let guests = pool.filter { $0.songID != bed.songID }
 
         let tempoSeed = AutoClubTempo.mashupDecision(
@@ -1113,14 +1180,92 @@ enum AutoRemixPlanner {
         return plan
     }
 
-    /// Bed fitness: drums + pocket + simpler harmony (lower vocal density).
+    /// Choose the club bed for an N-song mashup.
+    /// - Different pockets: prefer the bed whose pocket (house/festival)
+    ///   keeps guests as full hooks or legal cameos — not the highest
+    ///   raw drumConfidence (Paramore 144 over t.A.T.u. 90).
+    /// - Same pocket: strongest feature/hook is the vocal; the other song
+    ///   is the bed (Oops bed / BOMT vocal — not max drum).
+    private static func chooseClubBed(
+        pool: [AutoSongProfile],
+        tuning: AutoTuning
+    ) -> AutoSongProfile? {
+        guard !pool.isEmpty else { return nil }
+        if pool.count == 1 { return pool[0] }
+
+        if pool.count == 2 {
+            let a = pool[0], b = pool[1]
+            let pa = AutoClubTempo.classify(a.analysis.bpm)
+            let pb = AutoClubTempo.classify(b.analysis.bpm)
+            if let pa, let pb, pa == pb {
+                // Same pocket: strongest star/hook is the vocal; the other is the bed.
+                // Tie-break with vocal density then a light drum bias so the iconic
+                // pop vocal (BOMT) wins over the groove partner (Oops) — never
+                // assign bed solely by max drumConfidence.
+                func starScore(_ p: AutoSongProfile) -> Double {
+                    let vocal = p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds)
+                    return p.featureScore * 1.0 + vocal * 0.2 + p.analysis.drumStrength * 0.05
+                }
+                if starScore(a) >= starScore(b) { return b }
+                return a
+            }
+        }
+
+        return pool.max { bedFitness($0, pool: pool, tuning: tuning) < bedFitness($1, pool: pool, tuning: tuning) }
+    }
+
+    /// Bed fitness across pockets: pocket rank + guest compatibility +
+    /// light groove — drums alone must not invert a festival bed under a
+    /// midtempo drum hit.
+    private static func bedFitness(
+        _ candidate: AutoSongProfile,
+        pool: [AutoSongProfile],
+        tuning: AutoTuning
+    ) -> Double {
+        let guests = pool.filter { $0.songID != candidate.songID }
+        let bedBPM = candidate.analysis.bpm
+        let pocket = AutoClubTempo.classify(bedBPM)
+        let pocketRank: Double
+        switch pocket {
+        case .festival: pocketRank = 1.0
+        case .house: pocketRank = 0.95
+        case .midtempoPop: pocketRank = 0.55
+        case .other: pocketRank = 0.4
+        case nil: pocketRank = 0.35
+        }
+
+        var guestScore = 0.0
+        for g in guests {
+            let decision = AutoClubTempo.mashupDecision(
+                vocalBPM: g.analysis.bpm,
+                bedBPM: bedBPM,
+                maxVocalStretch: tuning.maxStretch,
+                maxInstrumentalStretch: tuning.maxInstrumentalStretch
+            )
+            if decision.ok {
+                guestScore += 1.0
+            } else {
+                // Still usable as a native-tempo cameo / chop.
+                guestScore += 0.45
+            }
+        }
+        let guestNorm = guestScore / Double(max(guests.count, 1))
+
+        let groove = candidate.analysis.drumStrength * 0.12
+            + candidate.analysis.bassDensity * 0.08
+        let meanVocal = candidate.analysis.meanVocalDensity(
+            from: 0, to: candidate.analysis.durationSeconds
+        )
+        let instrumental = (1.0 - min(1, meanVocal)) * 0.12
+        // Prefer confident analysis when claiming a festival/house bed.
+        let conf = candidate.analysis.analysisConfidence * 0.08
+
+        return pocketRank * 0.42 + guestNorm * 0.32 + groove + instrumental + conf
+    }
+
+    /// Legacy single-song bed heuristic (tests / debugging).
     private static func bedScore(_ p: AutoSongProfile) -> Double {
-        let drum = p.analysis.drumStrength
-        let bass = p.analysis.bassDensity
-        let pocket: Double = AutoClubTempo.classify(p.analysis.bpm) != nil ? 1.0 : 0.35
-        let meanVocal = p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds)
-        let simpleHarmony = 1.0 - min(1, meanVocal) // prefer instrumental beds
-        return drum * 0.35 + bass * 0.25 + pocket * 0.25 + simpleHarmony * 0.15
+        bedFitness(p, pool: [p], tuning: .standard)
     }
 
     /// Two-wave club shape for N-song mashups. Indices into `ordered`
@@ -1215,7 +1360,9 @@ enum AutoRemixPlanner {
         let pulseSource = ordered.first(where: { $0.songID == mashupBedID }) ?? ordered[0]
         let pulse = AutoClubPulse.policy(
             drumStrength: pulseSource.analysis.drumStrength,
-            bassDensity: pulseSource.analysis.bassDensity
+            bassDensity: pulseSource.analysis.bassDensity,
+            bpm: pulseSource.analysis.bpm,
+            analysisConfidence: pulseSource.analysis.analysisConfidence
         )
         if pulse.sourceHasClubKick {
             decisions.append(
@@ -1421,29 +1568,41 @@ enum AutoRemixPlanner {
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional pre-drop void before a hard hype cut (≤ half bar).
+            // Intentional pre-drop void: last beat(s) of the previous bar.
+            // Drop stays on the downbeat — do not advance cursor past the bar line.
             if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0 {
                 let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
                 let pause = voidBeats * beatSec
-                if pause > 0.05 {
+                if pause > 0.05, cursor > pause {
+                    let dropStart = cursor
+                    let voidStart = dropStart - pause
+                    if let idx = placed.indices.last {
+                        let newDur = voidStart - placed[idx].timelineStart
+                        if newDur >= tuning.minSegmentSeconds {
+                            placed[idx].timelineDuration = newDur
+                        }
+                    }
+                    for i in pulseRegions.indices where pulseRegions[i].timelineEnd > voidStart + 0.001 {
+                        if pulseRegions[i].timelineStart >= voidStart - 0.001 {
+                            pulseRegions[i].timelineEnd = pulseRegions[i].timelineStart
+                        } else {
+                            pulseRegions[i].timelineEnd = voidStart
+                        }
+                    }
+                    pulseRegions.removeAll { $0.timelineEnd - $0.timelineStart < 0.02 }
                     intentionalGaps.append(
-                        AutoIntentionalGap(
-                            start: cursor,
-                            end: cursor + pause,
-                            reason: "pre-drop void"
-                        )
+                        AutoIntentionalGap(start: voidStart, end: dropStart, reason: "pre-drop void")
                     )
                     pulseRegions.append(
-                        AutoClubPulse.Region(role: .void, timelineStart: cursor, timelineEnd: cursor + pause)
+                        AutoClubPulse.Region(role: .void, timelineStart: voidStart, timelineEnd: dropStart)
                     )
                     decisions.append(
                         AutoDecision(
                             kind: .allowedPredropVoid,
                             songTitle: profile.title,
-                            detail: String(format: "%.2f beats", voidBeats)
+                            detail: String(format: "%.2f beats (drop on downbeat)", voidBeats)
                         )
                     )
-                    cursor += pause
                 }
             }
 

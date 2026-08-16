@@ -169,12 +169,12 @@ do {
         check("Thin piano song writes pulse", plan.pulsePolicy?.writesKick == true)
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         check("Two-wave drops present", drops.count >= 2, "\(drops.count)")
-        check("Drops land on beat grid (voids allowed)",
+        check("Drops land on bar downbeats after void",
               drops.allSatisfy { drop in
-                  let beats = drop.timelineStart / plan.beatSeconds
-                  return abs(beats - beats.rounded()) < 0.08
+                  let bars = drop.timelineStart / plan.barSeconds
+                  return abs(bars - bars.rounded()) < 0.08
               },
-              "first drop at \(drops.first.map { String(format: "%.3f", $0.timelineStart) } ?? "?")")
+              "first drop at \(drops.first.map { String(format: "%.3f", $0.timelineStart) } ?? "?") bar=\(drops.first.map { String(format: "%.3f", $0.timelineStart / plan.barSeconds) } ?? "?")")
         check("Pre-drop void precedes at least one drop",
               plan.intentionalGaps.contains { gap in
                   drops.contains { abs($0.timelineStart - gap.end) < 0.05 }
@@ -366,22 +366,32 @@ func assertLegalNSongMashup(
     var stayStart = 0.0
     var stayEnd = 0.0
     var shortStays = 0
-    func flushStay() {
+    func flushStay(followedByVoid: Bool) {
         guard staySong != nil else { return }
         let bars = (stayEnd - stayStart) / max(barSec, 0.001)
-        if bars + 0.05 < 8 { shortStays += 1 }
+        // Pre-drop void carves the last beat of an 8-bar island — still a
+        // legal phrase stay (8 bars minus ≤2 beats).
+        let floor = followedByVoid ? 7.4 : 8.0
+        if bars + 0.05 < floor { shortStays += 1 }
     }
-    for p in dominants {
+    for (idx, p) in dominants.enumerated() {
         if staySong == p.songID {
             stayEnd = max(stayEnd, p.timelineStart + p.timelineDuration)
         } else {
-            flushStay()
+            let voidFollows = plan.intentionalGaps.contains { gap in
+                abs(gap.start - stayEnd) < 0.08 || (gap.start >= stayEnd - 0.01 && gap.start <= stayEnd + plan.beatSeconds)
+            }
+            flushStay(followedByVoid: voidFollows)
             staySong = p.songID
             stayStart = p.timelineStart
             stayEnd = p.timelineStart + p.timelineDuration
         }
+        _ = idx
     }
-    flushStay()
+    let voidFollowsEnd = plan.intentionalGaps.contains { gap in
+        abs(gap.start - stayEnd) < 0.08
+    }
+    flushStay(followedByVoid: voidFollowsEnd)
     check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays)")
 
     // Dual-vocal overlays are legal — only dual full-mix kick/bass stacks fail.
@@ -528,6 +538,169 @@ do {
         }
     case .failure(let message):
         check("N=5 mashup plan", false, message)
+    }
+}
+
+// MARK: - Measured crate bounce numbers (real-song analyzer features)
+
+func crateFeatures(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    confidence: Double
+) -> SongSignalFeatures {
+    makeFeatures(
+        duration: duration,
+        bpm: bpm,
+        drumConfidence: drum,
+        bassLevel: bass,
+        vocalLevel: vocal,
+        confidence: confidence
+    )
+}
+
+do {
+    // Pulse / one-kick against measured crate features.
+    let britney = AutoClubPulse.policy(drumStrength: 1.00, bassDensity: 0.37, bpm: 93, analysisConfidence: 1.00)
+    check("Britney 93 drum=1.00 bass=0.37 → no pulse", !britney.writesKick && britney.sourceHasClubKick)
+
+    let oops = AutoClubPulse.policy(drumStrength: 0.71, bassDensity: 0.38, bpm: 95, analysisConfidence: 1.00)
+    check("Oops 95 drum=0.71 bass=0.38 → no pulse", !oops.writesKick && oops.sourceHasClubKick)
+
+    let stupid = AutoClubPulse.policy(drumStrength: 0.19, bassDensity: 0.46, bpm: 128, analysisConfidence: 0.46)
+    check("stupid song 128 drum=0.19 → writes pulse", stupid.writesKick && stupid.writesBass)
+
+    let paramore = AutoClubPulse.policy(drumStrength: 0.29, bassDensity: 0.53, bpm: 144, analysisConfidence: 0.50)
+    check("All I Wanted 144 festival uncertain → no house pulse", !paramore.writesKick)
+
+    let tatu = AutoClubPulse.policy(drumStrength: 0.82, bassDensity: 0.57, bpm: 90, analysisConfidence: 1.00)
+    check("t.A.T.u. 90 drum=0.82 → no pulse", !tatu.writesKick && tatu.sourceHasClubKick)
+}
+
+do {
+    let song = makeSong(title: "stupid song", bpm: 128, key: "C")
+        // Confidence blend: metadata*0.4 + signal*0.6. Use a very low signal
+        // confidence so analysisConfidence lands under the low-confidence gate
+        // (mirrors the crate's weak structure without inventing cuts).
+        let feat = crateFeatures(duration: 180, bpm: 128, drum: 0.19, bass: 0.46, vocal: 0.51, confidence: 0.10)
+        switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 11, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        check("stupid song remix writes pulse", plan.pulsePolicy?.writesKick == true)
+        check("stupid song keeps house 128", abs(plan.targetBPM - 128) < 0.5, "bpm=\(plan.targetBPM)")
+        check("stupid song used energy-curve fallback",
+              plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
+        let expectedBuildOut = AutoGainPolicy.songPlacementVolume(energy: 0.18)
+        let expectedDrop = AutoGainPolicy.songPlacementVolume(energy: 1.0)
+        check("energy curve volume model: build-out < drop",
+              expectedBuildOut + 0.05 < expectedDrop,
+              String(format: "%.3f vs %.3f", expectedBuildOut, expectedDrop))
+        let quiet = plan.placements.filter { $0.volume <= expectedBuildOut + 0.08 }
+        let loud = plan.placements.filter { $0.volume >= expectedDrop - 0.08 }
+        check("stupid song plan has quiet build-out placements", !quiet.isEmpty,
+              "vols=\(plan.placements.map { String(format: "%.2f", $0.volume) })")
+        check("stupid song plan has loud drop placements", !loud.isEmpty,
+              "vols=\(plan.placements.map { String(format: "%.2f", $0.volume) })")
+        check("stupid song build-out quieter than drop (energy curve)",
+              (quiet.map { $0.volume }.max() ?? 1) + 0.05 < (loud.map { $0.volume }.min() ?? 0))
+    case .failure(let message):
+        check("stupid song remix", false, message)
+    }
+}
+
+do {
+    let song = makeSong(title: "All I Wanted", bpm: 144, key: "Em")
+    let feat = crateFeatures(duration: 200, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 12, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        check("All I Wanted keeps festival 144", abs(plan.targetBPM - 144) < 0.5, "bpm=\(plan.targetBPM)")
+        check("All I Wanted writesKick false", plan.pulsePolicy?.writesKick == false)
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        if !drops.isEmpty {
+            check("All I Wanted first drop on downbeat",
+                  abs(drops[0].timelineStart / plan.barSeconds
+                      - (drops[0].timelineStart / plan.barSeconds).rounded()) < 0.08,
+                  String(format: "t=%.3f bars=%.3f", drops[0].timelineStart, drops[0].timelineStart / plan.barSeconds))
+        }
+    case .failure(let message):
+        check("All I Wanted remix", false, message)
+    }
+}
+
+do {
+    // Britney duo: Oops = bed, BOMT = vocal, ~94, pitch bed not star.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 21, signals: signals) {
+    case .success(_, let plan, _):
+        check("BOMT+Oops target ~94", abs(plan.targetBPM - 94) < 1.5, "bpm=\(plan.targetBPM)")
+        check("BOMT+Oops bed is Oops", plan.mashupBedSongID == oops.id,
+              "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")")
+        check("BOMT+Oops vocal is BOMT", plan.mashupVocalSongID == bomt.id,
+              "vocal=\(plan.mashupVocalSongID == bomt.id ? "BOMT" : plan.mashupVocalSongID == oops.id ? "Oops" : "?")")
+        let bedPitch = plan.placements.filter { $0.songID == oops.id }.map { $0.effects.pitchAmount }.max() ?? 0
+        let vocalPitch = plan.placements.filter { $0.songID == bomt.id }.map { $0.effects.pitchAmount }.max() ?? 0
+        check("BOMT+Oops bed |pitch| ≤ 2 st", bedPitch <= 2.0 / 3.0 + 0.001, String(format: "%.3f", bedPitch))
+        check("BOMT+Oops vocal pitch ≤ 2 st", vocalPitch <= 2.0 / 12.0 + 0.05, String(format: "%.3f", vocalPitch))
+        check("BOMT+Oops does not pitch the star vocal", vocalPitch <= 0.005 + 0.001,
+              String(format: "vocalPitch=%.3f bedPitch=%.3f", vocalPitch, bedPitch))
+    case .failure(let message):
+        check("BOMT+Oops mashup", false, message)
+    }
+}
+
+do {
+    // Paramore + t.A.T.u.: Paramore stays 144 as bed; tatu is hook/cameo.
+    let paramore = makeSong(title: "All I Wanted", bpm: 144, key: "Em", color: .purple)
+    let tatu = makeSong(title: "All The Things She Said", bpm: 90, key: "Am", color: .pink)
+    let signals: [UUID: SongSignalFeatures] = [
+        paramore.id: crateFeatures(duration: 220, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50),
+        tatu.id: crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [paramore, tatu], seed: 33, signals: signals) {
+    case .success(_, let plan, _):
+        check("Paramore+tatu target 144", abs(plan.targetBPM - 144) < 0.5, "bpm=\(plan.targetBPM)")
+        check("Paramore+tatu bed is Paramore", plan.mashupBedSongID == paramore.id,
+              "bed=\(plan.mashupBedSongID == paramore.id ? "Paramore" : plan.mashupBedSongID == tatu.id ? "tatu" : "?")")
+        check("Paramore+tatu tatu is not the bed", plan.mashupBedSongID != tatu.id)
+        let tatuAsFullDrop1 = plan.mashupVocalSongID == tatu.id
+            && !plan.decisions.contains { $0.kind == .usedCameoOnly && $0.songTitle == tatu.title }
+        // tatu may be drop1 hook if gate allows cameo-as-full, or cameo-only — never the bed.
+        check("Paramore+tatu tatu usable as hook/cameo",
+              plan.mashupVocalSongID == tatu.id
+                || plan.decisions.contains { $0.kind == .usedCameoOnly && ($0.songTitle?.contains("Things") == true || $0.songTitle == tatu.title) }
+                || plan.placements.contains { $0.songID == tatu.id },
+              "vocalID=\(plan.mashupVocalSongID?.uuidString ?? "nil") cameo=\(plan.decisions.contains { $0.kind == .usedCameoOnly })")
+        _ = tatuAsFullDrop1
+    case .failure(let message):
+        check("Paramore+tatu mashup", false, message)
+    }
+}
+
+do {
+    let song = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm")
+    let feat = crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 5, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        check("Britney solo keeps 93", abs(plan.targetBPM - 93) < 0.5, "bpm=\(plan.targetBPM)")
+        check("Britney solo writesKick false", plan.pulsePolicy?.writesKick == false)
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        check("Britney first drop on downbeat",
+              drops.first.map {
+                  abs($0.timelineStart / plan.barSeconds - ($0.timelineStart / plan.barSeconds).rounded()) < 0.08
+              } ?? false,
+              drops.first.map { String(format: "t=%.3f bars=%.3f", $0.timelineStart, $0.timelineStart / plan.barSeconds) } ?? "no drop")
+        if let gap = plan.intentionalGaps.first(where: { $0.reason.contains("void") }),
+           let drop = drops.first {
+            check("Britney void ends at drop downbeat", abs(gap.end - drop.timelineStart) < 0.05)
+        }
+    case .failure(let message):
+        check("Britney solo remix", false, message)
     }
 }
 

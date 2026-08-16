@@ -536,7 +536,9 @@ enum AutoArrangementEngine {
         let chokeUnits = max(barUnits * 2, MixrTimeline.minClipLengthUnits + 0.1)
         let pulse = AutoClubPulse.policy(
             drumStrength: analysis.drumStrength,
-            bassDensity: analysis.bassDensity
+            bassDensity: analysis.bassDensity,
+            bpm: analysis.bpm,
+            analysisConfidence: analysis.analysisConfidence
         )
 
         for (k, chorus) in analysis.chorusOrDropCandidates.prefix(2).enumerated() {

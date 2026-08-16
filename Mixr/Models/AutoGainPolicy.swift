@@ -98,8 +98,10 @@ nonisolated enum AutoGainPolicy {
     static let preservationSongVolume = 0.9
 
     /// Placement volume for an energy-storied club / mashup slot.
+    /// Enough contrast for build-out subtraction vs drop payoff without
+    /// creating unexplained join jumps > 4 dB in offline PCM.
     static func songPlacementVolume(energy: Double) -> Double {
-        0.78 + 0.20 * min(1, max(0, energy))
+        0.58 + 0.42 * min(1, max(0, energy))
     }
 
     /// Extra attenuation when the pulse layer owns the low end.

@@ -42,7 +42,9 @@ Target shape on the phrase grid (all structural cuts on phrase / downbeat bounda
 - Four-on-the-floor kick + bass weight.
 - **ONE kick and ONE bass at a time.**
 - Duck or high-pass the original low end (existing blur / gain) while the pulse is in.
-- If the source already slams (or has a moderate kit): do **not** add this pulse. Use existing SFX-row one-shots (riser, snare build, impact, …) only.
+- If drums already slam (strong drum confidence), do **not** add pulse — even when bass density reads low.
+- Festival/rock pocket with uncertain analysis: do **not** invent a house kick.
+- Thin only when drums are actually weak. Slamming or moderate kits use existing SFX-row one-shots only.
 - Two kicks flam and mud the club system — hard fail.
 
 **Sound sources (product lock):**
