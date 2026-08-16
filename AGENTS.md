@@ -18,7 +18,9 @@ Apply structural aggressiveness from measured analysis confidence:
 2. **Medium confidence**: phrase-aligned club shape with continuous preference; allow cuts only with strong local evidence and filled transitions.
 3. **High confidence** (reliable section/beat/phrase analysis): rebuild onto an 8 / 16 / 32 bar phrase grid with a two-wave club arrangement (build → drop → break → build → drop 2). Prefer arrangement changes when repeat evidence supports them. Preserve the primary hook on drop 1 and add exactly one extra idea on drop 2.
 
-Never cut merely to increase variety, handoffs, effect count, or SFX density. When uncertain about a cut, keep the audio continuous and club-ify with energy.
+Never cut merely to increase variety, handoffs, effect count, or SFX density. When uncertain about a cut, keep the audio continuous and club-ify with energy, clip FX, and layered SFX.
+
+Club hype density (one-song Auto Remix / mashup): major SFX moments roughly every 4–8 bars (builds/drops/breaks), overlapping one-shots on extra SFX rows, plus audible clip FX (echo throws, filter/blur sweeps, reverb bloom). Sparse “≤ 3 musical SFX / min” is not a club mix. Still one kick and one bass. Flavor instincts bias toward Diplo / Guetta / Snake festival hype over Calvin sparse radio edits.
 
 ## Club arrangement (one song)
 

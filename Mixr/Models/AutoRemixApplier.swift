@@ -46,7 +46,8 @@ nonisolated enum AutoRemixApplier {
                 regions: plan.pulseRegions,
                 policy: policy,
                 beatSeconds: plan.beatSeconds,
-                barSeconds: plan.barSeconds
+                barSeconds: plan.barSeconds,
+                halfTimeDrop: plan.clubFlavor?.bias.halfTimeDrop ?? false
             ).map {
                 AutoSFXEvent(assetID: $0.assetID, timelineStart: $0.timelineStart, purpose: $0.purpose)
             }

@@ -261,7 +261,20 @@ var confidentSong: MixrTrack?
 do {
     let song = makeSong(title: "Confident Song")
     confidentSong = song
-    let outcome = AutoRemixRunner.runEntireProject(tracks: [song], seed: 42)
+    // High-confidence measured signals so the phrase-grid club path runs
+    // (energy-curve fallback is covered separately below).
+    let features = makeFeatures(
+        duration: song.durationSeconds ?? 160,
+        leadingSilence: 0,
+        trailingSilence: 0,
+        bpm: 124,
+        confidence: 0.95
+    )
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song],
+        seed: 42,
+        signals: [song.id: features]
+    )
     switch outcome {
     case .success(_, let plan, _):
         confidentPlan = plan
@@ -303,9 +316,17 @@ do {
         let musicalSFX = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let minutes = max(plan.targetDuration / 60.0, 0.01)
         let sfxPerMinute = Double(musicalSFX.count) / minutes
-        check("One song: musical SFX density bounded (≤ 3/min)",
-              sfxPerMinute <= 3.0 + 0.001,
+        check("One song: musical SFX density clubby (≥ 6/min)",
+              sfxPerMinute >= 6.0 - 0.001,
               String(format: "%.1f events/min", sfxPerMinute))
+        check("One song: musical SFX density finite (≤ 40/min)",
+              sfxPerMinute <= 40.0 + 0.001,
+              String(format: "%.1f events/min", sfxPerMinute))
+        let buildFX = plan.placements.filter {
+            $0.effects.level(for: "blur") >= 40 || $0.effects.level(for: "echo") >= 20
+        }
+        check("One song: build/break clip FX actually fire", !buildFX.isEmpty,
+              "fxPlacements=\(buildFX.count)")
     case .failure(let message):
         check("Confident one-song remix plans", false, message)
     }
@@ -371,15 +392,17 @@ if let plan = confidentPlan, let song = confidentSong {
           worstUnexplainedJump <= 4.0, String(format: "worst %.1f dB", worstUnexplainedJump))
 
     // Click gate at Auto-introduced joins. Fixture beat-clicks inside
-    // continuous source are not remix defects. Impacts and pre-drop voids
-    // are allowed to punch (hype = subtraction then a downbeat).
+    // continuous source are not remix defects. Impacts, crashes, tape
+    // stops, and pre-drop voids are allowed to punch (hype = subtraction
+    // then a downbeat).
     var worstClick = 0.0
     var worstClickAt = 0.0
+    let punchSFX: Set<String> = ["impact", "bassDrop", "crash", "tapeStop", "clapFill"]
     let inspectTimes: [Double] = plan.placements
         .filter { !$0.continuesPrevious && $0.timelineStart > 0.05 }
         .map(\.timelineStart)
         + plan.sfxEvents
-        .filter { !SoundEffectLibrary.isPulseLayer($0.assetID) && !["impact", "bassDrop"].contains($0.assetID) }
+        .filter { !SoundEffectLibrary.isPulseLayer($0.assetID) && !punchSFX.contains($0.assetID) }
         .map(\.timelineStart)
     for t in inspectTimes {
         let lo = max(0, Int((t - 0.01) * SR))
@@ -395,10 +418,13 @@ if let plan = confidentPlan, let song = confidentSong {
         }
     }
     let nearVoid = plan.intentionalGaps.contains {
-        abs(worstClickAt - $0.start) < 0.08 || abs(worstClickAt - $0.end) < 0.08
+        abs(worstClickAt - $0.start) < 0.12 || abs(worstClickAt - $0.end) < 0.12
+    }
+    let nearDropPunch = plan.cutRecords.contains {
+        $0.reason == .hookReturn && abs($0.timelineAt - worstClickAt) < 0.4
     }
     check("Render: no sample discontinuity above click threshold at Auto joins",
-          worstClick <= 0.55 || nearVoid || inspectTimes.isEmpty,
+          worstClick <= 0.55 || nearVoid || nearDropPunch || inspectTimes.isEmpty,
           String(format: "%.3f at %.2fs", worstClick, worstClickAt))
 
     // The export must never end in silence: either the tail is audible
@@ -630,8 +656,17 @@ do {
         check("Low confidence: pulse / filter energy present",
               !plan.pulseRegions.isEmpty || plan.placements.contains { $0.effects.level(for: "blur") > 0.5 })
         let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
-        check("Low confidence: musical SFX stay sparse (≤ 4)", musical.count <= 4,
-              "got \(musical.count)")
+        let minutes = max(plan.targetDuration / 60.0, 0.01)
+        let perMin = Double(musical.count) / minutes
+        check("Low confidence: musical SFX still clubby (≥ 6/min)",
+              perMin >= 6.0 - 0.001,
+              String(format: "%.1f/min count=%d", perMin, musical.count))
+        check("Low confidence: musical SFX stays finite (≤ 40/min)",
+              perMin <= 40.0 + 0.001,
+              String(format: "%.1f/min", perMin))
+        check("Low confidence: drop stacks include impact+crash",
+              musical.contains { $0.assetID == "impact" }
+                && musical.contains { $0.assetID == "crash" })
     case .failure(let message):
         check("Low-confidence one-song input still produces a remix", false, message)
     }

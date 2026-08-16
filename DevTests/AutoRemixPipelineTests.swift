@@ -188,7 +188,7 @@ do {
     }
 }
 
-// MARK: - 6. One-song remix keeps musical SFX sparse (pulse is separate)
+// MARK: - 6. One-song remix club SFX density (pulse is separate)
 
 do {
     let remixTracks = [makeSong(title: "Solo Remix", bpm: 128, key: "G")]
@@ -196,20 +196,76 @@ do {
         makeSong(title: "M1", bpm: 128, key: "G", color: .pink),
         makeSong(title: "M2", bpm: 128, key: "Em", color: .blue),
     ]
-    let remix = AutoRemixRunner.runEntireProject(tracks: remixTracks, seed: 55)
-    let mashup = AutoRemixRunner.runEntireProject(tracks: mashupTracks, seed: 55)
+    // High-confidence signal so the club phrase-grid path fires (not the
+    // sparse energy-curve fallback).
+    func hiConf(_ duration: Double, _ bpm: Double) -> SongSignalFeatures {
+        let hop = 0.5
+        let hops = max(8, Int(duration / hop))
+        var energy = [Double](repeating: 0.55, count: hops)
+        var vocal = [Double](repeating: 0.5, count: hops)
+        var bass = [Double](repeating: 0.45, count: hops)
+        for i in 0..<hops {
+            let t = Double(i) * hop
+            if t > duration * 0.35 && t < duration * 0.55 { energy[i] = 0.9; vocal[i] = 0.7 }
+            if t > duration * 0.7 && t < duration * 0.85 { energy[i] = 0.95; vocal[i] = 0.75 }
+        }
+        return SongSignalFeatures(
+            sampleRate: 44_100,
+            durationSeconds: duration,
+            rmsCurveDB: [Double](repeating: -12, count: hops),
+            onsetStrength: [Double](repeating: 0.7, count: hops),
+            hopSeconds: hop,
+            downbeatOffsetSeconds: 0,
+            beatConfidence: 0.95,
+            leadingSilenceSeconds: 0,
+            trailingSilenceSeconds: 0,
+            quietRegions: [],
+            energyCurve: energy,
+            bassEnergyCurve: bass,
+            vocalPresenceCurve: vocal,
+            noveltyCurve: [Double](repeating: 0.4, count: hops),
+            drumConfidence: 0.7,
+            overallConfidence: 0.95
+        )
+    }
+    let remixSignals = Dictionary(uniqueKeysWithValues: remixTracks.map { ($0.id, hiConf($0.durationSeconds ?? 180, 128)) })
+    let mashSignals = Dictionary(uniqueKeysWithValues: mashupTracks.map { ($0.id, hiConf($0.durationSeconds ?? 180, 128)) })
+    let remix = AutoRemixRunner.runEntireProject(tracks: remixTracks, seed: 55, signals: remixSignals)
+    let mashup = AutoRemixRunner.runEntireProject(tracks: mashupTracks, seed: 55, signals: mashSignals)
     switch (remix, mashup) {
     case (.success(_, let rp, _), .success(_, let mp, _)):
-        // Musical SFX (risers/impacts) stay sparse; club pulse lives in
-        // pulseRegions and is expanded at apply/render time.
         let musical = rp.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let rMinutes = max(rp.targetDuration / 60, 0.01)
+        let perMin = Double(musical.count) / rMinutes
         check(
-            "One-song remix musical SFX ≤ 3 events/min",
-            Double(musical.count) / rMinutes <= 3.0 + 0.0001,
-            String(format: "%.2f events/min", Double(musical.count) / rMinutes)
+            "One-song remix used club phrase grid (not energy-curve only)",
+            !rp.decisions.contains { $0.kind == .imposedClubEnergyCurve }
+                || musical.count >= 16,
+            "decisions include energy-curve=\(rp.decisions.contains { $0.kind == .imposedClubEnergyCurve }) count=\(musical.count)"
+        )
+        check(
+            "One-song remix musical SFX ≥ 6 events/min (club density)",
+            perMin >= 6.0 - 0.0001,
+            String(format: "%.2f events/min count=%d dur=%.1f", perMin, musical.count, rp.targetDuration)
+        )
+        check(
+            "One-song remix musical SFX stays finite (≤ 40/min)",
+            perMin <= 40.0 + 0.0001,
+            String(format: "%.2f events/min", perMin)
+        )
+        let ids = Set(musical.map(\.assetID))
+        check(
+            "One-song remix uses a variety of SFX ids",
+            ids.count >= 4,
+            "ids=\(ids.sorted())"
         )
         check("Mashup still coordinates SFX moments", !mp.sfxEvents.isEmpty)
+        let mashMusical = mp.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        check(
+            "Mashup musical SFX is denser than a polite drip",
+            mashMusical.count >= 6,
+            "count=\(mashMusical.count)"
+        )
         check("One-song remix records pulse regions", !rp.pulseRegions.isEmpty)
     default:
         check("Remix vs Mashup SFX comparison runs", false)

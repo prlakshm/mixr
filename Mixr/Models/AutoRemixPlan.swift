@@ -404,10 +404,12 @@ struct AutoTuning: Sendable {
     /// Minimum clip segment length in timeline seconds (model minimum ≈3.7 s).
     var minSegmentSeconds: Double = MixrTimeline.seconds(fromUnits: MixrTimeline.minClipLengthUnits) + 0.05
 
-    /// Remix: seconds between major coordinated SFX moments (~2–4 / min).
-    var remixMajorSFXSpacing = 16.0
-    /// Mashup: sparser SFX — song changes already create excitement.
-    var mashupMajorSFXSpacing = 24.0
+    /// Remix: seconds between major coordinated SFX moments.
+    /// Festival club density — roughly one major moment every 4–8 bars
+    /// (~8–12s at house/midtempo), not a polite radio-edit drip.
+    var remixMajorSFXSpacing = 8.0
+    /// Mashup: still busy — song changes are not enough excitement alone.
+    var mashupMajorSFXSpacing = 12.0
 
     static let standard = AutoTuning()
 }

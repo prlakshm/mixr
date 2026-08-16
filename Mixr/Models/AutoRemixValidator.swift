@@ -116,15 +116,13 @@ nonisolated enum AutoRemixValidator {
             return false
         }
 
-        // ── 4. Close accidental gaps (> one eighth note of silence) ──
-        // Coverage includes song clips AND SFX so transition tails / hits
-        // don't look like empty stretches. Intentional micro-pauses and
-        // pre-drop pauses are preserved.
+        // Close accidental gaps on SONG coverage only. SFX glitter must not
+        // hide a hole in the arrangement (busy beds, not whooshes over silence).
         let maxGap = plan.eighthNoteSeconds
         let intentional = plan.intentionalGaps
         var coverage = mergedCoverage(
             placements: plan.placements,
-            sfxEvents: plan.sfxEvents
+            sfxEvents: []
         )
 
         // Iterate until stable — pulling later content can create new adjacencies.
@@ -173,6 +171,13 @@ nonisolated enum AutoRemixValidator {
                     plan.intentionalGaps[i].start -= gap.length
                     plan.intentionalGaps[i].end -= gap.length
                 }
+                for i in plan.cutRecords.indices where plan.cutRecords[i].timelineAt >= gap.end - 0.01 {
+                    plan.cutRecords[i].timelineAt -= gap.length
+                }
+                for i in plan.pulseRegions.indices where plan.pulseRegions[i].timelineStart >= gap.end - 0.01 {
+                    plan.pulseRegions[i].timelineStart -= gap.length
+                    plan.pulseRegions[i].timelineEnd -= gap.length
+                }
                 decisions.append(
                     AutoDecision(
                         kind: .repairedTimelineGap,
@@ -185,7 +190,7 @@ nonisolated enum AutoRemixValidator {
 
             coverage = mergedCoverage(
                 placements: plan.placements,
-                sfxEvents: plan.sfxEvents
+                sfxEvents: []
             )
         }
 
@@ -212,7 +217,17 @@ nonisolated enum AutoRemixValidator {
             guard ["riser", "snareBuild", "reverseCymbal", "airSweep"].contains(event.assetID) else {
                 return false
             }
-            let lands = payoffStarts.contains { abs($0 - event.timelineEnd) < 0.35 }
+            let lands: Bool
+            switch event.assetID {
+            case "riser", "snareBuild":
+                // Builds must resolve into a downbeat payoff — start-near-intro
+                // is not enough (would keep orphan risers at t=0).
+                lands = payoffStarts.contains { abs($0 - event.timelineEnd) < 0.45 }
+            default:
+                // Atmosphere may start on a section entrance or end on a downbeat.
+                lands = payoffStarts.contains { abs($0 - event.timelineEnd) < 0.45 }
+                    || payoffStarts.contains { abs($0 - event.timelineStart) < 0.55 }
+            }
             if !lands {
                 decisions.append(
                     AutoDecision(

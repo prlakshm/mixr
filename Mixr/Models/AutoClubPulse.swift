@@ -114,12 +114,14 @@ nonisolated enum AutoClubPulse {
 
     /// Schedules four-on-the-floor kick + bass-weight hits. Muted in
     /// `buildOut`, `breakdown`, and `void`. Returns [] when the policy
-    /// does not write a pulse.
+    /// does not write a pulse. `halfTimeDrop` spaces drop kicks on the
+    /// half-time grid (dancehall / global-bass feel) without a second kick.
     static func scheduleHits(
         regions: [Region],
         policy: Policy,
         beatSeconds: Double,
-        barSeconds: Double
+        barSeconds: Double,
+        halfTimeDrop: Bool = false
     ) -> [Hit] {
         guard policy.writesKick || policy.writesBass else { return [] }
 
@@ -170,15 +172,16 @@ nonisolated enum AutoClubPulse {
                     }
                 }
             case .drop:
+                let kickStep = halfTimeDrop ? beatSeconds * 2 : beatSeconds
                 if policy.writesKick {
                     var t = region.timelineStart
                     while t < region.timelineEnd - 0.01 {
                         hits.append(Hit(
                             assetID: "clubKick",
                             timelineStart: t,
-                            purpose: "drop kick"
+                            purpose: halfTimeDrop ? "half-time drop kick" : "drop kick"
                         ))
-                        t += beatSeconds
+                        t += kickStep
                     }
                 }
                 if policy.writesBass {
@@ -187,7 +190,7 @@ nonisolated enum AutoClubPulse {
                         hits.append(Hit(
                             assetID: "clubBass",
                             timelineStart: t,
-                            purpose: "drop sub"
+                            purpose: halfTimeDrop ? "half-time drop sub" : "drop sub"
                         ))
                         t += beatSeconds * 2
                     }

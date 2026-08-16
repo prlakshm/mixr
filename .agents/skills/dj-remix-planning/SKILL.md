@@ -49,7 +49,7 @@ Phrase-grid only — drops land on downbeats, never mid-bar:
 7. Drop 2 = 16 — drop 1 + exactly one extra layer
 8. Outro — hook fragment + drums
 
-Recipe flavors (instincts, not sound-alikes): Calvin sparse, Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK.
+Recipe flavors (instincts, not sound-alikes): Calvin sparse (rare — clear piano ballads only), Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK, **Diplo / Major Lazer / Jack Ü** maximalist festival hype (void-then-slam, vocal chops over rolling bed, global-bass DNA, FX as groove). Default Auto Remix toward Diplo/Guetta/Snake — not a polite Calvin radio edit.
 
 ## Club pulse
 
@@ -120,9 +120,14 @@ Propose phrase-aligned opportunities when measured:
 
 ### Pulse / SFX
 - thin-song club kick / bass weight (first-class SFX menu items; one at a time)
-- existing SFX-row one-shots: riser, snare build, impact, …
+- existing SFX-row one-shots stacked on extra SFX rows: riser, snare build,
+  impact, crash, clap fill, air sweep, reverse cymbal, tape stop, …
+- major SFX moments roughly every 4–8 bars on builds/drops/breaks — festival
+  density, not a polite ≤3 events/min radio edit
+- clip FX must fire too: echo throws, blur/filter sweeps, reverb bloom
 
-Pulse and SFX must support an underlying musical transformation.
+Pulse and SFX must support an underlying musical transformation. Hype is
+layer density (bed + vocal + SFX + FX), never a second kick.
 
 ## High-confidence behavior
 
@@ -159,15 +164,16 @@ When structure, phrase, or beat confidence is low:
 
 Do not apply the same flavor to every song.
 
-Choose from measured texture + seed:
+Choose from measured texture + seed (hype-biased):
 
-- sparse piano/vocal/bass (Calvin-class)
+- sparse piano/vocal/bass (Calvin-class) — only clear ballads
 - vocal + electronic drop (Guetta-class)
 - four-bar harmonic loop (Avicii-class)
 - hummable chop drop (Marshmello-class)
 - chant / aggressive low end (Snake-class)
+- maximalist festival / global-bass (Diplo-class) — default for pop-over-club and dancehall midtempo
 
-Avoid stacking two dense midrange leads on the drop.
+Avoid stacking two dense midrange leads on the drop. Hype is density of FX/SFX layers — still one kick and one bass.
 
 ## Decision audit
 

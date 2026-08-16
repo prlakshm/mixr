@@ -323,6 +323,31 @@ enum AutoRemixPlanner {
             // Clamp section into usable range and requested bar count.
             let wantSeconds = Double(slot.bars) * bar
             let sourceDur = wantSeconds * ratio
+
+            // One-song club rewrite stays source-forward except justified
+            // hook returns on the drop. Random rewinds get deleted by the
+            // validator and leave audible holes — the opposite of busy.
+            if slot.role != .chorus,
+               let last = lastSourceEnd,
+               section.startSeconds < last - 0.05 {
+                let advanced = min(last, max(usableStart, usableEnd - sourceDur))
+                section = AutoCandidateSection(
+                    songID: section.songID,
+                    label: section.label,
+                    startSeconds: max(usableStart, advanced),
+                    barCount: slot.bars,
+                    barSeconds: section.barSeconds,
+                    hook: section.hook,
+                    energy: section.energy,
+                    vocal: section.vocal,
+                    clarity: section.clarity,
+                    rhythm: section.rhythm,
+                    uniqueness: section.uniqueness,
+                    transitionUse: section.transitionUse,
+                    confidence: section.confidence
+                )
+            }
+
             if section.startSeconds < usableStart {
                 section = AutoCandidateSection(
                     songID: section.songID,
@@ -341,11 +366,17 @@ enum AutoRemixPlanner {
                 )
             }
             if section.startSeconds + sourceDur > usableEnd {
-                let start = max(usableStart, usableEnd - sourceDur)
+                // Never rewind a non-chorus slot just to fit length — shorten
+                // into the remaining source instead (avoids validator holes).
+                let floor = (slot.role == .chorus)
+                    ? usableStart
+                    : (lastSourceEnd ?? usableStart)
+                let start = max(floor, usableEnd - sourceDur)
+                let clampedStart = min(max(usableStart, start), max(usableStart, usableEnd - bar * 2))
                 section = AutoCandidateSection(
                     songID: section.songID,
                     label: section.label,
-                    startSeconds: start,
+                    startSeconds: clampedStart,
                     barCount: slot.bars,
                     barSeconds: section.barSeconds,
                     hook: section.hook,
@@ -421,34 +452,63 @@ enum AutoRemixPlanner {
                 var fx = ClipEffectSettings()
                 switch slot.role {
                 case .intro:
-                    fx.setLevel(42, for: MixrEffect.blur.rawValue)
-                    fx.setLevel(10, for: MixrEffect.echo.rawValue)
+                    fx.setLevel(48, for: MixrEffect.blur.rawValue)
+                    fx.setLevel(16, for: MixrEffect.echo.rawValue)
+                    fx.echoPreset = .classic
                 case .build:
-                    fx.flangerAmount = seg.pulse == .buildOut ? 0.28 : (slot.energy > 0.78 ? 0.24 : 0.16)
-                    fx.setLevel(seg.pulse == .buildOut ? 36 : 18, for: MixrEffect.echo.rawValue)
+                    fx.flangerAmount = seg.pulse == .buildOut ? 0.36 : (slot.energy > 0.78 ? 0.30 : 0.22)
+                    fx.setLevel(seg.pulse == .buildOut ? 42 : 24, for: MixrEffect.echo.rawValue)
                     fx.echoPreset = .pingPong
                     if seg.pulse == .buildOut {
-                        fx.setLevel(50, for: MixrEffect.blur.rawValue)
+                        // Filter sweep into the void/drop — busy, not polite.
+                        fx.setLevel(58, for: MixrEffect.blur.rawValue)
+                        fx.setLevel(20, for: MixrEffect.reverb.rawValue)
+                        fx.reverbPreset = .hall
+                    } else {
+                        fx.setLevel(flavor.bias.fxAsGroove ? 26 : 18, for: MixrEffect.blur.rawValue)
+                    }
+                    if flavor.bias.fxAsGroove {
+                        fx.setLevel(max(fx.level(for: MixrEffect.echo.rawValue), 32), for: MixrEffect.echo.rawValue)
                     }
                 case .chorus:
-                    fx.setLevel(dropIndex == 0 ? 8 : 14, for: MixrEffect.reverb.rawValue)
+                    // Filter opens on the downbeat — drop is brighter than build-out.
+                    fx.setLevel(dropIndex == 0 ? 6 : 10, for: MixrEffect.blur.rawValue)
+                    fx.setLevel(dropIndex == 0 ? 12 : 18, for: MixrEffect.reverb.rawValue)
                     fx.reverbPreset = dropIndex == 0 ? .hall : .ambient
+                    fx.setLevel(dropIndex == 0 ? 10 : 16, for: MixrEffect.echo.rawValue)
                     if dropIndex >= 1, flavor.bias.drop2AiryLayer {
-                        fx.setLevel(12, for: MixrEffect.echo.rawValue)
+                        fx.setLevel(20, for: MixrEffect.echo.rawValue)
+                        fx.setLevel(16, for: MixrEffect.reverb.rawValue)
                     }
                     if flavor.bias.vocalChopLead, dropIndex == 0 {
-                        fx.setLevel(10, for: MixrEffect.blur.rawValue)
+                        fx.setLevel(14, for: MixrEffect.blur.rawValue)
+                    }
+                    if flavor.bias.aggressiveLowEnd {
+                        fx.flangerAmount = max(fx.flangerAmount, 0.12)
+                    }
+                    if flavor.bias.fxAsGroove {
+                        // Echo throws on the vocal / filter open as groove, not garnish.
+                        fx.setLevel(max(fx.level(for: MixrEffect.echo.rawValue), 18), for: MixrEffect.echo.rawValue)
+                        fx.echoPreset = .pingPong
                     }
                 case .breakdown:
-                    fx.setLevel(22 + flavor.bias.breakdownVocalClarity * 18, for: MixrEffect.reverb.rawValue)
+                    fx.setLevel(28 + flavor.bias.breakdownVocalClarity * 22, for: MixrEffect.reverb.rawValue)
                     fx.reverbPreset = .ambient
+                    fx.setLevel(22, for: MixrEffect.echo.rawValue)
+                    fx.echoPreset = .classic
+                    // Atmosphere bloom — not a muted midrange hole.
                     if flavor.bias.dropMidrangeSparse {
-                        fx.setLevel(16, for: MixrEffect.blur.rawValue)
+                        fx.setLevel(20, for: MixrEffect.blur.rawValue)
+                    } else {
+                        fx.setLevel(12, for: MixrEffect.blur.rawValue)
                     }
                 case .ending:
-                    fx.setLevel(24, for: MixrEffect.reverb.rawValue)
+                    fx.setLevel(28, for: MixrEffect.reverb.rawValue)
                     fx.reverbPreset = .ambient
-                    fx.setLevel(18, for: MixrEffect.echo.rawValue)
+                    fx.setLevel(26, for: MixrEffect.echo.rawValue)
+                    fx.echoPreset = .classic
+                case .groove:
+                    fx.setLevel(10, for: MixrEffect.echo.rawValue)
                 default:
                     break
                 }
@@ -469,6 +529,10 @@ enum AutoRemixPlanner {
 
                 if discontinuity, let prevEnd = lastSourceEnd {
                     let isHookReturn = slot.role == .chorus
+                    let prevVol = placements.last?.volume ?? volume
+                    let volDeltaDB = abs(20 * log10(max(volume, 0.05) / max(prevVol, 0.05)))
+                    let prevBlur = placements.last?.effects.level(for: "blur") ?? 0
+                    let fxFloor = (prevBlur >= 28 || fx.level(for: "blur") >= 28) ? 6.0 : 0.0
                     cutRecords.append(
                         AutoCutRecord(
                             timelineAt: segCursor,
@@ -476,7 +540,9 @@ enum AutoRemixPlanner {
                             sourceTo: sourceStart,
                             reason: isHookReturn ? .hookReturn : .redundantRepeat,
                             confidence: max(0.55, section.confidence),
-                            expectedEnergyDeltaDB: isHookReturn ? 2.0 : 0,
+                            expectedEnergyDeltaDB: isHookReturn
+                                ? (slot.entry == .hardHypeCut ? max(8.0, volDeltaDB) : max(2.0, volDeltaDB))
+                                : max(volDeltaDB, fxFloor),
                             masking: slot.entry == .hardHypeCut
                                 ? .sfx(assetID: "impact")
                                 : .alignedHardCut
@@ -501,7 +567,10 @@ enum AutoRemixPlanner {
                     )
                 }
                 if slot.role == .ending {
-                    fadeOut = ClipTransition(type: .echoOut, duration: 6)
+                    fadeOut = ClipTransition(type: .echoOut, duration: 8)
+                } else if slot.role == .build, seg.pulse == .buildOut {
+                    // Echo throw out of the build into the void/drop.
+                    fadeOut = ClipTransition(type: .echoOut, duration: 4)
                 }
 
                 placements.append(
@@ -524,36 +593,159 @@ enum AutoRemixPlanner {
                 segCursor += segDur
             }
 
-            // Coordinated SFX into drops.
-            if slot.role == .chorus {
-                let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
-                    ?? cursor
-                if let riser = SoundEffectLibrary.definition(for: dropIndex == 0 ? "riser" : "snareBuild"),
-                   dropAt - riser.durationSeconds >= 0 {
+            // Coordinated club SFX stacks — builds/drops/breaks stay busy.
+            // One-shots overlap on extra SFX rows at apply time.
+            let segEnd = segCursor
+            if slot.role == .build {
+                let buildEnd = segEnd
+                if let snare = SoundEffectLibrary.definition(for: "snareBuild"),
+                   buildEnd - snare.durationSeconds >= cursor {
                     sfx.append(
                         AutoSFXEvent(
-                            assetID: dropIndex == 0 ? "riser" : "snareBuild",
-                            timelineStart: dropAt - riser.durationSeconds,
-                            purpose: dropIndex == 0 ? "riser into drop 1" : "snare roll into drop 2"
+                            assetID: "snareBuild",
+                            timelineStart: buildEnd - snare.durationSeconds,
+                            purpose: "snare roll through build-out"
                         )
                     )
                 }
-                sfx.append(
-                    AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat")
-                )
-                if dropIndex >= 1, flavor.bias.drop2AiryLayer {
+                if let riser = SoundEffectLibrary.definition(for: "riser"),
+                   buildEnd - riser.durationSeconds >= cursor {
                     sfx.append(
-                        AutoSFXEvent(assetID: "airSweep", timelineStart: dropAt, purpose: "drop 2 airy layer")
+                        AutoSFXEvent(
+                            assetID: "riser",
+                            timelineStart: buildEnd - riser.durationSeconds,
+                            purpose: "riser into the drop"
+                        )
                     )
+                }
+                if let sweep = SoundEffectLibrary.definition(for: "airSweep"),
+                   buildEnd - sweep.durationSeconds >= cursor {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "airSweep",
+                            timelineStart: max(cursor, buildEnd - sweep.durationSeconds),
+                            purpose: "filter/air sweep on build-out"
+                        )
+                    )
+                }
+            }
+
+            if slot.role == .groove || slot.role == .intro {
+                // Keep the early arrangement busy — not silent until the first build.
+                let mid = cursor + Double(slot.bars) * bar * 0.5
+                sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: mid, purpose: "groove clap fill"))
+                if slot.role == .intro {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "reverseCymbal",
+                            timelineStart: max(0, cursor + Double(slot.bars) * bar - 1.2),
+                            purpose: "reverse out of intro"
+                        )
+                    )
+                }
+            }
+
+            if slot.role == .chorus {
+                let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
+                    ?? cursor
+                let dropEnd = placements.last(where: { $0.slotIndex == slotIdx })?.timelineEnd
+                    ?? (cursor + Double(slot.bars) * bar)
+                // Maximalist / Diplo: snare + riser into EVERY drop, then
+                // impact + crash + air + clap (horn-stab energy from existing SFX).
+                let stackHard = flavor.bias.maximalistStacks
+                if stackHard || dropIndex == 0 {
+                    if let riser = SoundEffectLibrary.definition(for: "riser"),
+                       dropAt - riser.durationSeconds >= 0,
+                       !sfx.contains(where: {
+                           $0.assetID == "riser" && abs(($0.timelineStart + riser.durationSeconds) - dropAt) < 0.35
+                       }) {
+                        sfx.append(
+                            AutoSFXEvent(
+                                assetID: "riser",
+                                timelineStart: dropAt - riser.durationSeconds,
+                                purpose: "riser into drop"
+                            )
+                        )
+                    }
+                }
+                if stackHard || dropIndex >= 1 {
+                    if let snare = SoundEffectLibrary.definition(for: "snareBuild"),
+                       dropAt - snare.durationSeconds >= 0,
+                       !sfx.contains(where: {
+                           $0.assetID == "snareBuild"
+                               && abs(($0.timelineStart + snare.durationSeconds) - dropAt) < 0.35
+                       }) {
+                        sfx.append(
+                            AutoSFXEvent(
+                                assetID: "snareBuild",
+                                timelineStart: dropAt - snare.durationSeconds,
+                                purpose: "snare roll into drop"
+                            )
+                        )
+                    }
+                }
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat"))
+                sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: dropAt, purpose: "crash on drop downbeat"))
+                if stackHard || dropIndex >= 1 || flavor.bias.drop2AiryLayer {
+                    sfx.append(AutoSFXEvent(assetID: "airSweep", timelineStart: dropAt, purpose: "siren/air sweep on drop"))
+                }
+                if stackHard || flavor.bias.vocalChopLead || dropIndex >= 1 {
+                    sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: dropAt, purpose: "clap fill on drop"))
+                }
+                // Tape stop into the slam — Diplo void-then-pile instinct.
+                if stackHard || dropIndex >= 1 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "tapeStop",
+                            timelineStart: max(0, dropAt - 0.35),
+                            purpose: "tape stop into drop"
+                        )
+                    )
+                }
+                // Mid-drop fill so a 16-bar drop stays hyped.
+                let midDrop = dropAt + (dropEnd - dropAt) * 0.5
+                sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: midDrop, purpose: "mid-drop clap fill"))
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: midDrop, purpose: "mid-drop impact"))
+                if stackHard {
+                    sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: midDrop, purpose: "mid-drop crash"))
                 }
                 decisions.append(
                     AutoDecision(
                         kind: .addedRiserIntoDrop,
                         songTitle: profile.title,
-                        detail: dropIndex == 0 ? "riser into drop 1" : "snare into drop 2"
+                        detail: stackHard
+                            ? "maximalist drop stack (\(flavor.rawValue))"
+                            : (dropIndex == 0 ? "riser+impact+crash drop 1" : "snare+impact+crash drop 2")
                     )
                 )
                 dropIndex += 1
+            }
+
+            if slot.role == .breakdown {
+                let breakAt = cursor
+                sfx.append(
+                    AutoSFXEvent(assetID: "reverseCymbal", timelineStart: max(0, breakAt - 0.5), purpose: "reverse into breakdown")
+                )
+                sfx.append(
+                    AutoSFXEvent(assetID: "downlifter", timelineStart: breakAt, purpose: "downlifter into breakdown")
+                )
+                if let air = SoundEffectLibrary.definition(for: "airSweep") {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "airSweep",
+                            timelineStart: breakAt + bar * 2,
+                            purpose: "atmosphere sweep in breakdown"
+                        )
+                    )
+                    _ = air
+                }
+            }
+
+            if slot.role == .ending {
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: cursor, purpose: "final hit"))
+                sfx.append(
+                    AutoSFXEvent(assetID: "downlifter", timelineStart: cursor + 0.8, purpose: "downlifter out")
+                )
             }
 
             selected.append(
@@ -581,7 +773,8 @@ enum AutoRemixPlanner {
             regions: pulseRegions,
             policy: pulse,
             beatSeconds: beat,
-            barSeconds: bar
+            barSeconds: bar,
+            halfTimeDrop: flavor.bias.halfTimeDrop
         )
 
         // Blend every join except the intentional pre-drop void — equal-power
@@ -723,19 +916,34 @@ enum AutoRemixPlanner {
 
             var fx = ClipEffectSettings()
             if role == .introTease || role == .breakdown {
-                fx.setLevel(36, for: MixrEffect.blur.rawValue)
+                fx.setLevel(role == .breakdown ? 40 : 36, for: MixrEffect.blur.rawValue)
+                fx.setLevel(role == .breakdown ? 32 : 14, for: MixrEffect.reverb.rawValue)
+                fx.reverbPreset = .ambient
+                if role == .breakdown {
+                    fx.setLevel(24, for: MixrEffect.echo.rawValue)
+                    fx.echoPreset = .classic
+                }
             }
             if role == .build {
-                fx.flangerAmount = 0.18
-                fx.setLevel(20, for: MixrEffect.echo.rawValue)
+                fx.flangerAmount = 0.26
+                fx.setLevel(26, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .pingPong
             }
             if role == .buildOut {
-                fx.flangerAmount = 0.28
-                fx.setLevel(50, for: MixrEffect.blur.rawValue)
-                fx.setLevel(28, for: MixrEffect.echo.rawValue)
+                fx.flangerAmount = 0.34
+                fx.setLevel(56, for: MixrEffect.blur.rawValue)
+                fx.setLevel(36, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .pingPong
+                fx.setLevel(18, for: MixrEffect.reverb.rawValue)
+            }
+            if role == .drop {
+                fx.setLevel(8, for: MixrEffect.blur.rawValue)
+                fx.setLevel(14, for: MixrEffect.reverb.rawValue)
+                fx.reverbPreset = .hall
+                fx.setLevel(12, for: MixrEffect.echo.rawValue)
             }
             if pulse.duckSourceLowEnd, role == .drop || role == .groove {
-                fx.setLevel(24, for: MixrEffect.blur.rawValue)
+                fx.setLevel(max(fx.level(for: MixrEffect.blur.rawValue), 24), for: MixrEffect.blur.rawValue)
             }
             fx = AutoSupportedEffects.sanitize(fx)
 
@@ -757,6 +965,19 @@ enum AutoRemixPlanner {
                 sourceContinuous = false
             }
 
+            var fadeOut: ClipTransition = .none
+            if i == curve.count - 1 {
+                fadeOut = ClipTransition(
+                    type: .echoOut,
+                    duration: 6,
+                    curve: AutoTransitionEnvelope.equalPowerCurveName
+                )
+            } else if role == .buildOut || role == .build {
+                fadeOut = ClipTransition(type: .echoOut, duration: 4)
+            } else if role == .breakdown {
+                fadeOut = ClipTransition(type: .echoOut, duration: 3)
+            }
+
             placements.append(
                 AutoClipPlacement(
                     songID: profile.songID,
@@ -766,9 +987,7 @@ enum AutoRemixPlanner {
                     tempoRatio: ratio,
                     volume: volume,
                     fadeIn: .none,
-                    fadeOut: i == curve.count - 1
-                        ? ClipTransition(type: .fadeOut, duration: 2, curve: AutoTransitionEnvelope.equalPowerCurveName)
-                        : .none,
+                    fadeOut: fadeOut,
                     effects: fx,
                     role: .dominant,
                     slotIndex: i,
@@ -776,18 +995,136 @@ enum AutoRemixPlanner {
                 )
             )
 
+            // Festival density on the continuous path too — crates with weak
+            // analysis still need busy SFX stacks, not two whooshes.
+            if role == .introTease {
+                sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: t0 + (t1 - t0) * 0.5, purpose: "energy-curve intro clap"))
+                sfx.append(
+                    AutoSFXEvent(
+                        assetID: "reverseCymbal",
+                        timelineStart: max(0, t1 - 1.2),
+                        purpose: "energy-curve reverse out of intro"
+                    )
+                )
+            }
+            if role == .groove {
+                sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: t0 + (t1 - t0) * 0.45, purpose: "energy-curve groove clap"))
+                if let air = SoundEffectLibrary.definition(for: "airSweep"), t1 - air.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "airSweep",
+                            timelineStart: t1 - air.durationSeconds,
+                            purpose: "energy-curve groove sweep into build"
+                        )
+                    )
+                }
+            }
+            if role == .build {
+                if let snare = SoundEffectLibrary.definition(for: "snareBuild"), t1 - snare.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "snareBuild",
+                            timelineStart: t1 - snare.durationSeconds,
+                            purpose: "energy-curve snare through build"
+                        )
+                    )
+                }
+                if let riser = SoundEffectLibrary.definition(for: "riser"), t1 - riser.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "riser",
+                            timelineStart: t1 - riser.durationSeconds,
+                            purpose: "energy-curve riser through build"
+                        )
+                    )
+                }
+            }
             if role == .drop {
                 let dropCount = pulseRegions.filter { $0.role == .drop }.count
-                let sfxAsset = dropCount <= 1 ? "riser" : "snareBuild"
-                if let def = SoundEffectLibrary.definition(for: sfxAsset), t0 - def.durationSeconds >= 0 {
-                    sfx.append(AutoSFXEvent(assetID: sfxAsset, timelineStart: t0 - def.durationSeconds, purpose: "energy-curve \(sfxAsset)"))
+                // Stack snare+riser into every drop; keep impact+crash together.
+                if let snare = SoundEffectLibrary.definition(for: "snareBuild"), t0 - snare.durationSeconds >= 0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "snareBuild",
+                            timelineStart: t0 - snare.durationSeconds,
+                            purpose: "energy-curve snare into drop"
+                        )
+                    )
+                }
+                if let riser = SoundEffectLibrary.definition(for: "riser"), t0 - riser.durationSeconds >= 0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "riser",
+                            timelineStart: t0 - riser.durationSeconds,
+                            purpose: "energy-curve riser into drop"
+                        )
+                    )
                 }
                 sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "energy-curve impact"))
+                sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "energy-curve crash"))
+                sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: t0, purpose: "energy-curve clap fill"))
+                if dropCount > 1 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "tapeStop",
+                            timelineStart: max(0, t0 - 0.35),
+                            purpose: "energy-curve tape stop into drop 2"
+                        )
+                    )
+                }
+                let midDrop = t0 + (t1 - t0) * 0.45
+                sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: midDrop, purpose: "energy-curve mid-drop clap"))
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: midDrop, purpose: "energy-curve mid-drop impact"))
+            }
+            if role == .buildOut {
+                if let air = SoundEffectLibrary.definition(for: "airSweep"), t1 - air.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "airSweep",
+                            timelineStart: t1 - air.durationSeconds,
+                            purpose: "energy-curve build-out sweep"
+                        )
+                    )
+                }
+                if let snare = SoundEffectLibrary.definition(for: "snareBuild"), t1 - snare.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "snareBuild",
+                            timelineStart: t1 - snare.durationSeconds,
+                            purpose: "energy-curve snare through build-out"
+                        )
+                    )
+                }
+            }
+            if role == .breakdown {
+                sfx.append(AutoSFXEvent(assetID: "downlifter", timelineStart: t0, purpose: "energy-curve downlifter"))
+                sfx.append(
+                    AutoSFXEvent(
+                        assetID: "reverseCymbal",
+                        timelineStart: max(0, t0 - 0.4),
+                        purpose: "energy-curve reverse"
+                    )
+                )
+                sfx.append(
+                    AutoSFXEvent(
+                        assetID: "airSweep",
+                        timelineStart: t0,
+                        purpose: "energy-curve breakdown atmosphere"
+                    )
+                )
+            }
+            if role == .outro {
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "energy-curve final hit"))
+                sfx.append(AutoSFXEvent(assetID: "downlifter", timelineStart: min(t1 - 0.5, t0 + 1.0), purpose: "energy-curve outro downlifter"))
             }
         }
 
         let hits = AutoClubPulse.scheduleHits(
-            regions: pulseRegions, policy: pulse, beatSeconds: beat, barSeconds: bar
+            regions: pulseRegions,
+            policy: pulse,
+            beatSeconds: beat,
+            barSeconds: bar,
+            halfTimeDrop: flavor.bias.halfTimeDrop
         )
         // Hits are materialized at apply/render — keep sfxEvents musical-only.
         _ = hits
@@ -1219,28 +1556,18 @@ enum AutoRemixPlanner {
         return pool.max { bedFitness($0, pool: pool, tuning: tuning) < bedFitness($1, pool: pool, tuning: tuning) }
     }
 
-    /// Same-pocket duo bed. When both songs have similar vocal density
-    /// (typical Britney-class midtempo pair), pick the bed by soft-capped
-    /// groove — raw drum 1.00 must not steal the bed from drum 0.71. When
-    /// one song is clearly the topline (much higher vocal), that song is
-    /// the vocal and the partner is the bed.
+    /// Same-pocket duo bed. Midtempo pop pairs (Britney-class) often measure
+    /// similar vocal density — do NOT flip bed solely on mean vocal. Bed =
+    /// groove partner (softer drums + bass weight); the hotter drum bus is
+    /// usually the radio single that should ride Drop 1 as the vocal.
     private static func samePocketDuoBed(_ a: AutoSongProfile, _ b: AutoSongProfile) -> AutoSongProfile {
-        let vocalA = a.analysis.meanVocalDensity(from: 0, to: a.analysis.durationSeconds)
-        let vocalB = b.analysis.meanVocalDensity(from: 0, to: b.analysis.durationSeconds)
-
-        if abs(vocalA - vocalB) > 0.08 {
-            // Clear topline vs groove partner.
-            return vocalA >= vocalB ? b : a
-        }
-
-        // Dual pop vocals in the same pocket — bed by groove fitness with a
-        // soft drum cap so slamming pop production cannot win the bed seat.
-        // Do not use featureScore here: real chorus detection can rate the
-        // groove partner as "hookier" and would invert BOMT/Oops again.
         func grooveBedScore(_ p: AutoSongProfile) -> Double {
             let drum = min(p.analysis.drumStrength, 0.72)
             let bass = p.analysis.bassDensity
-            return drum * 0.40 + bass * 0.60
+            // Soft preference for the less-slamming kit when soft-capped drums
+            // nearly tie (star singles often measure drumStrength ≈ 1.00).
+            let softPrefer = (1.0 - min(1.0, p.analysis.drumStrength)) * 0.18
+            return drum * 0.35 + bass * 0.50 + softPrefer
         }
         return grooveBedScore(a) >= grooveBedScore(b) ? a : b
     }
@@ -1420,6 +1747,21 @@ enum AutoRemixPlanner {
                 AutoDecision(kind: .wroteClubPulse, songTitle: pulseSource.title, detail: pulse.detail)
             )
         }
+
+        // Mashup club flavor — Diplo default when pop vocals sit on a club bed.
+        let vocalDensity = ordered.map {
+            $0.analysis.meanVocalDensity(from: 0, to: $0.analysis.durationSeconds)
+        }.max() ?? 0.5
+        let mashupFlavor = AutoClubFlavor.choose(
+            drumStrength: pulseSource.analysis.drumStrength,
+            bassDensity: pulseSource.analysis.bassDensity,
+            vocalDensity: vocalDensity,
+            bpm: targetBPM,
+            seed: seed ^ 0xD1_F10
+        )
+        decisions.append(
+            AutoDecision(kind: .choseClubFlavor, songTitle: pulseSource.title, detail: mashupFlavor.rawValue)
+        )
 
         var fits: [Int: AutoTempo.Fit] = [:]
         for (i, p) in ordered.enumerated() {
@@ -1775,26 +2117,32 @@ enum AutoRemixPlanner {
             var bodyFX = ClipEffectSettings()
             switch ps.slot.role {
             case .teaser:
-                bodyFX.setLevel(28, for: MixrEffect.blur.rawValue)
-                bodyFX.setLevel(14, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(34, for: MixrEffect.blur.rawValue)
+                bodyFX.setLevel(20, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .reverse
             case .build:
                 if !profile.lowConfidence {
-                    bodyFX.flangerAmount = ps.slot.energy > 0.75 ? 0.26 : 0.16
+                    bodyFX.flangerAmount = ps.slot.energy > 0.75 ? 0.34 : 0.24
+                    bodyFX.setLevel(28, for: MixrEffect.echo.rawValue)
+                    bodyFX.echoPreset = .pingPong
+                    bodyFX.setLevel(22, for: MixrEffect.blur.rawValue)
                 }
             case .chorus:
-                bodyFX.setLevel(8, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(12, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .hall
+                bodyFX.setLevel(14, for: MixrEffect.echo.rawValue)
             case .breakdown:
-                bodyFX.setLevel(18, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(28, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .ambient
+                bodyFX.setLevel(24, for: MixrEffect.echo.rawValue)
+                bodyFX.echoPreset = .classic
             case .ending:
-                bodyFX.setLevel(24, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(30, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .ambient
-                bodyFX.setLevel(20, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(28, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .classic
             case .groove, .intro:
-                break
+                bodyFX.setLevel(12, for: MixrEffect.echo.rawValue)
             }
             bodyFX = AutoSupportedEffects.sanitize(bodyFX)
 
@@ -2052,40 +2400,61 @@ enum AutoRemixPlanner {
             if i > 0, (allowMajorSFX || isDropReveal) {
                 switch entry {
                 case .hardHypeCut where isDropReveal || mode == .remix || ps.slot.isFinalPeak:
-                    let buildID = ps.slot.isFinalPeak ? "snareBuild" : "riser"
-                    // Riser ends on the downbeat — starts during the outgoing
-                    // phrase (overlaps build), not in post-silence dead air.
+                    let stackHard = mashupFlavor.bias.maximalistStacks
+                    let buildID = ps.slot.isFinalPeak || stackHard ? "snareBuild" : "riser"
+                    // Riser/snare overlaps the outgoing phrase into the downbeat.
                     addSFXEnding(
                         buildID,
                         at: boundary,
                         purpose: ps.slot.isFinalPeak ? "snare build into the final drop" : "riser into the drop"
                     )
+                    if stackHard || ps.slot.isFinalPeak {
+                        addSFXEnding("riser", at: boundary, purpose: "riser stacked into the drop")
+                        addSFXEnding("snareBuild", at: boundary, purpose: "snare stacked into the drop")
+                    }
+                    addSFXEnding("airSweep", at: boundary, purpose: "siren/air sweep into the drop")
                     addSFX("impact", at: boundary, purpose: "impact on the drop downbeat")
-                    if ps.slot.isFinalPeak {
-                        addSFXEnding("riser", at: boundary, purpose: "riser into the final drop")
+                    addSFX("crash", at: boundary, purpose: "crash on the drop downbeat")
+                    if stackHard || ps.slot.isFinalPeak || mode == .remix {
+                        addSFX("clapFill", at: boundary, purpose: "clap fill on the drop")
+                    }
+                    if stackHard || ps.slot.isFinalPeak {
+                        addSFX("tapeStop", at: max(0, boundary - 0.35), purpose: "tape stop into drop")
                     }
                     decisions.append(
                         AutoDecision(
                             kind: .addedRiserIntoDrop,
                             songTitle: nil,
-                            detail: ps.slot.isFinalPeak ? "snare build + impact" : "riser + impact"
+                            detail: ps.slot.isFinalPeak ? "snare+riser+impact+crash" : "riser+impact+crash"
                         )
                     )
                     lastMajorSFXTime = boundary
                 case .reverseEntrance where mode == .remix || ps.slot.energy >= 0.88:
                     addSFXEnding("reverseCymbal", at: boundary, purpose: "reverse cymbal into the hook reveal")
                     addSFX("impact", at: boundary, purpose: "impact on the new entrance")
+                    addSFX("crash", at: boundary, purpose: "crash on the entrance")
                     lastMajorSFXTime = boundary
-                case .blurReveal where mode == .remix && ps.slot.energy >= 0.9:
+                case .blurReveal where mode == .remix && ps.slot.energy >= 0.85:
                     addSFX("impact", at: boundary, purpose: "impact on the reveal")
+                    addSFXEnding("airSweep", at: boundary, purpose: "sweep into the reveal")
                     lastMajorSFXTime = boundary
-                case .vocalEchoOut where mode == .remix:
+                case .vocalEchoOut where mode == .remix || mode == .mashup:
                     if prev?.slot.role == .chorus, ps.slot.energy < prev!.slot.energy {
                         addSFX("downlifter", at: boundary, purpose: "downlifter out of the drop")
+                        addSFXEnding("reverseCymbal", at: boundary, purpose: "reverse out of the drop")
                         lastMajorSFXTime = boundary
                     }
-                case .flangerBuild where mode == .remix:
-                    addSFX("impact", at: boundary, purpose: "impact on the flanger release")
+                case .flangerBuild where mode == .remix || mode == .mashup:
+                    addSFXEnding("snareBuild", at: boundary + ps.timelineDuration, purpose: "snare through the build")
+                    addSFXEnding("riser", at: boundary + ps.timelineDuration, purpose: "riser through the build")
+                    addSFX("impact", at: boundary + ps.timelineDuration, purpose: "impact off the build")
+                    lastMajorSFXTime = boundary + ps.timelineDuration
+                case .atmosphericHandoff:
+                    addSFX("downlifter", at: boundary, purpose: "downlifter into breakdown")
+                    addSFXEnding("airSweep", at: boundary + barSec * 2, purpose: "atmosphere in the break")
+                    lastMajorSFXTime = boundary
+                case .cleanCrossfade where mode == .remix:
+                    addSFXEnding("airSweep", at: boundary, purpose: "sweep across the handoff")
                     lastMajorSFXTime = boundary
                 default:
                     break
@@ -2193,7 +2562,8 @@ enum AutoRemixPlanner {
             regions: pulseRegions,
             policy: pulse,
             beatSeconds: beatSec,
-            barSeconds: barSec
+            barSeconds: barSec,
+            halfTimeDrop: mashupFlavor.bias.halfTimeDrop
         )
 
         return AutoRemixPlan(
@@ -2208,7 +2578,7 @@ enum AutoRemixPlanner {
             intentionalGaps: intentionalGaps,
             pulsePolicy: pulse,
             pulseRegions: pulseRegions,
-            clubFlavor: nil,
+            clubFlavor: mashupFlavor,
             mashupVocalSongID: mashupVocalID,
             mashupDrop2SongID: mashupDrop2ID,
             mashupBedSongID: mashupBedID,

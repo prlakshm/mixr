@@ -786,6 +786,13 @@ do {
                 voidSkipped += 1
                 continue
             }
+            // Source-continuous splits (build body → build-out) abut without
+            // overlap by design — they are the same reading, not a handoff.
+            let sourceContinuous = next.continuesPrevious
+                || abs(next.sourceStart - (
+                    prev.sourceStart + prev.timelineDuration * prev.tempoRatio
+                )) < 0.05
+            if sourceContinuous { continue }
             let overlap = prev.timelineEnd - next.timelineStart
             let declared = next.overlapsPreviousSeconds
             check(
@@ -941,6 +948,91 @@ do {
     case .failure(let message):
         check("SFX multi-row apply", false, message)
     }
+}
+
+do {
+    // Even when Oops measures hotter vocals than BOMT, same-pocket duo must
+    // keep Oops as bed (groove) and BOMT as Drop 1 vocal — vocal density alone
+    // must not invert Britney-class roles.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.48, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.72, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        check("Skewed-vocal Britney still Oops bed", plan.mashupBedSongID == oops.id,
+              "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")")
+        check("Skewed-vocal Britney still BOMT Drop 1", plan.mashupVocalSongID == bomt.id,
+              "vocal=\(plan.mashupVocalSongID == bomt.id ? "BOMT" : plan.mashupVocalSongID == oops.id ? "Oops" : "?")")
+    case .failure(let message):
+        check("Skewed-vocal Britney mashup", false, message)
+    }
+}
+
+do {
+    // Club hype density: builds stack snare+riser; drops stack impact+crash.
+    let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
+    let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 42, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        let minutes = max(plan.targetDuration / 60.0, 0.5)
+        check("Club remix musical SFX ≥ 6/min",
+              Double(musical.count) / minutes >= 6.0 - 0.01,
+              String(format: "%.1f/min count=%d", Double(musical.count) / minutes, musical.count))
+        check("Club remix has snareBuild on a build/drop",
+              musical.contains { $0.assetID == "snareBuild" })
+        check("Club remix has riser",
+              musical.contains { $0.assetID == "riser" })
+        check("Club remix has impact+crash stacks",
+              musical.contains { $0.assetID == "impact" }
+                && musical.contains { $0.assetID == "crash" })
+        let buildOutFX = plan.placements.filter {
+            $0.effects.level(for: MixrEffect.blur.rawValue) >= 45
+                || $0.fadeOut.type == .echoOut
+        }
+        check("Club remix fires build-out blur / echo-out clip FX", !buildOutFX.isEmpty)
+        let breakFX = plan.placements.filter {
+            $0.effects.level(for: MixrEffect.reverb.rawValue) >= 24
+        }
+        check("Club remix fires breakdown reverb bloom", !breakFX.isEmpty)
+        // t.A.T.u. midtempo + slamming drums → Diplo global-bass instinct.
+        check("Club remix picks Diplo for dancehall/festival midtempo",
+              plan.clubFlavor == .diplo,
+              "flavor=\(plan.clubFlavor?.rawValue ?? "nil")")
+        check("Diplo flavor is maximalist",
+              plan.clubFlavor?.bias.maximalistStacks == true)
+        check("Diplo flavor allows half-time drop",
+              plan.clubFlavor?.bias.halfTimeDrop == true)
+        check("Diplo drop stacks include tapeStop",
+              musical.contains { $0.assetID == "tapeStop" })
+    case .failure(let message):
+        check("Club hype density remix", false, message)
+    }
+}
+
+do {
+    // Flavor selection unit checks — instincts, not sound-alikes.
+    let diplo = AutoClubFlavor.choose(
+        drumStrength: 0.71, bassDensity: 0.38, vocalDensity: 0.55, bpm: 95, seed: 7
+    )
+    check("Britney-class pop-over-club bed → Diplo", diplo == .diplo, "got \(diplo.rawValue)")
+    let ballad = AutoClubFlavor.choose(
+        drumStrength: 0.2, bassDensity: 0.2, vocalDensity: 0.85, bpm: 72, seed: 3
+    )
+    check("Sparse piano ballad still Calvin", ballad == .calvin, "got \(ballad.rawValue)")
+    let festival = AutoClubFlavor.choose(
+        drumStrength: 0.6, bassDensity: 0.7, vocalDensity: 0.4, bpm: 145, seed: 2
+    )
+    check("Festival bass → Snake or Diplo",
+          festival == .snake || festival == .diplo,
+          "got \(festival.rawValue)")
+    check("Diplo bias keeps midrange busy",
+          AutoClubFlavor.diplo.bias.dropMidrangeSparse == false)
+    check("Diplo bias treats FX as groove",
+          AutoClubFlavor.diplo.bias.fxAsGroove == true)
 }
 
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")

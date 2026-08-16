@@ -50,7 +50,8 @@ nonisolated enum AutoOfflineMixdown {
                 regions: plan.pulseRegions,
                 policy: policy,
                 beatSeconds: plan.beatSeconds,
-                barSeconds: plan.barSeconds
+                barSeconds: plan.barSeconds,
+                halfTimeDrop: plan.clubFlavor?.bias.halfTimeDrop ?? false
             ).map { $0.timelineStart + 0.3 }.max() ?? 0
             sfxEnd = max(sfxEnd, pulseEnd)
         }
@@ -97,6 +98,11 @@ nonisolated enum AutoOfflineMixdown {
             }
         }
 
+        // Reserve mix-bus headroom before SFX join — density is layers/FX,
+        // not slamming the song bus into the ceiling.
+        let headroom = Float(pow(10.0, -AutoGainPolicy.mixBusHeadroomDB / 20.0))
+        for i in 0..<frames { songBus[i] *= headroom }
+
         // ── SFX bus (musical accents + expanded club pulse) ──
         var mix = songBus
         var renderSFX = plan.sfxEvents
@@ -105,12 +111,24 @@ nonisolated enum AutoOfflineMixdown {
                 regions: plan.pulseRegions,
                 policy: policy,
                 beatSeconds: plan.beatSeconds,
-                barSeconds: plan.barSeconds
+                barSeconds: plan.barSeconds,
+                halfTimeDrop: plan.clubFlavor?.bias.halfTimeDrop ?? false
             )
             renderSFX += pulseHits.map {
                 AutoSFXEvent(assetID: $0.assetID, timelineStart: $0.timelineStart, purpose: $0.purpose)
             }
         }
+
+        // Precompute per-frame stacked SFX gain so coordinated club hits
+        // (riser+snare+impact+crash) honor maxSimultaneousSFXGain.
+        var sfxGainAtFrame = [Float](repeating: 0, count: frames)
+        struct PreparedSFX {
+            var startFrame: Int
+            var buffer: [Float]
+            var gain: Float
+        }
+        var prepared: [PreparedSFX] = []
+        prepared.reserveCapacity(renderSFX.count)
         for event in renderSFX {
             guard let def = SoundEffectLibrary.definition(for: event.assetID) else { continue }
             var buffer = syntheticSFX(
@@ -118,22 +136,34 @@ nonisolated enum AutoOfflineMixdown {
                 durationSeconds: def.durationSeconds,
                 sampleRate: sampleRate
             )
-            // Short edge fades on pulse hits so grid stacks never click.
-            if SoundEffectLibrary.isPulseLayer(event.assetID) {
-                let fade = max(1, Int(0.004 * sampleRate))
-                for i in 0..<min(fade, buffer.count) {
-                    let g = Float(i) / Float(fade)
-                    buffer[i] *= g
-                    let j = buffer.count - 1 - i
-                    if j >= 0 { buffer[j] *= g }
-                }
+            // Edge fades on every one-shot so dense stacks never click.
+            let fade = max(1, Int(0.004 * sampleRate))
+            for i in 0..<min(fade, buffer.count) {
+                let g = Float(i) / Float(fade)
+                buffer[i] *= g
+                let j = buffer.count - 1 - i
+                if j >= 0 { buffer[j] *= g }
             }
             let gain = Float(sfxTrackVolume * AutoGainPolicy.nominalGain(forSFX: event.assetID))
             let startFrame = Int(event.timelineStart * sampleRate)
-            for (j, v) in buffer.enumerated() {
+            for j in 0..<buffer.count {
                 let idx = startFrame + j
                 guard idx >= 0, idx < frames else { continue }
-                mix[idx] += v * gain
+                sfxGainAtFrame[idx] += abs(buffer[j]) * gain
+            }
+            prepared.append(PreparedSFX(startFrame: startFrame, buffer: buffer, gain: gain))
+        }
+        let stackCeiling = Float(AutoGainPolicy.maxSimultaneousSFXGain)
+        for event in prepared {
+            for (j, v) in event.buffer.enumerated() {
+                let idx = event.startFrame + j
+                guard idx >= 0, idx < frames else { continue }
+                var g = event.gain
+                let stacked = sfxGainAtFrame[idx]
+                if stacked > stackCeiling, stacked > 1e-6 {
+                    g *= stackCeiling / stacked
+                }
+                mix[idx] += v * g
             }
         }
 
@@ -187,6 +217,23 @@ nonisolated enum AutoOfflineMixdown {
         guard frameCount > 0 else { return }
         let srcRate = source.sampleRate
 
+        // Cheap wet-bus approximation so offline WAV bounces aren't bone-dry
+        // when the plan fires clip FX (real engines use ClipEffectDSP).
+        let blurAmt = p.effects.level(for: "blur") / 100.0
+        let echoAmt = p.effects.level(for: "echo") / 100.0
+        let reverbAmt = p.effects.level(for: "reverb") / 100.0
+        let flangerAmt = p.effects.flangerAmount
+        let beat = 60.0 / max(bpm, 40)
+        let echoDelayFrames = max(1, Int(beat * sampleRate))
+        let reverbDelays = [
+            max(1, Int(0.029 * sampleRate)),
+            max(1, Int(0.037 * sampleRate)),
+            max(1, Int(0.053 * sampleRate)),
+            max(1, Int(0.079 * sampleRate)),
+        ]
+        var lpf: Float = 0
+        let lpfCoeff = Float(0.15 + (1.0 - min(1, blurAmt)) * 0.75)
+
         for j in 0..<frameCount {
             let outIdx = startFrame + j
             guard outIdx >= 0, outIdx < bus.count else { continue }
@@ -196,7 +243,22 @@ nonisolated enum AutoOfflineMixdown {
             let i0 = Int(srcPos)
             guard i0 >= 0, i0 + 1 < source.samples.count else { continue }
             let frac = Float(srcPos - Double(i0))
-            let sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
+            var sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
+
+            // Blur ≈ low-pass (filter sweep / build-out).
+            if blurAmt > 0.02 {
+                lpf += (sample - lpf) * lpfCoeff
+                sample = sample * Float(1 - blurAmt * 0.85) + lpf * Float(blurAmt * 0.85)
+            }
+            // Flanger ≈ light modulated comb (cheap).
+            if flangerAmt > 0.02 {
+                let mod = 1.0 + 0.004 * sin(t * 5.5 * .pi * 2)
+                let delay = Int(mod * 0.0025 * sampleRate)
+                let di = i0 - delay
+                if di >= 0, di < source.samples.count {
+                    sample += source.samples[di] * Float(flangerAmt * 0.45)
+                }
+            }
 
             let envelope = AutoTransitionEnvelope.envelope(
                 transitionIn: p.fadeIn,
@@ -207,7 +269,28 @@ nonisolated enum AutoOfflineMixdown {
                 bpm: bpm,
                 continuity: continuity
             )
-            bus[outIdx] += sample * Float(trackVolume * p.volume * envelope.gain)
+            let dry = sample * Float(trackVolume * p.volume * envelope.gain)
+            bus[outIdx] += dry
+
+            // Echo throws / ping-pong-ish repeats into later frames.
+            if echoAmt > 0.05 {
+                var echoGain = Float(echoAmt * 0.35)
+                for tap in 1...4 {
+                    let idx = outIdx + tap * echoDelayFrames
+                    guard idx < bus.count else { break }
+                    bus[idx] += dry * echoGain
+                    echoGain *= 0.55
+                }
+            }
+            // Reverb bloom ≈ short multi-tap tail (bounce WAVs hear atmosphere).
+            if reverbAmt > 0.05 {
+                let wet = dry * Float(reverbAmt * 0.28)
+                for (ti, d) in reverbDelays.enumerated() {
+                    let idx = outIdx + d + ti * (echoDelayFrames / 4)
+                    guard idx < bus.count else { continue }
+                    bus[idx] += wet * Float(0.55 / Double(ti + 1))
+                }
+            }
         }
     }
 

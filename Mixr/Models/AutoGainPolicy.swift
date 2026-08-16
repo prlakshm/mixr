@@ -40,16 +40,16 @@ nonisolated enum AutoGainPolicy {
     /// cannot blow the 6 dB mix-bus headroom on their own.
     static func nominalGain(forSFX id: String) -> Double {
         switch id {
-        case "impact", "bassDrop": 0.25          // ≈ −12 dB
-        case "crash": 0.30                       // ≈ −10.5 dB
-        case "riser", "snareBuild": 0.32         // ≈ −10 dB
-        case "reverseCymbal": 0.28               // ≈ −11 dB
-        case "downlifter", "tapeStop": 0.25      // ≈ −12 dB
-        case "airSweep", "sweepUp", "sweepDown": 0.20  // ≈ −14 dB
-        case "clapFill": 0.28
+        case "impact", "bassDrop": 0.18          // ≈ −15 dB
+        case "crash": 0.22                       // ≈ −13 dB
+        case "riser", "snareBuild": 0.24         // ≈ −12.5 dB
+        case "reverseCymbal": 0.22               // ≈ −13 dB
+        case "downlifter", "tapeStop": 0.20      // ≈ −14 dB
+        case "airSweep", "sweepUp", "sweepDown": 0.16  // ≈ −16 dB
+        case "clapFill": 0.20
         case "clubKick": 0.14                    // Auto thin-song pulse
         case "clubBass": 0.12
-        default: 0.25
+        default: 0.20
         }
     }
 
@@ -61,10 +61,12 @@ nonisolated enum AutoGainPolicy {
     // MARK: Ducking
 
     /// Duck depth under a major impact, dB (smoothly ramped).
-    static let duckDepthDB = 3.0
+    /// Deep enough that impact+crash+clap stacks stay under the ceiling
+    /// without the limiter becoming the mix glue.
+    static let duckDepthDB = 4.5
     static let duckAttackSeconds = 0.06
-    static let duckHoldSeconds = 0.25
-    static let duckReleaseSeconds = 0.30
+    static let duckHoldSeconds = 0.28
+    static let duckReleaseSeconds = 0.32
 
     /// Gain applied to the SONG bus at time `t` while major SFX play.
     /// Smooth attack/hold/release envelope around each major impact;
