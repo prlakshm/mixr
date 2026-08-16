@@ -261,5 +261,202 @@ do {
     }
 }
 
+// MARK: - N-song mashups (2…5): one bed, rotating hooks, legal plan
+
+/// Assert club mashup legality: one bed owner, phrase-aligned ≥8-bar stays,
+/// no dual lead-vocal bars, Drop 1 ≠ Drop 2 when multiple hooks exist.
+func assertLegalNSongMashup(
+    _ plan: AutoRemixPlan,
+    expectedSongCount: Int,
+    label: String
+) {
+    check("\(label) mashup mode", plan.mode == .mashup)
+    check("\(label) bed owner set", plan.mashupBedSongID != nil)
+    guard let bedID = plan.mashupBedSongID else { return }
+
+    let barSec = plan.barSeconds
+    let dominants = plan.placements
+        .filter { $0.role == .dominant }
+        .sorted { $0.timelineStart < $1.timelineStart }
+    check("\(label) has dominant islands", dominants.count >= 2, "got \(dominants.count)")
+
+    // Phrase-aligned switches: each contiguous song stay ≥ 8 bars
+    // (except trailing outro may share the bed).
+    var staySong: UUID?
+    var stayStart = 0.0
+    var stayEnd = 0.0
+    var shortStays = 0
+    func flushStay() {
+        guard staySong != nil else { return }
+        let bars = (stayEnd - stayStart) / max(barSec, 0.001)
+        if bars + 0.05 < 8 { shortStays += 1 }
+    }
+    for p in dominants {
+        if staySong == p.songID {
+            stayEnd = max(stayEnd, p.timelineStart + p.timelineDuration)
+        } else {
+            flushStay()
+            staySong = p.songID
+            stayStart = p.timelineStart
+            stayEnd = p.timelineStart + p.timelineDuration
+        }
+    }
+    flushStay()
+    check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays)")
+
+    // No dual-vocal bars: supporting under a dense vocal must be the bed
+    // (or avoided — supporting placements from another guest are illegal).
+    var vocalBySong: [UUID: Double] = [:]
+    for section in plan.selectedSections {
+        vocalBySong[section.songID] = max(vocalBySong[section.songID] ?? 0, section.vocalDensity)
+    }
+    var dualVocalHits = 0
+    for support in plan.placements where support.role == .supporting {
+        let supportVocal = vocalBySong[support.songID] ?? 0
+        let concurrent = dominants.filter {
+            $0.timelineStart < support.timelineStart + support.timelineDuration - 0.01
+                && support.timelineStart < $0.timelineStart + $0.timelineDuration - 0.01
+        }
+        for dom in concurrent {
+            let domVocal = vocalBySong[dom.songID] ?? 0
+            if support.songID != bedID, supportVocal > 0.55, domVocal > 0.55 {
+                dualVocalHits += 1
+            }
+        }
+    }
+    check("\(label) no dual-vocal bars", dualVocalHits == 0, "hits=\(dualVocalHits)")
+
+    // Roles: Drop 1 / Drop 2 when guests exist.
+    if expectedSongCount >= 2 {
+        check("\(label) Drop 1 vocal role", plan.mashupVocalSongID != nil || plan.decisions.contains {
+            $0.kind == .skippedIncompatibleHook || $0.kind == .assignedMashupRoles
+        })
+        check("\(label) Drop 2 flip role", plan.mashupDrop2SongID != nil)
+        if let d1 = plan.mashupVocalSongID, let d2 = plan.mashupDrop2SongID, expectedSongCount >= 3 {
+            check("\(label) Drop 2 is a different song than Drop 1", d1 != d2,
+                  "drop1=\(d1) drop2=\(d2)")
+        }
+    }
+
+    check("\(label) roles decision recorded",
+          plan.decisions.contains { $0.kind == .assignedMashupRoles || $0.kind == .selectedAnchor })
+}
+
+do {
+    let bed = makeSong(title: "Bed2", bpm: 126, key: "Am", color: .blue)
+    let hook = makeSong(title: "Hook2", bpm: 124, key: "C", color: .pink)
+    let feats: [UUID: SongSignalFeatures] = [
+        bed.id: makeFeatures(duration: 180, bpm: 126, drumConfidence: 0.9, bassLevel: 0.8, vocalLevel: 0.2),
+        hook.id: makeFeatures(duration: 180, bpm: 124, drumConfidence: 0.25, bassLevel: 0.2, vocalLevel: 0.92),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bed, hook], seed: 42, signals: feats) {
+    case .success(_, let plan, _):
+        assertLegalNSongMashup(plan, expectedSongCount: 2, label: "N=2")
+        check("N=2 bed wins drums", plan.mashupBedSongID == bed.id)
+        check("N=2 drop2 is bed flip or distinct",
+              plan.mashupDrop2SongID == bed.id || plan.mashupDrop2SongID != plan.mashupVocalSongID)
+    case .failure(let message):
+        check("N=2 mashup plan", false, message)
+    }
+}
+
+do {
+    let bed = makeSong(title: "Bed3", bpm: 128, key: "Am", color: .blue)
+    let h1 = makeSong(title: "HookA", bpm: 126, key: "C", color: .pink)
+    let h2 = makeSong(title: "HookB", bpm: 124, key: "Em", color: .purple)
+    let feats: [UUID: SongSignalFeatures] = [
+        bed.id: makeFeatures(duration: 200, bpm: 128, drumConfidence: 0.92, bassLevel: 0.85, vocalLevel: 0.15),
+        h1.id: makeFeatures(duration: 200, bpm: 126, drumConfidence: 0.3, bassLevel: 0.25, vocalLevel: 0.95),
+        h2.id: makeFeatures(duration: 200, bpm: 124, drumConfidence: 0.28, bassLevel: 0.22, vocalLevel: 0.9),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bed, h1, h2], seed: 43, signals: feats) {
+    case .success(_, let plan, _):
+        assertLegalNSongMashup(plan, expectedSongCount: 3, label: "N=3")
+        check("N=3 bed owner", plan.mashupBedSongID == bed.id)
+        if let d1 = plan.mashupVocalSongID, let d2 = plan.mashupDrop2SongID {
+            check("N=3 drop flip uses second hook", d1 != d2 && d2 != bed.id,
+                  "d1=\(d1 == h1.id ? "A" : d1 == h2.id ? "B" : "?") d2=\(d2 == h1.id ? "A" : d2 == h2.id ? "B" : d2 == bed.id ? "bed" : "?")")
+        }
+    case .failure(let message):
+        check("N=3 mashup plan", false, message)
+    }
+}
+
+do {
+    let bed = makeSong(title: "Bed4", bpm: 126, key: "Gm", color: .blue)
+    let h1 = makeSong(title: "Hook4A", bpm: 124, key: "Bb", color: .pink)
+    let h2 = makeSong(title: "Hook4B", bpm: 128, key: "Dm", color: .purple)
+    let soft = makeSong(title: "BalladCameo", bpm: 122, key: "F", color: .yellow)
+    let feats: [UUID: SongSignalFeatures] = [
+        bed.id: makeFeatures(duration: 210, bpm: 126, drumConfidence: 0.9, bassLevel: 0.82, vocalLevel: 0.18),
+        h1.id: makeFeatures(duration: 210, bpm: 124, drumConfidence: 0.3, bassLevel: 0.2, vocalLevel: 0.93),
+        h2.id: makeFeatures(duration: 210, bpm: 128, drumConfidence: 0.32, bassLevel: 0.24, vocalLevel: 0.88),
+        soft.id: makeFeatures(duration: 210, bpm: 122, drumConfidence: 0.2, bassLevel: 0.15, vocalLevel: 0.85),
+    ]
+    // Soften ballad energy so it prefers breakdown runway.
+    var softFeat = feats[soft.id]!
+    softFeat.energyCurve = [Double](repeating: 0.3, count: softFeat.energyCurve.count)
+    var signals = feats
+    signals[soft.id] = softFeat
+    var bedFeat = signals[bed.id]!
+    bedFeat.energyCurve = [Double](repeating: 0.8, count: bedFeat.energyCurve.count)
+    signals[bed.id] = bedFeat
+
+    switch AutoRemixRunner.runEntireProject(tracks: [bed, h1, h2, soft], seed: 44, signals: signals) {
+    case .success(_, let plan, _):
+        assertLegalNSongMashup(plan, expectedSongCount: 4, label: "N=4")
+        check("N=4 bed owner", plan.mashupBedSongID == bed.id)
+        let songIDs = Set(plan.placements.map(\.songID))
+        check("N=4 places multiple guests or records skip/cameo",
+              songIDs.count >= 2
+                || plan.decisions.contains { $0.kind == .usedCameoOnly || $0.kind == .skippedIncompatibleHook })
+    case .failure(let message):
+        check("N=4 mashup plan", false, message)
+    }
+}
+
+do {
+    let bed = makeSong(title: "Bed5", bpm: 128, key: "Am", color: .blue)
+    let guests = [
+        makeSong(title: "G5a", bpm: 126, key: "C", color: .pink),
+        makeSong(title: "G5b", bpm: 124, key: "Em", color: .purple),
+        makeSong(title: "G5c", bpm: 130, key: "G", color: .yellow),
+        makeSong(title: "G5d", bpm: 122, key: "F", color: .red),
+    ]
+    var signals: [UUID: SongSignalFeatures] = [
+        bed.id: makeFeatures(duration: 220, bpm: 128, drumConfidence: 0.95, bassLevel: 0.88, vocalLevel: 0.12),
+    ]
+    for (i, g) in guests.enumerated() {
+        signals[g.id] = makeFeatures(
+            duration: 220,
+            bpm: Double(g.bpm ?? 126),
+            drumConfidence: 0.25,
+            bassLevel: 0.2,
+            vocalLevel: 0.9 - Double(i) * 0.03
+        )
+    }
+    // Far-key sour guest should gate to skip/cameo — still a legal plan.
+    let sour = makeSong(title: "Sour5", bpm: 140, key: "F#", color: .red)
+    // Replace last guest with sour incompatible for stretch+key stress.
+    let tracks = [bed] + Array(guests.prefix(3)) + [sour]
+    signals[sour.id] = makeFeatures(duration: 220, bpm: 140, drumConfidence: 0.2, bassLevel: 0.2, vocalLevel: 0.9)
+
+    switch AutoRemixRunner.runEntireProject(tracks: tracks, seed: 45, signals: signals) {
+    case .success(_, let plan, _):
+        assertLegalNSongMashup(plan, expectedSongCount: 5, label: "N=5")
+        check("N=5 bed owner", plan.mashupBedSongID == bed.id)
+        check("N=5 accepts 5-track input", plan.mode == .mashup)
+        // Sour may be skipped or cameo — must not force illegal stretch on it as drop1.
+        if plan.mashupVocalSongID == sour.id {
+            let stretch = plan.placements.filter { $0.songID == sour.id }.map { abs($0.tempoRatio - 1) }.max() ?? 0
+            check("N=5 sour vocal stretch ≤ 8% if used as drop1", stretch <= 0.08 + 0.001)
+        } else {
+            check("N=5 sour gated or not drop1", true)
+        }
+    case .failure(let message):
+        check("N=5 mashup plan", false, message)
+    }
+}
+
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")
 exit(failures == 0 ? 0 : 1)

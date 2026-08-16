@@ -185,3 +185,77 @@ nonisolated enum AutoCompatibility {
         )
     }
 }
+
+// MARK: - N-song mashup hook gates
+
+/// How an added song may appear over the club bed.
+nonisolated enum AutoMashupHookGate: String, Sendable {
+    /// Full 8–16 bar vocal hook on a drop or cameo island.
+    case fullHook
+    /// Short teaser / chop only (key or stretch is borderline).
+    case cameoChop
+    /// Do not place as a lead vocal.
+    case skip
+}
+
+nonisolated enum AutoMashupCompat {
+
+    struct Verdict: Sendable {
+        var gate: AutoMashupHookGate
+        var keyScore: Double
+        var vocalRatio: Double
+        var detail: String
+    }
+
+    /// Per-added-song compatibility vs the chosen club bed.
+    static func hookGate(
+        hook: AutoSongProfile,
+        bed: AutoSongProfile,
+        targetBPM: Double,
+        tuning: AutoTuning
+    ) -> Verdict {
+        // Prefer Camelot same / ±1 / relative (via AutoKey.score + ≤2 st fix).
+        let key = AutoKey.bestCorrection(
+            AutoKey.parse(bed.analysis.key),
+            AutoKey.parse(hook.analysis.key),
+            maxShift: min(2, tuning.maxCorrectivePitchSemitones)
+        )
+        let fit = AutoTempo.fit(
+            songBPM: hook.analysis.bpm,
+            targetBPM: targetBPM,
+            maxStretch: tuning.maxStretch
+        )
+        let stretchOK = fit.gridAligned && abs(fit.ratio - 1) <= tuning.maxStretch + 0.0001
+        let vocalRatio = stretchOK ? fit.ratio : 1.0
+
+        if key.score < 0.40 {
+            return Verdict(gate: .skip, keyScore: key.score, vocalRatio: 1, detail: "key clash beyond Camelot neighborhood / ±2 st")
+        }
+        if !stretchOK {
+            // Far stretch — allow a short chop at native tempo only if key is OK.
+            if key.score >= 0.5 {
+                return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: 1,
+                               detail: "stretch gate failed — cameo chop at native tempo")
+            }
+            return Verdict(gate: .skip, keyScore: key.score, vocalRatio: 1, detail: "stretch would wreck the vocal")
+        }
+        if key.score < 0.5 {
+            return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: vocalRatio,
+                           detail: "weak Camelot — short cameo only")
+        }
+        if abs(key.shiftSemitones) > 2 {
+            return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: vocalRatio,
+                           detail: "vocal pitch would exceed ±2 st — cameo only")
+        }
+        return Verdict(gate: .fullHook, keyScore: key.score, vocalRatio: vocalRatio,
+                       detail: "full hook over bed")
+    }
+
+    /// True when a guest should land in the breakdown runway (ballad / low energy
+    /// against a peak-time bed) rather than a slam drop.
+    static func needsBreakdownRunway(guest: AutoSongProfile, bed: AutoSongProfile) -> Bool {
+        let guestE = guest.analysis.meanEnergy(from: 0, to: guest.analysis.durationSeconds)
+        let bedE = bed.analysis.meanEnergy(from: 0, to: bed.analysis.durationSeconds)
+        return guestE < 0.45 && bedE > 0.65
+    }
+}

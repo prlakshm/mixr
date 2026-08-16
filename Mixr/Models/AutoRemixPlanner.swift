@@ -68,7 +68,7 @@ enum AutoRemixPlanner {
         }
         guard let plan else { return nil }
 
-        let byID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.songID, $0) })
+        let byID = Dictionary(profiles.map { ($0.songID, $0) }, uniquingKeysWith: { first, _ in first })
         return (plan, byID)
     }
 
@@ -871,7 +871,7 @@ enum AutoRemixPlanner {
         return (snapped >= from && snapped <= to) ? snapped : raw
     }
 
-    // MARK: - Mashup (2+ songs) — hook-over-bed
+    // MARK: - Mashup (2…5 songs) — one bed, rotating hooks on the club shape
 
     private static func mashupPlan(
         profiles: [AutoSongProfile],
@@ -879,201 +879,269 @@ enum AutoRemixPlanner {
         seed: UInt64,
         rng: inout AutoRandom
     ) -> AutoRemixPlan? {
-        // Hook-over-bed: highest featureScore = sung hook; highest
-        // anchorScore among the rest = club bed. Not equal ping-pong.
-        guard let vocal = profiles.max(by: { $0.featureScore < $1.featureScore }) else { return nil }
-        let bedPool = profiles.filter { $0.songID != vocal.songID }
-        guard let bed = bedPool.max(by: { $0.anchorScore < $1.anchorScore }) ?? bedPool.first else {
-            // Single profile somehow — shouldn't happen for mashup entry.
-            return nil
-        }
-        let extras = profiles
-            .filter { $0.songID != vocal.songID && $0.songID != bed.songID }
-            .sorted { $0.featureScore > $1.featureScore }
-
-        // Letter order: A = bed (continuity), B = vocal hook, then extras.
-        var ordered = [bed, vocal] + extras
-
-        var preDecisions: [AutoDecision] = [
-            AutoDecision(
-                kind: .assignedMashupRoles,
-                songTitle: nil,
-                detail: "Hook: \(vocal.title) over club bed: \(bed.title)"
-            ),
-            AutoDecision(kind: .selectedAnchor, songTitle: bed.title, detail: "club bed / continuity")
-        ]
-        var preWarnings: [String] = []
-
-        // Key preference: same Camelot, then ±1, then relative — pitch the BED.
-        let vocalKey = AutoKey.parse(vocal.analysis.key)
-        let bedKey = AutoKey.parse(bed.analysis.key)
-        let keyFit = AutoKey.bestCorrection(vocalKey, bedKey, maxShift: tuning.maxCorrectivePitchSemitones)
-        if keyFit.score < 0.45 {
-            preDecisions.append(
-                AutoDecision(
-                    kind: .refusedMashupPair,
-                    songTitle: nil,
-                    detail: "Keys clash beyond a safe bed pitch shift — Autofell back to phrase handoffs without a forced mashup drop."
-                )
-            )
-            preWarnings.append(
-                "Key compatibility is weak between \(vocal.title) and \(bed.title); avoided forcing a drop-on-drop mashup."
-            )
+        // Cap the club rewrite at five songs — extras are dropped by confidence.
+        var pool = profiles
+        if pool.count > 5 {
+            pool.sort { $0.analysis.analysisConfidence > $1.analysis.analysisConfidence }
+            let dropped = Array(pool.suffix(from: 5))
+            pool = Array(pool.prefix(5))
+            // Re-sort later after role assignment; keep decisions below.
+            _ = dropped
         }
 
-        let tempoPair = AutoClubTempo.mashupDecision(
-            vocalBPM: vocal.analysis.bpm,
+        // ONE club bed: most mixable drums / pocket / simplest harmony.
+        guard let bed = pool.max(by: { bedScore($0) < bedScore($1) }) else { return nil }
+        let guests = pool.filter { $0.songID != bed.songID }
+
+        let tempoSeed = AutoClubTempo.mashupDecision(
+            vocalBPM: guests.first?.analysis.bpm ?? bed.analysis.bpm,
             bedBPM: bed.analysis.bpm,
             maxVocalStretch: tuning.maxStretch,
             maxInstrumentalStretch: tuning.maxInstrumentalStretch
         )
-        if !tempoPair.ok {
-            preDecisions.append(
-                AutoDecision(
-                    kind: .refusedMashupPair,
-                    songTitle: nil,
-                    detail: tempoPair.detail
-                )
-            )
-            preWarnings.append(tempoPair.detail)
-            // Soft refuse: still produce a conservative phrase-aligned plan
-            // rather than crashing Entire Project — but do not stretch the vocal.
-        }
-        preDecisions.append(
-            AutoDecision(
-                kind: .choseClubTempo,
-                songTitle: bed.title,
-                detail: tempoPair.detail
-            )
-        )
-
-        if ordered.count >= 6 {
-            let budgetBars = Int(tuning.maxTimelineSeconds / (240.0 / bed.analysis.bpm))
-            let neededBars = 24 + ordered.count * 10
-            if neededBars > budgetBars,
-               let weakest = ordered.dropFirst().min(by: {
-                   $0.analysis.analysisConfidence < $1.analysis.analysisConfidence
-               }) {
-                ordered.removeAll { $0.songID == weakest.songID }
-                preDecisions.append(
-                    AutoDecision(
-                        kind: .excludedLowConfidenceSong,
-                        songTitle: weakest.title,
-                        detail: "not enough timeline for a recognizable phrase from every song"
-                    )
-                )
-                preWarnings.append(
-                    "Excluded \(weakest.title): not enough timeline for a recognizable phrase from every song, and its analysis confidence was lowest."
-                )
-            }
-        }
-
-        let targetBPM = tempoPair.ok ? tempoPair.targetBPM : AutoTempo.targetBPM(
-            profiles: ordered,
+        let targetBPM = tempoSeed.ok ? tempoSeed.targetBPM : AutoTempo.targetBPM(
+            profiles: pool,
             anchorID: bed.songID,
             maxStretch: tuning.maxInstrumentalStretch
         )
 
-        let slots: [Slot]
-        switch ordered.count {
-        case 2: slots = duoHookOverBedSlots()
-        case 3: slots = trioSlots()
-        case 4: slots = quadSlots()
-        default: slots = rotationSlots(count: ordered.count)
+        var preDecisions: [AutoDecision] = [
+            AutoDecision(kind: .selectedAnchor, songTitle: bed.title, detail: "club bed / one kick+bass owner")
+        ]
+        var preWarnings: [String] = []
+        if profiles.count > 5 {
+            preWarnings.append("Capped mashup at 5 songs for a streaming-length club rewrite.")
+            for p in profiles where !pool.contains(where: { $0.songID == p.songID }) {
+                preDecisions.append(
+                    AutoDecision(kind: .excludedLowConfidenceSong, songTitle: p.title, detail: "over the 5-song club mashup cap")
+                )
+            }
         }
+
+        // Gate every guest; rank full-hook candidates by featureScore.
+        var fullHooks: [AutoSongProfile] = []
+        var cameos: [AutoSongProfile] = []
+        for guest in guests.sorted(by: { $0.featureScore > $1.featureScore }) {
+            let verdict = AutoMashupCompat.hookGate(
+                hook: guest, bed: bed, targetBPM: targetBPM, tuning: tuning
+            )
+            switch verdict.gate {
+            case .fullHook:
+                fullHooks.append(guest)
+            case .cameoChop:
+                cameos.append(guest)
+                preDecisions.append(
+                    AutoDecision(kind: .usedCameoOnly, songTitle: guest.title, detail: verdict.detail)
+                )
+            case .skip:
+                preDecisions.append(
+                    AutoDecision(kind: .skippedIncompatibleHook, songTitle: guest.title, detail: verdict.detail)
+                )
+                preWarnings.append("Skipped \(guest.title): \(verdict.detail)")
+            }
+        }
+
+        // Drop 1 = strongest full hook; Drop 2 = next (or bed chorus flip on duo).
+        let drop1 = fullHooks.first
+        let drop2Candidate = fullHooks.dropFirst().first
+        // Surplus full hooks become cameos (rotate islands, don't stack).
+        if fullHooks.count > 2 {
+            cameos.append(contentsOf: fullHooks.suffix(from: 2))
+        }
+        // Energy matching: ballads prefer breakdown runway.
+        var breakdownCameo: AutoSongProfile?
+        var grooveCameo: AutoSongProfile?
+        var outroCameo: AutoSongProfile?
+        var remainingCameos = cameos
+        if let soft = remainingCameos.first(where: { AutoMashupCompat.needsBreakdownRunway(guest: $0, bed: bed) }) {
+            breakdownCameo = soft
+            remainingCameos.removeAll { $0.songID == soft.songID }
+            preDecisions.append(
+                AutoDecision(
+                    kind: .usedCameoOnly,
+                    songTitle: soft.title,
+                    detail: "breakdown runway (energy match)"
+                )
+            )
+        }
+        if let g = remainingCameos.first {
+            grooveCameo = g
+            remainingCameos.removeFirst()
+        }
+        if let o = remainingCameos.first {
+            outroCameo = o
+            remainingCameos.removeFirst()
+        }
+        // Any leftover cameos → outro teaser chain (still ≥8 bars each when placed).
+        if breakdownCameo == nil, let soft = remainingCameos.first {
+            breakdownCameo = soft
+            remainingCameos.removeFirst()
+        }
+
+        // ordered indices: 0 = bed, then drop1, drop2 (if guest), then cameos used in slots.
+        var ordered: [AutoSongProfile] = [bed]
+        if let drop1 { ordered.append(drop1) }
+        let drop2IsBedFlip = drop2Candidate == nil && drop1 != nil
+        if let drop2Candidate { ordered.append(drop2Candidate) }
+        var indexOf: [UUID: Int] = [bed.songID: 0]
+        for (i, p) in ordered.enumerated() where i > 0 { indexOf[p.songID] = i }
+        func ensureIndex(_ p: AutoSongProfile) -> Int {
+            if let i = indexOf[p.songID] { return i }
+            ordered.append(p)
+            let i = ordered.count - 1
+            indexOf[p.songID] = i
+            return i
+        }
+        let grooveIdx = grooveCameo.map { ensureIndex($0) }
+        let breakIdx = breakdownCameo.map { ensureIndex($0) }
+        let outroIdx = outroCameo.map { ensureIndex($0) }
+        for leftover in remainingCameos { _ = ensureIndex(leftover) }
+
+        let drop1Idx = drop1.map { indexOf[$0.songID]! }
+        let drop2Idx: Int = {
+            if let d = drop2Candidate { return indexOf[d.songID]! }
+            return 0 // bed chorus flip
+        }()
+
+        let roleDetail: String
+        if let drop1, let drop2Candidate {
+            roleDetail = "Bed: \(bed.title); Drop 1: \(drop1.title); Drop 2: \(drop2Candidate.title)"
+        } else if let drop1 {
+            roleDetail = "Bed: \(bed.title); Drop 1: \(drop1.title); Drop 2: \(bed.title) hook flip"
+        } else {
+            roleDetail = "Bed: \(bed.title) — no compatible full vocal hook; bed carries both drops"
+            preWarnings.append("No guest passed the full-hook gate; bed material carries the drops.")
+        }
+        preDecisions.insert(
+            AutoDecision(kind: .assignedMashupRoles, songTitle: nil, detail: roleDetail),
+            at: 0
+        )
+
+        // Bed pitch from strongest drop hook when available.
+        let pitchPartner = drop1 ?? drop2Candidate
+        let keyFit = AutoKey.bestCorrection(
+            AutoKey.parse(pitchPartner?.analysis.key),
+            AutoKey.parse(bed.analysis.key),
+            maxShift: tuning.maxCorrectivePitchSemitones
+        )
+        let bedPitch = (pitchPartner != nil && keyFit.score >= 0.5) ? keyFit.shiftSemitones : 0
+
+        let bedTempo = AutoClubTempo.mashupDecision(
+            vocalBPM: drop1?.analysis.bpm ?? bed.analysis.bpm,
+            bedBPM: bed.analysis.bpm,
+            maxVocalStretch: tuning.maxStretch,
+            maxInstrumentalStretch: tuning.maxInstrumentalStretch
+        )
+        preDecisions.append(
+            AutoDecision(kind: .choseClubTempo, songTitle: bed.title, detail: bedTempo.detail)
+        )
+        if !bedTempo.ok {
+            preWarnings.append(bedTempo.detail)
+        }
+
+        let slots = nSongClubMashupSlots(
+            drop1Idx: drop1Idx,
+            drop2Idx: drop2Idx,
+            drop2IsBedFlip: drop2IsBedFlip || drop1 == nil,
+            grooveCameoIdx: grooveIdx,
+            breakdownCameoIdx: breakIdx,
+            outroCameoIdx: outroIdx
+        )
+
+        // Per-guest vocal stretch from the hook gate (Drop 1 + Drop 2 + cameos).
+        let resolvedBPM = bedTempo.ok ? bedTempo.targetBPM : targetBPM
+        var guestTempoRatios: [UUID: Double] = [:]
+        for guest in ordered where guest.songID != bed.songID {
+            let v = AutoMashupCompat.hookGate(
+                hook: guest, bed: bed, targetBPM: resolvedBPM, tuning: tuning
+            )
+            guestTempoRatios[guest.songID] = v.vocalRatio
+        }
+        let vocalTempoRatio = drop1.flatMap { guestTempoRatios[$0.songID] }
 
         var plan = buildPlan(
             mode: .mashup,
             slots: slots,
             ordered: ordered,
-            targetBPM: targetBPM,
+            targetBPM: resolvedBPM,
             tuning: tuning,
             seed: seed,
             rng: &rng,
             preDecisions: preDecisions,
-            mashupVocalID: vocal.songID,
+            mashupVocalID: drop1?.songID,
             mashupBedID: bed.songID,
-            bedTempoRatio: tempoPair.ok ? tempoPair.bedRatio : nil,
-            vocalTempoRatio: tempoPair.ok ? tempoPair.vocalRatio : 1.0,
-            bedPitchSemitones: keyFit.score >= 0.5 ? keyFit.shiftSemitones : 0
+            bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+            vocalTempoRatio: vocalTempoRatio,
+            bedPitchSemitones: bedPitch,
+            guestTempoRatios: guestTempoRatios,
+            mashupDrop2ID: drop2IsBedFlip || drop1 == nil ? bed.songID : drop2Candidate?.songID
         )
         plan?.warnings.insert(contentsOf: preWarnings, at: 0)
+        _ = rng.next()
         return plan
     }
 
-    /// Hook-over-bed duo: bed owns intro/groove/builds/break; vocal lands
-    /// the familiar hook ON the drop. Minimum stay 8 bars; choruses 16.
-    private static func duoHookOverBedSlots() -> [Slot] {
-        [
-            Slot(songIdx: 0, role: .intro, bars: 8, entry: .none, energy: 0.45, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.58),
-            Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.72),
-            Slot(songIdx: 1, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0), // Drop 1 = vocal hook
-            Slot(songIdx: 0, role: .breakdown, bars: 8, entry: .atmosphericHandoff, energy: 0.4),
-            Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.82, isReturn: true),
-            Slot(songIdx: 1, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.55, isEnding: true, shrinkPriority: 0),
-        ]
+    /// Bed fitness: drums + pocket + simpler harmony (lower vocal density).
+    private static func bedScore(_ p: AutoSongProfile) -> Double {
+        let drum = p.analysis.drumStrength
+        let bass = p.analysis.bassDensity
+        let pocket: Double = AutoClubTempo.classify(p.analysis.bpm) != nil ? 1.0 : 0.35
+        let meanVocal = p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds)
+        let simpleHarmony = 1.0 - min(1, meanVocal) // prefer instrumental beds
+        return drum * 0.35 + bass * 0.25 + pocket * 0.25 + simpleHarmony * 0.15
     }
 
-    /// Legacy alternation kept for 3+ song sets (bed still index 0).
-    private static func duoSlots() -> [Slot] {
-        duoHookOverBedSlots()
-    }
-
-    private static func trioSlots() -> [Slot] {
-        [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.62),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.78),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.88, isReturn: true),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.82),
-            Slot(songIdx: 1, role: .groove, bars: 8, entry: .flangerBuild, energy: 0.72, isReturn: true, shrinkPriority: 2),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.95, isReturn: true),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0),
-        ]
-    }
-
-    private static func quadSlots() -> [Slot] {
-        [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.6),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.75),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.8),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.9, isReturn: true),
-            Slot(songIdx: 3, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.85),
-            Slot(songIdx: 1, role: .groove, bars: 8, entry: .flangerBuild, energy: 0.72, isReturn: true, shrinkPriority: 2),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .atmosphericHandoff, energy: 0.9, isReturn: true, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0),
-        ]
-    }
-
-    private static func rotationSlots(count: Int) -> [Slot] {
+    /// Two-wave club shape for N-song mashups. Indices into `ordered`
+    /// (0 = bed). Min stay 8 bars; hooks prefer 16. No 4-bar ping-pong.
+    private static func nSongClubMashupSlots(
+        drop1Idx: Int?,
+        drop2Idx: Int,
+        drop2IsBedFlip: Bool,
+        grooveCameoIdx: Int?,
+        breakdownCameoIdx: Int?,
+        outroCameoIdx: Int?
+    ) -> [Slot] {
         var slots: [Slot] = [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.6),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.75),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.8),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.88, isReturn: true),
-            Slot(songIdx: 3, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.82),
-            Slot(songIdx: 4, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.86),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .flangerBuild, energy: 0.9, isReturn: true, shrinkPriority: 2),
+            Slot(songIdx: 0, role: .intro, bars: 8, entry: .none, energy: 0.45, shrinkPriority: 2),
         ]
-        for extra in 5..<count {
-            slots.append(
-                Slot(
-                    songIdx: extra,
-                    role: .chorus,
-                    bars: 8,
-                    entry: extra % 2 == 0 ? .reverseEntrance : .blurReveal,
-                    energy: 0.85
-                )
-            )
+        if let g = grooveCameoIdx {
+            slots.append(Slot(songIdx: g, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.55))
+        } else {
+            slots.append(Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.58))
         }
-        slots.append(Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true))
-        slots.append(Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0))
+        slots.append(Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.72))
+
+        if let d1 = drop1Idx {
+            slots.append(Slot(songIdx: d1, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
+        } else {
+            slots.append(Slot(songIdx: 0, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
+        }
+
+        if let b = breakdownCameoIdx {
+            slots.append(Slot(songIdx: b, role: .breakdown, bars: 8, entry: .atmosphericHandoff, energy: 0.38))
+        } else {
+            slots.append(Slot(songIdx: 0, role: .breakdown, bars: 8, entry: .atmosphericHandoff, energy: 0.4))
+        }
+
+        slots.append(Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.82, isReturn: true))
+        slots.append(
+            Slot(
+                songIdx: drop2Idx,
+                role: .chorus,
+                bars: 16,
+                entry: .hardHypeCut,
+                energy: 1.0,
+                isFinalPeak: true,
+                isReturn: drop2IsBedFlip || (drop1Idx.map { $0 == drop2Idx } ?? false)
+            )
+        )
+
+        if let o = outroCameoIdx {
+            slots.append(Slot(songIdx: o, role: .teaser, bars: 8, entry: .vocalEchoOut, energy: 0.5, isEnding: true, shrinkPriority: 0))
+        } else {
+            // Min identity stay is 8 bars — no 4-bar outro ping.
+            slots.append(Slot(songIdx: 0, role: .ending, bars: 8, entry: .vocalEchoOut, energy: 0.55, isEnding: true, shrinkPriority: 0))
+        }
         return slots
     }
 
@@ -1092,7 +1160,9 @@ enum AutoRemixPlanner {
         mashupBedID: UUID? = nil,
         bedTempoRatio: Double? = nil,
         vocalTempoRatio: Double? = nil,
-        bedPitchSemitones: Int = 0
+        bedPitchSemitones: Int = 0,
+        guestTempoRatios: [UUID: Double] = [:],
+        mashupDrop2ID: UUID? = nil
     ) -> AutoRemixPlan? {
         let barSec = 240.0 / max(targetBPM, 40)
         let beatSec = barSec / 4
@@ -1128,16 +1198,23 @@ enum AutoRemixPlanner {
             let fit: AutoTempo.Fit
             if mode == .remix {
                 fit = AutoTempo.Fit(ratio: 1.0, gridAligned: true, halfOrDoubleTime: false)
-            } else if let vocalID = mashupVocalID, p.songID == vocalID, let vocalTempoRatio {
-                fit = AutoTempo.Fit(
-                    ratio: vocalTempoRatio,
-                    gridAligned: abs(vocalTempoRatio - 1) <= tuning.maxStretch || abs(vocalTempoRatio - 1) < 0.0001,
-                    halfOrDoubleTime: false
-                )
             } else if let bedID = mashupBedID, p.songID == bedID, let bedTempoRatio {
                 fit = AutoTempo.Fit(
                     ratio: bedTempoRatio,
                     gridAligned: abs(bedTempoRatio - 1) <= tuning.maxInstrumentalStretch,
+                    halfOrDoubleTime: false
+                )
+            } else if let guestRatio = guestTempoRatios[p.songID] {
+                // Drop 1 / Drop 2 / cameo guests — gate-approved stretch only.
+                fit = AutoTempo.Fit(
+                    ratio: guestRatio,
+                    gridAligned: abs(guestRatio - 1) <= tuning.maxStretch + 0.0001,
+                    halfOrDoubleTime: false
+                )
+            } else if let vocalID = mashupVocalID, p.songID == vocalID, let vocalTempoRatio {
+                fit = AutoTempo.Fit(
+                    ratio: vocalTempoRatio,
+                    gridAligned: abs(vocalTempoRatio - 1) <= tuning.maxStretch || abs(vocalTempoRatio - 1) < 0.0001,
                     halfOrDoubleTime: false
                 )
             } else {
@@ -1176,11 +1253,13 @@ enum AutoRemixPlanner {
 
         var slots = slotsIn
         func totalSeconds() -> Double { slots.reduce(0) { $0 + Double($1.bars) * barSec } }
+        // Mashups keep ≥8-bar identity stays (no 4-bar ping-pong).
+        let barFloor = mode == .mashup ? 8 : 4
         var shrinkPass = 2
         while totalSeconds() > tuning.maxTimelineSeconds, shrinkPass >= 1 {
             var shrunk = false
-            for i in slots.indices where slots[i].shrinkPriority >= shrinkPass && slots[i].bars > 4 {
-                slots[i].bars = slots[i].bars == 16 ? 8 : 4
+            for i in slots.indices where slots[i].shrinkPriority >= shrinkPass && slots[i].bars > barFloor {
+                slots[i].bars = slots[i].bars == 16 ? 8 : barFloor
                 shrunk = true
                 if totalSeconds() <= tuning.maxTimelineSeconds { break }
             }
@@ -1239,8 +1318,23 @@ enum AutoRemixPlanner {
             var bars = slot.bars
             let songDuration = profile.analysis.durationSeconds
             let availableSeconds = (songDuration - 0.15 - section.startSeconds) / max(fit.ratio, 0.0001)
-            while bars > minBars, Double(bars) * barSec > availableSeconds {
+            let identityFloor = mode == .mashup ? max(minBars, 8) : minBars
+            while bars > identityFloor, Double(bars) * barSec > availableSeconds {
                 bars -= minBars
+            }
+            // Mashups: skip rather than emit a sub-8-bar island.
+            if mode == .mashup, bars < 8 {
+                warnings.append(
+                    "\(profile.title) lacked 8 bars for \(slot.role.rawValue); skipped to avoid a 4-bar switch."
+                )
+                decisions.append(
+                    AutoDecision(
+                        kind: .skippedWeakSection,
+                        songTitle: profile.title,
+                        detail: "\(slot.role.rawValue) (under 8-bar identity floor)"
+                    )
+                )
+                continue
             }
             guard Double(bars) * barSec <= availableSeconds, bars >= 2 else {
                 warnings.append(
@@ -1266,7 +1360,8 @@ enum AutoRemixPlanner {
             }
 
             // Shorten weak low-energy grooves that aren't serving contrast.
-            if slot.role == .groove, section.energy < 0.35, section.hook < 0.45, bars > 4 {
+            // Mashups keep the 8-bar identity floor.
+            if mode != .mashup, slot.role == .groove, section.energy < 0.35, section.hook < 0.45, bars > 4 {
                 bars = 4
                 decisions.append(
                     AutoDecision(
@@ -1379,19 +1474,13 @@ enum AutoRemixPlanner {
         }
         guard placed.count >= 2 else { return nil }
 
-        // Duo alternation: target ≥3 handoffs without inventing tiny clips.
-        if mode == .mashup, ordered.count == 2 {
-            let handoffs = countHandoffs(placed)
-            if handoffs < 3 {
-                decisions.append(
-                    AutoDecision(
-                        kind: .duoAlternationFallback,
-                        songTitle: nil,
-                        detail: "Could not reach A → B → A → B without incomplete sections — kept the cleanest valid alternation."
-                    )
-                )
+        // Club mashups rotate hooks across islands — do not invent 4-bar
+        // ping-pong just to inflate handoff count.
+        if mode == .mashup {
+            let shortStay = placed.contains { $0.timelineDuration + 0.001 < Double(8) * barSec && !$0.slot.isEnding }
+            if shortStay {
                 warnings.append(
-                    "Fewer than three song handoffs — duration or analysis confidence prevented a full A → B → A → B without incomplete sections."
+                    "A mashup island landed under 8 bars after material limits — prefer fewer islands over 4-bar switches."
                 )
             }
         }
@@ -1591,6 +1680,8 @@ enum AutoRemixPlanner {
             }
 
             // Directional overlap under mashup handoffs.
+            // Never stack two toplines or two subs — bed may support a hook;
+            // guest-under-guest is always a hard cut.
             if mode == .mashup, isHandoff, let prev,
                ![.hardHypeCut, .cleanCrossfade, .none].contains(entry) {
                 let prevProfile = ordered[prev.slot.songIdx]
@@ -1606,15 +1697,23 @@ enum AutoRemixPlanner {
                 let prevSourceEnd = prev.section.startSeconds + prev.timelineDuration * prev.tempoRatio
                 let supportAvailable = prevProfile.analysis.durationSeconds - 0.15 - prevSourceEnd
 
-                let denseVocals = ps.section.vocal > 0.65 && prev.section.vocal > 0.65
-                if denseVocals, compat.overlapBars > 0 {
-                    decisions.append(
-                        AutoDecision(
-                            kind: .avoidedVocalOverlap,
-                            songTitle: profile.title,
-                            detail: prevProfile.title
+                let denseVocals = ps.section.vocal > 0.55 && prev.section.vocal > 0.55
+                let bothGuests = mashupBedID.map { bedID in
+                    profile.songID != bedID && prevProfile.songID != bedID
+                } ?? false
+                let dualBass = profile.analysis.bassDensity > 0.6 && prevProfile.analysis.bassDensity > 0.6
+                    && ps.slot.role == .chorus && prev.slot.role == .chorus
+
+                if denseVocals || bothGuests || dualBass {
+                    if denseVocals || bothGuests {
+                        decisions.append(
+                            AutoDecision(
+                                kind: .avoidedVocalOverlap,
+                                songTitle: profile.title,
+                                detail: prevProfile.title
+                            )
                         )
-                    )
+                    }
                     decisions.append(
                         AutoDecision(
                             kind: .replacedComplexOverlapWithHardCut,
@@ -1660,11 +1759,6 @@ enum AutoRemixPlanner {
                             )
                         )
                     }
-                } else if compat.overlapBars == 0,
-                          ![.hardHypeCut, .cleanCrossfade].contains(entry),
-                          !profile.lowConfidence {
-                    // Low compatibility → prefer a clean cut over a muddy overlap.
-                    // (Entry recipe already chosen; note the restraint.)
                 }
             }
 
@@ -1817,6 +1911,7 @@ enum AutoRemixPlanner {
             pulseRegions: pulseRegions,
             clubFlavor: nil,
             mashupVocalSongID: mashupVocalID,
+            mashupDrop2SongID: mashupDrop2ID,
             mashupBedSongID: mashupBedID,
             handoffCount: handoffs,
             songLetters: letters,

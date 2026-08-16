@@ -160,7 +160,7 @@ do {
     }
 }
 
-// MARK: - 5. Two-song mashup targets ≥3 handoffs
+// MARK: - 5. Two-song mashup — club bed + hook flip (not 4-bar ping-pong)
 
 do {
     let tracks = [
@@ -171,7 +171,15 @@ do {
     switch outcome {
     case .success(_, let plan, let summary):
         check("Two songs → Mashup mode", plan.mode == .mashup)
-        check("Two-song mashup handoffs ≥ 3", plan.handoffCount >= 3, "got \(plan.handoffCount)")
+        check("Bed owner assigned", plan.mashupBedSongID != nil)
+        check("Drop 1 vocal assigned", plan.mashupVocalSongID != nil)
+        check("Drop 2 flip assigned", plan.mashupDrop2SongID != nil)
+        check(
+            "Drop 1 and Drop 2 are different roles",
+            plan.mashupDrop2SongID != plan.mashupVocalSongID
+                || plan.mashupDrop2SongID == plan.mashupBedSongID,
+            "drop1=\(plan.mashupVocalSongID?.uuidString ?? "?") drop2=\(plan.mashupDrop2SongID?.uuidString ?? "?")"
+        )
         check("Summary sequence uses song names", summary.sequence.contains("Groove Anchor") || summary.sequence.contains("Vocal Feature"))
         let letters = AutoRemixPlanner.summary(for: plan, tracks: tracks)
         _ = letters

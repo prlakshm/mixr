@@ -8,7 +8,7 @@ For one-song Auto Remix, rebuild the track as a streaming-length club mix in the
 
 Preservation of identity means: the familiar hook lands on drop 1; arrangement, pulse, and energy do the transformation. SFX alone do not count as transformation.
 
-For mashups, assign **hook-over-bed** roles (one song sings, the other is the club bed). Never force two full mixes to fight drop-on-drop.
+For mashups (2…5 songs), assign **one club bed** and rotate vocal hooks across the club islands. Never force two full mixes to fight drop-on-drop.
 
 ## Confidence ladder (cuts vs energy)
 
@@ -60,16 +60,20 @@ Decide per song / pair:
 - Vocal stretch max ~6–8%; instrumental / bed stretch prefer ≤15%.
 - If stretch would wreck the vocal, keep source BPM and club-ify with arrangement + energy.
 
-## Mashup (two songs)
+## Mashup (2…5 songs)
 
-- One song = vocal hook; the other = club bed. Not equal ping-pong every 4 bars.
-- Prefer same Camelot, then ±1, then relative major/minor.
-- Pitch the **bed**, not the star vocal. Vocal pitch shift ≤ ~2 semitones.
-- Stretch the instrumental first. Vocal stretch ≤ 8%.
-- Switch only on phrase boundaries. Minimum stay 8 bars; prefer 16 for choruses.
-- One kick, one bass, one lead vocal at a time.
-- Land the familiar hook **on the drop**.
-- If key+tempo+energy cannot work without wrecking the vocal, refuse the pair or pick a safer architecture. Do not force a bad mashup.
+N-song club mashups keep the same two-wave shape. More songs mean more hooks to rotate across islands — not more simultaneous layers.
+
+- Pick **ONE club bed** (most mixable drums / already-in-pocket / simplest harmony). Everyone else is a vocal-hook candidate.
+- **ONE kick, ONE bass, ONE lead vocal** at any moment. Never stack two toplines or two subs.
+- Phrase grid still 8 / 16 / 32. Minimum identity stay **8 bars**; prefer **16** for a chorus/hook. Do not switch every 4 bars.
+- Club shape: intro → build → drop 1 → breakdown → build → drop 2 → outro.
+- **Drop 1** = the single strongest familiar hook. **Drop 2** = a different song’s hook (the flip). On a duo, Drop 2 may be the bed’s own chorus flip.
+- Remaining songs get 8–16 bar cameos in verse / breakdown / outro, or a chopped ad-lib under a drop if they pass key/stretch gates.
+- Compatibility is **per added song**: Camelot same / ±1 / relative; vocal stretch ≤ 8%; pitch vocal ≤ 2 st; prefer pitching the bed. If song 4 or 5 fails the gate, skip it or use it only as a short chop — do not force a sour full-vocal overlay.
+- Energy matching still applies: a ballad on a peak-time bed needs a breakdown runway, not a slam.
+- Cap at 5 songs for a streaming-length club rewrite.
+- If key+tempo+energy cannot work without wrecking the vocal, refuse or degrade that guest. Do not force a bad mashup.
 - Drop-on-drop of two full mixes is a fail.
 
 ## Structural edits

@@ -22,7 +22,8 @@ Preservation constrains identity (familiar hook on drop 1), not arrangement.
 SFX alone do not count as transformation. Accidental silence is forbidden;
 **intentional pre-drop voids are allowed** (hype = subtraction then a downbeat).
 
-Mashups are **hook-over-bed**: one song sings, the other is the club bed.
+Mashups (2…5 songs) are **one club bed + rotating hooks**: one kick, one bass,
+one lead vocal at a time. More songs rotate across islands — they do not stack.
 
 ## Planning hierarchy
 
@@ -67,12 +68,16 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 - Vocal stretch ≤ ~8%; bed/instrumental ≤ ~15%.
 - If stretch wrecks the vocal → keep BPM, club-ify with arrangement + energy.
 
-## Mashup
+## Mashup (2…5 songs)
 
-- Highest feature/vocal affinity → hook; highest groove/drums → bed.
-- Pitch the bed (≤ ~2 st); never force the star vocal through illegal stretch.
-- Prefer Camelot same → ±1 → relative. Refuse pairs that cannot work.
-- Minimum stay 8 bars; prefer 16 on choruses. Hook lands on the drop.
+- ONE club bed (drums / pocket / simple harmony); others = vocal-hook candidates.
+- Drop 1 = strongest full hook; Drop 2 = a different song’s hook (duo may flip to bed chorus).
+- Remaining songs: 8–16 bar cameos (verse/breakdown/outro) or short chops if gates fail.
+- Pitch the bed (≤ ~2 st); never force a star vocal through illegal stretch.
+- Prefer Camelot same → ±1 → relative. Skip or cameo-only when song 4/5 fails.
+- Minimum stay 8 bars; prefer 16 on choruses. No 4-bar ping-pong.
+- Ballad on a peak-time bed → breakdown runway, not a slam.
+- Cap at 5 songs.
 
 ## Opportunity evidence
 

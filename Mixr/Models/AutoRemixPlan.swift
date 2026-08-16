@@ -73,6 +73,8 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case refusedMashupPair
     case allowedPredropVoid
     case choseClubFlavor
+    case usedCameoOnly
+    case skippedIncompatibleHook
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -140,6 +142,10 @@ struct AutoDecision: Sendable, Equatable {
             return "Left an intentional pre-drop void\(detail.map { " (\($0))" } ?? "")."
         case .choseClubFlavor:
             return "Club flavor: \(detail ?? "festival rewrite")."
+        case .usedCameoOnly:
+            return "Used \(song) as a short cameo\(detail.map { " — \($0)" } ?? "") rather than a full vocal drop."
+        case .skippedIncompatibleHook:
+            return "Skipped \(song) as a full hook\(detail.map { ": \($0)" } ?? "")."
         }
     }
 }
@@ -295,8 +301,10 @@ struct AutoRemixPlan: Sendable {
     var pulseRegions: [AutoClubPulse.Region] = []
     /// Recipe flavor bias (Calvin / Guetta / … instincts).
     var clubFlavor: AutoClubFlavor? = nil
-    /// Mashup: song chosen as the sung hook (nil for one-song remix).
+    /// Mashup: song chosen as Drop 1 sung hook (nil for one-song remix).
     var mashupVocalSongID: UUID? = nil
+    /// Mashup: song chosen as Drop 2 flip hook (nil when unused).
+    var mashupDrop2SongID: UUID? = nil
     /// Mashup: song chosen as the club bed (nil for one-song remix).
     var mashupBedSongID: UUID? = nil
     /// Song-change count between consecutive dominant slots.
