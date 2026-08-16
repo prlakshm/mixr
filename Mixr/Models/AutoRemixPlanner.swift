@@ -724,6 +724,20 @@ enum AutoRemixPlanner {
                             : (dropIndex == 0 ? "riser+impact drop 1" : "snare+impact drop 2")
                     )
                 )
+                if let lead = placements.last(where: {
+                    $0.slotIndex == slotIdx && $0.role == .dominant
+                }) {
+                    appendHookEchoThrows(
+                        lead: lead,
+                        songTitle: profile.title,
+                        barSec: bar,
+                        beatSec: beat,
+                        intentionalGaps: intentionalGaps,
+                        tuning: tuning,
+                        placements: &placements,
+                        decisions: &decisions
+                    )
+                }
                 dropIndex += 1
             }
 
@@ -1077,6 +1091,20 @@ enum AutoRemixPlanner {
                 let mid = t0 + segDur * 0.45
                 sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: mid, purpose: "mid-drop clap"))
                 sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: mid, purpose: "mid-drop impact"))
+                if let lead = placements.last(where: {
+                    $0.slotIndex == i && $0.role == .dominant
+                }) {
+                    appendHookEchoThrows(
+                        lead: lead,
+                        songTitle: profile.title,
+                        barSec: bar,
+                        beatSec: beat,
+                        intentionalGaps: intentionalGaps,
+                        tuning: tuning,
+                        placements: &placements,
+                        decisions: &decisions
+                    )
+                }
                 dropIndex += 1
             }
             if role == .breakdown {
@@ -1169,6 +1197,113 @@ enum AutoRemixPlanner {
         )
         pulseRegions.append(
             AutoClubPulse.Region(role: .void, timelineStart: voidStart, timelineEnd: dropStart)
+        )
+    }
+
+    /// Classic DJ echo throws: copy 1–4 beats of the hook onto short
+    /// supporting placements delayed by 1/8–1/2 bar (into the pre-drop
+    /// void and off the drop vocal). Literal duplicates — bounce WAVs
+    /// hear them even when wet Echo DSP is limited offline.
+    private static func appendHookEchoThrows(
+        lead: AutoClipPlacement,
+        songTitle: String?,
+        barSec: Double,
+        beatSec: Double,
+        intentionalGaps: [AutoIntentionalGap],
+        tuning: AutoTuning,
+        placements: inout [AutoClipPlacement],
+        decisions: inout [AutoDecision]
+    ) {
+        guard lead.role == .dominant else { return }
+        guard lead.timelineDuration >= barSec * 7.5 else { return }
+
+        let void = intentionalGaps.first {
+            $0.reason.localizedCaseInsensitiveContains("void")
+                && abs($0.end - lead.timelineStart) < 0.05
+        }
+
+        // Best 1–4 beats of the hook — default 2-beat chop (not a 16-bar verse).
+        let chopBeats = 2.0
+        let chopDur = min(barSec, max(beatSec, chopBeats * beatSec))
+        let titleSource = lead.sourceStart
+        // Last-word / end-of-bar chop within the opening bar of the hook.
+        let lastWordSource = lead.sourceStart
+            + max(0, (4.0 - chopBeats) * beatSec * lead.tempoRatio)
+
+        // 2–3 stutter taps on the classic delay grid.
+        let delayBars: [Double]
+        if void != nil {
+            // Anticipate into the void, then stutter out of the drop vocal.
+            delayBars = [-0.125, 0.125, 0.5]
+        } else {
+            delayBars = [0.125, 0.25, 0.5]
+        }
+
+        var placed = 0
+        for (i, delay) in delayBars.enumerated() {
+            let t0 = lead.timelineStart + delay * barSec
+            if let void, t0 < void.start - 0.02 { continue }
+            guard t0 >= -0.01 else { continue }
+            // Keep throws near the drop — not mid-verse repeats.
+            guard t0 <= lead.timelineStart + barSec * 0.75 + 0.05 else { continue }
+            guard t0 + chopDur <= lead.timelineEnd + beatSec else { continue }
+
+            let intoVoid = delay < -0.01
+            let sourceStart = intoVoid || i == 0 ? titleSource : lastWordSource
+
+            var fx = ClipEffectSettings()
+            fx.setLevel(24 + Double(i) * 10, for: MixrEffect.echo.rawValue)
+            fx.echoPreset = i == 0 ? .classic : .pingPong
+            fx.setLevel(16, for: MixrEffect.reverb.rawValue)
+            fx.reverbPreset = .ambient
+            // Duck lows so the throw sits under the lead / bed kick.
+            fx.setLevel(40, for: MixrEffect.blur.rawValue)
+            fx = AutoSupportedEffects.sanitize(fx)
+
+            let decay = max(0.22, tuning.duckedVocalSupportVolume * (0.95 - Double(i) * 0.22))
+            // Declare intentional same-song layering for the validator.
+            let declaredOverlap = max(chopDur, abs(delay) * barSec + chopDur)
+
+            placements.append(
+                AutoClipPlacement(
+                    songID: lead.songID,
+                    sourceStart: sourceStart,
+                    timelineStart: max(0, t0),
+                    timelineDuration: chopDur,
+                    tempoRatio: lead.tempoRatio,
+                    volume: min(tuning.supportVolume, decay),
+                    fadeIn: ClipTransition(type: .crossfade, duration: 0.25),
+                    fadeOut: ClipTransition(type: .echoOut, duration: 2),
+                    effects: fx,
+                    role: .supporting,
+                    slotIndex: lead.slotIndex,
+                    overlapsPreviousSeconds: declaredOverlap
+                )
+            )
+            placed += 1
+        }
+
+        guard placed >= 2 else {
+            // Roll back a lone tap — stutter needs at least a double.
+            if placed == 1, let last = placements.indices.last,
+               placements[last].role == .supporting,
+               placements[last].songID == lead.songID,
+               placements[last].timelineDuration <= barSec + 0.05 {
+                placements.remove(at: last)
+            }
+            return
+        }
+
+        decisions.append(
+            AutoDecision(
+                kind: .hookEchoThrow,
+                songTitle: songTitle,
+                detail: String(
+                    format: "%d× %.0f-beat chops @1/8–1/2 bar near drop",
+                    placed,
+                    chopBeats
+                )
+            )
         )
     }
 
@@ -2324,6 +2459,20 @@ enum AutoRemixPlanner {
                     placements: &placements,
                     decisions: &decisions
                 )
+                if let lead = placements.last(where: {
+                    $0.slotIndex == i && $0.role == .dominant && $0.songID == profile.songID
+                }) {
+                    appendHookEchoThrows(
+                        lead: lead,
+                        songTitle: profile.title,
+                        barSec: barSec,
+                        beatSec: beatSec,
+                        intentionalGaps: intentionalGaps,
+                        tuning: tuning,
+                        placements: &placements,
+                        decisions: &decisions
+                    )
+                }
             }
 
             // Directional overlap under mashup handoffs (non-drop recipes).

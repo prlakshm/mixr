@@ -111,7 +111,7 @@ Propose phrase-aligned opportunities when measured:
 
 ### Transition
 - filtered build
-- echo throw
+- echo throw (clip Echo Out **and** short same-song duplicate chops delayed 1/8–1/2 bar into the void / off the drop — not full-verse repeats)
 - intentional pre-drop void
 - reverse lead-in
 - equal-power overlap

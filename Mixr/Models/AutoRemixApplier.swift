@@ -116,13 +116,23 @@ nonisolated enum AutoRemixApplier {
     // MARK: - Clip construction
 
     private static func makeClip(_ p: AutoClipPlacement) -> MixrClip {
-        MixrClip(
+        let units = MixrTimeline.units(fromSeconds: max(0.05, p.timelineDuration))
+        // Short supporting echo / stutter chops may sit below the global
+        // clip minimum so bounce WAVs hear the literal duplicate.
+        let isShortEcho = p.role == .supporting
+            && units < MixrTimeline.minClipLengthUnits
+            && (
+                p.overlapsPreviousSeconds > 0.05
+                    || p.effects.level(for: MixrEffect.echo.rawValue) >= 8
+                    || p.fadeOut.type == .echoOut
+            )
+        let minUnits: CGFloat = isShortEcho
+            ? max(0.12, units)
+            : MixrTimeline.minClipLengthUnits
+        return MixrClip(
             id: UUID(),
             start: MixrTimeline.units(fromSeconds: p.timelineStart),
-            length: max(
-                MixrTimeline.minClipLengthUnits,
-                MixrTimeline.units(fromSeconds: p.timelineDuration)
-            ),
+            length: max(minUnits, units),
             playbackSpeed: p.tempoRatio,
             transitionIn: p.fadeIn,
             transitionOut: p.fadeOut,

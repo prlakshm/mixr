@@ -1133,5 +1133,79 @@ do {
           String(format: "%.2f", farBPM.overlapSeconds))
 }
 
+do {
+    // DJ echo throws: short same-song supporting duplicates (1–4 beats),
+    // delayed 1/8–1/2 bar into the pre-drop void / off the drop vocal —
+    // not full-verse repeats, and not deleted as redundantRepeat.
+    let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
+    let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 42, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        guard let drop0 = drops.first else {
+            check("Echo throws: Drop 1 exists", false)
+            break
+        }
+        let bar = plan.barSeconds
+        let beat = plan.beatSeconds
+        let echoes = plan.placements.filter { p in
+            p.role == .supporting
+                && p.songID == song.id
+                && p.timelineDuration <= bar + 0.05
+                && p.timelineDuration >= beat * 0.75
+                && abs(p.timelineStart - drop0.timelineStart) <= bar * 0.75
+        }
+        check(
+            "Club remix places ≥2 short hook echo-duplicate supports near Drop 1",
+            echoes.count >= 2,
+            "count=\(echoes.count)"
+        )
+        check(
+            "Echo throws stay ≤4 beats (not full-verse duplicates)",
+            echoes.allSatisfy { $0.timelineDuration <= beat * 4.05 },
+            echoes.map { String(format: "%.2f", $0.timelineDuration) }.joined(separator: ",")
+        )
+        check(
+            "Echo throws are ducked under the lead",
+            echoes.allSatisfy { $0.volume <= 0.50 },
+            echoes.map { String(format: "%.2f", $0.volume) }.joined(separator: ",")
+        )
+        check(
+            "Echo throws declare same-song overlap and/or echo FX",
+            echoes.allSatisfy {
+                $0.overlapsPreviousSeconds > 0.05
+                    || $0.effects.level(for: MixrEffect.echo.rawValue) >= 12
+                    || $0.fadeOut.type == .echoOut
+            }
+        )
+        check(
+            "Planner records hookEchoThrow decision",
+            plan.decisions.contains { $0.kind == .hookEchoThrow }
+        )
+        // Into the void and/or just after the drop downbeat.
+        let void = plan.intentionalGaps.first {
+            $0.reason.contains("void") && abs($0.end - drop0.timelineStart) < 0.05
+        }
+        if let void {
+            let intoVoid = echoes.contains { $0.timelineStart < drop0.timelineStart - 0.01 && $0.timelineStart >= void.start - 0.05 }
+            let afterDrop = echoes.contains {
+                $0.timelineStart >= drop0.timelineStart - 0.01
+                    && $0.timelineStart <= drop0.timelineStart + bar * 0.55
+            }
+            check("Echo throws land in the pre-drop void and/or off the drop", intoVoid || afterDrop,
+                  "intoVoid=\(intoVoid) afterDrop=\(afterDrop)")
+        }
+        // Delays should land near classic 1/8, 1/4, or 1/2 bar grids.
+        let delayOK = echoes.contains { echo in
+            let delayBars = (echo.timelineStart - drop0.timelineStart) / max(bar, 0.001)
+            let targets: [Double] = [-0.125, 0.0, 0.125, 0.25, 0.5]
+            return targets.contains { abs(delayBars - $0) < 0.06 }
+        }
+        check("Echo throw delays sit on 1/8–1/2 bar grid", delayOK)
+    case .failure(let message):
+        check("Hook echo-duplicate remix", false, message)
+    }
+}
+
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")
 exit(failures == 0 ? 0 : 1)

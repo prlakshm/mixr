@@ -21,12 +21,32 @@ nonisolated enum AutoRemixValidator {
         var warnings = plan.warnings
         var decisions = plan.decisions
         let minLen = tuning.minSegmentSeconds - 0.1
+        let barSec = plan.barSeconds
+        let beatSec = plan.beatSeconds
+        let echoMinLen = max(0.12, beatSec * 0.4)
+
+        // Short supporting DJ echo throws (≤1 bar) are intentional chops —
+        // they may sit below the global clip minimum.
+        func isHookEchoThrow(_ p: AutoClipPlacement) -> Bool {
+            p.role == .supporting
+                && p.timelineDuration <= barSec + 0.05
+                && p.timelineDuration >= echoMinLen
+                && (
+                    p.overlapsPreviousSeconds > 0.05
+                        || p.effects.level(for: MixrEffect.echo.rawValue) >= 8
+                        || p.fadeOut.type == .echoOut
+                )
+        }
 
         // ── 1. Source ranges must live inside each song ──
-        plan.placements = plan.placements.compactMap { p in
-            var p = p
+        var step1: [AutoClipPlacement] = []
+        step1.reserveCapacity(plan.placements.count)
+        for var p in plan.placements {
             p.effects = AutoSupportedEffects.sanitize(p.effects)
-            guard let duration = profiles[p.songID]?.analysis.durationSeconds else { return p }
+            guard let duration = profiles[p.songID]?.analysis.durationSeconds else {
+                step1.append(p)
+                continue
+            }
             if p.sourceStart < 0 { p.sourceStart = 0 }
             let overrun = p.sourceEnd - (duration - 0.05)
             if overrun > 0 {
@@ -37,18 +57,20 @@ nonisolated enum AutoRemixValidator {
                     p.timelineDuration -= remaining / max(p.tempoRatio, 0.0001)
                 }
             }
-            guard p.timelineDuration >= minLen else {
+            let floor = isHookEchoThrow(p) ? echoMinLen : minLen
+            if p.timelineDuration < floor {
                 if p.role == .dominant {
                     warnings.append("Dropped a section that no longer had enough source material.")
                 }
-                return nil
+                continue
             }
-            return p
+            step1.append(p)
         }
+        plan.placements = step1
 
         // ── 2. Same-song placements may overlap ONLY for a declared
-        // equal-power crossfade (true temporal overlap). Undeclared
-        // overlap is trimmed away as before.
+        // equal-power crossfade (true temporal overlap), or when a
+        // supporting hook-echo / stutter layer sits under the lead.
         var bySong: [UUID: [Int]] = [:]
         for (i, p) in plan.placements.enumerated() {
             bySong[p.songID, default: []].append(i)
@@ -58,15 +80,23 @@ nonisolated enum AutoRemixValidator {
                 plan.placements[$0].timelineStart < plan.placements[$1].timelineStart
             }
             for pair in zip(sorted, sorted.dropFirst()) {
-                let overlap = plan.placements[pair.0].timelineEnd - plan.placements[pair.1].timelineStart
-                let declared = plan.placements[pair.1].overlapsPreviousSeconds
+                let a = plan.placements[pair.0]
+                let b = plan.placements[pair.1]
+                let overlap = a.timelineEnd - b.timelineStart
+                let declared = max(a.overlapsPreviousSeconds, b.overlapsPreviousSeconds)
                 if overlap > 0.005 {
+                    // Intentional same-song supporting echo / stutter layer.
+                    if (a.role == .supporting || b.role == .supporting),
+                       declared > 0.005 || isHookEchoThrow(a) || isHookEchoThrow(b) {
+                        continue
+                    }
                     if declared > 0.005, overlap <= declared + 0.05 {
                         continue   // sanctioned crossfade overlap
                     }
-                    let excess = overlap - max(0, declared)
+                    let excess = overlap - max(0, min(declared, overlap))
+                    let floor = isHookEchoThrow(a) ? echoMinLen : minLen
                     plan.placements[pair.0].timelineDuration -= excess
-                    if plan.placements[pair.0].timelineDuration < minLen {
+                    if plan.placements[pair.0].timelineDuration < floor {
                         plan.placements[pair.0].timelineDuration = 0
                         warnings.append(
                             "Removed a clip segment that collided with the same song's next section."
@@ -75,7 +105,10 @@ nonisolated enum AutoRemixValidator {
                 }
             }
         }
-        plan.placements.removeAll { $0.timelineDuration < minLen }
+        plan.placements.removeAll { p in
+            let floor = isHookEchoThrow(p) ? echoMinLen : minLen
+            return p.timelineDuration < floor
+        }
 
         // ── 2b. One-song remix: every internal cut must be reasoned,
         // confident, and masked; source order must stay monotonic unless

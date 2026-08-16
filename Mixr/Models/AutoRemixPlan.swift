@@ -81,6 +81,8 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case duckedSupportingVocal
     /// Refused two full-mix drops that would stack kicks/subs.
     case rejectedDualBassStack
+    /// Short same-song hook duplicate used as a DJ echo / stutter throw.
+    case hookEchoThrow
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -158,6 +160,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Ducked \(song) under the lead vocal\(detail.map { " — \($0)" } ?? "")."
         case .rejectedDualBassStack:
             return "Rejected a dual kick/bass stack\(detail.map { " — \($0)" } ?? "")."
+        case .hookEchoThrow:
+            return "Threw a hook echo duplicate of \(song)\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -205,10 +209,10 @@ struct AutoClipPlacement: Sendable {
     /// split made only to change effects). Continuous edges get no fades
     /// of any kind — the audio underneath is continuous.
     var continuesPrevious: Bool = false
-    /// > 0 when this placement deliberately OVERLAPS the previous
-    /// placement of the same song by this many timeline seconds for a
-    /// true equal-power crossfade. The validator only permits same-song
-    /// overlap that is declared here.
+    /// > 0 when this placement deliberately OVERLAPS another placement of
+    /// the same song — equal-power crossfade, or a short supporting DJ
+    /// echo / stutter layer under the lead. The validator only permits
+    /// same-song overlap that is declared here (or a supporting echo throw).
     var overlapsPreviousSeconds: Double = 0
 
     nonisolated var timelineEnd: Double { timelineStart + timelineDuration }
