@@ -291,10 +291,17 @@ do {
                   justifiedReturnStarts: justifiedReturns(plan)
               ))
 
-        // Club remix uses intentional pre-drop voids (hype = subtraction).
+        // Club remix: intentional pre-drop voids on plain drops (Drop 2+).
+        // Pivot Drop 1 uses a hard cut — gaps list may be Drop-2-only.
         check("One song: club shape allows intentional pre-drop voids",
               plan.intentionalGaps.allSatisfy { $0.reason.contains("pre-drop") },
               "\(plan.intentionalGaps.count) gaps")
+        let hasPivot = plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        check(
+            "One song: Drop 1 pivot hard-cut and/or a plain-drop void exist",
+            hasPivot || !plan.intentionalGaps.isEmpty,
+            "pivot=\(hasPivot) voids=\(plan.intentionalGaps.count)"
+        )
 
         let dropRegions = plan.pulseRegions.filter { $0.role == .drop }
         check("One song: two-wave club drops", dropRegions.count >= 2,
@@ -709,7 +716,7 @@ do {
               musical.contains { $0.assetID == "impact" })
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
-            check("Low confidence: Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+            check("Low confidence: Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
                   String(format: "bar=%.1f", bar))
         }
         let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }

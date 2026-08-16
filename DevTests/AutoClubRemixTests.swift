@@ -175,11 +175,27 @@ do {
                   return abs(bars - bars.rounded()) < 0.08
               },
               "first drop at \(drops.first.map { String(format: "%.3f", $0.timelineStart) } ?? "?") bar=\(drops.first.map { String(format: "%.3f", $0.timelineStart / plan.barSeconds) } ?? "?")")
-        check("Pre-drop void precedes at least one drop",
-              plan.intentionalGaps.contains { gap in
-                  drops.contains { abs($0.timelineStart - gap.end) < 0.05 }
-              })
-        check("Intentional pre-drop void present", !plan.intentionalGaps.isEmpty)
+        // Pivot Drop 1 = hard cut (no void). Plain club drops (Drop 2+) still get a 1-beat void.
+        let voidBeforeSomeDrop = plan.intentionalGaps.contains { gap in
+            drops.contains { abs($0.timelineStart - gap.end) < 0.05 }
+        }
+        let pivotBeforeDrop1: Bool = {
+            guard let drop1 = drops.first else { return false }
+            let beat = plan.beatSeconds
+            let grains = plan.placements.filter {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beat) < beat * 0.35
+                    && $0.timelineStart >= drop1.timelineStart - plan.barSeconds * 4.5
+                    && $0.timelineStart < drop1.timelineStart - 0.02
+            }
+            return grains.count >= 8
+                || plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        }()
+        check(
+            "Drop 1 has void or Xirex pivot (pivot joins need not void)",
+            voidBeforeSomeDrop || pivotBeforeDrop1,
+            "voids=\(plan.intentionalGaps.count) pivot=\(pivotBeforeDrop1)"
+        )
         check("Kept midtempo pocket (not shoved to 128)",
               plan.targetBPM < 110, "bpm=\(plan.targetBPM)")
     case .failure(let message):
@@ -661,7 +677,7 @@ do {
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
-            check("stupid song Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+            check("stupid song Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
                   String(format: "bar=%.1f", bar))
         } else {
             check("stupid song has a drop", false)
@@ -687,7 +703,7 @@ do {
                       - (drops[0].timelineStart / plan.barSeconds).rounded()) < 0.08,
                   String(format: "t=%.3f bars=%.3f", drops[0].timelineStart, drops[0].timelineStart / plan.barSeconds))
             let bar = drops[0].timelineStart / plan.barSeconds
-            check("All I Wanted Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+            check("All I Wanted Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
                   String(format: "bar=%.1f", bar))
         }
         let cymbals = plan.sfxEvents.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
@@ -868,6 +884,14 @@ do {
                 voidSkipped += 1
                 continue
             }
+            // Xirex pivot hard cut — no overlap required (slam on the downbeat).
+            let pivotBefore = plan.placements.contains { g in
+                g.role == .supporting
+                    && abs(g.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
+                    && g.timelineStart >= next.timelineStart - plan.barSeconds * 4.5
+                    && g.timelineStart < next.timelineStart - 0.02
+            }
+            if pivotBefore { continue }
             // Source-continuous splits (build body → build-out) abut without
             // overlap by design — they are the same reading, not a handoff.
             let sourceContinuous = next.continuesPrevious
@@ -933,6 +957,20 @@ do {
               "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
 
         // Two-deck + Xirex pivot: Oops plays complete first; no early title chops.
+        // Real Drop 1 is after one complete Oops hook + 4-bar baby loop (~bar 20),
+        // never a fake drop on the bed chorus and never a quiet fade-in.
+        let pulseDrops = plan.pulseRegions.filter { $0.role == .drop }.sorted { $0.timelineStart < $1.timelineStart }
+        if let pulseDrop1 = pulseDrops.first {
+            let dropBar = pulseDrop1.timelineStart / plan.barSeconds
+            check(
+                "Britney: pulse Drop 1 after complete Oops + pivot (~bar 20), not bar 16 fake / not late bar 28",
+                dropBar >= 16.5 && dropBar <= 24.5,
+                String(format: "bar=%.1f t=%.2f", dropBar, pulseDrop1.timelineStart)
+            )
+        } else {
+            check("Britney: pulse Drop 1 exists", false)
+        }
+
         if let drop1Start = dropLeads.map(\.timelineStart).min() {
             let guestBefore = plan.placements.filter {
                 $0.songID == vocalID
@@ -958,6 +996,12 @@ do {
                     "Britney: first Oops placement is a complete phrase (≥8 bars)",
                     firstBed.timelineDuration >= plan.barSeconds * 7.5,
                     String(format: "dur=%.2f", firstBed.timelineDuration)
+                )
+                let bedBeforeDrop = bedDoms.filter { $0.timelineStart < drop1Start - 0.05 }
+                check(
+                    "Britney: Oops opening title/chorus finishes before pivot (important lines uncut)",
+                    bedBeforeDrop.contains { $0.timelineDuration >= plan.barSeconds * 7.5 },
+                    "bedPhrasesBeforeDrop=\(bedBeforeDrop.count)"
                 )
             } else {
                 check("Britney: Oops bed dominant exists", false)
@@ -1004,8 +1048,50 @@ do {
                                 && drop1Start >= last.timelineEnd - 0.05,
                         String(format: "loopEnd=%.2f drop=%.2f", last.timelineEnd, drop1Start)
                     )
+                    // Scorer consistency: pivot hard-cut time == pulse Drop 1 time.
+                    if let pulseDrop1 = pulseDrops.first {
+                        check(
+                            "Britney: pivot hard cut matches pulse Drop 1 (not an earlier fake drop)",
+                            abs(pulseDrop1.timelineStart - drop1Start) < plan.beatSeconds * 0.6,
+                            String(format: "pulseDrop=%.2f guestDrop=%.2f", pulseDrop1.timelineStart, drop1Start)
+                        )
+                    }
                 }
             }
+
+            // Xirex hard cut: incoming Drop 1 is full level, not a fade-in from silence.
+            if let drop1 = dropLeads.min(by: { $0.timelineStart < $1.timelineStart }) {
+                check(
+                    "Britney: Drop 1 hard cut — no fade-in / volume ramp",
+                    drop1.fadeIn.type == .none || drop1.fadeIn.duration <= 0.02,
+                    "fadeIn=\(drop1.fadeIn.type.rawValue) dur=\(drop1.fadeIn.duration)"
+                )
+                check(
+                    "Britney: Drop 1 slam is ~full gain on bar 1 of the hook",
+                    drop1.volume >= 0.92,
+                    String(format: "vol=%.2f", drop1.volume)
+                )
+            }
+
+            // Diet SFX on the pivot join: loop grains + ≤1 slam (impact). No riser pile.
+            let mixLo = drop1Start - plan.barSeconds * 4.5
+            let mixHi = drop1Start + plan.beatSeconds
+            let joinSFX = plan.sfxEvents.filter {
+                $0.timelineStart >= mixLo - 0.05 && $0.timelineStart <= mixHi + 0.05
+                    && !SoundEffectLibrary.isPulseLayer($0.assetID)
+            }
+            let joinSlams = joinSFX.filter { $0.assetID == "impact" }
+            let joinPile = joinSFX.filter {
+                $0.assetID == "riser" || $0.assetID == "snareBuild"
+                    || $0.assetID == "tapeStop" || $0.assetID == "crash"
+                    || $0.assetID == "reverseCymbal"
+            }
+            check(
+                "Britney: mix-window SFX is pivot loop + ≤1 slam (no riser/tape/crash pile)",
+                joinSlams.count <= 1 && joinPile.isEmpty,
+                "slams=\(joinSlams.count) pile=\(joinPile.map(\.assetID))"
+            )
+
             check(
                 "Britney: pivotWallpaperLoop decision recorded",
                 plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
@@ -1033,20 +1119,12 @@ do {
             check("Britney pivot token is 'baby'", token == "baby", "token=\(token ?? "nil")")
         }
 
-        // Riser must start during the outgoing phrase (before the cut/downbeat).
-        let risers = plan.sfxEvents.filter { $0.assetID == "riser" || $0.assetID == "snareBuild" }
+        // Pivot Drop 1: impact slam only (no riser wallpaper required).
         let impacts = plan.sfxEvents.filter { $0.assetID == "impact" }
-        check("Mashup emits riser into drop", !risers.isEmpty)
-        for riser in risers {
-            let cut = impacts.first(where: { abs($0.timelineStart - riser.timelineEnd) < 0.4 })?.timelineStart
-                ?? dropLeads.map(\.timelineStart).min()
-            if let cut {
-                check(
-                    "Riser overlaps outgoing phrase (starts before cut)",
-                    riser.timelineStart < cut - 0.25,
-                    String(format: "riserStart=%.2f cut=%.2f", riser.timelineStart, cut)
-                )
-            }
+        check("Mashup emits impact slam on a drop", !impacts.isEmpty)
+        if let drop1 = dropLeads.map(\.timelineStart).min() {
+            let onDrop1 = impacts.contains { abs($0.timelineStart - drop1) < 0.35 }
+            check("Mashup impact lands on Drop 1 downbeat", onDrop1)
         }
     case .failure(let message):
         check("Bed under hook mashup", false, message)
@@ -1190,16 +1268,24 @@ do {
             } ?? false
         )
         check(
-            "Club remix has snareBuild or riser in a mix window",
-            musical.contains {
-                ($0.assetID == "snareBuild" || $0.assetID == "riser") && inMixWindow($0.timelineStart)
-            }
+            "Club remix Drop 1 mix window is diet (impact slam, no riser/snare pile)",
+            drops.first.map { d0 in
+                let lo = d0.timelineStart - plan.barSeconds * 4.5
+                let hi = d0.timelineStart + plan.beatSeconds
+                let join = musical.filter { $0.timelineStart >= lo - 0.05 && $0.timelineStart <= hi + 0.05 }
+                let pile = join.filter {
+                    $0.assetID == "riser" || $0.assetID == "snareBuild"
+                        || $0.assetID == "tapeStop" || $0.assetID == "crash"
+                }
+                let slams = join.filter { $0.assetID == "impact" }
+                return pile.isEmpty && slams.count <= 1
+            } ?? false
         )
         let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
         check("Club remix cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
-            check("Club remix Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
+            check("Club remix Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
                   String(format: "bar=%.1f", bar))
         }
         if let dropPlacement = plan.placements.first(where: {

@@ -251,11 +251,11 @@ enum AutoRemixPlanner {
         let bar = beat * 4
         let ratio = tempo.ratio
 
-        // Xirex grammar: opening uncut → first complete hook → 4-bar pivot
-        // wallpaper → Drop 1 hard cut (lands ~bar 28, still ≤32).
+        // Xirex grammar: opening uncut → one complete hook → 4-bar pivot
+        // wallpaper → Drop 1 hard cut. Cut earlier (~bar 20): no long groove
+        // runway after the hook is already done.
         let shape: [(role: AutoCandidateSection.Label, bars: Int, energy: Double, pulse: AutoClubPulse.RegionRole, entry: AutoTransitionRecipe)] = [
             (.intro, 8, 0.45, .introTease, .none),
-            (.groove, 8, 0.58, .groove, .cleanCrossfade),
             (.chorus, 8, 0.88, .groove, .cleanCrossfade),    // first complete hook (still the record)
             (.build, 4, 0.70, .buildOut, .flangerBuild),      // pivot wallpaper window
             (.chorus, 16, 1.0, .drop, .hardHypeCut),          // Drop 1
@@ -454,10 +454,12 @@ enum AutoRemixPlanner {
                 buildBodyBars = slot.bars - 4
             }
 
-            // Intentional pre-drop void — skip when previous island is the
-            // 4-bar pivot wallpaper window (Xirex loop replaces the void).
+            // Intentional pre-drop void — skip only on Drop 1 when the previous
+            // shape slot is the Xirex 4-bar pivot window. Drop 2+ still get the
+            // classic 1-beat void (plain club drop).
             if slot.entry == .hardHypeCut, cursor > 0, slot.bars >= 8 {
-                let pivotBefore = slotIdx > 0
+                let pivotBefore = dropIndex == 0
+                    && slotIdx > 0
                     && shape[slotIdx - 1].role == .build
                     && shape[slotIdx - 1].bars <= 4
                 if !pivotBefore {
@@ -608,8 +610,9 @@ enum AutoRemixPlanner {
 
                 var fadeIn: ClipTransition = .none
                 var fadeOut: ClipTransition = .none
+                // Xirex: hard cut into the hook — no fade-in / volume ramp.
                 if slot.entry == .hardHypeCut, segIdx == 0 {
-                    fadeIn = ClipTransition(type: .crossfade, duration: 0.125)
+                    fadeIn = .none
                 } else if slot.entry == .cleanCrossfade, segIdx == 0, placements.isEmpty == false {
                     fadeIn = ClipTransition(
                         type: .crossfade,
@@ -619,8 +622,8 @@ enum AutoRemixPlanner {
                 }
                 if slot.role == .ending {
                     fadeOut = ClipTransition(type: .echoOut, duration: 8)
-                } else if slot.role == .build, seg.pulse == .buildOut {
-                    // Echo throw out of the build into the void/drop.
+                } else if slot.role == .build, seg.pulse == .buildOut, slot.bars >= 8 {
+                    // Long builds may echo out; the 4-bar pivot window is grains only.
                     fadeOut = ClipTransition(type: .echoOut, duration: 4)
                 }
 
@@ -644,10 +647,9 @@ enum AutoRemixPlanner {
                 segCursor += segDur
             }
 
-            // Coordinated club SFX stacks — builds/drops/breaks stay busy.
-            // One-shots overlap on extra SFX rows at apply time.
+            // Coordinated club SFX — diet on the Xirex pivot join.
             let segEnd = segCursor
-            if slot.role == .build {
+            if slot.role == .build, slot.bars >= 8 {
                 let buildEnd = segEnd
                 if let snare = SoundEffectLibrary.definition(for: "snareBuild"),
                    buildEnd - snare.durationSeconds >= cursor {
@@ -669,7 +671,6 @@ enum AutoRemixPlanner {
                         )
                     )
                 }
-                // Mix window into the drop: snare + riser only (no air wallpaper).
             }
 
             if slot.role == .groove || slot.role == .intro {
@@ -679,60 +680,21 @@ enum AutoRemixPlanner {
             if slot.role == .chorus, slot.entry == .hardHypeCut {
                 let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
                     ?? cursor
-                // Mix-window into the drop: snare/riser + one impact on Drop 1.
-                let stackHard = flavor.bias.maximalistStacks
-                if dropIndex == 0 || stackHard {
-                    if let riser = SoundEffectLibrary.definition(for: "riser"),
-                       dropAt - riser.durationSeconds >= 0,
-                       !sfx.contains(where: {
-                           $0.assetID == "riser" && abs(($0.timelineStart + riser.durationSeconds) - dropAt) < 0.35
-                       }) {
-                        sfx.append(
-                            AutoSFXEvent(
-                                assetID: "riser",
-                                timelineStart: dropAt - riser.durationSeconds,
-                                purpose: "riser into drop"
-                            )
-                        )
-                    }
-                }
-                if dropIndex == 0 {
-                    if let snare = SoundEffectLibrary.definition(for: "snareBuild"),
-                       dropAt - snare.durationSeconds >= 0,
-                       !sfx.contains(where: {
-                           $0.assetID == "snareBuild"
-                               && abs(($0.timelineStart + snare.durationSeconds) - dropAt) < 0.35
-                       }) {
-                        sfx.append(
-                            AutoSFXEvent(
-                                assetID: "snareBuild",
-                                timelineStart: dropAt - snare.durationSeconds,
-                                purpose: "snare roll into drop"
-                            )
-                        )
-                    }
-                }
+                // Pivot Drop 1: one impact slam only. No riser/tape/crash pile.
                 sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat"))
-                let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
-                if dropIndex == 0, cymbalCount < 2 {
-                    sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: dropAt, purpose: "crash punctuation on drop"))
-                }
-                if dropIndex == 0, stackHard {
-                    sfx.append(
-                        AutoSFXEvent(
-                            assetID: "tapeStop",
-                            timelineStart: max(0, dropAt - 0.35),
-                            purpose: "tape stop into drop"
-                        )
-                    )
+                if dropIndex > 0 {
+                    let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
+                    if cymbalCount < 2 {
+                        sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: dropAt, purpose: "crash punctuation on drop"))
+                    }
                 }
                 decisions.append(
                     AutoDecision(
                         kind: .addedRiserIntoDrop,
                         songTitle: profile.title,
                         detail: dropIndex == 0
-                            ? "mix-window drop 1 (impact\(stackHard ? "+tape" : ""))"
-                            : "drop 2 flip (impact only)"
+                            ? "pivot hard-cut slam (impact only)"
+                            : "drop 2 flip (impact)"
                     )
                 )
                 // Xirex pivot wallpaper before Drop 1 only.
@@ -861,7 +823,7 @@ enum AutoRemixPlanner {
         let bar = beat * 4
         let ratio = tempo.ratio
 
-        // Xirex-ish low-conf shape: opening → first hook → 4-bar pivot → Drop 1.
+        // Xirex-ish low-conf shape: opening → first hook → 4-bar pivot → Drop 1 (~bar 20).
         struct Seg {
             var role: AutoClubPulse.RegionRole
             var bars: Int
@@ -869,7 +831,6 @@ enum AutoRemixPlanner {
         }
         let shape: [Seg] = [
             .init(role: .introTease, bars: 8, energy: 0.42),
-            .init(role: .groove, bars: 8, energy: 0.55),
             .init(role: .groove, bars: 8, energy: 0.80), // first complete hook listen-through
             .init(role: .buildOut, bars: 4, energy: 0.50), // pivot wallpaper window
             .init(role: .drop, bars: 16, energy: 1.00),
@@ -908,7 +869,12 @@ enum AutoRemixPlanner {
             let t1 = cursor + segDur
 
             if seg.role == .drop, t0 > beat {
-                let pivotBefore = i > 0 && shape[i - 1].role == .buildOut && shape[i - 1].bars <= 4
+                // Skip void only for Drop 1 after the dedicated 4-bar pivot.
+                // Later buildOut segments before Drop 2 are plain club mute + void.
+                let pivotBefore = dropIndex == 0
+                    && i > 0
+                    && shape[i - 1].role == .buildOut
+                    && shape[i - 1].bars <= 4
                 if !pivotBefore {
                     let voidSec = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats) * beat
                     if voidSec > 0.05 {
@@ -1045,7 +1011,7 @@ enum AutoRemixPlanner {
                     timelineDuration: segDur,
                     tempoRatio: ratio,
                     volume: volume,
-                    fadeIn: role == .drop ? ClipTransition(type: .crossfade, duration: 0.125) : .none,
+                    fadeIn: .none,
                     fadeOut: fadeOut,
                     effects: fx,
                     role: .dominant,
@@ -1056,7 +1022,8 @@ enum AutoRemixPlanner {
             lastSourceEnd = sourceStart + segDur * ratio
 
             // Two-deck: SFX only in mix window / on the drop — not groove wallpaper.
-            if role == .buildOut {
+            if role == .buildOut, !(seg.bars <= 4 && dropIndex == 0) {
+                // Non-pivot build-outs may carry snare/riser into a plain drop.
                 if let snare = SoundEffectLibrary.definition(for: "snareBuild"), t1 - snare.durationSeconds >= t0 {
                     sfx.append(
                         AutoSFXEvent(
@@ -1078,40 +1045,12 @@ enum AutoRemixPlanner {
                 }
             }
             if role == .drop {
-                if dropIndex == 0 {
-                    if let snare = SoundEffectLibrary.definition(for: "snareBuild"), t0 - snare.durationSeconds >= 0 {
-                        sfx.append(
-                            AutoSFXEvent(
-                                assetID: "snareBuild",
-                                timelineStart: t0 - snare.durationSeconds,
-                                purpose: "snare into drop"
-                            )
-                        )
-                    }
-                    if let riser = SoundEffectLibrary.definition(for: "riser"), t0 - riser.durationSeconds >= 0 {
-                        sfx.append(
-                            AutoSFXEvent(
-                                assetID: "riser",
-                                timelineStart: t0 - riser.durationSeconds,
-                                purpose: "riser into drop"
-                            )
-                        )
-                    }
-                    if flavor.bias.maximalistStacks {
-                        sfx.append(
-                            AutoSFXEvent(
-                                assetID: "tapeStop",
-                                timelineStart: max(0, t0 - 0.35),
-                                purpose: "tape stop into drop"
-                            )
-                        )
-                    }
-                    if cymbalPunctuation < 2 {
-                        sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "crash punctuation on drop"))
-                        cymbalPunctuation += 1
-                    }
-                }
+                // Pivot Drop 1: impact slam only. Drop 2 may keep light crash.
                 sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "impact on drop"))
+                if dropIndex > 0, cymbalPunctuation < 2 {
+                    sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "crash punctuation on drop"))
+                    cymbalPunctuation += 1
+                }
                 if dropIndex == 0,
                    let phrase = placements.last(where: {
                        $0.role == .dominant && $0.timelineEnd <= t0 + 0.05
@@ -1784,8 +1723,8 @@ enum AutoRemixPlanner {
 
     /// Two-wave club shape for N-song mashups. Indices into `ordered`
     /// (0 = bed). Min stay 8 bars; hooks prefer 16. No 4-bar ping-pong.
-    /// Xirex grammar before Drop 1: bed intro → groove → complete bed chorus
-    /// → 4-bar pivot wallpaper window → guest hook-replace.
+    /// Xirex: bed intro → complete bed chorus → 4-bar pivot → guest Drop 1
+    /// (~bar 20). Groove cameos move after Drop 1 so the join stays early.
     private static func nSongClubMashupSlots(
         drop1Idx: Int?,
         drop2Idx: Int,
@@ -1797,11 +1736,6 @@ enum AutoRemixPlanner {
         var slots: [Slot] = [
             Slot(songIdx: 0, role: .intro, bars: 8, entry: .none, energy: 0.45, shrinkPriority: 2),
         ]
-        if let g = grooveCameoIdx {
-            slots.append(Slot(songIdx: g, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.55))
-        } else {
-            slots.append(Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.58))
-        }
         // Complete Deck A chorus/hook BEFORE the pivot loop (never chop the title).
         slots.append(Slot(songIdx: 0, role: .chorus, bars: 8, entry: .cleanCrossfade, energy: 0.88))
         // 4-bar pivot window — replaced with 1-beat wallpaper grains at emit time.
@@ -1811,6 +1745,11 @@ enum AutoRemixPlanner {
             slots.append(Slot(songIdx: d1, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
         } else {
             slots.append(Slot(songIdx: 0, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
+        }
+
+        // Optional groove cameo after the first join (not before — keeps Drop 1 early).
+        if let g = grooveCameoIdx {
+            slots.append(Slot(songIdx: g, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.55))
         }
 
         if let b = breakdownCameoIdx {
@@ -2181,13 +2120,17 @@ enum AutoRemixPlanner {
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional pre-drop void — skipped when the previous window is
-            // the Xirex 4-bar pivot wallpaper (loop replaces the void).
-            let prevIsPivotWindow = pulseRegions.contains { region in
-                region.role == .buildOut
-                    && abs(region.timelineEnd - cursor) < 0.08
-                    && region.timelineEnd - region.timelineStart >= barSec * 1.5
-            }
+            // Intentional pre-drop void — skipped only for the Xirex pivot
+            // wallpaper handoff (hard cut after the 4-bar loop). Plain club
+            // drops (e.g. Drop 2 after an 8-bar build) still get the 1-beat void.
+            // Detect pivot by a reserved ~4-bar gap before the drop — not by any
+            // trailing buildOut pulse (return builds also end in buildOut).
+            let prevIsPivotWindow: Bool = {
+                guard let last = placed.last else { return false }
+                let lastEnd = last.timelineStart + last.timelineDuration
+                let gap = cursor - lastEnd
+                return gap >= barSec * 3.5 && gap <= barSec * 4.5
+            }()
             if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0, !prevIsPivotWindow {
                 let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
                 let pause = voidBeats * beatSec
@@ -2234,7 +2177,10 @@ enum AutoRemixPlanner {
             case .intro, .teaser: pulseRole = .introTease
             case .groove: pulseRole = .groove
             case .build: pulseRole = .build
-            case .chorus: pulseRole = .drop
+            case .chorus:
+                // Only hard-hype hook-replace is a Drop. The bed's completed
+                // chorus before the pivot stays "the record" (groove pulse).
+                pulseRole = entry == .hardHypeCut ? .drop : .groove
             case .breakdown: pulseRole = .breakdown
             case .ending: pulseRole = .outro
             }
@@ -2431,9 +2377,9 @@ enum AutoRemixPlanner {
             if entry == .cleanCrossfade, headSeconds == 0 {
                 bodyFadeIn = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
             }
-            // Xirex: hard cut into the hook-replace drop (no crossfade, no echo).
+            // Xirex: hard cut into the hook-replace drop (no crossfade, no fade-in).
             if entry == .hardHypeCut, headSeconds == 0 {
-                bodyFadeIn = ClipTransition(type: .crossfade, duration: 0.125)
+                bodyFadeIn = .none
                 bodyFadeOut = next == nil
                     ? bodyFadeOut
                     : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
@@ -2682,40 +2628,35 @@ enum AutoRemixPlanner {
                 }
             }
 
-            // Coordinated SFX — denser in remix; mashup drops still get a
-            // riser→impact deck so the third layer overlaps the outgoing phrase.
+            // Coordinated SFX — Drop 1 after pivot is diet (impact slam only).
             let isDropReveal = ps.slot.role == .chorus && entry == .hardHypeCut
 
             if i > 0, (allowMajorSFX || isDropReveal) {
                 switch entry {
                 case .hardHypeCut where isDropReveal || mode == .remix || ps.slot.isFinalPeak:
-                    // Two-deck: Drop 1 gets mix-window punctuation; Drop 2 is a flip (impact).
                     let isDrop1 = isDropReveal && !ps.slot.isFinalPeak
-                    if isDrop1 || mode == .remix {
-                        addSFXEnding(
-                            "riser",
-                            at: boundary,
-                            purpose: "riser into the drop"
-                        )
-                        addSFXEnding(
-                            "snareBuild",
-                            at: boundary,
-                            purpose: "snare into the drop"
-                        )
-                    }
+                    let pivotJoin = isDrop1 && decisions.contains { $0.kind == .pivotWallpaperLoop }
+                        || isDrop1 && placements.contains {
+                            $0.role == .supporting
+                                && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+                                && $0.timelineStart >= boundary - barSec * 4.5
+                                && $0.timelineStart < boundary - 0.02
+                        }
+                    // Pivot join: one slam. Plain Drop 2 / non-pivot: impact (+ optional crash).
                     addSFX("impact", at: boundary, purpose: "impact on the drop downbeat")
-                    let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
-                    if isDrop1, cymbalCount < 2 {
-                        addSFX("crash", at: boundary, purpose: "crash punctuation on drop")
-                    }
-                    if isDrop1, mashupFlavor.bias.maximalistStacks {
-                        addSFX("tapeStop", at: max(0, boundary - 0.35), purpose: "tape stop into drop")
+                    if !pivotJoin, !isDrop1 {
+                        let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
+                        if cymbalCount < 2 {
+                            addSFX("crash", at: boundary, purpose: "crash punctuation on drop")
+                        }
                     }
                     decisions.append(
                         AutoDecision(
                             kind: .addedRiserIntoDrop,
                             songTitle: nil,
-                            detail: ps.slot.isFinalPeak ? "drop 2 flip impact" : "mix-window drop 1"
+                            detail: pivotJoin
+                                ? "pivot hard-cut slam (impact only)"
+                                : (ps.slot.isFinalPeak ? "drop 2 flip impact" : "drop slam")
                         )
                     )
                     lastMajorSFXTime = boundary
@@ -2731,10 +2672,12 @@ enum AutoRemixPlanner {
                         lastMajorSFXTime = boundary
                     }
                 case .flangerBuild where mode == .remix || mode == .mashup:
-                    // Mix window: snare/riser through the build into the drop.
-                    addSFXEnding("snareBuild", at: boundary + ps.timelineDuration, purpose: "snare through the build")
-                    addSFXEnding("riser", at: boundary + ps.timelineDuration, purpose: "riser through the build")
-                    lastMajorSFXTime = boundary + ps.timelineDuration
+                    // Skip SFX on the 4-bar pivot window — grains + Drop 1 slam own it.
+                    if ps.slot.bars >= 8 {
+                        addSFXEnding("snareBuild", at: boundary + ps.timelineDuration, purpose: "snare through the build")
+                        addSFXEnding("riser", at: boundary + ps.timelineDuration, purpose: "riser through the build")
+                        lastMajorSFXTime = boundary + ps.timelineDuration
+                    }
                 case .atmosphericHandoff:
                     addSFX("downlifter", at: boundary, purpose: "downlifter into breakdown")
                     lastMajorSFXTime = boundary
@@ -2902,6 +2845,28 @@ enum AutoRemixPlanner {
             // Keep the pre-drop void as the only intentional hole.
             let voidBeforeNext = intentionalGaps.contains { abs($0.end - next.timelineStart) < 0.05 }
             if voidBeforeNext { continue }
+
+            // Xirex pivot hard cut: 1-beat grains fill the window before the
+            // drop — do NOT invent an equal-power fade-in (quiet → gradual).
+            let pivotBeforeNext = placements.contains { g in
+                g.role == .supporting
+                    && abs(g.timelineDuration - beatSec) < beatSec * 0.4
+                    && g.timelineStart >= next.timelineStart - barSec * 4.5
+                    && g.timelineStart < next.timelineStart - 0.02
+                    && g.timelineEnd <= next.timelineStart + 0.08
+            }
+            if pivotBeforeNext {
+                placements[nextIdx].fadeIn = .none
+                // Trim any dominant that spilled into the loop window.
+                if prev.timelineEnd > next.timelineStart - barSec * 3.9 {
+                    let trimmed = (next.timelineStart - barSec * 4) - prev.timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                        placements[prevIdx].fadeOut = .none
+                    }
+                }
+                continue
+            }
 
             // Source-continuous neighbors (energy-curve / no-cut path): do not
             // invent an overlap cut — that would manufacture internal edits.

@@ -576,6 +576,24 @@ nonisolated enum AutoRemixValidator {
             }
             if voidBefore { continue }
 
+            // Xirex pivot hard cut — never soften Drop 1 into an equal-power fade-in.
+            let beatSec = plan.beatSeconds
+            let barSec = plan.barSeconds
+            let pivotBefore = plan.placements.contains { g in
+                g.role == .supporting
+                    && abs(g.timelineDuration - beatSec) < beatSec * 0.4
+                    && g.timelineStart >= next.timelineStart - barSec * 4.5
+                    && g.timelineStart < next.timelineStart - 0.02
+                    && g.timelineEnd <= next.timelineStart + 0.08
+            } || plan.decisions.contains {
+                $0.kind == .pivotWallpaperLoop
+                    && ($0.detail ?? "").contains(String(format: "%.1f", next.timelineStart))
+            }
+            if pivotBefore {
+                plan.placements[nextIdx].fadeIn = .none
+                continue
+            }
+
             // Continuous source (energy-curve / no-cut path) — never invent an overlap cut.
             let prevSourceEnd = prev.sourceStart + prev.timelineDuration * prev.tempoRatio
             if next.continuesPrevious || abs(next.sourceStart - prevSourceEnd) < 0.05 {

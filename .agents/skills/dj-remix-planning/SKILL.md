@@ -36,8 +36,9 @@ is an optional ≤8-bar island, not the default. Never stack two full-mix kicks/
   chops, no riser spam, no guest vocal.
 - **Xirex pivot wallpaper** (gold standard): Deck A chorus/hook plays COMPLETE
   once; catch only the last 1-beat grain; loop it 8–16× (2–4 bars) with rising
-  HPF; hard cut into Deck B's hook on the same word. Not 1/8 stutter spam, not
-  tape stops, not verse decoration.
+  HPF; **hard cut** into Deck B's hook at full level on the downbeat (no fade-in).
+  Cut earlier (~bar 20 after intro + one hook + pivot). Diet SFX: loop + ≤1 slam.
+  Not 1/8 stutter spam, not tape/riser piles, not verse decoration.
 - **Semantic joins**: wait until a phrase finishes. Outro/end of A meets
   intro/hook of B (Mixxx AutoDJ phrase-match behavior; reimplement, don't
   copy GPL). AutoMashUpper still picks WHICH 8–16 bar islands belong together.
