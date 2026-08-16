@@ -126,12 +126,12 @@ do {
     check("Moderate kit gets no pulse layer",
           !mid.writesKick && !mid.writesBass && !mid.duckSourceLowEnd)
 
-    check("Pulse assets are Auto-only (not on manual SFX row)",
-          !SoundEffectLibrary.all.contains { $0.id == "clubKick" || $0.id == "clubBass" }
-              && SoundEffectLibrary.definition(for: "clubKick") != nil
-              && SoundEffectLibrary.definition(for: "clubBass") != nil)
-    check("Manual SFX row stays at the twelve one-shots",
-          SoundEffectLibrary.all.count == 12)
+    check("Club Kick and Club Bass are first-class SFX menu items",
+          SoundEffectLibrary.all.contains { $0.id == "clubKick" }
+              && SoundEffectLibrary.all.contains { $0.id == "clubBass" }
+              && SoundEffectLibrary.definition(for: "clubKick") != nil)
+    check("SFX library includes pulse alongside the classic one-shots",
+          SoundEffectLibrary.all.count >= 14)
 }
 
 do {

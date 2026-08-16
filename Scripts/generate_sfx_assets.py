@@ -350,6 +350,40 @@ def gen_air_sweep(duration=2.0, seed=12):
     return out
 
 
+def gen_club_kick(duration=0.18, seed=21):
+    """Short four-on-the-floor kick thump — soft attack, no click."""
+    n = int(duration * SR)
+    out = []
+    phase = 0.0
+    rng = random.Random(seed)
+    for i in range(n):
+        ts = i / SR
+        t = i / max(1, n - 1)
+        attack = min(1.0, t / 0.08)
+        env = attack * math.exp(-12.0 * ts / max(duration, 0.01))
+        freq = exp_interp(120.0, 48.0, min(1.0, ts / duration))
+        phase += 2.0 * math.pi * freq / SR
+        tone = math.sin(phase)
+        noise = rng.uniform(-1, 1) * 0.25
+        out.append((tone * 0.75 + noise) * env)
+    return out
+
+
+def gen_club_bass(duration=0.28, seed=22):
+    """Short sub / bass-weight hit for the club pulse layer."""
+    n = int(duration * SR)
+    out = []
+    phase = 0.0
+    for i in range(n):
+        ts = i / SR
+        t = i / max(1, n - 1)
+        attack = min(1.0, t / 0.05)
+        env = attack * math.exp(-8.0 * ts / max(duration, 0.01))
+        phase += 2.0 * math.pi * 45.0 / SR
+        out.append(math.sin(phase) * env)
+    return out
+
+
 # ── Manifest ─────────────────────────────────────────────────────────
 
 def main():
@@ -366,7 +400,9 @@ def main():
     write_wav("bass_drop.wav", gen_bass_drop(1.5))
     write_wav("tape_stop.wav", gen_tape_stop(1.0))
     write_wav("air_sweep.wav", gen_air_sweep(2.0))
-    print("Done — 12 assets.")
+    write_wav("club_kick.wav", gen_club_kick(0.18))
+    write_wav("club_bass.wav", gen_club_bass(0.28))
+    print("Done — 14 assets.")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ nonisolated enum AutoClubPulse {
         var detail: String
     }
 
-    /// One scheduled pulse hit on the SFX bus (Auto-only assets).
+    /// One scheduled pulse hit on the SFX bus (Club Kick / Club Bass menu assets).
     struct Hit: Sendable, Equatable {
         var assetID: String
         var timelineStart: Double

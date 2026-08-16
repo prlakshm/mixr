@@ -47,7 +47,7 @@ Target shape on the phrase grid (all structural cuts on phrase / downbeat bounda
 
 **Sound sources (product lock):**
 1. Clip effects panel only: reverb, echo, pitch, flanger, blur (existing presets). No new clip-effect types.
-2. SFX row only: the twelve bundled one-shots. Pulse kick/bass are Auto-only and not SFX-row cards.
+2. SFX row: the built-in one-shots, including **Club Kick** and **Club Bass** (first-class menu items Auto may also place).
 3. Arrangement: cuts, tempo/pocket, ducking/HPF, intentional pre-drop void.
 
 ## Tempo pockets
