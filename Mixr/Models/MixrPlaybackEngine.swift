@@ -25,11 +25,12 @@ import Combine
 //     moves are click-free and clip boundaries don't pop.
 //   • Effects at 0 resolve to true bypasses (EQ band/vocoder bypass, 0 wet)
 //     so untouched clips pay no processing cost and sound bit-identical.
-//   • The SFX track plays real audio buffers (bundled generated assets,
-//     procedurally synthesized as a fallback).
-//
-// A master peak limiter after the main mixer protects the summed output
-// when several boosted clips overlap.
+    //   • Every SFX timeline row plays real audio buffers (bundled generated
+    //     assets, procedurally synthesized as a fallback). Simultaneous
+    //     one-shots sit on adjacent SFX rows — each row has its own player.
+    //
+    // A master peak limiter after the main mixer protects the summed output
+    // when several boosted clips overlap.
 
 @MainActor
 final class MixrPlaybackEngine: ObservableObject {
@@ -43,7 +44,9 @@ final class MixrPlaybackEngine: ObservableObject {
     private let limiter = ClipEffectDSP.makePeakLimiter()
     private var limiterInstalled = false
     private var chains: [UUID: TrackChain] = [:]
-    private var sfxChain: SFXChain?
+    /// One player per SFX timeline row. Clips within a row never overlap;
+    /// simultaneous hits live on adjacent rows and need separate players.
+    private var sfxChains: [UUID: SFXChain] = [:]
     private var sfxBufferCache: [String: AVAudioPCMBuffer] = [:]
 
     /// (timelineSeconds at sync point, wall-clock seconds at sync point)
@@ -156,6 +159,7 @@ final class MixrPlaybackEngine: ObservableObject {
         for id in chains.keys where !live.contains(id) {
             removeChain(id: id)
         }
+        pruneSFXChains(liveIDs: Set(tracks.filter(\.isSFXTrack).map(\.id)))
 
         // Defer AVAudioEngine graph construction so launch UI can paint first.
         let pendingAdds = tracks.filter { !$0.isSFXTrack && chains[$0.id] == nil }
@@ -293,9 +297,11 @@ final class MixrPlaybackEngine: ObservableObject {
         if chain.securityScoped { chain.url.stopAccessingSecurityScopedResource() }
     }
 
-    private func ensureSFXChain(format: AVAudioFormat) -> SFXChain {
-        if let sfxChain, sfxChain.format == format { return sfxChain }
-        if let old = sfxChain {
+    private func ensureSFXChain(trackID: UUID, format: AVAudioFormat) -> SFXChain {
+        if let existing = sfxChains[trackID], existing.format == format {
+            return existing
+        }
+        if let old = sfxChains.removeValue(forKey: trackID) {
             old.player.stop()
             engine.detach(old.player)
         }
@@ -303,8 +309,17 @@ final class MixrPlaybackEngine: ObservableObject {
         chain.format = format
         engine.attach(chain.player)
         engine.connect(chain.player, to: engine.mainMixerNode, format: format)
-        sfxChain = chain
+        sfxChains[trackID] = chain
         return chain
+    }
+
+    private func pruneSFXChains(liveIDs: Set<UUID>) {
+        for id in sfxChains.keys where !liveIDs.contains(id) {
+            if let old = sfxChains.removeValue(forKey: id) {
+                old.player.stop()
+                engine.detach(old.player)
+            }
+        }
     }
 
     // MARK: - SFX buffers (bundled assets, synthesized fallback)
@@ -413,8 +428,11 @@ final class MixrPlaybackEngine: ObservableObject {
             if laneHasAudio[0] || laneHasAudio[1] { scheduled = true }
         }
 
-        // ── 5. SFX track: schedule each clip's buffer at its host time ──
-        if let sfxTrack = snapshot.first(where: { $0.isSFXTrack }) {
+        // ── 5. Every SFX row: schedule each clip's buffer at its host time ──
+        // One player per row so stacked hits on adjacent lanes actually sound.
+        let liveSFX = Set(snapshot.filter(\.isSFXTrack).map(\.id))
+        pruneSFXChains(liveIDs: liveSFX)
+        for sfxTrack in snapshot where sfxTrack.isSFXTrack {
             var pending: [(buffer: AVAudioPCMBuffer, delaySec: Double)] = []
 
             for clip in sfxTrack.clips.sorted(by: { $0.start < $1.start }) {
@@ -441,7 +459,7 @@ final class MixrPlaybackEngine: ObservableObject {
             }
 
             if let format = pending.first?.buffer.format {
-                let chain = ensureSFXChain(format: format)
+                let chain = ensureSFXChain(trackID: sfxTrack.id, format: format)
                 for item in pending where item.buffer.format == format {
                     chain.player.scheduleBuffer(
                         item.buffer,
@@ -531,7 +549,9 @@ final class MixrPlaybackEngine: ObservableObject {
         for chain in chains.values {
             for player in chain.players { player.stop() }
         }
-        sfxChain?.player.stop()
+        for chain in sfxChains.values {
+            chain.player.stop()
+        }
     }
 
     // MARK: - Live parameters (60 fps)
@@ -543,19 +563,23 @@ final class MixrPlaybackEngine: ObservableObject {
     private func applyTickParameters(at t: Double, force: Bool = false) {
         let soloAware = snapshot
 
-        // Policy ducking: the song bus dips smoothly under major SFX hits.
+        // Policy ducking: the song bus dips smoothly under major SFX hits
+        // from every SFX timeline row.
         var duckGain = 1.0
-        if let sfxTrack = snapshot.first(where: { $0.isSFXTrack }),
-           TrackLibrary.isAudible(sfxTrack, in: soloAware) {
-            let events = sfxTrack.clips.compactMap { clip -> AutoSFXEvent? in
-                guard let id = clip.soundEffectID else { return nil }
-                return AutoSFXEvent(
-                    assetID: id,
-                    timelineStart: MixrTimeline.seconds(fromUnits: clip.start),
-                    purpose: ""
-                )
+        let duckEvents: [AutoSFXEvent] = snapshot
+            .filter { $0.isSFXTrack && TrackLibrary.isAudible($0, in: soloAware) }
+            .flatMap { track in
+                track.clips.compactMap { clip -> AutoSFXEvent? in
+                    guard let id = clip.soundEffectID else { return nil }
+                    return AutoSFXEvent(
+                        assetID: id,
+                        timelineStart: MixrTimeline.seconds(fromUnits: clip.start),
+                        purpose: ""
+                    )
+                }
             }
-            duckGain = AutoGainPolicy.duckGain(at: t, sfxEvents: events)
+        if !duckEvents.isEmpty {
+            duckGain = AutoGainPolicy.duckGain(at: t, sfxEvents: duckEvents)
         }
 
         for track in snapshot where !track.isSFXTrack {
@@ -616,15 +640,16 @@ final class MixrPlaybackEngine: ObservableObject {
             chain.playerB.volume = chain.smoothedVolumeB
         }
 
-        if let sfxTrack = snapshot.first(where: { $0.isSFXTrack }), let sfxChain {
+        for sfxTrack in snapshot where sfxTrack.isSFXTrack {
+            guard let chain = sfxChains[sfxTrack.id] else { continue }
             let audible = TrackLibrary.isAudible(sfxTrack, in: soloAware)
             let target: Float = audible ? Float(sfxTrack.volume) : 0
             if force {
-                sfxChain.smoothedVolume = target
+                chain.smoothedVolume = target
             } else {
-                sfxChain.smoothedVolume += (target - sfxChain.smoothedVolume) * 0.45
+                chain.smoothedVolume += (target - chain.smoothedVolume) * 0.45
             }
-            sfxChain.player.volume = sfxChain.smoothedVolume
+            chain.player.volume = chain.smoothedVolume
         }
     }
 

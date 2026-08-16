@@ -591,7 +591,7 @@ do {
         check("stupid song keeps house 128", abs(plan.targetBPM - 128) < 0.5, "bpm=\(plan.targetBPM)")
         check("stupid song used energy-curve fallback",
               plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
-        let expectedBuildOut = AutoGainPolicy.songPlacementVolume(energy: 0.18)
+        let expectedBuildOut = AutoGainPolicy.songPlacementVolume(energy: 0.50)
         let expectedDrop = AutoGainPolicy.songPlacementVolume(energy: 1.0)
         check("energy curve volume model: build-out < drop",
               expectedBuildOut + 0.05 < expectedDrop,
@@ -629,28 +629,52 @@ do {
 }
 
 do {
-    // Britney duo: Oops = bed, BOMT = vocal, ~94, pitch bed not star.
+    // Britney duo — measured crate numbers (seed matches real bounce).
+    // Same midtempo pocket, equal vocal density: bed must be Oops (groove),
+    // not BOMT (raw drum 1.00). Pitch the bed toward the vocal.
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let signals: [UUID: SongSignalFeatures] = [
         bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
         oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
     ]
-    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 21, signals: signals) {
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
     case .success(_, let plan, _):
         check("BOMT+Oops target ~94", abs(plan.targetBPM - 94) < 1.5, "bpm=\(plan.targetBPM)")
-        check("BOMT+Oops bed is Oops", plan.mashupBedSongID == oops.id,
+        check("BOMT+Oops bed is Oops (not raw drum winner)", plan.mashupBedSongID == oops.id,
               "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")")
         check("BOMT+Oops vocal is BOMT", plan.mashupVocalSongID == bomt.id,
               "vocal=\(plan.mashupVocalSongID == bomt.id ? "BOMT" : plan.mashupVocalSongID == oops.id ? "Oops" : "?")")
-        let bedPitch = plan.placements.filter { $0.songID == oops.id }.map { $0.effects.pitchAmount }.max() ?? 0
-        let vocalPitch = plan.placements.filter { $0.songID == bomt.id }.map { $0.effects.pitchAmount }.max() ?? 0
-        check("BOMT+Oops bed |pitch| ≤ 2 st", bedPitch <= 2.0 / 3.0 + 0.001, String(format: "%.3f", bedPitch))
-        check("BOMT+Oops vocal pitch ≤ 2 st", vocalPitch <= 2.0 / 12.0 + 0.05, String(format: "%.3f", vocalPitch))
-        check("BOMT+Oops does not pitch the star vocal", vocalPitch <= 0.005 + 0.001,
-              String(format: "vocalPitch=%.3f bedPitch=%.3f", vocalPitch, bedPitch))
+        let bedPlacements = plan.placements.filter { $0.songID == oops.id }
+        let vocalPlacements = plan.placements.filter { $0.songID == bomt.id }
+        let bedPitch = bedPlacements.map { $0.effects.pitchAmount }.max() ?? 0
+        let vocalPitch = vocalPlacements.map { $0.effects.pitchAmount }.max() ?? 0
+        check("BOMT+Oops vocal pitch is 0", vocalPitch <= 0.005 + 0.001, String(format: "%.3f", vocalPitch))
+        check("BOMT+Oops |bed pitch| ≤ 2 st", bedPitch <= 2.0 / 3.0 + 0.001, String(format: "%.3f", bedPitch))
+        // Cm vocal / C#m bed → bed shifts down toward vocal (−1 st direction).
+        let bedDir = bedPlacements.first { $0.effects.pitchAmount > 0.005 }?.effects.pitchDirection
+        check("BOMT+Oops pitches bed toward vocal (down)",
+              bedPitch <= 0.005 || bedDir == .down,
+              "dir=\(bedDir.map { "\($0)" } ?? "none") amount=\(bedPitch)")
     case .failure(let message):
         check("BOMT+Oops mashup", false, message)
+    }
+}
+
+do {
+    // Track order reversed — still Oops bed / BOMT vocal.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [oops, bomt], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        check("BOMT+Oops reversed order still Oops bed", plan.mashupBedSongID == oops.id)
+        check("BOMT+Oops reversed order still BOMT vocal", plan.mashupVocalSongID == bomt.id)
+    case .failure(let message):
+        check("BOMT+Oops reversed order", false, message)
     }
 }
 
@@ -683,6 +707,45 @@ do {
 }
 
 do {
+    // All-5 crate: must not park festival All I Wanted (144) as bed at ~95.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let stupid = makeSong(title: "stupid song", bpm: 128, key: "C", color: .yellow)
+    let paramore = makeSong(title: "All I Wanted", bpm: 144, key: "Em", color: .purple)
+    let tatu = makeSong(title: "All The Things She Said", bpm: 90, key: "Am", color: .red)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+        stupid.id: crateFeatures(duration: 180, bpm: 128, drum: 0.19, bass: 0.46, vocal: 0.51, confidence: 0.46),
+        paramore.id: crateFeatures(duration: 220, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50),
+        tatu.id: crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(
+        tracks: [bomt, oops, stupid, paramore, tatu],
+        seed: 20260815,
+        signals: signals
+    ) {
+    case .success(_, let plan, _):
+        check("All-5 bed is not Paramore parked at midtempo",
+              plan.mashupBedSongID != paramore.id || abs(plan.targetBPM - 144) < 1,
+              "bed=\(plan.mashupBedSongID == paramore.id ? "Paramore" : "other") bpm=\(plan.targetBPM)")
+        check("All-5 does not park a 144 bed at ~95",
+              !(plan.mashupBedSongID == paramore.id && plan.targetBPM < 110),
+              "bedBPM=\(plan.targetBPM)")
+        // Bed's native pocket should match the arrangement target.
+        if let bedID = plan.mashupBedSongID {
+            let bedTrack = [bomt, oops, stupid, paramore, tatu].first { $0.id == bedID }
+            let bedBPM = Double(bedTrack?.bpm ?? 0)
+            check("All-5 target stays near bed pocket",
+                  abs(plan.targetBPM - bedBPM) / max(bedBPM, 1) <= 0.12,
+                  "target=\(plan.targetBPM) bedNative=\(bedBPM)")
+        }
+    case .failure(let message):
+        check("All-5 crate mashup", false, message)
+    }
+}
+
+do {
     let song = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm")
     let feat = crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 5, signals: [song.id: feat]) {
@@ -701,6 +764,182 @@ do {
         }
     case .failure(let message):
         check("Britney solo remix", false, message)
+    }
+}
+
+do {
+    // Non-void handoffs must declare real temporal overlap (continuous energy).
+    let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
+    let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 42, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        let dominants = plan.placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        var blendedJoins = 0
+        var voidSkipped = 0
+        for (prev, next) in zip(dominants, dominants.dropFirst()) {
+            let voidBefore = plan.intentionalGaps.contains {
+                $0.reason.contains("void") && abs($0.end - next.timelineStart) < 0.05
+            }
+            if voidBefore {
+                voidSkipped += 1
+                continue
+            }
+            let overlap = prev.timelineEnd - next.timelineStart
+            let declared = next.overlapsPreviousSeconds
+            check(
+                "Handoff overlap seconds > 0",
+                overlap > 0.05 && declared > 0.05,
+                String(format: "overlap=%.3f declared=%.3f at t=%.2f", overlap, declared, next.timelineStart)
+            )
+            blendedJoins += 1
+        }
+        check("At least one blended handoff exists", blendedJoins > 0, "joins=\(blendedJoins) voids=\(voidSkipped)")
+        check(
+            "Intentional gaps are only pre-drop voids",
+            plan.intentionalGaps.allSatisfy { $0.reason.contains("void") },
+            plan.intentionalGaps.map(\.reason).joined(separator: ",")
+        )
+    case .failure(let message):
+        check("Handoff overlap remix", false, message)
+    }
+}
+
+do {
+    // DJ-level layering: drop vocal must overlap bed deck in time.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        guard let bedID = plan.mashupBedSongID, let vocalID = plan.mashupVocalSongID else {
+            check("Mashup bed under hook roles present", false, "missing roles")
+            break
+        }
+        let dropLeads = plan.placements.filter {
+            $0.songID == vocalID && $0.role == .dominant
+        }
+        let bedLayers = plan.placements.filter {
+            $0.songID == bedID && $0.role == .supporting
+        }
+        var layered = false
+        for drop in dropLeads {
+            for bed in bedLayers {
+                let overlap = min(drop.timelineEnd, bed.timelineEnd) - max(drop.timelineStart, bed.timelineStart)
+                if overlap > plan.barSeconds {
+                    layered = true
+                    check("Bed under drop stays audible (not muted)", bed.volume >= 0.70,
+                          String(format: "vol=%.2f", bed.volume))
+                    check("Bed under drop carves mids (HPF/blur), not mute",
+                          bed.effects.level(for: MixrEffect.blur.rawValue) >= 20)
+                }
+            }
+        }
+        check("Drop placement overlaps bed placement in time", layered,
+              "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
+
+        // Riser must start during the outgoing phrase (before the cut/downbeat).
+        let risers = plan.sfxEvents.filter { $0.assetID == "riser" || $0.assetID == "snareBuild" }
+        let impacts = plan.sfxEvents.filter { $0.assetID == "impact" }
+        check("Mashup emits riser into drop", !risers.isEmpty)
+        for riser in risers {
+            let cut = impacts.first(where: { abs($0.timelineStart - riser.timelineEnd) < 0.4 })?.timelineStart
+                ?? dropLeads.map(\.timelineStart).min()
+            if let cut {
+                check(
+                    "Riser overlaps outgoing phrase (starts before cut)",
+                    riser.timelineStart < cut - 0.25,
+                    String(format: "riserStart=%.2f cut=%.2f", riser.timelineStart, cut)
+                )
+            }
+        }
+    case .failure(let message):
+        check("Bed under hook mashup", false, message)
+    }
+}
+
+do {
+    // Simultaneous SFX land on separate SFX rows (per-row non-overlap).
+    var tracks: [MixrTrack] = [
+        makeSong(title: "Stack Fixture", bpm: 128, key: "C", durationSeconds: 60)
+    ]
+    let riser = SoundEffectLibrary.definition(for: "riser")!
+    let impact = SoundEffectLibrary.definition(for: "impact")!
+    let t = MixrTimeline.units(fromSeconds: 8)
+    // Impact at the same instant the riser ends — classic drop stack.
+    SoundEffectLibrary.placeExact(definition: riser, atUnit: t - riser.lengthUnits, into: &tracks)
+    SoundEffectLibrary.placeExact(definition: impact, atUnit: t, into: &tracks)
+    // Force a same-timestamp collision: second impact needs another row.
+    SoundEffectLibrary.placeExact(definition: impact, atUnit: t, into: &tracks)
+    let sfxTracks = tracks.filter(\.isSFXTrack)
+    check("Two simultaneous SFX create ≥2 SFX tracks", sfxTracks.count >= 2,
+          "sfxRows=\(sfxTracks.count)")
+    let startsAtT = sfxTracks.flatMap(\.clips).filter { abs($0.start - t) < 0.5 }
+    check("Two SFX events can share a timestamp across rows", startsAtT.count >= 2,
+          "clipsAtT=\(startsAtT.count)")
+    for row in sfxTracks {
+        for (a, b) in zip(row.clips.sorted { $0.start < $1.start },
+                          row.clips.sorted { $0.start < $1.start }.dropFirst()) {
+            check(
+                "Per SFX row clips do not overlap",
+                a.start + a.length <= b.start + MixrTimeline.clipEdgeEpsilon,
+                String(format: "row clips %.1f…%.1f vs %.1f", a.start, a.start + a.length, b.start)
+            )
+        }
+    }
+
+    // Applier packing: plan with overlapping musical SFX → multi-row apply.
+    let song = tracks.first { !$0.isSFXTrack }!
+    let feat = crateFeatures(duration: 180, bpm: 128, drum: 0.2, bass: 0.5, vocal: 0.5, confidence: 0.2)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 11, signals: [song.id: feat]) {
+    case .success(let applied, let plan, _):
+        let dropSFX = plan.sfxEvents.filter { ["riser", "snareBuild", "impact"].contains($0.assetID) }
+        if dropSFX.count >= 2 {
+            let appliedSFX = applied.filter(\.isSFXTrack)
+            let times = Dictionary(grouping: dropSFX, by: { Int(($0.timelineStart * 100).rounded()) })
+            let colliding = times.values.contains { $0.count >= 2 }
+                || dropSFX.contains { a in
+                    dropSFX.contains { b in
+                        a.assetID != b.assetID
+                            && abs(a.timelineStart - b.timelineStart) < 0.05
+                    }
+                }
+            // Riser ends at impact time; applier must not slide them onto one row.
+            let impactEvents = plan.sfxEvents.filter { $0.assetID == "impact" }
+            let risers = plan.sfxEvents.filter { $0.assetID == "riser" || $0.assetID == "snareBuild" }
+            var needsTwoRows = colliding
+            for impact in impactEvents {
+                for r in risers {
+                    let rEnd = r.timelineEnd
+                    if abs(rEnd - impact.timelineStart) < 0.35 || abs(r.timelineStart - impact.timelineStart) < 0.05 {
+                        needsTwoRows = true
+                    }
+                }
+            }
+            if needsTwoRows {
+                check("Auto apply uses multiple SFX rows when hits collide",
+                      appliedSFX.count >= 2 || appliedSFX.flatMap(\.clips).count >= 2,
+                      "sfxTracks=\(appliedSFX.count) clips=\(appliedSFX.flatMap(\.clips).count)")
+            }
+            // Same-timestamp musical SFX must not share one row.
+            for row in appliedSFX {
+                let byStart = Dictionary(grouping: row.clips) { Int(($0.start * 10).rounded()) }
+                let overlapOnRow = byStart.values.contains { group in
+                    group.count > 1 && zip(group, group.dropFirst()).contains { a, b in
+                        a.start < b.start + b.length && b.start < a.start + a.length
+                    }
+                }
+                check("Applied SFX row has no overlapping clips", !overlapOnRow)
+            }
+        } else {
+            check("Energy-curve plan emits drop SFX", !dropSFX.isEmpty)
+        }
+    case .failure(let message):
+        check("SFX multi-row apply", false, message)
     }
 }
 

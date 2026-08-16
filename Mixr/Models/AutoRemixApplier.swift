@@ -7,7 +7,9 @@ import Foundation
 //
 // Turns a VALIDATED AutoRemixPlan into concrete MixrTrack clip arrays.
 // Songs keep their tracks (id, color, mix state); only clips are rebuilt.
-// The SFX track's clips are replaced by the plan's coordinated events.
+// SFX: clips are packed onto one or more SFX rows with per-row
+// nonOverlappingStart. Simultaneous hits (riser + impact + pulse) land on
+// adjacent SFX rows — same as a user dragging a one-shot up/down.
 // Returns the applied plan so the summary reflects skipped SFX / repairs.
 // The caller wraps the whole apply in one undo snapshot.
 
@@ -53,11 +55,16 @@ nonisolated enum AutoRemixApplier {
         }
         let allSFX = (plan.sfxEvents + pulseHits).sorted { $0.timelineStart < $1.timelineStart }
 
-        // ── SFX track: replace with the plan's events (skip unknowns) ──
+        // Reset every SFX row, then pack exact-time hits across rows.
+        for ti in result.indices where result[ti].isSFXTrack {
+            result[ti].clips = []
+        }
+
         var placedSFX: [AutoSFXEvent] = []
         if !allSFX.isEmpty {
-            let idx = ensureSFXTrack(in: &result)
-            var clips: [MixrClip] = []
+            if !result.contains(where: { $0.isSFXTrack }) {
+                result.append(SoundEffectLibrary.makeSFXTrack(primary: true))
+            }
             for event in allSFX {
                 guard let definition = SoundEffectLibrary.definition(for: event.assetID) else {
                     appliedPlan.decisions.append(
@@ -72,38 +79,37 @@ nonisolated enum AutoRemixApplier {
                     )
                     continue
                 }
-                let isPulse = SoundEffectLibrary.isPulseLayer(definition.id)
-                let placedStart: CGFloat
-                if isPulse {
-                    // Pulse hits stay on the beat grid — never slide.
-                    placedStart = MixrTimeline.units(fromSeconds: max(0, event.timelineStart))
-                } else {
-                    placedStart = SoundEffectLibrary.nonOverlappingStart(
-                        proposedStart: MixrTimeline.units(fromSeconds: max(0, event.timelineStart)),
-                        lengthUnits: definition.lengthUnits,
-                        in: clips
-                    )
-                }
-                clips.append(
-                    MixrClip(
-                        id: UUID(),
-                        start: placedStart,
-                        length: definition.lengthUnits,
-                        soundEffectID: definition.id
-                    )
+                let unit = MixrTimeline.units(fromSeconds: max(0, event.timelineStart))
+                SoundEffectLibrary.placeExact(
+                    definition: definition,
+                    atUnit: unit,
+                    into: &result
                 )
-                // Keep musical SFX on the applied plan; pulse stays region-driven.
-                if !isPulse {
+                if !SoundEffectLibrary.isPulseLayer(definition.id) {
                     placedSFX.append(event)
                 }
             }
-            result[idx].clips = clips
-        } else if let idx = result.firstIndex(where: { $0.isSFXTrack }) {
-            result[idx].clips = []
+            // Drop unused empty spill lanes (keep the primary / top SFX row).
+            pruneEmptySecondarySFXTracks(&result)
+        } else {
+            pruneEmptySecondarySFXTracks(&result)
         }
 
         appliedPlan.sfxEvents = placedSFX
         return Applied(tracks: result, plan: appliedPlan)
+    }
+
+    /// Removes empty SFX spill lanes; keeps the first (top) SFX row even if empty.
+    private static func pruneEmptySecondarySFXTracks(_ tracks: inout [MixrTrack]) {
+        var seenPrimary = false
+        tracks.removeAll { track in
+            guard track.isSFXTrack else { return false }
+            if !seenPrimary {
+                seenPrimary = true
+                return false
+            }
+            return track.clips.isEmpty
+        }
     }
 
     // MARK: - Clip construction
@@ -124,28 +130,5 @@ nonisolated enum AutoRemixApplier {
             soundEffectID: nil,
             sourceOffsetSeconds: max(0, p.sourceStart)
         )
-    }
-
-    private static func ensureSFXTrack(in tracks: inout [MixrTrack]) -> Int {
-        if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
-        tracks.append(
-            MixrTrack(
-                id: UUID(),
-                title: "Sound Effects",
-                artist: "Built-in SFX",
-                duration: "",
-                durationSeconds: nil,
-                bpm: nil,
-                key: nil,
-                color: .silver,
-                volume: 0.85,
-                isMuted: false,
-                trackType: .soundEffect,
-                url: nil,
-                artworkData: nil,
-                clips: []
-            )
-        )
-        return tracks.count - 1
     }
 }

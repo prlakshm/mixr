@@ -86,12 +86,17 @@ enum SoundEffectLibrary {
         pulseLayerIDs.contains(id)
     }
 
-    // MARK: - Collision-free placement
+    // MARK: - Collision-free placement (per SFX row)
 
-    /// Resolves a non-overlapping start on the SFX track:
+    /// Resolves a non-overlapping start on ONE SFX track:
     /// starting at `proposedStart`, while the proposed range overlaps an
     /// existing clip, slide the start to the end of that clip and retry.
     /// Never returns a negative start.
+    ///
+    /// Clips on a single SFX row never overlap. To stack riser + impact +
+    /// pulse at the same time, place the colliding hit on an adjacent SFX
+    /// row (`placeExact` / Auto Remix extra tracks) — same as a user
+    /// dragging a one-shot up or down.
     static func nonOverlappingStart(
         proposedStart: CGFloat,
         lengthUnits: CGFloat,
@@ -117,5 +122,87 @@ enum SoundEffectLibrary {
         }
 
         return max(0, start)
+    }
+
+    /// True when `proposedStart` can host `lengthUnits` on this row without sliding.
+    static func fitsExactly(
+        proposedStart: CGFloat,
+        lengthUnits: CGFloat,
+        in clips: [MixrClip],
+        epsilon: CGFloat = MixrTimeline.clipEdgeEpsilon
+    ) -> Bool {
+        let want = max(0, proposedStart)
+        let resolved = nonOverlappingStart(
+            proposedStart: want,
+            lengthUnits: lengthUnits,
+            in: clips,
+            epsilon: epsilon
+        )
+        return abs(resolved - want) <= epsilon
+    }
+
+    /// Empty SFX timeline row (primary or spill lane). Extra lanes share the
+    /// SFX gradient in the UI but only the top row shows chip/headings.
+    static func makeSFXTrack(primary: Bool = true) -> MixrTrack {
+        MixrTrack(
+            id: UUID(),
+            title: primary ? "Sound Effects" : "Sound Effects",
+            artist: primary ? "Built-in SFX" : "",
+            duration: "",
+            durationSeconds: nil,
+            bpm: nil,
+            key: nil,
+            color: .silver,
+            volume: 0.85,
+            isMuted: false,
+            trackType: .soundEffect,
+            url: nil,
+            artworkData: nil,
+            clips: []
+        )
+    }
+
+    /// Places a one-shot at an exact timeline unit: first SFX row that fits
+    /// without sliding, else appends a new SFX row (editor-style stacking).
+    /// Returns the track index used.
+    @discardableResult
+    static func placeExact(
+        definition: SoundEffectDefinition,
+        atUnit unit: CGFloat,
+        into tracks: inout [MixrTrack],
+        clipID: UUID = UUID()
+    ) -> Int {
+        let want = max(0, unit)
+        let sfxIndices = tracks.indices.filter { tracks[$0].isSFXTrack }
+        for idx in sfxIndices {
+            if fitsExactly(
+                proposedStart: want,
+                lengthUnits: definition.lengthUnits,
+                in: tracks[idx].clips
+            ) {
+                tracks[idx].clips.append(
+                    MixrClip(
+                        id: clipID,
+                        start: want,
+                        length: definition.lengthUnits,
+                        soundEffectID: definition.id
+                    )
+                )
+                tracks[idx].clips.sort { $0.start < $1.start }
+                return idx
+            }
+        }
+        let primary = sfxIndices.isEmpty
+        tracks.append(makeSFXTrack(primary: primary))
+        let idx = tracks.count - 1
+        tracks[idx].clips.append(
+            MixrClip(
+                id: clipID,
+                start: want,
+                length: definition.lengthUnits,
+                soundEffectID: definition.id
+            )
+        )
+        return idx
     }
 }

@@ -231,8 +231,18 @@ do {
             .filter { $0.element.role == .dominant }
             .sorted { $0.element.timelineStart < $1.element.timelineStart }
         if dominants.count >= 2 {
+            let firstIdx = dominants[0].offset
             let secondIdx = dominants[1].offset
             let threshold = dominants[1].element.timelineStart
+            // Equal-power blends may already overlap same-song neighbors —
+            // trim to a butt join so the +1s shift creates a real hole.
+            if broken.placements[firstIdx].timelineEnd > threshold - 0.001 {
+                let trimmed = threshold - broken.placements[firstIdx].timelineStart
+                if trimmed > 0.05 {
+                    broken.placements[firstIdx].timelineDuration = trimmed
+                }
+            }
+            broken.placements[secondIdx].overlapsPreviousSeconds = 0
             broken.placements[secondIdx].timelineStart += 1.0
             for i in broken.placements.indices where i != secondIdx
                 && broken.placements[i].timelineStart >= threshold - 0.001 {

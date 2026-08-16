@@ -206,19 +206,15 @@ private struct TimelineEditor {
 
     // MARK: SFX
 
-    /// Adds an SFX clip at a unit using the shared collision rule.
+    /// Adds an SFX clip at an exact unit. If it would collide on the current
+    /// SFX row, places it on an adjacent SFX row (editor-style stacking).
     mutating func addSFX(_ definitionID: String, atUnit unit: CGFloat) {
         guard let definition = SoundEffectLibrary.definition(for: definitionID) else { return }
-        let idx = ensureSFXTrack()
-        let start = SoundEffectLibrary.nonOverlappingStart(
-            proposedStart: max(0, unit),
-            lengthUnits: definition.lengthUnits,
-            in: tracks[idx].clips
+        SoundEffectLibrary.placeExact(
+            definition: definition,
+            atUnit: max(0, unit),
+            into: &tracks
         )
-        tracks[idx].clips.append(
-            MixrClip(id: UUID(), start: start, length: definition.lengthUnits, soundEffectID: definition.id)
-        )
-        tracks[idx].clips.sort { $0.start < $1.start }
     }
 
     /// Adds an SFX so it ENDS at `unit` (risers/builds into a drop).
@@ -228,29 +224,6 @@ private struct TimelineEditor {
         let start = unit - definition.lengthUnits
         guard start >= 0 else { return }
         addSFX(definitionID, atUnit: start)
-    }
-
-    private mutating func ensureSFXTrack() -> Int {
-        if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
-        tracks.append(
-            MixrTrack(
-                id: UUID(),
-                title: "Sound Effects",
-                artist: "Built-in SFX",
-                duration: "",
-                durationSeconds: nil,
-                bpm: nil,
-                key: nil,
-                color: .silver,
-                volume: 0.85,
-                isMuted: false,
-                trackType: .soundEffect,
-                url: nil,
-                artworkData: nil,
-                clips: []
-            )
-        )
-        return tracks.count - 1
     }
 }
 

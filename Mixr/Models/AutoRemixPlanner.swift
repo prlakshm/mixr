@@ -404,7 +404,8 @@ enum AutoRemixPlanner {
             if slot.role == .build, buildBodyBars < timelineBars {
                 segments = [
                     (buildBodyBars, .build, slot.energy * 0.85),
-                    (timelineBars - buildBodyBars, .buildOut, 0.18),
+                    // Build-out: kick mute / filter — keep audible energy (not dead air).
+                    (timelineBars - buildBodyBars, .buildOut, 0.52),
                 ]
             } else {
                 segments = [(timelineBars, regionRole, slot.energy)]
@@ -583,6 +584,18 @@ enum AutoRemixPlanner {
             barSeconds: bar
         )
 
+        // Blend every join except the intentional pre-drop void — equal-power
+        // overlaps so verse→build→drop stays continuous (void is the only hole).
+        blendAdjacentHandoffs(
+            placements: &placements,
+            intentionalGaps: intentionalGaps,
+            songDurations: [profile.songID: analysis.durationSeconds],
+            barSec: bar,
+            beatSec: beat,
+            tuning: tuning,
+            cutRecords: &cutRecords
+        )
+
         let totalDuration = placements.map(\.timelineEnd).max() ?? cursor
         return AutoRemixPlan(
             mode: .remix,
@@ -647,11 +660,11 @@ enum AutoRemixPlanner {
             .init(fracEnd: 0.16, energy: 0.42, role: .introTease),
             .init(fracEnd: 0.30, energy: 0.55, role: .groove),
             .init(fracEnd: 0.40, energy: 0.62, role: .build),
-            .init(fracEnd: 0.48, energy: 0.18, role: .buildOut), // subtraction
+            .init(fracEnd: 0.48, energy: 0.50, role: .buildOut), // filtered, not dead
             .init(fracEnd: 0.62, energy: 1.00, role: .drop),
-            .init(fracEnd: 0.72, energy: 0.32, role: .breakdown),
+            .init(fracEnd: 0.72, energy: 0.40, role: .breakdown),
             .init(fracEnd: 0.80, energy: 0.58, role: .build),
-            .init(fracEnd: 0.86, energy: 0.18, role: .buildOut),
+            .init(fracEnd: 0.86, energy: 0.48, role: .buildOut),
             .init(fracEnd: 0.96, energy: 1.00, role: .drop),
             .init(fracEnd: 1.00, energy: 0.45, role: .outro),
         ]
@@ -667,7 +680,7 @@ enum AutoRemixPlanner {
 
         var fracStart = 0.0
         for (i, seg) in curve.enumerated() {
-            var t0 = snapToBar(timelineDur * fracStart)
+            let t0 = snapToBar(timelineDur * fracStart)
             var t1 = snapToBar(timelineDur * seg.fracEnd)
             if t1 <= t0 { t1 = t0 + bar }
             fracStart = seg.fracEnd
@@ -732,17 +745,16 @@ enum AutoRemixPlanner {
                 volume *= AutoGainPolicy.pulseDuckedSongVolumeScale
             }
 
-            // Source follows timeline except across an intentional void, where
-            // playback pauses (source does not skip ahead with the gap).
-            let acrossVoid = intentionalGaps.last.map { abs($0.end - t0) < 0.02 } ?? false
+            // Source follows the timeline as one continuous reading. Bar snaps
+            // may leave tiny timeline adjacencies, but never invent source cuts.
             let sourceStart: Double
             let sourceContinuous: Bool
-            if acrossVoid, let prev = placements.last {
+            if let prev = placements.last {
                 sourceStart = prev.sourceEnd
                 sourceContinuous = true
             } else {
-                sourceStart = usableStart + t0 * ratio
-                sourceContinuous = placements.last.map { abs($0.sourceEnd - sourceStart) < 0.05 } ?? false
+                sourceStart = usableStart
+                sourceContinuous = false
             }
 
             placements.append(
@@ -779,6 +791,9 @@ enum AutoRemixPlanner {
         )
         // Hits are materialized at apply/render — keep sfxEvents musical-only.
         _ = hits
+
+        // No invented handoff overlaps on the continuous energy-curve path —
+        // source stays contiguous; only the pre-drop void is a timeline hole.
 
         let section = AutoSelectedSection(
             songID: profile.songID,
@@ -1181,11 +1196,10 @@ enum AutoRemixPlanner {
     }
 
     /// Choose the club bed for an N-song mashup.
-    /// - Different pockets: prefer the bed whose pocket (house/festival)
-    ///   keeps guests as full hooks or legal cameos — not the highest
-    ///   raw drumConfidence (Paramore 144 over t.A.T.u. 90).
-    /// - Same pocket: strongest feature/hook is the vocal; the other song
-    ///   is the bed (Oops bed / BOMT vocal — not max drum).
+    /// - Same pocket duo: star topline = vocal, partner = bed. Never assign
+    ///   bed by raw max drumConfidence (BOMT 1.00 must not beat Oops 0.71).
+    /// - Cross-pocket / N>2: prefer a bed whose native pocket the arrangement
+    ///   will actually keep (no parking a 144 festival bed at 95).
     private static func chooseClubBed(
         pool: [AutoSongProfile],
         tuning: AutoTuning
@@ -1198,25 +1212,42 @@ enum AutoRemixPlanner {
             let pa = AutoClubTempo.classify(a.analysis.bpm)
             let pb = AutoClubTempo.classify(b.analysis.bpm)
             if let pa, let pb, pa == pb {
-                // Same pocket: strongest star/hook is the vocal; the other is the bed.
-                // Tie-break with vocal density then a light drum bias so the iconic
-                // pop vocal (BOMT) wins over the groove partner (Oops) — never
-                // assign bed solely by max drumConfidence.
-                func starScore(_ p: AutoSongProfile) -> Double {
-                    let vocal = p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds)
-                    return p.featureScore * 1.0 + vocal * 0.2 + p.analysis.drumStrength * 0.05
-                }
-                if starScore(a) >= starScore(b) { return b }
-                return a
+                return samePocketDuoBed(a, b)
             }
         }
 
         return pool.max { bedFitness($0, pool: pool, tuning: tuning) < bedFitness($1, pool: pool, tuning: tuning) }
     }
 
-    /// Bed fitness across pockets: pocket rank + guest compatibility +
-    /// light groove — drums alone must not invert a festival bed under a
-    /// midtempo drum hit.
+    /// Same-pocket duo bed. When both songs have similar vocal density
+    /// (typical Britney-class midtempo pair), pick the bed by soft-capped
+    /// groove — raw drum 1.00 must not steal the bed from drum 0.71. When
+    /// one song is clearly the topline (much higher vocal), that song is
+    /// the vocal and the partner is the bed.
+    private static func samePocketDuoBed(_ a: AutoSongProfile, _ b: AutoSongProfile) -> AutoSongProfile {
+        let vocalA = a.analysis.meanVocalDensity(from: 0, to: a.analysis.durationSeconds)
+        let vocalB = b.analysis.meanVocalDensity(from: 0, to: b.analysis.durationSeconds)
+
+        if abs(vocalA - vocalB) > 0.08 {
+            // Clear topline vs groove partner.
+            return vocalA >= vocalB ? b : a
+        }
+
+        // Dual pop vocals in the same pocket — bed by groove fitness with a
+        // soft drum cap so slamming pop production cannot win the bed seat.
+        // Do not use featureScore here: real chorus detection can rate the
+        // groove partner as "hookier" and would invert BOMT/Oops again.
+        func grooveBedScore(_ p: AutoSongProfile) -> Double {
+            let drum = min(p.analysis.drumStrength, 0.72)
+            let bass = p.analysis.bassDensity
+            return drum * 0.40 + bass * 0.60
+        }
+        return grooveBedScore(a) >= grooveBedScore(b) ? a : b
+    }
+
+    /// Bed fitness across pockets: must keep the bed's native pocket on the
+    /// timeline. A festival bed that would resolve to a midtempo median is
+    /// disqualified (all-5 crate → no 144 song parked at 95).
     private static func bedFitness(
         _ candidate: AutoSongProfile,
         pool: [AutoSongProfile],
@@ -1234,6 +1265,15 @@ enum AutoRemixPlanner {
         case nil: pocketRank = 0.35
         }
 
+        // Will AutoTempo.targetBPM actually keep this bed's pocket?
+        let resolvedTarget = AutoTempo.targetBPM(
+            profiles: pool,
+            anchorID: candidate.songID,
+            maxStretch: tuning.maxInstrumentalStretch
+        )
+        let keepsPocket = abs(resolvedTarget - bedBPM) / max(bedBPM, 1) <= 0.10
+        let pocketKeepScore: Double = keepsPocket ? 1.0 : 0.05
+
         var guestScore = 0.0
         for g in guests {
             let decision = AutoClubTempo.mashupDecision(
@@ -1242,25 +1282,32 @@ enum AutoRemixPlanner {
                 maxVocalStretch: tuning.maxStretch,
                 maxInstrumentalStretch: tuning.maxInstrumentalStretch
             )
-            if decision.ok {
+            if decision.ok, abs(decision.targetBPM - bedBPM) / max(bedBPM, 1) <= 0.10 {
                 guestScore += 1.0
+            } else if decision.ok {
+                guestScore += 0.25
             } else {
-                // Still usable as a native-tempo cameo / chop.
-                guestScore += 0.45
+                // Cameo at native tempo — fine, but does not justify yanking the bed.
+                guestScore += 0.35
             }
         }
         let guestNorm = guestScore / Double(max(guests.count, 1))
 
-        let groove = candidate.analysis.drumStrength * 0.12
+        // Soft-cap drums so raw 1.00 cannot dominate bed choice.
+        let groove = min(candidate.analysis.drumStrength, 0.72) * 0.10
             + candidate.analysis.bassDensity * 0.08
         let meanVocal = candidate.analysis.meanVocalDensity(
             from: 0, to: candidate.analysis.durationSeconds
         )
-        let instrumental = (1.0 - min(1, meanVocal)) * 0.12
-        // Prefer confident analysis when claiming a festival/house bed.
-        let conf = candidate.analysis.analysisConfidence * 0.08
+        let instrumental = (1.0 - min(1, meanVocal)) * 0.10
+        let conf = candidate.analysis.analysisConfidence * 0.05
 
-        return pocketRank * 0.42 + guestNorm * 0.32 + groove + instrumental + conf
+        return pocketKeepScore * 0.40
+            + pocketRank * 0.20
+            + guestNorm * 0.22
+            + groove
+            + instrumental
+            + conf
     }
 
     /// Legacy single-song bed heuristic (tests / debugging).
@@ -1773,22 +1820,33 @@ enum AutoRemixPlanner {
                     duration: headSeconds,
                     fx: headFX,
                     volume: baseVolume * 0.92,
-                    fadeIn: ClipTransition(type: .crossfade, duration: 4),
+                    fadeIn: ClipTransition(
+                        type: .crossfade,
+                        duration: 4,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName
+                    ),
                     fadeOut: .none
                 ))
             }
 
             let bodyStart = headSeconds
             let bodyDuration = ps.timelineDuration - headSeconds - tailSeconds
-            var bodyFadeIn: ClipTransition = headSeconds > 0 ? .none : ClipTransition(type: .crossfade, duration: 1)
-            var bodyFadeOut: ClipTransition = tailSeconds > 0 ? .none : ClipTransition(type: .fadeOut, duration: 1)
+            let equalPower = AutoTransitionEnvelope.equalPowerCurveName
+            // Never fade both neighbors toward silence — equal-power crossfade
+            // keeps energy continuous through handoffs (void is the only hole).
+            var bodyFadeIn: ClipTransition = headSeconds > 0
+                ? .none
+                : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
+            var bodyFadeOut: ClipTransition = tailSeconds > 0
+                ? .none
+                : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
             if entry == .cleanCrossfade, headSeconds == 0 {
-                bodyFadeIn = ClipTransition(type: .crossfade, duration: 4)
+                bodyFadeIn = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
             }
             if ps.slot.isEnding {
                 bodyFadeOut = ClipTransition(type: .echoOut, duration: 6)
             } else if nextIsHandoff, nextEntry == .cleanCrossfade, tailSeconds == 0 {
-                bodyFadeOut = ClipTransition(type: .fadeOut, duration: 4)
+                bodyFadeOut = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
             }
 
             var emittedPitchMoment = false
@@ -1987,15 +2045,16 @@ enum AutoRemixPlanner {
                 }
             }
 
-            // Coordinated SFX — denser in remix, sparingly in mashup.
-            let isMajorReveal = ps.slot.isFinalPeak
-                || entry == .hardHypeCut
-                || (entry == .reverseEntrance && (mode == .remix || ps.slot.energy >= 0.9))
+            // Coordinated SFX — denser in remix; mashup drops still get a
+            // riser→impact deck so the third layer overlaps the outgoing phrase.
+            let isDropReveal = ps.slot.role == .chorus && entry == .hardHypeCut
 
-            if i > 0, allowMajorSFX {
+            if i > 0, (allowMajorSFX || isDropReveal) {
                 switch entry {
-                case .hardHypeCut where mode == .remix || isMajorReveal || ps.slot.isFinalPeak:
+                case .hardHypeCut where isDropReveal || mode == .remix || ps.slot.isFinalPeak:
                     let buildID = ps.slot.isFinalPeak ? "snareBuild" : "riser"
+                    // Riser ends on the downbeat — starts during the outgoing
+                    // phrase (overlaps build), not in post-silence dead air.
                     addSFXEnding(
                         buildID,
                         at: boundary,
@@ -2028,9 +2087,6 @@ enum AutoRemixPlanner {
                 case .flangerBuild where mode == .remix:
                     addSFX("impact", at: boundary, purpose: "impact on the flanger release")
                     lastMajorSFXTime = boundary
-                case .hardHypeCut where mode == .mashup && !isMajorReveal:
-                    // Mashup: song switch is enough — skip impact on every handoff.
-                    break
                 default:
                     break
                 }
@@ -2115,6 +2171,23 @@ enum AutoRemixPlanner {
             }
         }
 
+        // Continuous energy through handoffs — equal-power overlaps everywhere
+        // except the intentional pre-drop void. Bed stays under the hook drop.
+        var songDurations: [UUID: Double] = [:]
+        for p in ordered {
+            songDurations[p.songID] = p.analysis.durationSeconds
+        }
+        var cutRecords: [AutoCutRecord] = []
+        blendAdjacentHandoffs(
+            placements: &placements,
+            intentionalGaps: intentionalGaps,
+            songDurations: songDurations,
+            barSec: barSec,
+            beatSec: beatSec,
+            tuning: tuning,
+            cutRecords: &cutRecords
+        )
+
         // Club pulse hits materialize at apply/render from pulseRegions.
         _ = AutoClubPulse.scheduleHits(
             regions: pulseRegions,
@@ -2131,6 +2204,7 @@ enum AutoRemixPlanner {
             selectedSections: sections,
             placements: placements,
             sfxEvents: sfx.sorted { $0.timelineStart < $1.timelineStart },
+            cutRecords: cutRecords,
             intentionalGaps: intentionalGaps,
             pulsePolicy: pulse,
             pulseRegions: pulseRegions,
@@ -2148,6 +2222,154 @@ enum AutoRemixPlanner {
             confidence: confidence,
             randomSeed: seed
         )
+    }
+
+    /// Equal-power overlaps on every dominant join except the intentional
+    /// pre-drop void. Keeps continuous energy through verse→build→drop;
+    /// the only quiet hole is the 1-beat void into a drop.
+    private static func blendAdjacentHandoffs(
+        placements: inout [AutoClipPlacement],
+        intentionalGaps: [AutoIntentionalGap],
+        songDurations: [UUID: Double],
+        barSec: Double,
+        beatSec: Double,
+        tuning: AutoTuning,
+        cutRecords: inout [AutoCutRecord]
+    ) {
+        let equalPower = AutoTransitionEnvelope.equalPowerCurveName
+        // Prefer 1 bar of overlap; floor at 2 beats / min segment.
+        let overlapSec = max(tuning.minSegmentSeconds, min(barSec, beatSec * 4))
+        let overlapBeats = overlapSec / max(beatSec, 0.001)
+
+        let dominantIdxs = placements.indices
+            .filter { placements[$0].role == .dominant }
+            .sorted { placements[$0].timelineStart < placements[$1].timelineStart }
+
+        for (prevIdx, nextIdx) in zip(dominantIdxs, dominantIdxs.dropFirst()) {
+            let prev = placements[prevIdx]
+            let next = placements[nextIdx]
+
+            // Keep the pre-drop void as the only intentional hole.
+            let voidBeforeNext = intentionalGaps.contains { abs($0.end - next.timelineStart) < 0.05 }
+            if voidBeforeNext { continue }
+
+            // Source-continuous neighbors (energy-curve / no-cut path): do not
+            // invent an overlap cut — that would manufacture internal edits.
+            let sourceContinuous = abs(next.sourceStart - (
+                prev.sourceStart + prev.timelineDuration * prev.tempoRatio
+            )) < 0.05 || next.continuesPrevious
+            if sourceContinuous {
+                continue
+            }
+
+            // Different songs: never overlap two dominants (dual full mixes).
+            // Layer the outgoing as a supporting deck under the incoming.
+            if prev.songID != next.songID {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                let hasSupport = placements.contains {
+                    $0.role == .supporting
+                        && $0.songID == prev.songID
+                        && $0.timelineStart < next.timelineStart + overlapSec
+                        && $0.timelineEnd > next.timelineStart + 0.05
+                }
+                if !hasSupport {
+                    let songDur = songDurations[prev.songID] ?? .infinity
+                    let srcStart = placements[prevIdx].sourceStart
+                        + placements[prevIdx].timelineDuration * placements[prevIdx].tempoRatio
+                    if srcStart + overlapSec * prev.tempoRatio <= songDur - 0.05 {
+                        var supportFX = ClipEffectSettings()
+                        supportFX.setLevel(22, for: MixrEffect.blur.rawValue)
+                        placements.append(
+                            AutoClipPlacement(
+                                songID: prev.songID,
+                                sourceStart: srcStart,
+                                timelineStart: next.timelineStart,
+                                timelineDuration: min(overlapSec, next.timelineDuration),
+                                tempoRatio: prev.tempoRatio,
+                                volume: tuning.supportVolume,
+                                fadeIn: .none,
+                                fadeOut: ClipTransition(
+                                    type: .crossfade, duration: overlapBeats, curve: equalPower
+                                ),
+                                effects: AutoSupportedEffects.sanitize(supportFX),
+                                role: .supporting,
+                                slotIndex: next.slotIndex
+                            )
+                        )
+                    }
+                }
+                placements[nextIdx].fadeIn = ClipTransition(
+                    type: .crossfade, duration: overlapBeats, curve: equalPower
+                )
+                placements[nextIdx].overlapsPreviousSeconds = max(
+                    placements[nextIdx].overlapsPreviousSeconds, overlapSec
+                )
+                continue
+            }
+
+            // Same-song already overlapping enough.
+            if next.timelineStart < prev.timelineEnd - overlapSec * 0.5 {
+                if placements[nextIdx].overlapsPreviousSeconds < 0.01 {
+                    let existing = prev.timelineEnd - next.timelineStart
+                    if existing > 0.05 {
+                        placements[nextIdx].overlapsPreviousSeconds = existing
+                        placements[prevIdx].fadeOut = ClipTransition(
+                            type: .crossfade, duration: existing / max(beatSec, 0.001), curve: equalPower
+                        )
+                        placements[nextIdx].fadeIn = ClipTransition(
+                            type: .crossfade, duration: existing / max(beatSec, 0.001), curve: equalPower
+                        )
+                    }
+                }
+                continue
+            }
+
+            // Same song: source room to extend the previous clip through the join.
+            let songDur = songDurations[prev.songID] ?? .infinity
+            let extraSource = overlapSec * prev.tempoRatio
+            guard prev.sourceEnd + extraSource <= songDur - 0.05 else { continue }
+
+            let join = next.timelineStart
+            placements[prevIdx].timelineDuration = (join + overlapSec) - prev.timelineStart
+            placements[prevIdx].fadeOut = ClipTransition(
+                type: .crossfade, duration: overlapBeats, curve: equalPower
+            )
+            placements[nextIdx].fadeIn = ClipTransition(
+                type: .crossfade, duration: overlapBeats, curve: equalPower
+            )
+            placements[nextIdx].overlapsPreviousSeconds = overlapSec
+
+            if abs(next.sourceStart - prev.sourceEnd) > 0.05 {
+                let hasRecord = cutRecords.contains { abs($0.timelineAt - join) < 0.1 }
+                if !hasRecord {
+                    cutRecords.append(
+                        AutoCutRecord(
+                            timelineAt: join,
+                            sourceFrom: prev.sourceEnd,
+                            sourceTo: next.sourceStart,
+                            reason: .redundantRepeat,
+                            confidence: 0.7,
+                            expectedEnergyDeltaDB: 0,
+                            masking: .equalPowerCrossfade(seconds: overlapSec)
+                        )
+                    )
+                } else if let i = cutRecords.firstIndex(where: { abs($0.timelineAt - join) < 0.1 }) {
+                    cutRecords[i].masking = .equalPowerCrossfade(seconds: overlapSec)
+                }
+            }
+        }
+    }
+
+    private static func fadesTowardSilence(_ t: ClipTransition) -> Bool {
+        switch t.type {
+        case .fadeOut, .echoOut: return true
+        default: return false
+        }
     }
 
     /// Bed under the drop (one kick/bass) + optional second vocal overlay.
@@ -2209,8 +2431,10 @@ enum AutoRemixPlanner {
                     )
                 } else {
                     var bedFX = ClipEffectSettings()
-                    // Keep bed punchy but leave midrange for the vocal lead.
-                    bedFX.setLevel(10, for: MixrEffect.blur.rawValue)
+                    // Frequency-split layering: bed keeps kick/bass audible;
+                    // HPF/blur mids so the vocal sits on top — never mute the bed.
+                    let midCarve: Double = lead.section.vocal > 0.45 ? 34 : 22
+                    bedFX.setLevel(midCarve, for: MixrEffect.blur.rawValue)
                     bedFX = AutoSupportedEffects.sanitize(bedFX)
                     placements.append(
                         AutoClipPlacement(
@@ -2219,9 +2443,18 @@ enum AutoRemixPlanner {
                             timelineStart: lead.timelineStart,
                             timelineDuration: lead.timelineDuration,
                             tempoRatio: bedFit.ratio,
-                            volume: max(tuning.supportVolume, 0.55),
-                            fadeIn: ClipTransition(type: .crossfade, duration: 2),
-                            fadeOut: ClipTransition(type: .fadeOut, duration: 4),
+                            // Bed deck stays present under the hook (DJ layering).
+                            volume: max(0.78, tuning.supportVolume + 0.30),
+                            fadeIn: ClipTransition(
+                                type: .crossfade,
+                                duration: 2,
+                                curve: AutoTransitionEnvelope.equalPowerCurveName
+                            ),
+                            fadeOut: ClipTransition(
+                                type: .crossfade,
+                                duration: 2,
+                                curve: AutoTransitionEnvelope.equalPowerCurveName
+                            ),
                             effects: bedFX,
                             role: .supporting,
                             slotIndex: leadSlotIndex

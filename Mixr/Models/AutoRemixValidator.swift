@@ -189,6 +189,22 @@ nonisolated enum AutoRemixValidator {
             )
         }
 
+        // ── 4b. Handoffs must overlap (except the intentional pre-drop void).
+        // A join with no overlap and no SFX cover is a defect — extend the
+        // previous dominant for an equal-power crossfade when source allows.
+        ensureHandoffOverlaps(
+            &plan,
+            profiles: profiles,
+            tuning: tuning,
+            warnings: &warnings,
+            decisions: &decisions
+        )
+
+        // Intentional silence is ONLY the pre-drop void (hype = subtraction).
+        plan.intentionalGaps.removeAll { gap in
+            !gap.reason.localizedCaseInsensitiveContains("void")
+        }
+
         // ── 5. Every riser/build SFX must lead to a payoff ──
         let payoffStarts = plan.placements.filter { $0.role == .dominant }.map(\.timelineStart)
         let beforeSFX = plan.sfxEvents.count
@@ -484,13 +500,153 @@ nonisolated enum AutoRemixValidator {
         )
     }
 
+    /// Dominant joins need real temporal overlap + equal-power fades, unless
+    /// they are the intentional pre-drop void (or already SFX-covered butts).
+    private static func ensureHandoffOverlaps(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        tuning: AutoTuning,
+        warnings: inout [String],
+        decisions: inout [AutoDecision]
+    ) {
+        let equalPower = AutoTransitionEnvelope.equalPowerCurveName
+        let overlapSec = max(tuning.minSegmentSeconds, min(plan.barSeconds, plan.beatSeconds * 4))
+        let overlapBeats = overlapSec / max(plan.beatSeconds, 0.001)
+
+        let idxs = plan.placements.indices
+            .filter { plan.placements[$0].role == .dominant }
+            .sorted { plan.placements[$0].timelineStart < plan.placements[$1].timelineStart }
+
+        for (prevIdx, nextIdx) in zip(idxs, idxs.dropFirst()) {
+            let prev = plan.placements[prevIdx]
+            let next = plan.placements[nextIdx]
+
+            let voidBefore = plan.intentionalGaps.contains {
+                $0.reason.localizedCaseInsensitiveContains("void")
+                    && abs($0.end - next.timelineStart) < 0.05
+            }
+            if voidBefore { continue }
+
+            // Continuous source (energy-curve / no-cut path) — never invent an overlap cut.
+            let prevSourceEnd = prev.sourceStart + prev.timelineDuration * prev.tempoRatio
+            if next.continuesPrevious || abs(next.sourceStart - prevSourceEnd) < 0.05 {
+                continue
+            }
+            // Low-confidence club curve: no structural handoff surgery.
+            if plan.decisions.contains(where: {
+                $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback
+            }), plan.mode == .remix {
+                continue
+            }
+
+            // Different songs: never extend two dominants into each other.
+            if prev.songID != next.songID {
+                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        plan.placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                let hasSupport = plan.placements.contains {
+                    $0.role == .supporting
+                        && $0.songID == prev.songID
+                        && $0.timelineStart < next.timelineStart + overlapSec
+                        && $0.timelineEnd > next.timelineStart + 0.05
+                }
+                if hasSupport || plan.sfxEvents.contains(where: {
+                    $0.timelineEnd > next.timelineStart - 0.05 && $0.timelineStart < next.timelineStart + 0.05
+                }) {
+                    plan.placements[nextIdx].fadeIn = ClipTransition(
+                        type: .crossfade, duration: overlapBeats, curve: equalPower
+                    )
+                    plan.placements[nextIdx].overlapsPreviousSeconds = max(
+                        plan.placements[nextIdx].overlapsPreviousSeconds, overlapSec * 0.5
+                    )
+                }
+                continue
+            }
+
+            let overlap = prev.timelineEnd - next.timelineStart
+            if overlap >= overlapSec * 0.45 {
+                if plan.placements[nextIdx].overlapsPreviousSeconds < 0.01 {
+                    plan.placements[nextIdx].overlapsPreviousSeconds = overlap
+                }
+                plan.placements[prevIdx].fadeOut = ClipTransition(
+                    type: .crossfade, duration: overlap / max(plan.beatSeconds, 0.001), curve: equalPower
+                )
+                plan.placements[nextIdx].fadeIn = ClipTransition(
+                    type: .crossfade, duration: overlap / max(plan.beatSeconds, 0.001), curve: equalPower
+                )
+                continue
+            }
+
+            let joinLo = min(prev.timelineEnd, next.timelineStart)
+            let joinHi = max(prev.timelineEnd, next.timelineStart)
+            let sfxCover = plan.sfxEvents.contains { event in
+                event.timelineEnd > joinLo - 0.02 && event.timelineStart < joinHi + 0.02
+            }
+
+            let songDuration = profiles[prev.songID]?.analysis.durationSeconds ?? .infinity
+            let needEnd = next.timelineStart + overlapSec
+            let extraTimeline = needEnd - prev.timelineEnd
+            let extraSource = max(0, extraTimeline) * prev.tempoRatio
+            if extraTimeline > 0.01,
+               prev.sourceEnd + extraSource <= songDuration - 0.05 {
+                plan.placements[prevIdx].timelineDuration = needEnd - prev.timelineStart
+                plan.placements[prevIdx].fadeOut = ClipTransition(
+                    type: .crossfade, duration: overlapBeats, curve: equalPower
+                )
+                plan.placements[nextIdx].fadeIn = ClipTransition(
+                    type: .crossfade, duration: overlapBeats, curve: equalPower
+                )
+                plan.placements[nextIdx].overlapsPreviousSeconds = overlapSec
+                decisions.append(
+                    AutoDecision(
+                        kind: .repairedTimelineGap,
+                        songTitle: nil,
+                        detail: "equal-power handoff overlap"
+                    )
+                )
+            } else if abs(prev.timelineEnd - next.timelineStart) < 0.05, sfxCover {
+                // Butt join with SFX cover — acceptable masking, no silence hole.
+                continue
+            } else if overlap > 0.05 {
+                plan.placements[nextIdx].overlapsPreviousSeconds = max(
+                    plan.placements[nextIdx].overlapsPreviousSeconds, overlap
+                )
+                plan.placements[prevIdx].fadeOut = ClipTransition(
+                    type: .crossfade,
+                    duration: overlap / max(plan.beatSeconds, 0.001),
+                    curve: equalPower
+                )
+                plan.placements[nextIdx].fadeIn = ClipTransition(
+                    type: .crossfade,
+                    duration: overlap / max(plan.beatSeconds, 0.001),
+                    curve: equalPower
+                )
+            } else if !sfxCover {
+                warnings.append(
+                    "A section join had no overlap and no SFX cover — kept continuous when possible."
+                )
+            }
+        }
+    }
+
     private static func isCrossfadeMasking(_ masking: AutoCutMasking) -> Bool {
         if case .equalPowerCrossfade = masking { return true }
         return false
     }
 
     private static func fadesTowardSilence(_ t: ClipTransition) -> Bool {
-        [.fadeOut, .crossfade, .auto].contains(t.type) && t.duration > 0.5
+        switch t.type {
+        case .fadeOut, .echoOut:
+            return t.duration > 0
+        case .crossfade, .auto:
+            // Equal-power conserves energy; other curves can dig a hole.
+            return t.curve != AutoTransitionEnvelope.equalPowerCurveName && t.duration > 0.5
+        case .none:
+            return false
+        }
     }
 
     private static func fadesIn(_ t: ClipTransition) -> Bool {
