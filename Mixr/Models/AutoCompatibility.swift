@@ -149,8 +149,9 @@ nonisolated enum AutoCompatibility {
         let fitB = AutoTempo.fit(songBPM: supportProfile.analysis.bpm, targetBPM: targetBPM, maxStretch: tuning.maxStretch)
         let tempoScore: Double = (fitA.gridAligned && fitB.gridAligned) ? 1.0 : 0.25
 
-        // Vocal collision: one dominant vocal source at a time.
-        let vocalScore = max(0, 1 - max(0, dominant.vocal + support.vocal - 1.1))
+        // Vocal collision: complementary vocals may share midrange; only
+        // extreme double-dense verses score poorly (planner ducks those).
+        let vocalScore = max(0.35, 1 - max(0, dominant.vocal + support.vocal - 1.35))
 
         // Bass collision: two bass-heavy drops can't share the low end.
         let bothDrops = dominant.label == .chorus && support.label == .chorus

@@ -4,8 +4,9 @@ import Foundation
 //
 // Validates and REPAIRS a plan before it ever touches the timeline:
 // clamps source ranges, enforces clip minimums, removes same-song
-// overlaps, closes accidental gaps, caps simultaneous sources at two,
-// guarantees every riser has a payoff, and snaps impacts to downbeats.
+// overlaps, closes accidental gaps, caps simultaneous sources
+// (2 for remix, 3 for mashup vocal stacks), guarantees every riser
+// has a payoff, and snaps impacts to downbeats.
 // A knowingly invalid plan is never returned — offending elements are
 // repaired or dropped with a warning.
 
@@ -90,16 +91,26 @@ nonisolated enum AutoRemixValidator {
             )
         }
 
-        // ── 3. No more than two full-song sources at once ──
+        // ── 3. Cap simultaneous full-song sources ──
+        // Remix: at most two. Mashup: bed + lead vocal + optional second
+        // vocal overlay may reach three complementary layers.
+        let maxConcurrentSongs = plan.mode == .mashup ? 3 : 2
         let dominants = plan.placements.filter { $0.role == .dominant }
+        let snapshot = plan.placements
         plan.placements.removeAll { p in
             guard p.role == .supporting else { return false }
             let concurrent = dominants.filter {
                 $0.timelineStart < p.timelineEnd - 0.01 && $0.timelineEnd > p.timelineStart + 0.01
             }
-            let distinctSongs = Set(concurrent.map(\.songID) + [p.songID])
-            if distinctSongs.count > 2 {
-                warnings.append("Removed an overlap that would have stacked three songs at once.")
+            let otherSupports = snapshot.filter { s in
+                s.role == .supporting
+                    && s.songID != p.songID
+                    && s.timelineStart < p.timelineEnd - 0.01
+                    && s.timelineEnd > p.timelineStart + 0.01
+            }
+            let distinctSongs = Set(concurrent.map(\.songID) + otherSupports.map(\.songID) + [p.songID])
+            if distinctSongs.count > maxConcurrentSongs {
+                warnings.append("Removed an overlap that would have stacked too many songs at once.")
                 return true
             }
             return false

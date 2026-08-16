@@ -75,6 +75,12 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case choseClubFlavor
     case usedCameoOnly
     case skippedIncompatibleHook
+    /// Second vocal stacked under a drop (chant / harmony / title line).
+    case stackedVocalOverlay
+    /// Supporting vocal ducked / EQ'd under a dense lead.
+    case duckedSupportingVocal
+    /// Refused two full-mix drops that would stack kicks/subs.
+    case rejectedDualBassStack
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -146,6 +152,12 @@ struct AutoDecision: Sendable, Equatable {
             return "Used \(song) as a short cameo\(detail.map { " — \($0)" } ?? "") rather than a full vocal drop."
         case .skippedIncompatibleHook:
             return "Skipped \(song) as a full hook\(detail.map { ": \($0)" } ?? "")."
+        case .stackedVocalOverlay:
+            return "Stacked \(song) as a vocal overlay\(detail.map { " — \($0)" } ?? "")."
+        case .duckedSupportingVocal:
+            return "Ducked \(song) under the lead vocal\(detail.map { " — \($0)" } ?? "")."
+        case .rejectedDualBassStack:
+            return "Rejected a dual kick/bass stack\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -367,6 +379,12 @@ struct AutoTuning: Sendable {
     var maxInstrumentalStretch = AutoClubTempo.maxInstrumentalStretch
     /// Supporting source gain during overlaps (≈ −7 dB).
     var supportVolume = 0.45
+    /// Duckier gain when two dense vocals share a drop (≈ −10 dB).
+    var duckedVocalSupportVolume = 0.32
+    /// Vocal overlay length on a drop (bars) — chant / harmony window.
+    var vocalOverlayBars = 8
+    /// Bars into the drop before the second vocal enters.
+    var vocalOverlayEntryBars = 4
     /// Minimum directional-compatibility score before Auto risks an overlap.
     var minOverlapScore = 0.55
     /// Analysis confidence below this → energy-curve club-ify without invented cuts.

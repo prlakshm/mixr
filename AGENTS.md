@@ -8,7 +8,7 @@ For one-song Auto Remix, rebuild the track as a streaming-length club mix in the
 
 Preservation of identity means: the familiar hook lands on drop 1; arrangement, pulse, and energy do the transformation. SFX alone do not count as transformation.
 
-For mashups (2…5 songs), assign **one club bed** and rotate vocal hooks across the club islands. Never force two full mixes to fight drop-on-drop.
+For mashups (2…5 songs), assign **one club bed** and rotate vocal hooks across the club islands. Complementary vocal stacks on drops are desirable; never stack two full mixes with two kicks/subs.
 
 ## Confidence ladder (cuts vs energy)
 
@@ -62,10 +62,13 @@ Decide per song / pair:
 
 ## Mashup (2…5 songs)
 
-N-song club mashups keep the same two-wave shape. More songs mean more hooks to rotate across islands — not more simultaneous layers.
+N-song club mashups keep the same two-wave shape. More songs mean more hooks to rotate across islands — and complementary vocal stacks on drops — not chaotic full-mix layering.
 
 - Pick **ONE club bed** (most mixable drums / already-in-pocket / simplest harmony). Everyone else is a vocal-hook candidate.
-- **ONE kick, ONE bass, ONE lead vocal** at any moment. Never stack two toplines or two subs.
+- **ONE kick and ONE bass** at any moment. Never stack two full-mix drops with two kicks/subs.
+- **Vocals may overlap.** Midrange can hold two complementary vocals (different register, or one sparser / chopped). Typical shape: bed + primary hook, then a second (or third) vocal enters as a chant, title line, or harmony for 4–16 bars (Bollywood mashup feel).
+- Duck or EQ the supporting vocal under the lead when both are dense — do not slam two full verses for the entire drop.
+- For 3–5 song mashups, **rotate** which vocals overlap on drop 1 vs drop 2 rather than playing all of them the whole time.
 - Phrase grid still 8 / 16 / 32. Minimum identity stay **8 bars**; prefer **16** for a chorus/hook. Do not switch every 4 bars.
 - Club shape: intro → build → drop 1 → breakdown → build → drop 2 → outro.
 - **Drop 1** = the single strongest familiar hook. **Drop 2** = a different song’s hook (the flip). On a duo, Drop 2 may be the bed’s own chorus flip.
@@ -74,7 +77,6 @@ N-song club mashups keep the same two-wave shape. More songs mean more hooks to 
 - Energy matching still applies: a ballad on a peak-time bed needs a breakdown runway, not a slam.
 - Cap at 5 songs for a streaming-length club rewrite.
 - If key+tempo+energy cannot work without wrecking the vocal, refuse or degrade that guest. Do not force a bad mashup.
-- Drop-on-drop of two full mixes is a fail.
 
 ## Structural edits
 

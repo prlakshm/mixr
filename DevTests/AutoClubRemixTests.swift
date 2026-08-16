@@ -261,10 +261,91 @@ do {
     }
 }
 
+// MARK: - Dual-vocal overlay on a drop is legal (Bollywood stack)
+
+do {
+    let bed = makeSong(title: "ClubBedVocalOK", bpm: 128, key: "Am", color: .blue)
+    let english = makeSong(title: "EnglishHook", bpm: 126, key: "C", color: .pink)
+    let bollywood = makeSong(title: "BollywoodHook", bpm: 124, key: "Em", color: .purple)
+    let feats: [UUID: SongSignalFeatures] = [
+        bed.id: makeFeatures(duration: 200, bpm: 128, drumConfidence: 0.92, bassLevel: 0.85, vocalLevel: 0.12),
+        english.id: makeFeatures(duration: 200, bpm: 126, drumConfidence: 0.28, bassLevel: 0.2, vocalLevel: 0.95),
+        bollywood.id: makeFeatures(duration: 200, bpm: 124, drumConfidence: 0.26, bassLevel: 0.18, vocalLevel: 0.93),
+    ]
+    switch AutoRemixRunner.runEntireProject(
+        tracks: [bed, english, bollywood],
+        seed: 77,
+        signals: feats
+    ) {
+    case .success(_, let plan, _):
+        check("Dual-vocal mashup mode", plan.mode == .mashup)
+        check("Dual-vocal plan accepted (not rejected)", true)
+        let stacked = plan.decisions.contains { $0.kind == .stackedVocalOverlay }
+        let ducked = plan.decisions.contains { $0.kind == .duckedSupportingVocal }
+        check("Dual-vocal overlay decision present", stacked, "stacked=\(stacked) ducked=\(ducked)")
+        // Supporting guest concurrent with a drop dominant = legal dual-vocal bars.
+        let dominants = plan.placements.filter { $0.role == .dominant }
+        let guestSupports = plan.placements.filter {
+            $0.role == .supporting && $0.songID != plan.mashupBedSongID
+        }
+        var dualVocalBars = false
+        for support in guestSupports {
+            let overDrop = dominants.contains {
+                $0.songID != support.songID
+                    && $0.timelineStart < support.timelineStart + support.timelineDuration - 0.01
+                    && support.timelineStart < $0.timelineStart + $0.timelineDuration - 0.01
+            }
+            if overDrop { dualVocalBars = true }
+        }
+        check("Dual-vocal bars on a drop are legal and present", dualVocalBars,
+              "guestSupports=\(guestSupports.count)")
+        check("Did not reject the plan for dual vocals",
+              !plan.decisions.contains { $0.kind == .avoidedVocalOverlap && $0.detail?.contains("reject") == true })
+    case .failure(let message):
+        check("Dual-vocal overlay must be a legal plan", false, message)
+    }
+}
+
+// MARK: - Dual full-mix kick/bass stack still rejected
+
+do {
+    // Two slamming dance tracks — stacking both full mixes as dual drops is illegal.
+    let a = makeSong(title: "SlamA", bpm: 128, key: "Am", color: .blue)
+    let b = makeSong(title: "SlamB", bpm: 128, key: "C", color: .pink)
+    let feats: [UUID: SongSignalFeatures] = [
+        a.id: makeFeatures(duration: 180, bpm: 128, drumConfidence: 0.95, bassLevel: 0.9, vocalLevel: 0.4),
+        b.id: makeFeatures(duration: 180, bpm: 128, drumConfidence: 0.93, bassLevel: 0.88, vocalLevel: 0.45),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [a, b], seed: 88, signals: feats) {
+    case .success(_, let plan, _):
+        // Plan may succeed, but must not leave two slamming kits as dual dominants
+        // overlapping the same bars.
+        let dominants = plan.placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        var dualDominantOverlap = false
+        for i in 0..<dominants.count {
+            for j in (i + 1)..<dominants.count where dominants[i].songID != dominants[j].songID {
+                let a = dominants[i], b = dominants[j]
+                if a.timelineStart < b.timelineStart + b.timelineDuration - 0.05
+                    && b.timelineStart < a.timelineStart + a.timelineDuration - 0.05 {
+                    dualDominantOverlap = true
+                }
+            }
+        }
+        check("No overlapping dual dominant full mixes", !dualDominantOverlap)
+        // Bed wins one kick; supporting slam under slam should be refused or heavily treated.
+        let bedID = plan.mashupBedSongID
+        check("One bed/kick owner assigned", bedID != nil)
+    case .failure:
+        check("Slam pair fails closed or plans with one bed", true)
+    }
+}
+
 // MARK: - N-song mashups (2…5): one bed, rotating hooks, legal plan
 
 /// Assert club mashup legality: one bed owner, phrase-aligned ≥8-bar stays,
-/// no dual lead-vocal bars, Drop 1 ≠ Drop 2 when multiple hooks exist.
+/// Drop 1 ≠ Drop 2 when multiple hooks exist. Dual-vocal overlays are legal.
 func assertLegalNSongMashup(
     _ plan: AutoRemixPlan,
     expectedSongCount: Int,
@@ -272,7 +353,7 @@ func assertLegalNSongMashup(
 ) {
     check("\(label) mashup mode", plan.mode == .mashup)
     check("\(label) bed owner set", plan.mashupBedSongID != nil)
-    guard let bedID = plan.mashupBedSongID else { return }
+    guard plan.mashupBedSongID != nil else { return }
 
     let barSec = plan.barSeconds
     let dominants = plan.placements
@@ -280,8 +361,7 @@ func assertLegalNSongMashup(
         .sorted { $0.timelineStart < $1.timelineStart }
     check("\(label) has dominant islands", dominants.count >= 2, "got \(dominants.count)")
 
-    // Phrase-aligned switches: each contiguous song stay ≥ 8 bars
-    // (except trailing outro may share the bed).
+    // Phrase-aligned switches: each contiguous song stay ≥ 8 bars.
     var staySong: UUID?
     var stayStart = 0.0
     var stayEnd = 0.0
@@ -304,27 +384,9 @@ func assertLegalNSongMashup(
     flushStay()
     check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays)")
 
-    // No dual-vocal bars: supporting under a dense vocal must be the bed
-    // (or avoided — supporting placements from another guest are illegal).
-    var vocalBySong: [UUID: Double] = [:]
-    for section in plan.selectedSections {
-        vocalBySong[section.songID] = max(vocalBySong[section.songID] ?? 0, section.vocalDensity)
-    }
-    var dualVocalHits = 0
-    for support in plan.placements where support.role == .supporting {
-        let supportVocal = vocalBySong[support.songID] ?? 0
-        let concurrent = dominants.filter {
-            $0.timelineStart < support.timelineStart + support.timelineDuration - 0.01
-                && support.timelineStart < $0.timelineStart + $0.timelineDuration - 0.01
-        }
-        for dom in concurrent {
-            let domVocal = vocalBySong[dom.songID] ?? 0
-            if support.songID != bedID, supportVocal > 0.55, domVocal > 0.55 {
-                dualVocalHits += 1
-            }
-        }
-    }
-    check("\(label) no dual-vocal bars", dualVocalHits == 0, "hits=\(dualVocalHits)")
+    // Dual-vocal overlays are legal — only dual full-mix kick/bass stacks fail.
+    let supports = plan.placements.filter { $0.role == .supporting }
+    check("\(label) may include supporting layers", true, "supports=\(supports.count)")
 
     // Roles: Drop 1 / Drop 2 when guests exist.
     if expectedSongCount >= 2 {
@@ -377,6 +439,17 @@ do {
             check("N=3 drop flip uses second hook", d1 != d2 && d2 != bed.id,
                   "d1=\(d1 == h1.id ? "A" : d1 == h2.id ? "B" : "?") d2=\(d2 == h1.id ? "A" : d2 == h2.id ? "B" : d2 == bed.id ? "bed" : "?")")
         }
+        let stacked = plan.decisions.filter { $0.kind == .stackedVocalOverlay }
+        check("N=3 stacks vocal overlay on a drop (legal)", !stacked.isEmpty,
+              "decisions=\(stacked.map { $0.detail ?? "" })")
+        // Rotate: overlays on drop 1 and drop 2 should not be the same guest when both exist.
+        let overlaySongs = Set(
+            plan.placements
+                .filter { $0.role == .supporting && $0.songID != bed.id }
+                .map(\.songID)
+        )
+        check("N=3 supporting vocal layer(s) present", !overlaySongs.isEmpty,
+              "overlaySongs=\(overlaySongs.count)")
     case .failure(let message):
         check("N=3 mashup plan", false, message)
     }

@@ -4,11 +4,9 @@ import Foundation
 //
 // Generates an AutoRemixPlan from the project's songs:
 //
-//   1 song   → REMIX: rearranged hook-forward edit with hype SFX
-//   2 songs  → MASHUP: A → B → A → B → A (roles switch, ≥3 handoffs)
-//   3 songs  → MASHUP: A → B → A → C → B → C → A
-//   4 songs  → MASHUP: A → B → C → A → D → B → C → A
-//   5+ songs → MASHUP: anchor-and-rotation (A → B → C → A → D → E → B → A …)
+//   1 song   → REMIX: club phrase-grid rewrite + thin-song pulse
+//   2…5 songs → MASHUP: one club bed + rotating hooks on the two-wave
+//                club shape; complementary vocal stacks on drops OK
 //
 // Every handoff picks ONE primary transition recipe; SFX arrive as
 // coordinated events (riser + impact = one moment); low-confidence songs
@@ -1003,6 +1001,38 @@ enum AutoRemixPlanner {
             return 0 // bed chorus flip
         }()
 
+        // Rotate which guest vocals stack on drop 1 vs drop 2.
+        func vocalEnough(_ idx: Int) -> Bool {
+            let p = ordered[idx]
+            return p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds) >= 0.35
+                || p.featureScore >= 0.45
+        }
+        func pickOverlay(excluding lead: Int?, prefer: [Int?]) -> Int? {
+            var seen = Set<Int>()
+            if let lead { seen.insert(lead) }
+            for candidate in prefer {
+                guard let idx = candidate, !seen.contains(idx), vocalEnough(idx) else { continue }
+                seen.insert(idx)
+                return idx
+            }
+            return nil
+        }
+        let drop1OverlayIdx = pickOverlay(
+            excluding: drop1Idx,
+            prefer: [
+                drop2Candidate.map { indexOf[$0.songID]! },
+                grooveIdx, breakIdx, outroIdx,
+                drop2IsBedFlip ? nil : Optional(drop2Idx),
+            ]
+        )
+        let drop2OverlayIdx = pickOverlay(
+            excluding: drop2Idx,
+            prefer: [
+                drop1Idx, // rotate: Drop 1 hook returns as chant under Drop 2
+                outroIdx, grooveIdx, breakIdx,
+            ]
+        )
+
         let roleDetail: String
         if let drop1, let drop2Candidate {
             roleDetail = "Bed: \(bed.title); Drop 1: \(drop1.title); Drop 2: \(drop2Candidate.title)"
@@ -1074,7 +1104,9 @@ enum AutoRemixPlanner {
             vocalTempoRatio: vocalTempoRatio,
             bedPitchSemitones: bedPitch,
             guestTempoRatios: guestTempoRatios,
-            mashupDrop2ID: drop2IsBedFlip || drop1 == nil ? bed.songID : drop2Candidate?.songID
+            mashupDrop2ID: drop2IsBedFlip || drop1 == nil ? bed.songID : drop2Candidate?.songID,
+            drop1VocalOverlayIdx: drop1OverlayIdx,
+            drop2VocalOverlayIdx: drop2OverlayIdx
         )
         plan?.warnings.insert(contentsOf: preWarnings, at: 0)
         _ = rng.next()
@@ -1162,7 +1194,9 @@ enum AutoRemixPlanner {
         vocalTempoRatio: Double? = nil,
         bedPitchSemitones: Int = 0,
         guestTempoRatios: [UUID: Double] = [:],
-        mashupDrop2ID: UUID? = nil
+        mashupDrop2ID: UUID? = nil,
+        drop1VocalOverlayIdx: Int? = nil,
+        drop2VocalOverlayIdx: Int? = nil
     ) -> AutoRemixPlan? {
         let barSec = 240.0 / max(targetBPM, 40)
         let beatSec = barSec / 4
@@ -1679,41 +1713,45 @@ enum AutoRemixPlanner {
                 )
             }
 
-            // Directional overlap under mashup handoffs.
-            // Never stack two toplines or two subs — bed may support a hook;
-            // guest-under-guest is always a hard cut.
+            // Club mashup drops: bed under the hook (one kick/bass) + optional
+            // second vocal chant/harmony (Bollywood stack). Vocals may overlap.
+            if mode == .mashup, ps.slot.role == .chorus {
+                appendMashupDropStacks(
+                    lead: ps,
+                    leadProfile: profile,
+                    leadSlotIndex: i,
+                    ordered: ordered,
+                    fits: fits,
+                    mashupBedID: mashupBedID,
+                    overlaySongIdx: ps.slot.isFinalPeak ? drop2VocalOverlayIdx : drop1VocalOverlayIdx,
+                    dropLabel: ps.slot.isFinalPeak ? "Drop 2" : "Drop 1",
+                    barSec: barSec,
+                    tuning: tuning,
+                    usedRanges: &usedRanges,
+                    placements: &placements,
+                    decisions: &decisions
+                )
+            }
+
+            // Directional overlap under mashup handoffs (non-drop recipes).
+            // Vocals may overlap with ducking; reject only dual kick/bass full mixes.
             if mode == .mashup, isHandoff, let prev,
                ![.hardHypeCut, .cleanCrossfade, .none].contains(entry) {
                 let prevProfile = ordered[prev.slot.songIdx]
-                let compat = AutoCompatibility.directional(
-                    dominant: ps.section,
-                    dominantProfile: profile,
-                    support: prev.section,
-                    supportProfile: prevProfile,
-                    targetBPM: targetBPM,
-                    tuning: tuning
-                )
-                let overlapSeconds = Double(compat.overlapBars) * barSec
-                let prevSourceEnd = prev.section.startSeconds + prev.timelineDuration * prev.tempoRatio
-                let supportAvailable = prevProfile.analysis.durationSeconds - 0.15 - prevSourceEnd
-
-                let denseVocals = ps.section.vocal > 0.55 && prev.section.vocal > 0.55
-                let bothGuests = mashupBedID.map { bedID in
-                    profile.songID != bedID && prevProfile.songID != bedID
-                } ?? false
-                let dualBass = profile.analysis.bassDensity > 0.6 && prevProfile.analysis.bassDensity > 0.6
+                let dualBass = profile.analysis.bassDensity > 0.65
+                    && prevProfile.analysis.bassDensity > 0.65
+                    && profile.analysis.drumStrength > 0.65
+                    && prevProfile.analysis.drumStrength > 0.65
                     && ps.slot.role == .chorus && prev.slot.role == .chorus
 
-                if denseVocals || bothGuests || dualBass {
-                    if denseVocals || bothGuests {
-                        decisions.append(
-                            AutoDecision(
-                                kind: .avoidedVocalOverlap,
-                                songTitle: profile.title,
-                                detail: prevProfile.title
-                            )
+                if dualBass {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .rejectedDualBassStack,
+                            songTitle: profile.title,
+                            detail: "vs \(prevProfile.title)"
                         )
-                    }
+                    )
                     decisions.append(
                         AutoDecision(
                             kind: .replacedComplexOverlapWithHardCut,
@@ -1721,43 +1759,71 @@ enum AutoRemixPlanner {
                             detail: profile.title
                         )
                     )
-                } else if compat.overlapBars > 0,
-                          overlapSeconds >= tuning.minSegmentSeconds,
-                          supportAvailable >= overlapSeconds * prev.tempoRatio {
-                    var supportFX = ClipEffectSettings()
-                    supportFX.setLevel(32, for: MixrEffect.blur.rawValue)
-                    // Mashup: pitch the BED only — never the star vocal.
-                    let mayPitchSupport = mashupBedID == nil
-                        || prevProfile.songID == mashupBedID
-                    if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
-                        supportFX.pitchDirection = compat.pitchCorrectionSemitones > 0 ? .up : .down
-                        supportFX.pitchAmount = Double(abs(compat.pitchCorrectionSemitones)) / 12.0
-                    }
-                    supportFX = AutoSupportedEffects.sanitize(supportFX)
-                    placements.append(
-                        AutoClipPlacement(
-                            songID: prevProfile.songID,
-                            sourceStart: prevSourceEnd,
-                            timelineStart: boundary,
-                            timelineDuration: overlapSeconds,
-                            tempoRatio: prev.tempoRatio,
-                            volume: tuning.supportVolume,
-                            fadeIn: .none,
-                            fadeOut: ClipTransition(type: .fadeOut, duration: 4),
-                            effects: supportFX,
-                            role: .supporting,
-                            slotIndex: i
-                        )
+                } else {
+                    let compat = AutoCompatibility.directional(
+                        dominant: ps.section,
+                        dominantProfile: profile,
+                        support: prev.section,
+                        supportProfile: prevProfile,
+                        targetBPM: targetBPM,
+                        tuning: tuning
                     )
-                    if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
-                        let sign = compat.pitchCorrectionSemitones > 0 ? "+" : ""
-                        decisions.append(
-                            AutoDecision(
-                                kind: .pitchCorrectedOverlap,
-                                songTitle: prevProfile.title,
-                                detail: "\(sign)\(compat.pitchCorrectionSemitones) semitones"
+                    let overlapSeconds = Double(max(compat.overlapBars, 1)) * barSec
+                    let prevSourceEnd = prev.section.startSeconds + prev.timelineDuration * prev.tempoRatio
+                    let supportAvailable = prevProfile.analysis.durationSeconds - 0.15 - prevSourceEnd
+                    let denseVocals = ps.section.vocal > 0.55 && prev.section.vocal > 0.55
+                    let allowOverlap = (compat.overlapBars > 0 || denseVocals)
+                        && overlapSeconds >= tuning.minSegmentSeconds
+                        && supportAvailable >= overlapSeconds * prev.tempoRatio
+
+                    if allowOverlap {
+                        var supportFX = ClipEffectSettings()
+                        var supportVol = tuning.supportVolume
+                        if denseVocals {
+                            supportFX.setLevel(34, for: MixrEffect.blur.rawValue)
+                            supportVol = tuning.duckedVocalSupportVolume
+                            decisions.append(
+                                AutoDecision(
+                                    kind: .duckedSupportingVocal,
+                                    songTitle: prevProfile.title,
+                                    detail: "under \(profile.title)"
+                                )
+                            )
+                        } else {
+                            supportFX.setLevel(22, for: MixrEffect.blur.rawValue)
+                        }
+                        let mayPitchSupport = mashupBedID == nil
+                            || prevProfile.songID == mashupBedID
+                        if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
+                            supportFX.pitchDirection = compat.pitchCorrectionSemitones > 0 ? .up : .down
+                            supportFX.pitchAmount = Double(abs(compat.pitchCorrectionSemitones)) / 12.0
+                        }
+                        supportFX = AutoSupportedEffects.sanitize(supportFX)
+                        placements.append(
+                            AutoClipPlacement(
+                                songID: prevProfile.songID,
+                                sourceStart: prevSourceEnd,
+                                timelineStart: boundary,
+                                timelineDuration: min(overlapSeconds, ps.timelineDuration),
+                                tempoRatio: prev.tempoRatio,
+                                volume: supportVol,
+                                fadeIn: .none,
+                                fadeOut: ClipTransition(type: .fadeOut, duration: 4),
+                                effects: supportFX,
+                                role: .supporting,
+                                slotIndex: i
                             )
                         )
+                        if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
+                            let sign = compat.pitchCorrectionSemitones > 0 ? "+" : ""
+                            decisions.append(
+                                AutoDecision(
+                                    kind: .pitchCorrectedOverlap,
+                                    songTitle: prevProfile.title,
+                                    detail: "\(sign)\(compat.pitchCorrectionSemitones) semitones"
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -1922,6 +1988,179 @@ enum AutoRemixPlanner {
             warnings: warnings,
             confidence: confidence,
             randomSeed: seed
+        )
+    }
+
+    /// Bed under the drop (one kick/bass) + optional second vocal overlay.
+    /// Vocals may stack; dual full-mix kick/sub stacks are refused.
+    private static func appendMashupDropStacks(
+        lead: PlacedSlot,
+        leadProfile: AutoSongProfile,
+        leadSlotIndex: Int,
+        ordered: [AutoSongProfile],
+        fits: [Int: AutoTempo.Fit],
+        mashupBedID: UUID?,
+        overlaySongIdx: Int?,
+        dropLabel: String,
+        barSec: Double,
+        tuning: AutoTuning,
+        usedRanges: inout [UUID: [(Double, Double)]],
+        placements: inout [AutoClipPlacement],
+        decisions: inout [AutoDecision]
+    ) {
+        // Soften lead lows when a slamming guest sits over the bed kick.
+        if let bedID = mashupBedID, leadProfile.songID != bedID,
+           leadProfile.analysis.bassDensity > 0.55 || leadProfile.analysis.drumStrength > 0.65 {
+            for i in placements.indices where placements[i].slotIndex == leadSlotIndex
+                && placements[i].songID == leadProfile.songID
+                && placements[i].role == .dominant {
+                var fx = placements[i].effects
+                fx.setLevel(
+                    max(fx.level(for: MixrEffect.blur.rawValue), 24),
+                    for: MixrEffect.blur.rawValue
+                )
+                placements[i].effects = AutoSupportedEffects.sanitize(fx)
+            }
+        }
+
+        // Bed groove under the vocal drop — owns kick/bass when lead is a guest.
+        if let bedID = mashupBedID,
+           leadProfile.songID != bedID,
+           let bedIdx = ordered.firstIndex(where: { $0.songID == bedID }) {
+            let bed = ordered[bedIdx]
+            let bedFit = fits[bedIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: true, halfOrDoubleTime: false)
+            let used = usedRanges[bed.songID] ?? []
+            if let section = bed.best(
+                [.groove, .chorus, .build],
+                tuning: tuning,
+                used: used,
+                allowReuse: true
+            ) {
+                let dualBass = bed.analysis.bassDensity > 0.65
+                    && leadProfile.analysis.bassDensity > 0.7
+                    && bed.analysis.drumStrength > 0.7
+                    && leadProfile.analysis.drumStrength > 0.7
+                if dualBass {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .rejectedDualBassStack,
+                            songTitle: bed.title,
+                            detail: "under \(leadProfile.title) on \(dropLabel)"
+                        )
+                    )
+                } else {
+                    var bedFX = ClipEffectSettings()
+                    // Keep bed punchy but leave midrange for the vocal lead.
+                    bedFX.setLevel(10, for: MixrEffect.blur.rawValue)
+                    bedFX = AutoSupportedEffects.sanitize(bedFX)
+                    placements.append(
+                        AutoClipPlacement(
+                            songID: bed.songID,
+                            sourceStart: section.startSeconds,
+                            timelineStart: lead.timelineStart,
+                            timelineDuration: lead.timelineDuration,
+                            tempoRatio: bedFit.ratio,
+                            volume: max(tuning.supportVolume, 0.55),
+                            fadeIn: ClipTransition(type: .crossfade, duration: 2),
+                            fadeOut: ClipTransition(type: .fadeOut, duration: 4),
+                            effects: bedFX,
+                            role: .supporting,
+                            slotIndex: leadSlotIndex
+                        )
+                    )
+                    usedRanges[bed.songID, default: []].append(
+                        (section.startSeconds, section.startSeconds + lead.timelineDuration * bedFit.ratio)
+                    )
+                }
+            }
+        }
+
+        // Second vocal: chant / title line / harmony for 4–16 bars.
+        guard let overlayIdx = overlaySongIdx,
+              overlayIdx >= 0, overlayIdx < ordered.count else { return }
+        let overlay = ordered[overlayIdx]
+        guard overlay.songID != leadProfile.songID else { return }
+
+        // Refuse overlay if it would be a second slamming full-mix kit.
+        if overlay.analysis.drumStrength > 0.75 && overlay.analysis.bassDensity > 0.7
+            && leadProfile.analysis.drumStrength > 0.7 && leadProfile.analysis.bassDensity > 0.65 {
+            decisions.append(
+                AutoDecision(
+                    kind: .rejectedDualBassStack,
+                    songTitle: overlay.title,
+                    detail: "full-mix overlay under \(leadProfile.title)"
+                )
+            )
+            return
+        }
+
+        let overlayFit = fits[overlayIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: true, halfOrDoubleTime: false)
+        let used = usedRanges[overlay.songID] ?? []
+        guard let section = overlay.best(
+            [.teaser, .chorus, .groove],
+            tuning: tuning,
+            used: used,
+            allowReuse: true
+        ) else { return }
+
+        let entryBars = max(0, min(tuning.vocalOverlayEntryBars, 8))
+        var overlayBars = max(4, min(tuning.vocalOverlayBars, 16))
+        let availableBars = Int((lead.timelineDuration / max(barSec, 0.001)).rounded(.down)) - entryBars
+        overlayBars = min(overlayBars, max(4, availableBars))
+        let start = lead.timelineStart + Double(entryBars) * barSec
+        let duration = Double(overlayBars) * barSec
+        guard duration >= tuning.minSegmentSeconds,
+              start + duration <= lead.timelineStart + lead.timelineDuration + 0.05 else { return }
+
+        let dense = section.vocal > 0.55 && lead.section.vocal > 0.55
+        var fx = ClipEffectSettings()
+        let volume: Double
+        if dense {
+            fx.setLevel(36, for: MixrEffect.blur.rawValue)
+            fx.setLevel(12, for: MixrEffect.reverb.rawValue)
+            fx.reverbPreset = .hall
+            volume = tuning.duckedVocalSupportVolume
+            decisions.append(
+                AutoDecision(
+                    kind: .duckedSupportingVocal,
+                    songTitle: overlay.title,
+                    detail: "under \(leadProfile.title) on \(dropLabel)"
+                )
+            )
+        } else {
+            fx.setLevel(16, for: MixrEffect.blur.rawValue)
+            volume = tuning.supportVolume
+        }
+        // Extra HPF when overlay still carries drum weight.
+        if overlay.analysis.drumStrength > 0.55 || overlay.analysis.bassDensity > 0.55 {
+            fx.setLevel(max(fx.level(for: MixrEffect.blur.rawValue), 40), for: MixrEffect.blur.rawValue)
+        }
+        fx = AutoSupportedEffects.sanitize(fx)
+
+        placements.append(
+            AutoClipPlacement(
+                songID: overlay.songID,
+                sourceStart: section.startSeconds,
+                timelineStart: start,
+                timelineDuration: duration,
+                tempoRatio: overlayFit.ratio,
+                volume: volume,
+                fadeIn: ClipTransition(type: .crossfade, duration: 2),
+                fadeOut: ClipTransition(type: .fadeOut, duration: 4),
+                effects: fx,
+                role: .supporting,
+                slotIndex: leadSlotIndex
+            )
+        )
+        usedRanges[overlay.songID, default: []].append(
+            (section.startSeconds, section.startSeconds + duration * overlayFit.ratio)
+        )
+        decisions.append(
+            AutoDecision(
+                kind: .stackedVocalOverlay,
+                songTitle: overlay.title,
+                detail: "\(overlayBars) bars on \(dropLabel) under \(leadProfile.title)"
+            )
         )
     }
 

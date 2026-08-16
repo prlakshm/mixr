@@ -22,8 +22,9 @@ Preservation constrains identity (familiar hook on drop 1), not arrangement.
 SFX alone do not count as transformation. Accidental silence is forbidden;
 **intentional pre-drop voids are allowed** (hype = subtraction then a downbeat).
 
-Mashups (2…5 songs) are **one club bed + rotating hooks**: one kick, one bass,
-one lead vocal at a time. More songs rotate across islands — they do not stack.
+Mashups (2…5 songs) are **one club bed + rotating hooks**: one kick and one
+bass at a time. Complementary vocal stacks on drops are desirable (Bollywood
+feel); never stack two full-mix kicks/subs.
 
 ## Planning hierarchy
 
@@ -72,6 +73,9 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 
 - ONE club bed (drums / pocket / simple harmony); others = vocal-hook candidates.
 - Drop 1 = strongest full hook; Drop 2 = a different song’s hook (duo may flip to bed chorus).
+- Vocals may overlap on hooks/drops (chant / harmony / title line for 4–16 bars). Duck the supporting vocal when both are dense.
+- Rotate which vocals overlap on drop 1 vs drop 2 (3–5 songs).
+- Still ONE kick and ONE bass — reject dual full-mix kick/sub stacks.
 - Remaining songs: 8–16 bar cameos (verse/breakdown/outro) or short chops if gates fail.
 - Pitch the bed (≤ ~2 st); never force a star vocal through illegal stretch.
 - Prefer Camelot same → ±1 → relative. Skip or cameo-only when song 4/5 fails.
