@@ -124,6 +124,7 @@ nonisolated enum AutoRemixApplier {
             && (
                 p.overlapsPreviousSeconds > 0.05
                     || p.effects.level(for: MixrEffect.echo.rawValue) >= 8
+                    || p.effects.level(for: MixrEffect.blur.rawValue) >= 36
                     || p.fadeOut.type == .echoOut
             )
         let minUnits: CGFloat = isShortEcho

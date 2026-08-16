@@ -30,10 +30,14 @@ is an optional ≤8-bar island, not the default. Never stack two full-mix kicks/
 
 - **Deck A** = current phrase (bed or solo source). **Deck B** = next hook.
 - **Mix window** = last ~8 bars of A's phrase + first ~8 bars of the drop.
-  Extra layers (second vocal, SFX stacks, echo throws, filter sweeps) are
-  legal ONLY there, plus one impact on Drop 1.
-- **Verses / grooves** = one deck: the source, maybe light HPF. No echo
-  throws, no riser wallpaper, no guest vocal.
+  Extra layers (second vocal, SFX stacks, pivot wallpaper grains, filter sweeps)
+  are legal ONLY there, plus one impact on Drop 1.
+- **Verses / grooves** = one deck: the source, maybe light HPF. No wallpaper
+  chops, no riser spam, no guest vocal.
+- **Xirex pivot wallpaper** (gold standard): Deck A chorus/hook plays COMPLETE
+  once; catch only the last 1-beat grain; loop it 8–16× (2–4 bars) with rising
+  HPF; hard cut into Deck B's hook on the same word. Not 1/8 stutter spam, not
+  tape stops, not verse decoration.
 - **Semantic joins**: wait until a phrase finishes. Outro/end of A meets
   intro/hook of B (Mixxx AutoDJ phrase-match behavior; reimplement, don't
   copy GPL). AutoMashUpper still picks WHICH 8–16 bar islands belong together.
@@ -126,8 +130,8 @@ Propose phrase-aligned opportunities when measured:
 
 ### Transition
 - filtered build (mix window only)
-- echo throw into the pre-drop void / mix window only (not wallpaper on every drop)
-- intentional pre-drop void
+- Xirex pivot wallpaper: 1-beat last-word loop 8–16× → hard cut (not echo spam)
+- intentional pre-drop void (skipped when pivot wallpaper owns the window)
 - reverse lead-in
 - equal-power overlap
 - hard hype cut with anti-click microfade
@@ -144,7 +148,7 @@ Propose phrase-aligned opportunities when measured:
   crash, clap fill, air sweep, reverse cymbal, tape stop, …
 - SFX live in the **mix window and on the drop** — not on verses/grooves
 - one impact on Drop 1; cymbal punctuation ≤ 2 total; no mid-drop wallpaper
-- clip FX in the mix window: echo throws, blur/filter sweeps, reverb bloom
+- clip FX in the mix window: pivot HPF sweep, blur/filter, reverb bloom
 
 Pulse and SFX must support an underlying musical transformation. Hype is
 the join and the drop, never a second kick or verse wallpaper.

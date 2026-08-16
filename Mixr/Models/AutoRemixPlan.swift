@@ -85,6 +85,8 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case hookEchoThrow
     /// Guest hook replaced the bed vocal on a drop (one melody).
     case hookReplace
+    /// Xirex-style pivot: 1-beat last-word of a completed phrase, looped 2–4 bars.
+    case pivotWallpaperLoop
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -166,6 +168,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Threw a hook echo duplicate of \(song)\(detail.map { " — \($0)" } ?? "")."
         case .hookReplace:
             return "Hook-replaced \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .pivotWallpaperLoop:
+            return "Pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -399,8 +403,12 @@ struct AutoTuning: Sendable {
     var allowCallAndResponseOverlay = false
     /// Mix window length in bars (last N of outgoing + first N of drop).
     var mixWindowBars = 8
-    /// Max short echo-throw chops in one mix window (into the void).
-    var maxMixWindowEchoThrows = 1
+    /// Max short echo-throw chops in one mix window (legacy; prefer pivot loop).
+    var maxMixWindowEchoThrows = 0
+    /// Bars of 1-beat pivot-grain wallpaper before hook-replace (Xirex move).
+    var pivotWallpaperBars = 4
+    /// Repeats of the 1-beat pivot grain (= bars × 4 when quarter-note).
+    var pivotWallpaperBeats: Int { max(8, pivotWallpaperBars * 4) }
     /// Minimum directional-compatibility score before Auto risks an overlap.
     var minOverlapScore = 0.55
     /// Analysis confidence below this → energy-curve club-ify without invented cuts.

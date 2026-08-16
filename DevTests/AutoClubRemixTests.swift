@@ -394,7 +394,15 @@ func assertLegalNSongMashup(
             let voidFollows = plan.intentionalGaps.contains { gap in
                 abs(gap.start - stayEnd) < 0.08 || (gap.start >= stayEnd - 0.01 && gap.start <= stayEnd + plan.beatSeconds)
             }
-            flushStay(followedByVoid: voidFollows)
+            // Xirex pivot wallpaper (1-beat grains) after a completed phrase
+            // is not a sub-8-bar identity stay.
+            let pivotFollows = plan.placements.contains { g in
+                g.role == .supporting
+                    && abs(g.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
+                    && g.timelineStart >= stayEnd - 0.05
+                    && g.timelineStart <= stayEnd + plan.barSeconds * 0.25
+            }
+            flushStay(followedByVoid: voidFollows || pivotFollows)
             staySong = p.songID
             stayStart = p.timelineStart
             stayEnd = p.timelineStart + p.timelineDuration
@@ -403,9 +411,24 @@ func assertLegalNSongMashup(
     }
     let voidFollowsEnd = plan.intentionalGaps.contains { gap in
         abs(gap.start - stayEnd) < 0.08
+    } || plan.placements.contains { g in
+        g.role == .supporting
+            && abs(g.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
+            && abs(g.timelineStart - stayEnd) < 0.1
     }
     flushStay(followedByVoid: voidFollowsEnd)
-    check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays)")
+    if shortStays != 0 {
+        var detail: [String] = []
+        for p in dominants {
+            let bars = p.timelineDuration / max(barSec, 0.001)
+            if bars + 0.05 < 8.0 {
+                detail.append(String(format: "bars=%.2f t=%.1f src=%.1f", bars, p.timelineStart, p.sourceStart))
+            }
+        }
+        check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays) shortDoms=\(detail.joined(separator: "; "))")
+    } else {
+        check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays)")
+    }
 
     // Supporting bed under hook is OK; dual full-mix kick/bass stacks fail.
     let supports = plan.placements.filter { $0.role == .supporting }
@@ -804,9 +827,22 @@ do {
                   abs($0.timelineStart / plan.barSeconds - ($0.timelineStart / plan.barSeconds).rounded()) < 0.08
               } ?? false,
               drops.first.map { String(format: "t=%.3f bars=%.3f", $0.timelineStart, $0.timelineStart / plan.barSeconds) } ?? "no drop")
-        if let gap = plan.intentionalGaps.first(where: { $0.reason.contains("void") }),
-           let drop = drops.first {
-            check("Britney void ends at drop downbeat", abs(gap.end - drop.timelineStart) < 0.05)
+        if let drop = drops.first {
+            let voidOK = plan.intentionalGaps.contains {
+                $0.reason.contains("void") && abs($0.end - drop.timelineStart) < 0.05
+            }
+            let beat = plan.beatSeconds
+            let grains = plan.placements.filter {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beat) < beat * 0.35
+                    && $0.timelineStart >= drop.timelineStart - plan.barSeconds * 4.5
+                    && $0.timelineStart < drop.timelineStart - 0.02
+            }
+            check(
+                "Britney void or Xirex pivot wallpaper before drop",
+                voidOK || grains.count >= 8,
+                "void=\(voidOK) grains=\(grains.count)"
+            )
         }
     case .failure(let message):
         check("Britney solo remix", false, message)
@@ -896,7 +932,7 @@ do {
         check("Drop placement overlaps bed placement in time", layered,
               "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
 
-        // Two-deck: before Drop 1, only the bed is now-playing (no guest hook).
+        // Two-deck + Xirex pivot: Oops plays complete first; no early title chops.
         if let drop1Start = dropLeads.map(\.timelineStart).min() {
             let guestBefore = plan.placements.filter {
                 $0.songID == vocalID
@@ -908,21 +944,93 @@ do {
                 guestBefore.isEmpty,
                 "earlyGuest=\(guestBefore.count)"
             )
-            let echoSpam = plan.placements.filter {
+
+            let bedDoms = plan.placements
+                .filter { $0.songID == bedID && $0.role == .dominant }
+                .sorted { $0.timelineStart < $1.timelineStart }
+            if let firstBed = bedDoms.first {
+                check(
+                    "Britney: first Oops title/intro uncut (source near start)",
+                    firstBed.sourceStart <= plan.barSeconds * 2 + 0.05,
+                    String(format: "sourceStart=%.2f", firstBed.sourceStart)
+                )
+                check(
+                    "Britney: first Oops placement is a complete phrase (≥8 bars)",
+                    firstBed.timelineDuration >= plan.barSeconds * 7.5,
+                    String(format: "dur=%.2f", firstBed.timelineDuration)
+                )
+            } else {
+                check("Britney: Oops bed dominant exists", false)
+            }
+
+            // No supporting chops in the opening 8–16 bars (wallpaper is mix-window only).
+            let earlyChops = plan.placements.filter {
                 $0.role == .supporting
-                    && $0.timelineDuration <= plan.barSeconds + 0.05
-                    && ($0.fadeOut.type == .echoOut
-                        || $0.effects.level(for: MixrEffect.echo.rawValue) >= 12)
+                    && $0.timelineStart < plan.barSeconds * 8 - 0.05
+                    && $0.timelineDuration <= plan.beatSeconds * 1.5
             }
             check(
-                "Britney two-deck: no echo-throw wallpaper (≤2)",
-                echoSpam.count <= 2,
+                "Britney: no early intro/title chops",
+                earlyChops.isEmpty,
+                "earlyChops=\(earlyChops.count)"
+            )
+
+            // Pivot wallpaper: 1-beat last-word grains, 8–16×, immediately before Drop 1.
+            let beat = plan.beatSeconds
+            let grains = plan.placements.filter { p in
+                p.role == .supporting
+                    && p.songID == bedID
+                    && abs(p.timelineDuration - beat) < beat * 0.35
+                    && p.timelineStart >= drop1Start - plan.barSeconds * 4.5
+                    && p.timelineStart < drop1Start - 0.02
+            }.sorted { $0.timelineStart < $1.timelineStart }
+            check(
+                "Britney: pivot wallpaper is 8–16× of a 1-beat grain",
+                grains.count >= 8 && grains.count <= 16,
+                "count=\(grains.count)"
+            )
+            if let g0 = grains.first {
+                let sameGrain = grains.allSatisfy { abs($0.sourceStart - g0.sourceStart) < 0.08 }
+                check("Britney: wallpaper chops share one pivot grain source", sameGrain)
+                check(
+                    "Britney: pivot loop is HPF/thinned (blur)",
+                    grains.allSatisfy { $0.effects.level(for: MixrEffect.blur.rawValue) >= 36 }
+                )
+                if let last = grains.last {
+                    check(
+                        "Britney: Baby hook-replace lands on downbeat after pivot loop",
+                        abs(last.timelineEnd - drop1Start) < plan.beatSeconds * 0.6
+                            || (drop1Start - last.timelineEnd) < plan.beatSeconds * 0.6
+                                && drop1Start >= last.timelineEnd - 0.05,
+                        String(format: "loopEnd=%.2f drop=%.2f", last.timelineEnd, drop1Start)
+                    )
+                }
+            }
+            check(
+                "Britney: pivotWallpaperLoop decision recorded",
+                plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+            )
+            // No echo-throw spam — pivot loop replaced that grammar.
+            let echoSpam = plan.placements.filter {
+                $0.role == .supporting
+                    && $0.fadeOut.type == .echoOut
+                    && $0.timelineDuration > plan.beatSeconds * 1.5
+            }
+            check(
+                "Britney: no echo-throw wallpaper (pivot loop instead)",
+                echoSpam.isEmpty,
                 "echoes=\(echoSpam.count)"
             )
             check(
                 "Britney two-deck: no dual-vocal overlay default",
                 !plan.decisions.contains { $0.kind == .stackedVocalOverlay }
             )
+            // Shared pivot token from titles.
+            let token = AutoPivotWord.preferredPivot(
+                deckATitle: "Oops I Did It Again",
+                deckBTitle: "Baby One More Time"
+            )
+            check("Britney pivot token is 'baby'", token == "baby", "token=\(token ?? "nil")")
         }
 
         // Riser must start during the outgoing phrase (before the cut/downbeat).
@@ -1131,20 +1239,27 @@ do {
               plan.clubFlavor?.bias.maximalistStacks == true)
         check("Diplo flavor allows half-time drop",
               plan.clubFlavor?.bias.halfTimeDrop == true)
-        // Echo throws: mix-window only, not 3-chop wallpaper on every drop.
+        // Pivot wallpaper (1-beat grains) may sit in the mix window; no echo-throw spam.
         let echoes = plan.placements.filter { p in
             p.role == .supporting
                 && p.songID == song.id
-                && p.timelineDuration <= plan.barSeconds + 0.05
-                && (p.overlapsPreviousSeconds > 0.05
-                    || p.effects.level(for: MixrEffect.echo.rawValue) >= 12
-                    || p.fadeOut.type == .echoOut)
+                && p.fadeOut.type == .echoOut
+                && p.timelineDuration > plan.beatSeconds * 1.5
         }
-        let echoOutside = echoes.filter { !inMixWindow($0.timelineStart) }
         check(
-            "Echo throws gated to mix windows (no wallpaper)",
-            echoOutside.isEmpty && echoes.count <= 2,
-            "echoes=\(echoes.count) outside=\(echoOutside.count)"
+            "No echo-throw wallpaper (pivot loop replaces it)",
+            echoes.isEmpty,
+            "echoes=\(echoes.count)"
+        )
+        let grains = plan.placements.filter { p in
+            p.role == .supporting
+                && abs(p.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.35
+                && inMixWindow(p.timelineStart)
+        }
+        check(
+            "Pivot wallpaper grains gated to mix windows",
+            grains.isEmpty || grains.allSatisfy { inMixWindow($0.timelineStart) },
+            "grains=\(grains.count)"
         )
     case .failure(let message):
         check("Two-deck club remix", false, message)
@@ -1236,61 +1351,62 @@ do {
 }
 
 do {
-    // Echo throws are mix-window tools (into the void), not wallpaper on every drop.
+    // Xirex pivot wallpaper (general): 1-beat last-word loop in the mix window,
+    // not echo-throw spam on every drop / not early intro chops.
     let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
     let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 42, signals: [song.id: feat]) {
     case .success(_, let plan, _):
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         guard let drop0 = drops.first else {
-            check("Echo mix-window: Drop 1 exists", false)
+            check("Pivot wallpaper: Drop 1 exists", false)
             break
         }
         let bar = plan.barSeconds
         let beat = plan.beatSeconds
-        let echoes = plan.placements.filter { p in
+        // Opening: no short supporting chops in first 8 bars.
+        let earlyChops = plan.placements.filter {
+            $0.role == .supporting
+                && $0.timelineStart < bar * 8 - 0.05
+                && $0.timelineDuration <= beat * 1.5
+        }
+        check("Solo remix: no early intro chops", earlyChops.isEmpty, "count=\(earlyChops.count)")
+        if let first = plan.placements.filter({ $0.role == .dominant }).sorted(by: { $0.timelineStart < $1.timelineStart }).first {
+            check(
+                "Solo remix: opening phrase starts near source start",
+                first.sourceStart <= bar * 2 + 0.05,
+                String(format: "sourceStart=%.2f", first.sourceStart)
+            )
+        }
+        let grains = plan.placements.filter { p in
             p.role == .supporting
                 && p.songID == song.id
-                && p.timelineDuration <= bar + 0.05
-                && p.timelineDuration >= beat * 0.75
-                && (p.overlapsPreviousSeconds > 0.05
-                    || p.effects.level(for: MixrEffect.echo.rawValue) >= 12
-                    || p.fadeOut.type == .echoOut)
+                && abs(p.timelineDuration - beat) < beat * 0.35
+                && p.timelineStart >= drop0.timelineStart - bar * 4.5
+                && p.timelineStart < drop0.timelineStart - 0.02
         }
-        // At most one short throw into the Drop 1 void — not 3 chops on every drop.
-        let nearDrop1 = echoes.filter { abs($0.timelineStart - drop0.timelineStart) <= bar * 0.75 }
         check(
-            "Echo throws ≤2 near Drop 1 (mix window, not wallpaper)",
-            nearDrop1.count <= 2,
-            "count=\(nearDrop1.count)"
+            "Solo remix: pivot wallpaper 8–16× before Drop 1",
+            grains.count >= 8 && grains.count <= 16,
+            "count=\(grains.count)"
         )
-        let nearDrop2: Int = {
+        check(
+            "Solo remix records pivotWallpaperLoop",
+            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        )
+        // No legacy echo-throw wallpaper on Drop 2.
+        let drop2Echoes: Int = {
             guard drops.count > 1 else { return 0 }
             let d2 = drops[1]
-            return echoes.filter { abs($0.timelineStart - d2.timelineStart) <= bar * 0.75 }.count
+            return plan.placements.filter {
+                $0.role == .supporting
+                    && $0.fadeOut.type == .echoOut
+                    && abs($0.timelineStart - d2.timelineStart) <= bar * 0.75
+            }.count
         }()
-        check("No echo-throw wallpaper on Drop 2", nearDrop2 == 0, "count=\(nearDrop2)")
-        if !nearDrop1.isEmpty {
-            check(
-                "Mix-window echo stays ≤4 beats",
-                nearDrop1.allSatisfy { $0.timelineDuration <= beat * 4.05 }
-            )
-            check(
-                "Mix-window echo is ducked",
-                nearDrop1.allSatisfy { $0.volume <= 0.50 }
-            )
-            let void = plan.intentionalGaps.first {
-                $0.reason.contains("void") && abs($0.end - drop0.timelineStart) < 0.05
-            }
-            if let void {
-                let intoVoid = nearDrop1.contains {
-                    $0.timelineStart < drop0.timelineStart - 0.01 && $0.timelineStart >= void.start - 0.05
-                }
-                check("When present, echo lands in the pre-drop void", intoVoid)
-            }
-        }
+        check("No echo-throw wallpaper on Drop 2", drop2Echoes == 0, "count=\(drop2Echoes)")
     case .failure(let message):
-        check("Mix-window echo gating", false, message)
+        check("Pivot wallpaper solo remix", false, message)
     }
 }
 

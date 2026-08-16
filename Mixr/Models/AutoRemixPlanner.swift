@@ -251,11 +251,13 @@ enum AutoRemixPlanner {
         let bar = beat * 4
         let ratio = tempo.ratio
 
-        // Compact streaming club shape (bars). All on phrase grid.
+        // Xirex grammar: opening uncut → first complete hook → 4-bar pivot
+        // wallpaper → Drop 1 hard cut (lands ~bar 28, still ≤32).
         let shape: [(role: AutoCandidateSection.Label, bars: Int, energy: Double, pulse: AutoClubPulse.RegionRole, entry: AutoTransitionRecipe)] = [
             (.intro, 8, 0.45, .introTease, .none),
             (.groove, 8, 0.58, .groove, .cleanCrossfade),
-            (.build, 8, 0.72, .build, .flangerBuild),
+            (.chorus, 8, 0.88, .groove, .cleanCrossfade),    // first complete hook (still the record)
+            (.build, 4, 0.70, .buildOut, .flangerBuild),      // pivot wallpaper window
             (.chorus, 16, 1.0, .drop, .hardHypeCut),          // Drop 1
             (.breakdown, 8, 0.42, .breakdown, .atmosphericHandoff),
             (.build, 8, 0.82, .build, .flangerBuild),         // Build 2 denser
@@ -307,8 +309,8 @@ enum AutoRemixPlanner {
         for (slotIdx, slot) in shape.enumerated() {
             let labels: [AutoCandidateSection.Label]
             switch slot.role {
-            case .intro: labels = [.intro, .groove, .teaser]
-            case .groove: labels = [.groove, .teaser, .chorus]
+            case .intro: labels = [.intro, .groove] // never teaser — protect title
+            case .groove: labels = [.groove, .chorus]
             case .build: labels = [.build, .groove]
             case .chorus: labels = [.chorus, .teaser]
             case .breakdown: labels = [.breakdown, .groove]
@@ -320,15 +322,54 @@ enum AutoRemixPlanner {
                 ?? fallbackSection(profile: profile, label: slot.role, bars: slot.bars, usableStart: usableStart, usableEnd: usableEnd)
             else { continue }
 
-            // Drop slots: prefer the strongest chorus / title-line island
-            // (AutoSectionCatalog hook score), not a verse disguised as chorus.
-            // Drop 2 uses the next-best hook (or flips the same hook).
+            // Protect opening: intro always starts at the record head.
+            if slot.role == .intro {
+                section = AutoCandidateSection(
+                    songID: section.songID,
+                    label: .intro,
+                    startSeconds: usableStart,
+                    barCount: slot.bars,
+                    barSeconds: section.barSeconds,
+                    hook: section.hook,
+                    energy: section.energy,
+                    vocal: section.vocal,
+                    clarity: section.clarity,
+                    rhythm: section.rhythm,
+                    uniqueness: section.uniqueness,
+                    transitionUse: section.transitionUse,
+                    confidence: section.confidence
+                )
+            }
+
+            // Drop slots (hard hype): strongest chorus islands.
+            // First complete hook (pulse .groove / clean crossfade) keeps the
+            // record playing — no mid-song jump that chops into the title.
             if slot.role == .chorus {
                 let hooks = profile.candidates
                     .filter { ($0.label == .chorus || $0.label == .teaser) && $0.barCount >= 8 }
                     .sorted { $0.hook > $1.hook }
-                if dropIndex < hooks.count {
-                    section = hooks[dropIndex]
+                if slot.entry == .hardHypeCut {
+                    if dropIndex < hooks.count {
+                        section = hooks[dropIndex]
+                    } else if let bestHook = hooks.first {
+                        section = bestHook
+                    }
+                } else if slot.pulse == .groove, let last = lastSourceEnd {
+                    section = AutoCandidateSection(
+                        songID: section.songID,
+                        label: .chorus,
+                        startSeconds: min(last, max(usableStart, usableEnd - Double(slot.bars) * bar * ratio)),
+                        barCount: slot.bars,
+                        barSeconds: section.barSeconds,
+                        hook: max(section.hook, 0.85),
+                        energy: slot.energy,
+                        vocal: section.vocal,
+                        clarity: section.clarity,
+                        rhythm: section.rhythm,
+                        uniqueness: section.uniqueness,
+                        transitionUse: section.transitionUse,
+                        confidence: section.confidence
+                    )
                 } else if let bestHook = hooks.first {
                     section = bestHook
                 }
@@ -413,36 +454,52 @@ enum AutoRemixPlanner {
                 buildBodyBars = slot.bars - 4
             }
 
-            // Intentional pre-drop void: last beat(s) of the previous bar.
-            // Drop stays on the downbeat (bar boundary) — do not shift cursor.
-            if slot.entry == .hardHypeCut, cursor > 0 {
-                let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
-                let voidSec = voidBeats * beat
-                if voidSec > 0.05, cursor > voidSec {
-                    let dropStart = cursor
-                    let voidStart = dropStart - voidSec
-                    carvePredropVoid(
-                        voidStart: voidStart,
-                        dropStart: dropStart,
-                        placements: &placements,
-                        pulseRegions: &pulseRegions,
-                        intentionalGaps: &intentionalGaps,
-                        minSegmentSeconds: tuning.minSegmentSeconds
-                    )
-                    if let last = placements.last {
-                        lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
-                    }
-                    decisions.append(
-                        AutoDecision(
-                            kind: .allowedPredropVoid,
-                            songTitle: profile.title,
-                            detail: String(format: "%.2f beats before drop (drop on downbeat)", voidBeats)
+            // Intentional pre-drop void — skip when previous island is the
+            // 4-bar pivot wallpaper window (Xirex loop replaces the void).
+            if slot.entry == .hardHypeCut, cursor > 0, slot.bars >= 8 {
+                let pivotBefore = slotIdx > 0
+                    && shape[slotIdx - 1].role == .build
+                    && shape[slotIdx - 1].bars <= 4
+                if !pivotBefore {
+                    let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
+                    let voidSec = voidBeats * beat
+                    if voidSec > 0.05, cursor > voidSec {
+                        let dropStart = cursor
+                        let voidStart = dropStart - voidSec
+                        carvePredropVoid(
+                            voidStart: voidStart,
+                            dropStart: dropStart,
+                            placements: &placements,
+                            pulseRegions: &pulseRegions,
+                            intentionalGaps: &intentionalGaps,
+                            minSegmentSeconds: tuning.minSegmentSeconds
                         )
-                    )
+                        if let last = placements.last {
+                            lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
+                        }
+                        decisions.append(
+                            AutoDecision(
+                                kind: .allowedPredropVoid,
+                                songTitle: profile.title,
+                                detail: String(format: "%.2f beats before drop (drop on downbeat)", voidBeats)
+                            )
+                        )
+                    }
                 }
             }
 
             if slot.entry != .none { transitionsUsed.append(slot.entry) }
+
+            // Xirex 4-bar pivot window: no dominant audio here — grains land
+            // when Drop 1 emits (after the completed hook phrase).
+            if slot.role == .build, slot.bars <= 4, slot.pulse == .buildOut {
+                let dur = Double(slot.bars) * bar
+                pulseRegions.append(
+                    AutoClubPulse.Region(role: .buildOut, timelineStart: cursor, timelineEnd: cursor + dur)
+                )
+                cursor += dur
+                continue
+            }
 
             // Split build into body + buildOut (kick mute).
             let segments: [(bars: Int, pulse: AutoClubPulse.RegionRole, energy: Double)]
@@ -619,11 +676,10 @@ enum AutoRemixPlanner {
                 // Two-deck: verses/grooves stay one deck — no clap wallpaper.
             }
 
-            if slot.role == .chorus {
+            if slot.role == .chorus, slot.entry == .hardHypeCut {
                 let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
                     ?? cursor
                 // Mix-window into the drop: snare/riser + one impact on Drop 1.
-                // Diplo energy lives on the downbeat — not mid-drop wallpaper.
                 let stackHard = flavor.bias.maximalistStacks
                 if dropIndex == 0 || stackHard {
                     if let riser = SoundEffectLibrary.definition(for: "riser"),
@@ -679,32 +735,22 @@ enum AutoRemixPlanner {
                             : "drop 2 flip (impact only)"
                     )
                 )
-                // Echo throw only into Drop 1 void (mix window) — not every drop.
-                if dropIndex == 0, let lead = placements.last(where: {
-                    $0.slotIndex == slotIdx && $0.role == .dominant
-                }) {
-                    var echoLead = lead
-                    if let outgoing = placements.last(where: {
-                        $0.role == .dominant
-                            && $0.slotIndex != slotIdx
-                            && $0.timelineEnd <= lead.timelineStart + 0.15
-                    }) {
-                        let chop = min(bar, max(beat, 2 * beat))
-                        echoLead.sourceStart = max(
-                            outgoing.sourceStart,
-                            outgoing.sourceEnd - chop * outgoing.tempoRatio
-                        )
-                    }
-                    appendHookEchoThrows(
-                        lead: echoLead,
-                        songTitle: profile.title,
+                // Xirex pivot wallpaper before Drop 1 only.
+                if dropIndex == 0,
+                   let phrase = placements.last(where: {
+                       $0.role == .dominant && $0.slotIndex != slotIdx
+                   }) {
+                    appendPivotWallpaperLoop(
+                        completedPhrase: phrase,
+                        dropTimelineStart: dropAt,
+                        deckATitle: profile.title,
+                        deckBTitle: profile.title,
                         barSec: bar,
                         beatSec: beat,
-                        intentionalGaps: intentionalGaps,
                         tuning: tuning,
                         placements: &placements,
-                        decisions: &decisions,
-                        mixWindowOnly: true
+                        pulseRegions: &pulseRegions,
+                        decisions: &decisions
                     )
                 }
                 dropIndex += 1
@@ -815,8 +861,7 @@ enum AutoRemixPlanner {
         let bar = beat * 4
         let ratio = tempo.ratio
 
-        // Same compact shape as the confident path — intro 8 + groove 8 +
-        // build 8 → Drop 1 at bar 24 (not 48% of a long song).
+        // Xirex-ish low-conf shape: opening → first hook → 4-bar pivot → Drop 1.
         struct Seg {
             var role: AutoClubPulse.RegionRole
             var bars: Int
@@ -825,8 +870,8 @@ enum AutoRemixPlanner {
         let shape: [Seg] = [
             .init(role: .introTease, bars: 8, energy: 0.42),
             .init(role: .groove, bars: 8, energy: 0.55),
-            .init(role: .build, bars: 4, energy: 0.65),
-            .init(role: .buildOut, bars: 4, energy: 0.50),
+            .init(role: .groove, bars: 8, energy: 0.80), // first complete hook listen-through
+            .init(role: .buildOut, bars: 4, energy: 0.50), // pivot wallpaper window
             .init(role: .drop, bars: 16, energy: 1.00),
             .init(role: .breakdown, bars: 8, energy: 0.40),
             .init(role: .build, bars: 4, energy: 0.70),
@@ -863,29 +908,32 @@ enum AutoRemixPlanner {
             let t1 = cursor + segDur
 
             if seg.role == .drop, t0 > beat {
-                let voidSec = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats) * beat
-                if voidSec > 0.05 {
-                    let dropStart = t0
-                    let voidStart = dropStart - voidSec
-                    carvePredropVoid(
-                        voidStart: voidStart,
-                        dropStart: dropStart,
-                        placements: &placements,
-                        pulseRegions: &pulseRegions,
-                        intentionalGaps: &intentionalGaps,
-                        minSegmentSeconds: tuning.minSegmentSeconds
-                    )
-                    if let last = placements.last {
-                        lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
-                    }
-                    if dropIndex == 0 {
-                        decisions.append(
-                            AutoDecision(
-                                kind: .allowedPredropVoid,
-                                songTitle: profile.title,
-                                detail: "low-confidence club shape (drop on downbeat)"
-                            )
+                let pivotBefore = i > 0 && shape[i - 1].role == .buildOut && shape[i - 1].bars <= 4
+                if !pivotBefore {
+                    let voidSec = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats) * beat
+                    if voidSec > 0.05 {
+                        let dropStart = t0
+                        let voidStart = dropStart - voidSec
+                        carvePredropVoid(
+                            voidStart: voidStart,
+                            dropStart: dropStart,
+                            placements: &placements,
+                            pulseRegions: &pulseRegions,
+                            intentionalGaps: &intentionalGaps,
+                            minSegmentSeconds: tuning.minSegmentSeconds
                         )
+                        if let last = placements.last {
+                            lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
+                        }
+                        if dropIndex == 0 {
+                            decisions.append(
+                                AutoDecision(
+                                    kind: .allowedPredropVoid,
+                                    songTitle: profile.title,
+                                    detail: "low-confidence club shape (drop on downbeat)"
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -935,14 +983,17 @@ enum AutoRemixPlanner {
             }
 
             // Source: continuous through tease/build; JUMP to hook on drops.
+            // First complete-hook listen-through (pre-pivot groove@0.80) also
+            // jumps to the strongest hook — then plays it continuous once.
             let sourceStart: Double
             let sourceContinuous: Bool
-            if role == .drop {
+            let isFirstHookPass = role == .groove && seg.energy >= 0.78 && dropIndex == 0
+            if role == .drop || isFirstHookPass {
                 let hookStart = dropIndex == 0 ? hook1 : hook2
                 let clamped = min(max(usableStart, hookStart), max(usableStart, usableEnd - segDur * ratio))
                 sourceStart = clamped
                 sourceContinuous = false
-                if let prevEnd = lastSourceEnd, abs(clamped - prevEnd) > 0.05 {
+                if role == .drop, let prevEnd = lastSourceEnd, abs(clamped - prevEnd) > 0.05 {
                     cutRecords.append(
                         AutoCutRecord(
                             timelineAt: t0,
@@ -962,9 +1013,14 @@ enum AutoRemixPlanner {
                         )
                     )
                 }
+            } else if role == .buildOut, seg.bars <= 4, dropIndex == 0 {
+                // Pivot window — no dominant audio; grains added at drop.
+                pulseRegions.append(AutoClubPulse.Region(role: role, timelineStart: t0, timelineEnd: t1))
+                cursor = t1
+                continue
             } else if let prev = lastSourceEnd {
-                sourceStart = prev
-                sourceContinuous = true
+                sourceStart = role == .introTease ? usableStart : prev
+                sourceContinuous = role != .introTease
             } else {
                 sourceStart = usableStart
                 sourceContinuous = false
@@ -1056,19 +1112,21 @@ enum AutoRemixPlanner {
                     }
                 }
                 sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "impact on drop"))
-                if dropIndex == 0, let lead = placements.last(where: {
-                    $0.slotIndex == i && $0.role == .dominant
-                }) {
-                    appendHookEchoThrows(
-                        lead: lead,
-                        songTitle: profile.title,
+                if dropIndex == 0,
+                   let phrase = placements.last(where: {
+                       $0.role == .dominant && $0.timelineEnd <= t0 + 0.05
+                   }) {
+                    appendPivotWallpaperLoop(
+                        completedPhrase: phrase,
+                        dropTimelineStart: t0,
+                        deckATitle: profile.title,
+                        deckBTitle: profile.title,
                         barSec: bar,
                         beatSec: beat,
-                        intentionalGaps: intentionalGaps,
                         tuning: tuning,
                         placements: &placements,
-                        decisions: &decisions,
-                        mixWindowOnly: true
+                        pulseRegions: &pulseRegions,
+                        decisions: &decisions
                     )
                 }
                 dropIndex += 1
@@ -1165,85 +1223,103 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// Classic DJ echo throw into the mix-window void: copy 1–2 beats of the
-    /// hook onto a short supporting placement. Literal duplicate so bounce
-    /// WAVs hear it. Gated to Drop 1 mix window — not wallpaper on every drop.
-    private static func appendHookEchoThrows(
-        lead: AutoClipPlacement,
-        songTitle: String?,
+    /// Xirex pivot wallpaper: after Deck A’s chorus/hook plays COMPLETE,
+    /// loop the last 1-beat grain 8–16× (2–4 bars) with rising HPF, then
+    /// hard-cut into Deck B. Not echo throws, not 1/8 spam, not intro chops.
+    private static func appendPivotWallpaperLoop(
+        completedPhrase: AutoClipPlacement,
+        dropTimelineStart: Double,
+        deckATitle: String?,
+        deckBTitle: String?,
         barSec: Double,
         beatSec: Double,
-        intentionalGaps: [AutoIntentionalGap],
         tuning: AutoTuning,
         placements: inout [AutoClipPlacement],
-        decisions: inout [AutoDecision],
-        mixWindowOnly: Bool = true
+        pulseRegions: inout [AutoClubPulse.Region],
+        decisions: inout [AutoDecision]
     ) {
-        guard lead.role == .dominant else { return }
-        guard lead.timelineDuration >= barSec * 7.5 else { return }
+        let loopBars = max(2, min(4, tuning.pivotWallpaperBars))
+        let repeats = max(8, min(16, loopBars * 4))
+        let loopDur = Double(repeats) * beatSec
+        let loopStart = dropTimelineStart - loopDur
+        guard loopStart >= 0.05 else { return }
 
-        let void = intentionalGaps.first {
-            $0.reason.localizedCaseInsensitiveContains("void")
-                && abs($0.end - lead.timelineStart) < 0.05
+        // Grain = last 1 beat of the completed phrase (must have already sounded).
+        let phraseEnd = min(completedPhrase.sourceEnd, completedPhrase.sourceStart + completedPhrase.timelineDuration * completedPhrase.tempoRatio)
+        guard phraseEnd - completedPhrase.sourceStart >= beatSec * completedPhrase.tempoRatio * 3.5 else {
+            // Phrase too short — refuse to invent an early chop.
+            return
         }
-        // Mix-window gate: need a pre-drop void (or explicit opt-in).
-        guard !mixWindowOnly || void != nil else { return }
+        let grainSource = AutoPivotWord.lastBeatGrainSource(
+            phraseSourceStart: completedPhrase.sourceStart,
+            phraseSourceEnd: phraseEnd,
+            beatSec: beatSec,
+            tempoRatio: completedPhrase.tempoRatio
+        )
 
-        let chopBeats = 2.0
-        let chopDur = min(barSec, max(beatSec, chopBeats * beatSec))
-        let titleSource = lead.sourceStart
+        // Trim Deck A dominants out of the loop window (wallpaper owns it).
+        for i in placements.indices where placements[i].role == .dominant {
+            let p = placements[i]
+            if p.timelineStart < loopStart, p.timelineEnd > loopStart + 0.01 {
+                let newDur = loopStart - p.timelineStart
+                if newDur >= tuning.minSegmentSeconds * 0.5 {
+                    placements[i].timelineDuration = newDur
+                    placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
+                }
+            } else if p.timelineStart >= loopStart - 0.01, p.timelineStart < dropTimelineStart {
+                placements[i].timelineDuration = 0
+            }
+        }
+        placements.removeAll { $0.timelineDuration < 0.05 }
 
-        // One throw into the void (last word / title anticipates the drop).
-        let maxThrows = max(1, tuning.maxMixWindowEchoThrows)
-        let delayBars: [Double] = void != nil ? [-0.125] : [0.125]
-        var placed = 0
-        for delay in delayBars.prefix(maxThrows) {
-            let t0 = lead.timelineStart + delay * barSec
-            if let void, t0 < void.start - 0.02 { continue }
-            guard t0 >= -0.01 else { continue }
-            guard t0 <= lead.timelineStart + barSec * 0.25 + 0.05 else { continue }
-            guard t0 + chopDur <= lead.timelineEnd + beatSec else { continue }
+        // Pulse: kick out through the thinned stutter.
+        pulseRegions.removeAll {
+            $0.timelineEnd > loopStart + 0.01 && $0.timelineStart < dropTimelineStart - 0.01
+        }
+        pulseRegions.append(
+            AutoClubPulse.Region(role: .buildOut, timelineStart: loopStart, timelineEnd: dropTimelineStart)
+        )
 
+        let pivot = AutoPivotWord.preferredPivot(
+            deckATitle: deckATitle ?? "",
+            deckBTitle: deckBTitle ?? deckATitle ?? ""
+        )
+
+        for i in 0..<repeats {
+            let t0 = loopStart + Double(i) * beatSec
+            // Rising HPF: thin/tinny through the 4 bars.
+            let blur = 40.0 + (30.0 * Double(i) / Double(max(repeats - 1, 1)))
             var fx = ClipEffectSettings()
-            fx.setLevel(28, for: MixrEffect.echo.rawValue)
-            fx.echoPreset = .classic
-            fx.setLevel(14, for: MixrEffect.reverb.rawValue)
-            fx.reverbPreset = .ambient
-            fx.setLevel(40, for: MixrEffect.blur.rawValue)
+            fx.setLevel(blur, for: MixrEffect.blur.rawValue)
             fx = AutoSupportedEffects.sanitize(fx)
-
-            let vol = min(tuning.supportVolume, tuning.duckedVocalSupportVolume * 0.95)
-            let declaredOverlap = max(chopDur, abs(delay) * barSec + chopDur)
 
             placements.append(
                 AutoClipPlacement(
-                    songID: lead.songID,
-                    sourceStart: titleSource,
-                    timelineStart: max(0, t0),
-                    timelineDuration: chopDur,
-                    tempoRatio: lead.tempoRatio,
-                    volume: max(0.18, vol),
-                    fadeIn: ClipTransition(type: .crossfade, duration: 0.25),
-                    fadeOut: ClipTransition(type: .echoOut, duration: 2),
+                    songID: completedPhrase.songID,
+                    sourceStart: grainSource,
+                    timelineStart: t0,
+                    timelineDuration: beatSec,
+                    tempoRatio: completedPhrase.tempoRatio,
+                    volume: max(0.28, tuning.duckedVocalSupportVolume + 0.08),
+                    fadeIn: ClipTransition(type: .none, duration: 0),
+                    fadeOut: ClipTransition(type: .none, duration: 0),
                     effects: fx,
                     role: .supporting,
-                    slotIndex: lead.slotIndex,
-                    overlapsPreviousSeconds: declaredOverlap
+                    slotIndex: completedPhrase.slotIndex,
+                    overlapsPreviousSeconds: beatSec
                 )
             )
-            placed += 1
         }
-
-        guard placed >= 1 else { return }
 
         decisions.append(
             AutoDecision(
-                kind: .hookEchoThrow,
-                songTitle: songTitle,
+                kind: .pivotWallpaperLoop,
+                songTitle: deckATitle,
                 detail: String(
-                    format: "%d× %.0f-beat mix-window throw into void",
-                    placed,
-                    chopBeats
+                    format: "%d×1-beat%@ → hard cut @%.1fs",
+                    repeats,
+                    pivot.map { " “\($0)”" } ?? "",
+                    dropTimelineStart
                 )
             )
         )
@@ -1708,6 +1784,8 @@ enum AutoRemixPlanner {
 
     /// Two-wave club shape for N-song mashups. Indices into `ordered`
     /// (0 = bed). Min stay 8 bars; hooks prefer 16. No 4-bar ping-pong.
+    /// Xirex grammar before Drop 1: bed intro → groove → complete bed chorus
+    /// → 4-bar pivot wallpaper window → guest hook-replace.
     private static func nSongClubMashupSlots(
         drop1Idx: Int?,
         drop2Idx: Int,
@@ -1724,7 +1802,10 @@ enum AutoRemixPlanner {
         } else {
             slots.append(Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.58))
         }
-        slots.append(Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.72))
+        // Complete Deck A chorus/hook BEFORE the pivot loop (never chop the title).
+        slots.append(Slot(songIdx: 0, role: .chorus, bars: 8, entry: .cleanCrossfade, energy: 0.88))
+        // 4-bar pivot window — replaced with 1-beat wallpaper grains at emit time.
+        slots.append(Slot(songIdx: 0, role: .build, bars: 4, entry: .flangerBuild, energy: 0.72, shrinkPriority: 1))
 
         if let d1 = drop1Idx {
             slots.append(Slot(songIdx: d1, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
@@ -1754,7 +1835,6 @@ enum AutoRemixPlanner {
         if let o = outroCameoIdx {
             slots.append(Slot(songIdx: o, role: .teaser, bars: 8, entry: .vocalEchoOut, energy: 0.5, isEnding: true, shrinkPriority: 0))
         } else {
-            // Min identity stay is 8 bars — no 4-bar outro ping.
             slots.append(Slot(songIdx: 0, role: .ending, bars: 8, entry: .vocalEchoOut, energy: 0.55, isEnding: true, shrinkPriority: 0))
         }
         return slots
@@ -1977,7 +2057,7 @@ enum AutoRemixPlanner {
                 )
             }
 
-            guard let section else {
+            guard var section = section else {
                 warnings.append(
                     "No usable \(slot.role.rawValue) section found in \(profile.title); skipped that appearance."
                 )
@@ -1988,6 +2068,44 @@ enum AutoRemixPlanner {
                         detail: slot.role.rawValue
                     )
                 )
+                continue
+            }
+
+            // Protect Deck A opening: intro always starts at the record head
+            // (never a mid-song teaser chop of the title).
+            if slot.role == .intro {
+                let open = max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
+                if abs(section.startSeconds - open) > 0.05 || section.startSeconds > barSec * 2 {
+                    section = AutoCandidateSection(
+                        songID: section.songID,
+                        label: .intro,
+                        startSeconds: open,
+                        barCount: section.barCount,
+                        barSeconds: section.barSeconds,
+                        hook: section.hook,
+                        energy: section.energy,
+                        vocal: section.vocal,
+                        clarity: section.clarity,
+                        rhythm: section.rhythm,
+                        uniqueness: section.uniqueness,
+                        transitionUse: section.transitionUse,
+                        confidence: section.confidence
+                    )
+                }
+            }
+
+            // Xirex: reserve the 4-bar pivot wallpaper window on the timeline
+            // (no dominant island). Grains are emitted when Drop 1 lands.
+            if mode == .mashup, slot.role == .build, slot.bars <= 4, !slot.isReturn {
+                let dur = Double(slot.bars) * barSec
+                pulseRegions.append(
+                    AutoClubPulse.Region(
+                        role: .buildOut,
+                        timelineStart: cursor,
+                        timelineEnd: cursor + dur
+                    )
+                )
+                cursor += dur
                 continue
             }
 
@@ -2063,9 +2181,14 @@ enum AutoRemixPlanner {
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional pre-drop void: last beat(s) of the previous bar.
-            // Drop stays on the downbeat — do not advance cursor past the bar line.
-            if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0 {
+            // Intentional pre-drop void — skipped when the previous window is
+            // the Xirex 4-bar pivot wallpaper (loop replaces the void).
+            let prevIsPivotWindow = pulseRegions.contains { region in
+                region.role == .buildOut
+                    && abs(region.timelineEnd - cursor) < 0.08
+                    && region.timelineEnd - region.timelineStart >= barSec * 1.5
+            }
+            if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0, !prevIsPivotWindow {
                 let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
                 let pause = voidBeats * beatSec
                 if pause > 0.05, cursor > pause {
@@ -2220,6 +2343,17 @@ enum AutoRemixPlanner {
 
             if i > 0 { transitionsUsed.append(entry) }
 
+            // Xirex 4-bar pivot window: no dominant bed audio — wallpaper grains
+            // are placed when Drop 1 emits (after the completed chorus phrase).
+            let isPivotWindow = mode == .mashup
+                && ps.slot.role == .build
+                && ps.slot.bars <= 4
+                && !ps.slot.isReturn
+            if isPivotWindow {
+                lastMajorSFXTime = boundary
+                continue
+            }
+
             var bodyFX = ClipEffectSettings()
             switch ps.slot.role {
             case .teaser:
@@ -2296,6 +2430,13 @@ enum AutoRemixPlanner {
                 : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
             if entry == .cleanCrossfade, headSeconds == 0 {
                 bodyFadeIn = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
+            }
+            // Xirex: hard cut into the hook-replace drop (no crossfade, no echo).
+            if entry == .hardHypeCut, headSeconds == 0 {
+                bodyFadeIn = ClipTransition(type: .crossfade, duration: 0.125)
+                bodyFadeOut = next == nil
+                    ? bodyFadeOut
+                    : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
             }
             if ps.slot.isEnding {
                 bodyFadeOut = ClipTransition(type: .echoOut, duration: 6)
@@ -2384,9 +2525,32 @@ enum AutoRemixPlanner {
                 )
             }
 
-            // Club mashup drops: bed under the hook (one kick/bass) + optional
-            // second vocal chant/harmony (Bollywood stack). Vocals may overlap.
+            // Club mashup drops: bed under the hook (hook-replace) + optional
+            // short call-and-response. Xirex pivot wallpaper before Drop 1 only
+            // (hard cut into hook-replace) — never on the bed's own complete chorus.
             if mode == .mashup, ps.slot.role == .chorus {
+                if !ps.slot.isFinalPeak,
+                   entry == .hardHypeCut,
+                   let bedID = mashupBedID,
+                   let bedTitle = ordered.first(where: { $0.songID == bedID })?.title,
+                   let phrase = placements.last(where: {
+                       $0.songID == bedID
+                           && $0.role == .dominant
+                           && $0.timelineEnd <= ps.timelineStart + 0.05
+                   }) {
+                    appendPivotWallpaperLoop(
+                        completedPhrase: phrase,
+                        dropTimelineStart: ps.timelineStart,
+                        deckATitle: bedTitle,
+                        deckBTitle: profile.title,
+                        barSec: barSec,
+                        beatSec: beatSec,
+                        tuning: tuning,
+                        placements: &placements,
+                        pulseRegions: &pulseRegions,
+                        decisions: &decisions
+                    )
+                }
                 appendMashupDropStacks(
                     lead: ps,
                     leadProfile: profile,
@@ -2402,39 +2566,6 @@ enum AutoRemixPlanner {
                     placements: &placements,
                     decisions: &decisions
                 )
-                if let lead = placements.last(where: {
-                    $0.slotIndex == i && $0.role == .dominant && $0.songID == profile.songID
-                }) {
-                    // Echo Deck A's last word into the Drop 1 void — not guest wallpaper.
-                    if !ps.slot.isFinalPeak {
-                        var echoLead = lead
-                        if let bedID = mashupBedID,
-                           let outgoing = placements.last(where: {
-                               $0.songID == bedID
-                                   && $0.role == .dominant
-                                   && $0.timelineEnd <= lead.timelineStart + 0.15
-                           }) {
-                            let chop = min(barSec, max(beatSec, 2 * beatSec))
-                            echoLead.songID = outgoing.songID
-                            echoLead.tempoRatio = outgoing.tempoRatio
-                            echoLead.sourceStart = max(
-                                outgoing.sourceStart,
-                                outgoing.sourceEnd - chop * outgoing.tempoRatio
-                            )
-                        }
-                        appendHookEchoThrows(
-                            lead: echoLead,
-                            songTitle: profile.title,
-                            barSec: barSec,
-                            beatSec: beatSec,
-                            intentionalGaps: intentionalGaps,
-                            tuning: tuning,
-                            placements: &placements,
-                            decisions: &decisions,
-                            mixWindowOnly: true
-                        )
-                    }
-                }
             }
 
             // Directional overlap under mashup handoffs (non-drop recipes).

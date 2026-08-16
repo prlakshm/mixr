@@ -25,17 +25,18 @@ nonisolated enum AutoRemixValidator {
         let beatSec = plan.beatSeconds
         let echoMinLen = max(0.12, beatSec * 0.4)
 
-        // Short supporting DJ echo throws (≤1 bar) are intentional chops —
-        // they may sit below the global clip minimum.
+        // Short supporting DJ echo throws OR 1-beat pivot wallpaper grains
+        // may sit below the global clip minimum.
         func isHookEchoThrow(_ p: AutoClipPlacement) -> Bool {
-            p.role == .supporting
-                && p.timelineDuration <= barSec + 0.05
+            guard p.role == .supporting else { return false }
+            let shortGrain = p.timelineDuration <= barSec + 0.05
                 && p.timelineDuration >= echoMinLen
-                && (
-                    p.overlapsPreviousSeconds > 0.05
-                        || p.effects.level(for: MixrEffect.echo.rawValue) >= 8
-                        || p.fadeOut.type == .echoOut
-                )
+            let pivotBeat = abs(p.timelineDuration - beatSec) < beatSec * 0.4
+            guard shortGrain || pivotBeat else { return false }
+            return p.overlapsPreviousSeconds > 0.05
+                || p.effects.level(for: MixrEffect.echo.rawValue) >= 8
+                || p.effects.level(for: MixrEffect.blur.rawValue) >= 36
+                || p.fadeOut.type == .echoOut
         }
 
         // ── 1. Source ranges must live inside each song ──
