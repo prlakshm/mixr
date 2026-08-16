@@ -83,6 +83,11 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 - Ballad on a peak-time bed → breakdown runway, not a slam.
 - Cap at 5 songs.
 
+Ported heuristics (Swift reimplementations — cite in code):
+- **AutoMashUpper (Davies 2014):** mashability is LOCAL per 8–16 bar island (harmonic / rhythmic / spectral); search beat offsets; asymmetric vocal-over-bed.
+- **AutoMashup 2025 (BSD-3):** stem *role proxies* from vocalPresence vs bass/drum curves (no Demucs); directional compatibility.
+- **Mixxx AutoDJ phrase match:** transition = outro∩intro; delay long intros so endings meet; far BPM → tape-stop, not vocal wreck.
+
 ## Opportunity evidence
 
 Propose phrase-aligned opportunities when measured:

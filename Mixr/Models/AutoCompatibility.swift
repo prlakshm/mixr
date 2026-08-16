@@ -120,10 +120,12 @@ nonisolated enum AutoTempo {
 
 /// Directional pairing verdict: how well `support` works UNDER `dominant`.
 /// A ↦ B and B ↦ A are evaluated independently — a vocal-heavy section
-/// can ride over a sparse groove even when the reverse pairing fails.
+/// can ride over a sparse groove even when the reverse pairing fails
+/// (COCOLA / AutoMashup 2025 directional compatibility).
 struct AutoDirectionalCompat: Sendable {
     var score: Double
     /// Corrective pitch to apply to the SUPPORTING side, semitones.
+    /// AutoMashUpper: pitch/stretch the bed, not the star vocal.
     var pitchCorrectionSemitones: Int
     /// Recommended overlap length; 0 = use a clean phrase-aligned handoff.
     var overlapBars: Int
@@ -139,7 +141,7 @@ nonisolated enum AutoCompatibility {
         targetBPM: Double,
         tuning: AutoTuning
     ) -> AutoDirectionalCompat {
-        // Harmonic: allow small corrective shifts on the support side only.
+        // Harmonic (AutoMashUpper chroma × key transposition proxy via Camelot).
         let keyA = AutoKey.parse(dominantProfile.analysis.key)
         let keyB = AutoKey.parse(supportProfile.analysis.key)
         let harmonic = AutoKey.bestCorrection(keyA, keyB, maxShift: tuning.maxCorrectivePitchSemitones)
@@ -153,7 +155,8 @@ nonisolated enum AutoCompatibility {
         // extreme double-dense verses score poorly (planner ducks those).
         let vocalScore = max(0.35, 1 - max(0, dominant.vocal + support.vocal - 1.35))
 
-        // Bass collision: two bass-heavy drops can't share the low end.
+        // Bass collision / spectral balance (AutoMashUpper): two bass-heavy
+        // drops can't share the low end.
         let bothDrops = dominant.label == .chorus && support.label == .chorus
         let bassLoad = dominantProfile.analysis.bassDensity + supportProfile.analysis.bassDensity
         let bassScore: Double = bothDrops && bassLoad > 1.3 ? 0.3 : 1.0
@@ -172,6 +175,7 @@ nonisolated enum AutoCompatibility {
         var overlapBars = 0
         if weighted >= tuning.minOverlapScore, fitA.gridAligned, fitB.gridAligned,
            confidence >= tuning.lowConfidenceThreshold {
+            // Mixxx AutoDJ: similar BPM → longer phrase overlap when strong.
             overlapBars = weighted >= 0.72 ? 2 : 1
         }
 

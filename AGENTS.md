@@ -22,6 +22,8 @@ Never cut merely to increase variety, handoffs, effect count, or SFX density. Wh
 
 Club hype density (one-song Auto Remix / mashup): major SFX moments roughly every 4–8 bars (builds/drops/breaks), overlapping one-shots on extra SFX rows, plus audible clip FX (echo throws, filter/blur sweeps, reverb bloom). Sparse “≤ 3 musical SFX / min” is not a club mix. Still one kick and one bass. Flavor instincts bias toward Diplo / Guetta / Snake festival hype over Calvin sparse radio edits.
 
+Mashup algorithms (reimplemented in Swift — no Demucs/PyTorch/Mixxx source): AutoMashUpper local phrase mashability (harmonic/rhythmic/spectral + beat-offset islands); AutoMashup 2025 stem *role proxies* from vocal/bass/drum curves (directional bed≠vocal); Mixxx AutoDJ phrase matching (outro∩intro overlap, delay long intros, tape-stop on far BPM).
+
 ## Club arrangement (one song)
 
 Target shape on the phrase grid (all structural cuts on phrase / downbeat boundaries; a drop that lands on bar 3 of a phrase is a fail):

@@ -31,6 +31,7 @@ SOURCES=(
   "$ROOT/Mixr/Models/AutoClubPulse.swift"
   "$ROOT/Mixr/Models/AutoClubFlavor.swift"
   "$ROOT/Mixr/Models/AutoCompatibility.swift"
+  "$ROOT/Mixr/Models/AutoMashability.swift"
   "$ROOT/Mixr/Models/AutoSectionCatalog.swift"
   "$ROOT/Mixr/Models/AutoRemixPlan.swift"
   "$ROOT/Mixr/Models/AutoRemixPlanner.swift"

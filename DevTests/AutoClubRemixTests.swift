@@ -1035,5 +1035,67 @@ do {
           AutoClubFlavor.diplo.bias.fxAsGroove == true)
 }
 
+do {
+    // AutoMashUpper / AutoMashup role proxies — Britney crate numbers.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    let bomtProf = AutoSectionCatalog.profile(track: bomt, signal: signals[bomt.id])
+    let oopsProf = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
+    check(
+        "Role proxy: Oops beats BOMT as bed (drum 1.00 soft-capped)",
+        AutoStemRoleProxy.bedScore(for: oopsProf) > AutoStemRoleProxy.bedScore(for: bomtProf),
+        String(format: "oops=%.3f bomt=%.3f",
+               AutoStemRoleProxy.bedScore(for: oopsProf),
+               AutoStemRoleProxy.bedScore(for: bomtProf))
+    )
+    check(
+        "Role proxy: BOMT beats Oops as hook",
+        AutoStemRoleProxy.hookScore(for: bomtProf) >= AutoStemRoleProxy.hookScore(for: oopsProf) - 0.05,
+        String(format: "bomt=%.3f oops=%.3f",
+               AutoStemRoleProxy.hookScore(for: bomtProf),
+               AutoStemRoleProxy.hookScore(for: oopsProf))
+    )
+    if let island = AutoMashability.bestIsland(
+        guest: bomtProf, bed: oopsProf, wantBars: 16, targetBPM: 94, tuning: .standard
+    ) {
+        check("AutoMashUpper island bars are 8–16", island.bars >= 8 && island.bars <= 16,
+              "bars=\(island.bars)")
+        check("AutoMashUpper island has positive mashability", island.score > 0.2,
+              String(format: "%.3f", island.score))
+        check("AutoMashUpper spectral balance is defined", island.spectral > 0,
+              String(format: "%.3f", island.spectral))
+    } else {
+        check("AutoMashUpper finds a local island for BOMT over Oops", false)
+    }
+
+    // Mixxx AutoDJ phrase match: long intro delays incoming so endings meet.
+    let longIntro = AutoPhraseMatch.plan(
+        outgoingDuration: 4.0,
+        incomingIntroDuration: 12.0,
+        beatSeconds: 0.5,
+        barSeconds: 2.0,
+        bpmAligned: true,
+        stretchFar: false
+    )
+    check("Mixxx: long intro delays incoming", longIntro.incomingDelaySeconds > 0.5,
+          String(format: "%.2f", longIntro.incomingDelaySeconds))
+    check("Mixxx: aligned BPM prefers long crossfade", longIntro.preferLongCrossfade)
+    let farBPM = AutoPhraseMatch.plan(
+        outgoingDuration: 8.0,
+        incomingIntroDuration: 8.0,
+        beatSeconds: 0.5,
+        barSeconds: 2.0,
+        bpmAligned: false,
+        stretchFar: true
+    )
+    check("Mixxx: far BPM prefers tape-stop", farBPM.preferTapeStop)
+    check("Mixxx: far BPM keeps short overlap", farBPM.overlapSeconds <= 2.0 + 0.01,
+          String(format: "%.2f", farBPM.overlapSeconds))
+}
+
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")
 exit(failures == 0 ? 0 : 1)

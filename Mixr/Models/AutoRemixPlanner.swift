@@ -1335,10 +1335,13 @@ enum AutoRemixPlanner {
             }
         }
 
-        // Gate every guest; rank full-hook candidates by featureScore.
+        // Gate every guest; rank full-hook candidates by AutoMashup hook-role
+        // proxy + featureScore (star topline ≠ max drums).
         var fullHooks: [AutoSongProfile] = []
         var cameos: [AutoSongProfile] = []
-        for guest in guests.sorted(by: { $0.featureScore > $1.featureScore }) {
+        for guest in guests.sorted(by: {
+            AutoStemRoleProxy.hookScore(for: $0) > AutoStemRoleProxy.hookScore(for: $1)
+        }) {
             let verdict = AutoMashupCompat.hookGate(
                 hook: guest, bed: bed, targetBPM: targetBPM, tuning: tuning
             )
@@ -1355,6 +1358,20 @@ enum AutoRemixPlanner {
                     AutoDecision(kind: .skippedIncompatibleHook, songTitle: guest.title, detail: verdict.detail)
                 )
                 preWarnings.append("Skipped \(guest.title): \(verdict.detail)")
+            }
+        }
+
+        // Prefer the guest whose best 8–16 bar island mashability vs the bed
+        // wins (AutoMashUpper local mashability — not whole-song stretch).
+        if fullHooks.count > 1 {
+            fullHooks.sort { a, b in
+                let ia = AutoMashability.bestIsland(
+                    guest: a, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+                )?.score ?? AutoStemRoleProxy.hookScore(for: a)
+                let ib = AutoMashability.bestIsland(
+                    guest: b, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+                )?.score ?? AutoStemRoleProxy.hookScore(for: b)
+                return ia > ib
             }
         }
 
@@ -1557,19 +1574,21 @@ enum AutoRemixPlanner {
     }
 
     /// Same-pocket duo bed. Midtempo pop pairs (Britney-class) often measure
-    /// similar vocal density — do NOT flip bed solely on mean vocal. Bed =
-    /// groove partner (softer drums + bass weight); the hotter drum bus is
-    /// usually the radio single that should ride Drop 1 as the vocal.
+    /// similar — or even skewed — vocal density. Bed = groove partner via
+    /// soft-capped drums + bass (AutoMashup role proxy spirit: bed ≠ max
+    /// drumConfidence). Vocal density must NOT invert Oops↔BOMT; the hotter
+    /// raw drum bus is usually the radio single that rides Drop 1.
     private static func samePocketDuoBed(_ a: AutoSongProfile, _ b: AutoSongProfile) -> AutoSongProfile {
-        func grooveBedScore(_ p: AutoSongProfile) -> Double {
+        func grooveBed(_ p: AutoSongProfile) -> Double {
+            // Soft-cap so drum 1.00 cannot beat a 0.71 groove partner.
             let drum = min(p.analysis.drumStrength, 0.72)
             let bass = p.analysis.bassDensity
-            // Soft preference for the less-slamming kit when soft-capped drums
-            // nearly tie (star singles often measure drumStrength ≈ 1.00).
-            let softPrefer = (1.0 - min(1.0, p.analysis.drumStrength)) * 0.18
-            return drum * 0.35 + bass * 0.50 + softPrefer
+            let softPrefer = (1.0 - min(1.0, p.analysis.drumStrength)) * 0.35
+            // Tiny vocal term as tie-break only — never enough to flip 1.00 vs 0.71.
+            let vocal = p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds)
+            return drum * 0.30 + bass * 0.40 + softPrefer - vocal * 0.05
         }
-        return grooveBedScore(a) >= grooveBedScore(b) ? a : b
+        return grooveBed(a) >= grooveBed(b) ? a : b
     }
 
     /// Bed fitness across pockets: must keep the bed's native pocket on the
@@ -1871,6 +1890,48 @@ enum AutoRemixPlanner {
                     break
                 }
             }
+
+            // AutoMashUpper (Davies 2014): mashability is LOCAL — snap drop
+            // vocals to the best 8–16 bar island over the bed (beat-offset
+            // search), not a whole-song stretch of the star vocal.
+            if mode == .mashup, slot.role == .chorus,
+               let bedID = mashupBedID, profile.songID != bedID,
+               let bedProfile = ordered.first(where: { $0.songID == bedID }),
+               let island = AutoMashability.bestIsland(
+                   guest: profile,
+                   bed: bedProfile,
+                   wantBars: max(8, slot.bars),
+                   targetBPM: targetBPM,
+                   tuning: tuning
+               ),
+               let base = section {
+                section = AutoCandidateSection(
+                    songID: base.songID,
+                    label: base.label,
+                    startSeconds: island.guestStart,
+                    barCount: max(base.barCount, island.bars),
+                    barSeconds: base.barSeconds,
+                    hook: max(base.hook, island.score),
+                    energy: base.energy,
+                    vocal: base.vocal,
+                    clarity: base.clarity,
+                    rhythm: max(base.rhythm, island.rhythmic),
+                    uniqueness: base.uniqueness,
+                    transitionUse: base.transitionUse,
+                    confidence: base.confidence
+                )
+                decisions.append(
+                    AutoDecision(
+                        kind: .selectedAnchor,
+                        songTitle: profile.title,
+                        detail: String(
+                            format: "AutoMashUpper island @%.1fs over bed @%.1fs (score %.2f)",
+                            island.guestStart, island.bedStart, island.score
+                        )
+                    )
+                )
+            }
+
             guard let section else {
                 warnings.append(
                     "No usable \(slot.role.rawValue) section found in \(profile.title); skipped that appearance."
@@ -2333,13 +2394,32 @@ enum AutoRemixPlanner {
                         targetBPM: targetBPM,
                         tuning: tuning
                     )
-                    let overlapSeconds = Double(max(compat.overlapBars, 1)) * barSec
+                    // Mixxx AutoDJ phrase match: overlap = outro∩intro, not a hole.
+                    let stretchFar = abs((fits[ps.slot.songIdx]?.ratio ?? 1) - 1) > tuning.maxStretch * 0.9
+                        || abs((fits[prev.slot.songIdx]?.ratio ?? 1) - 1) > tuning.maxInstrumentalStretch * 0.9
+                    let phrase = AutoPhraseMatch.plan(
+                        outgoingDuration: min(prev.timelineDuration, barSec * 4),
+                        incomingIntroDuration: min(ps.timelineDuration, barSec * 4),
+                        beatSeconds: beatSec,
+                        barSeconds: barSec,
+                        bpmAligned: (fits[ps.slot.songIdx]?.gridAligned ?? false)
+                            && (fits[prev.slot.songIdx]?.gridAligned ?? false),
+                        stretchFar: stretchFar
+                    )
+                    let overlapSeconds = max(
+                        Double(max(compat.overlapBars, 1)) * barSec * 0.5,
+                        phrase.overlapSeconds
+                    )
                     let prevSourceEnd = prev.section.startSeconds + prev.timelineDuration * prev.tempoRatio
                     let supportAvailable = prevProfile.analysis.durationSeconds - 0.15 - prevSourceEnd
                     let denseVocals = ps.section.vocal > 0.55 && prev.section.vocal > 0.55
-                    let allowOverlap = (compat.overlapBars > 0 || denseVocals)
+                    let allowOverlap = (compat.overlapBars > 0 || denseVocals || phrase.preferLongCrossfade)
                         && overlapSeconds >= tuning.minSegmentSeconds
                         && supportAvailable >= overlapSeconds * prev.tempoRatio
+
+                    if phrase.preferTapeStop {
+                        addSFX("tapeStop", at: max(0, boundary - 0.3), purpose: "Mixxx-style spinback into far-BPM join")
+                    }
 
                     if allowOverlap {
                         var supportFX = ClipEffectSettings()
@@ -2607,7 +2687,8 @@ enum AutoRemixPlanner {
         cutRecords: inout [AutoCutRecord]
     ) {
         let equalPower = AutoTransitionEnvelope.equalPowerCurveName
-        // Prefer 1 bar of overlap; floor at 2 beats / min segment.
+        // Prefer 1 bar of overlap; Mixxx AutoDJ lengthens when both sides
+        // have long phrase material and BPM is aligned.
         let overlapSec = max(tuning.minSegmentSeconds, min(barSec, beatSec * 4))
         let overlapBeats = overlapSec / max(beatSec, 0.001)
 
@@ -2775,18 +2856,44 @@ enum AutoRemixPlanner {
         }
 
         // Bed groove under the vocal drop — owns kick/bass when lead is a guest.
+        // Prefer AutoMashUpper island bedStart when mashability found a beat offset.
         if let bedID = mashupBedID,
            leadProfile.songID != bedID,
            let bedIdx = ordered.firstIndex(where: { $0.songID == bedID }) {
             let bed = ordered[bedIdx]
             let bedFit = fits[bedIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: true, halfOrDoubleTime: false)
             let used = usedRanges[bed.songID] ?? []
-            if let section = bed.best(
+            let island = AutoMashability.bestIsland(
+                guest: leadProfile,
+                bed: bed,
+                wantBars: max(8, Int((lead.timelineDuration / max(barSec, 0.001)).rounded())),
+                targetBPM: 240.0 / max(barSec, 0.001),
+                tuning: tuning
+            )
+            var section = bed.best(
                 [.groove, .chorus, .build],
                 tuning: tuning,
                 used: used,
                 allowReuse: true
-            ) {
+            )
+            if let island, let base = section {
+                section = AutoCandidateSection(
+                    songID: base.songID,
+                    label: base.label,
+                    startSeconds: island.bedStart,
+                    barCount: base.barCount,
+                    barSeconds: base.barSeconds,
+                    hook: base.hook,
+                    energy: base.energy,
+                    vocal: base.vocal,
+                    clarity: base.clarity,
+                    rhythm: base.rhythm,
+                    uniqueness: base.uniqueness,
+                    transitionUse: base.transitionUse,
+                    confidence: base.confidence
+                )
+            }
+            if let section {
                 let dualBass = bed.analysis.bassDensity > 0.65
                     && leadProfile.analysis.bassDensity > 0.7
                     && bed.analysis.drumStrength > 0.7
