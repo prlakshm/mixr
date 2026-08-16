@@ -47,6 +47,9 @@ nonisolated enum AutoGainPolicy {
         case "downlifter", "tapeStop": 0.25      // ≈ −12 dB
         case "airSweep", "sweepUp", "sweepDown": 0.20  // ≈ −14 dB
         case "clapFill": 0.28
+        case "clubKick": 0.14                    // pulse layer — soft under the song
+        case "clubBass": 0.12
+        case "clubHat": 0.08
         default: 0.25
         }
     }
@@ -92,15 +95,16 @@ nonisolated enum AutoGainPolicy {
 
     // MARK: Song placement gain
 
-    /// Volume for the continuous one-song remix placement. One value for
-    /// the whole song — the song's own dynamics carry the energy story —
-    /// leaving ≈ 1 dB of clip headroom before track gain and SFX.
+    /// Fallback song volume when a placement has no energy story.
     static let preservationSongVolume = 0.9
 
-    /// Placement volume for an energy-storied slot (mashup path).
+    /// Placement volume for an energy-storied club / mashup slot.
     static func songPlacementVolume(energy: Double) -> Double {
-        0.82 + 0.18 * min(1, max(0, energy))
+        0.78 + 0.20 * min(1, max(0, energy))
     }
+
+    /// Extra attenuation when the pulse layer owns the low end.
+    static let pulseDuckedSongVolumeScale = 0.88
 
     // MARK: Tail trimming
 

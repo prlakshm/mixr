@@ -37,12 +37,28 @@ nonisolated enum AutoRemixApplier {
             }
         }
 
+        // Expand pulse regions into on-grid hits, then merge with musical SFX.
+        let pulseHits: [AutoSFXEvent]
+        if let policy = plan.pulsePolicy, !plan.pulseRegions.isEmpty {
+            pulseHits = AutoClubPulse.scheduleHits(
+                regions: plan.pulseRegions,
+                policy: policy,
+                beatSeconds: plan.beatSeconds,
+                barSeconds: plan.barSeconds
+            ).map {
+                AutoSFXEvent(assetID: $0.assetID, timelineStart: $0.timelineStart, purpose: $0.purpose)
+            }
+        } else {
+            pulseHits = []
+        }
+        let allSFX = (plan.sfxEvents + pulseHits).sorted { $0.timelineStart < $1.timelineStart }
+
         // ── SFX track: replace with the plan's events (skip unknowns) ──
         var placedSFX: [AutoSFXEvent] = []
-        if !plan.sfxEvents.isEmpty {
+        if !allSFX.isEmpty {
             let idx = ensureSFXTrack(in: &result)
             var clips: [MixrClip] = []
-            for event in plan.sfxEvents.sorted(by: { $0.timelineStart < $1.timelineStart }) {
+            for event in allSFX {
                 guard let definition = SoundEffectLibrary.definition(for: event.assetID) else {
                     appliedPlan.decisions.append(
                         AutoDecision(
@@ -56,20 +72,30 @@ nonisolated enum AutoRemixApplier {
                     )
                     continue
                 }
-                let start = SoundEffectLibrary.nonOverlappingStart(
-                    proposedStart: MixrTimeline.units(fromSeconds: max(0, event.timelineStart)),
-                    lengthUnits: definition.lengthUnits,
-                    in: clips
-                )
+                let isPulse = ["clubKick", "clubBass", "clubHat"].contains(definition.id)
+                let placedStart: CGFloat
+                if isPulse {
+                    // Pulse hits stay on the beat grid — never slide.
+                    placedStart = MixrTimeline.units(fromSeconds: max(0, event.timelineStart))
+                } else {
+                    placedStart = SoundEffectLibrary.nonOverlappingStart(
+                        proposedStart: MixrTimeline.units(fromSeconds: max(0, event.timelineStart)),
+                        lengthUnits: definition.lengthUnits,
+                        in: clips
+                    )
+                }
                 clips.append(
                     MixrClip(
                         id: UUID(),
-                        start: start,
+                        start: placedStart,
                         length: definition.lengthUnits,
                         soundEffectID: definition.id
                     )
                 )
-                placedSFX.append(event)
+                // Keep musical SFX on the applied plan; pulse stays region-driven.
+                if !isPulse {
+                    placedSFX.append(event)
+                }
             }
             result[idx].clips = clips
         } else if let idx = result.firstIndex(where: { $0.isSFXTrack }) {

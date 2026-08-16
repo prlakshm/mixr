@@ -38,6 +38,9 @@ nonisolated enum SFXSynthesizer {
         case .bassDrop:      samples = bassDrop(duration, sr)
         case .tapeStop:      samples = tapeStop(duration, sr)
         case .airSweep:      samples = airSweep(duration, sr)
+        case .clubKick:      samples = clubKick(duration, sr)
+        case .clubBass:      samples = clubBass(duration, sr)
+        case .clubHat:       samples = clubHat(duration, sr)
         }
         normalize(&samples)
         edgeFades(&samples, sr: sr)
@@ -323,6 +326,44 @@ nonisolated enum SFXSynthesizer {
             let fc = max(300, 900 + 600 * sin(2 * .pi * 0.5 * ts))
             let low = svf.process(noise.next(), fc: fc, q: 1.1, sr: sr).low
             out.append(low * pow(sin(.pi * t), 1.5))
+        }
+        return out
+    }
+
+    private static func clubKick(_ duration: Double, _ sr: Double) -> [Double] {
+        let n = Int(duration * sr)
+        var out = [Double](); out.reserveCapacity(n)
+        var phase = 0.0
+        var noise = Noise(seed: 21)
+        for i in 0..<n {
+            let t = Double(i) / sr
+            let env = exp(-14 * t / max(duration, 0.01))
+            phase += 2 * .pi * expInterp(120, 48, min(1, t / duration)) / sr
+            out.append((sin(phase) * 0.85 + noise.next() * 0.15) * env)
+        }
+        return out
+    }
+
+    private static func clubBass(_ duration: Double, _ sr: Double) -> [Double] {
+        let n = Int(duration * sr)
+        var out = [Double](); out.reserveCapacity(n)
+        var phase = 0.0
+        for i in 0..<n {
+            let t = Double(i) / sr
+            let env = exp(-8 * t / max(duration, 0.01))
+            phase += 2 * .pi * 45 / sr
+            out.append(sin(phase) * env)
+        }
+        return out
+    }
+
+    private static func clubHat(_ duration: Double, _ sr: Double) -> [Double] {
+        let n = Int(duration * sr)
+        var noise = Noise(seed: 22)
+        var out = [Double](); out.reserveCapacity(n)
+        for i in 0..<n {
+            let t = Double(i) / sr
+            out.append(noise.next() * exp(-40 * t / max(duration, 0.01)) * 0.55)
         }
         return out
     }

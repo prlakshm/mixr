@@ -180,7 +180,7 @@ do {
     }
 }
 
-// MARK: - 6. One-song remix keeps SFX sparse (preservation-first)
+// MARK: - 6. One-song remix keeps musical SFX sparse (pulse is separate)
 
 do {
     let remixTracks = [makeSong(title: "Solo Remix", bpm: 128, key: "G")]
@@ -192,16 +192,17 @@ do {
     let mashup = AutoRemixRunner.runEntireProject(tracks: mashupTracks, seed: 55)
     switch (remix, mashup) {
     case (.success(_, let rp, _), .success(_, let mp, _)):
-        // SFX density is bounded by musical need — a one-song remix is
-        // NOT required to be denser than a mashup (the opposite of the
-        // old montage contract).
+        // Musical SFX (risers/impacts) stay sparse; club pulse lives in
+        // pulseRegions and is expanded at apply/render time.
+        let musical = rp.sfxEvents.filter { !["clubKick", "clubBass", "clubHat"].contains($0.assetID) }
         let rMinutes = max(rp.targetDuration / 60, 0.01)
         check(
-            "One-song remix SFX ≤ 3 events/min",
-            Double(rp.sfxEvents.count) / rMinutes <= 3.0 + 0.0001,
-            String(format: "%.2f events/min", Double(rp.sfxEvents.count) / rMinutes)
+            "One-song remix musical SFX ≤ 3 events/min",
+            Double(musical.count) / rMinutes <= 3.0 + 0.0001,
+            String(format: "%.2f events/min", Double(musical.count) / rMinutes)
         )
         check("Mashup still coordinates SFX moments", !mp.sfxEvents.isEmpty)
+        check("One-song remix records pulse regions", !rp.pulseRegions.isEmpty)
     default:
         check("Remix vs Mashup SFX comparison runs", false)
     }
@@ -232,6 +233,14 @@ do {
             for i in broken.sfxEvents.indices where broken.sfxEvents[i].timelineStart >= threshold - 0.001 {
                 broken.sfxEvents[i].timelineStart += 1.0
             }
+            for i in broken.intentionalGaps.indices where broken.intentionalGaps[i].start >= threshold - 0.001 {
+                broken.intentionalGaps[i].start += 1.0
+                broken.intentionalGaps[i].end += 1.0
+            }
+            for i in broken.pulseRegions.indices where broken.pulseRegions[i].timelineStart >= threshold - 0.001 {
+                broken.pulseRegions[i].timelineStart += 1.0
+                broken.pulseRegions[i].timelineEnd += 1.0
+            }
 
             let repaired = AutoRemixValidator.validate(broken, profiles: profiles, tuning: .standard)
             let maxGap = repaired.eighthNoteSeconds
@@ -248,7 +257,14 @@ do {
             }
             var largestAccidental = 0.0
             for pair in zip(merged, merged.dropFirst()) {
-                let gap = pair.1.0 - pair.0.1
+                let gapStart = pair.0.1
+                let gapEnd = pair.1.0
+                let gap = gapEnd - gapStart
+                let intentional = repaired.intentionalGaps.contains { g in
+                    let overlap = min(gapEnd, g.end) - max(gapStart, g.start)
+                    return overlap > gap * 0.5
+                }
+                if intentional { continue }
                 if gap > largestAccidental { largestAccidental = gap }
             }
             check(
@@ -290,7 +306,7 @@ do {
             }
             check(
                 "Intentional micro-pause preserved",
-                stillMarked || pause <= validated.beatSeconds * 0.25 + 0.01
+                stillMarked || pause <= AutoTuning.standard.maxIntentionalPauseBeats * validated.beatSeconds + 0.01
             )
         } else {
             check("Intentional micro-pause preserved", false, "no placements")

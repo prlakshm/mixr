@@ -44,7 +44,16 @@ nonisolated enum AutoOfflineMixdown {
         includeTail: Bool = true
     ) -> Result {
         let contentEnd = plan.placements.map(\.timelineEnd).max() ?? 0
-        let sfxEnd = plan.sfxEvents.map(\.timelineEnd).max() ?? 0
+        var sfxEnd = plan.sfxEvents.map(\.timelineEnd).max() ?? 0
+        if let policy = plan.pulsePolicy, !plan.pulseRegions.isEmpty {
+            let pulseEnd = AutoClubPulse.scheduleHits(
+                regions: plan.pulseRegions,
+                policy: policy,
+                beatSeconds: plan.beatSeconds,
+                barSeconds: plan.barSeconds
+            ).map { $0.timelineStart + 0.3 }.max() ?? 0
+            sfxEnd = max(sfxEnd, pulseEnd)
+        }
         let tail = includeTail ? exportTailSeconds(plan: plan) : 0
         let totalSeconds = max(contentEnd, sfxEnd) + tail
         let frames = Int(totalSeconds * sampleRate)
@@ -77,25 +86,48 @@ nonisolated enum AutoOfflineMixdown {
         }
 
         // ── Ducking under major SFX (policy-driven; baseline = none) ──
-        if !plan.sfxEvents.isEmpty {
+        let duckEvents = plan.sfxEvents
+        if !duckEvents.isEmpty {
             for i in 0..<frames {
                 let t = Double(i) / sampleRate
-                let duck = AutoGainPolicy.duckGain(at: t, sfxEvents: plan.sfxEvents)
+                let duck = AutoGainPolicy.duckGain(at: t, sfxEvents: duckEvents)
                 if duck < 0.9999 {
                     songBus[i] *= Float(duck)
                 }
             }
         }
 
-        // ── SFX bus ──
+        // ── SFX bus (musical accents + expanded club pulse) ──
         var mix = songBus
-        for event in plan.sfxEvents {
+        var renderSFX = plan.sfxEvents
+        if let policy = plan.pulsePolicy, !plan.pulseRegions.isEmpty {
+            let pulseHits = AutoClubPulse.scheduleHits(
+                regions: plan.pulseRegions,
+                policy: policy,
+                beatSeconds: plan.beatSeconds,
+                barSeconds: plan.barSeconds
+            )
+            renderSFX += pulseHits.map {
+                AutoSFXEvent(assetID: $0.assetID, timelineStart: $0.timelineStart, purpose: $0.purpose)
+            }
+        }
+        for event in renderSFX {
             guard let def = SoundEffectLibrary.definition(for: event.assetID) else { continue }
-            let buffer = syntheticSFX(
+            var buffer = syntheticSFX(
                 type: def.synthesisType,
                 durationSeconds: def.durationSeconds,
                 sampleRate: sampleRate
             )
+            // Short edge fades on pulse hits so grid stacks never click.
+            if ["clubKick", "clubBass", "clubHat"].contains(event.assetID) {
+                let fade = max(1, Int(0.004 * sampleRate))
+                for i in 0..<min(fade, buffer.count) {
+                    let g = Float(i) / Float(fade)
+                    buffer[i] *= g
+                    let j = buffer.count - 1 - i
+                    if j >= 0 { buffer[j] *= g }
+                }
+            }
             let gain = Float(sfxTrackVolume * AutoGainPolicy.nominalGain(forSFX: event.assetID))
             let startFrame = Int(event.timelineStart * sampleRate)
             for (j, v) in buffer.enumerated() {
@@ -230,6 +262,19 @@ nonisolated enum AutoOfflineMixdown {
                 value = noise * Float(exp(-6 * x))
             case .reverseCymbal:
                 value = noise * Float(0.05 + 0.9 * x * x * x)
+            case .clubKick:
+                // Soft-attack thump — avoid a sample-edge click at hit onset.
+                let attack = Float(min(1, x / 0.08))
+                let env = attack * Float(exp(-12 * x))
+                let tone = Float(sin(2 * Double.pi * 55 * Double(i) / sampleRate))
+                value = (noise * 0.25 + tone * 0.75) * env
+            case .clubBass:
+                let attack = Float(min(1, x / 0.05))
+                let env = attack * Float(exp(-8 * x))
+                let tone = Float(sin(2 * Double.pi * 45 * Double(i) / sampleRate))
+                value = tone * env * 0.9
+            case .clubHat:
+                value = noise * Float(exp(-40 * x)) * 0.5
             }
             out[i] = value
         }

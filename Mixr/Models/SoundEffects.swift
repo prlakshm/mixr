@@ -20,6 +20,12 @@ enum SFXSynthesisType: String, Sendable {
     case bassDrop
     case tapeStop
     case airSweep
+    /// Short synthesized club kick for the Auto pulse layer.
+    case clubKick
+    /// Short synthesized sub / bass weight for the Auto pulse layer.
+    case clubBass
+    /// Light hat tick for pulse / slamming-source decoration.
+    case clubHat
 }
 
 // MARK: - Sound Effect Definition
@@ -60,6 +66,10 @@ enum SoundEffectLibrary {
         SoundEffectDefinition(id: "bassDrop",       title: "Bass Drop",      icon: "arrow.down.to.line",          durationSeconds: 1.5, assetName: "bass_drop.wav",      synthesisType: .bassDrop),
         SoundEffectDefinition(id: "tapeStop",       title: "Tape Stop",      icon: "recordingtape",               durationSeconds: 1.0, assetName: "tape_stop.wav",      synthesisType: .tapeStop),
         SoundEffectDefinition(id: "airSweep",       title: "Air Sweep",      icon: "wind",                        durationSeconds: 2.0, assetName: "air_sweep.wav",      synthesisType: .airSweep),
+        // Procedural pulse-layer hits (no bundled wav — synthesizer / mixdown).
+        SoundEffectDefinition(id: "clubKick",       title: "Club Kick",      icon: "circle.fill",                 durationSeconds: 0.18, assetName: "club_kick.wav",      synthesisType: .clubKick),
+        SoundEffectDefinition(id: "clubBass",       title: "Club Bass",      icon: "waveform.path",               durationSeconds: 0.28, assetName: "club_bass.wav",      synthesisType: .clubBass),
+        SoundEffectDefinition(id: "clubHat",        title: "Club Hat",       icon: "hat.widebrim.fill",           durationSeconds: 0.08, assetName: "club_hat.wav",       synthesisType: .clubHat),
     ]
 
     /// nonisolated: looked up by the background export renderer too.

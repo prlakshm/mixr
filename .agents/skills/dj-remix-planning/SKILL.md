@@ -1,43 +1,81 @@
 ---
 name: dj-remix-planning
 description: >-
-  Plan Auto Remix transformations that preserve song identity while creating a
-  clearly edited alternate arrangement. Use when designing remix recipes,
-  selecting cut/transition/SFX opportunities, scoring transformation zones,
-  auditing remix decisions, or implementing Auto Remix planning logic.
+  Plan Auto Remix club rewrites and mashups: phrase-grid arrangement, pulse
+  layer, tempo pockets, hook-over-bed roles, and transformation scoring.
+  Use when designing remix recipes, selecting cut/transition/SFX/pulse
+  opportunities, auditing remix decisions, or implementing Auto Remix planning.
 ---
 
-> **Policy source of truth:** Mixr root `AGENTS.md` confidence ladder. This skill provides planning procedure; if guidance conflicts, AGENTS.md wins.
+> **Policy source of truth:** Mixr root `AGENTS.md`. This skill provides
+> planning procedure; if guidance conflicts, AGENTS.md wins.
 
 # DJ Remix Planning
 
 ## Product intent
 
-Auto Remix should preserve the song's identity while creating a clearly
-transformed alternate arrangement.
+Auto Remix rewrites a song as a **streaming-length club mix**: builds, drops,
+breakdowns, and hype—while keeping the song's recognizable identity on the
+first drop.
 
-Preservation is a constraint, not the objective.
+Preservation constrains identity (familiar hook on drop 1), not arrangement.
+SFX alone do not count as transformation. Accidental silence is forbidden;
+**intentional pre-drop voids are allowed** (hype = subtraction then a downbeat).
 
-A successful high-confidence remix should feel intentionally edited in
-multiple parts of the song. SFX alone do not count as transformation.
+Mashups are **hook-over-bed**: one song sings, the other is the club bed.
 
 ## Planning hierarchy
 
-1. Analyze musical structure.
-2. Generate transformation opportunities throughout the song.
-3. Score each opportunity using measured evidence.
-4. Select a varied, distributed recipe.
-5. Validate musical and audio integrity.
-6. Render and report every decision.
+1. Analyze musical structure (sections, beats, phrases, drum/bass density).
+2. Decide tempo pocket (keep strong pockets; stretch/double-time only within gates).
+3. Decide pulse policy (one-kick rule).
+4. Build the club phrase-grid recipe (or mashup hook/bed slots).
+5. Score and place sections; record structured cut / void / pulse decisions.
+6. Validate musical and audio integrity.
+7. Render and report every decision.
+
+## Club shape (one song)
+
+Phrase-grid only — drops land on downbeats, never mid-bar:
+
+1. Intro 8–16 — filtered identity / kick tease
+2. Groove 8–16 — identity below drop density
+3. Build 8–16 — riser / snare; kick+bass out last 4 bars; optional void
+4. Drop 1 = 16 — familiar hook, full pulse, one lead idea
+5. Breakdown 8–16 — pulse out, breathe
+6. Build 2 — denser than build 1
+7. Drop 2 = 16 — drop 1 + exactly one extra layer
+8. Outro — hook fragment + drums
+
+Recipe flavors (instincts, not sound-alikes): Calvin sparse, Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK.
+
+## Club pulse
+
+- Thin source → write kick+bass, duck/high-pass original low end.
+- Slamming kit → **no second kick**; only risers / snare / impact / hats.
+- Mute kick+bass in build-out, breakdown, and void regions.
+
+## Tempo
+
+- Keep midtempo (~90–100), house (~124–130), festival (~140–150) pockets.
+- Double-time only when 2× lands in a pocket; check half/double before stretch.
+- Vocal stretch ≤ ~8%; bed/instrumental ≤ ~15%.
+- If stretch wrecks the vocal → keep BPM, club-ify with arrangement + energy.
+
+## Mashup
+
+- Highest feature/vocal affinity → hook; highest groove/drums → bed.
+- Pitch the bed (≤ ~2 st); never force the star vocal through illegal stretch.
+- Prefer Camelot same → ±1 → relative. Refuse pairs that cannot work.
+- Minimum stay 8 bars; prefer 16 on choruses. Hook lands on the drop.
 
 ## Opportunity evidence
 
-An opportunity may be proposed at a phrase-aligned boundary when one or
-more of these are measured:
+Propose phrase-aligned opportunities when measured:
 
 - repeated or highly similar section
 - energy rise or fall
-- instrumentation change
+- instrumentation / drum density change
 - temporary reduction in vocal activity
 - chorus, bridge, breakdown, pre-chorus, intro, or outro boundary
 - 8-, 16-, or 32-bar structural completion
@@ -47,61 +85,51 @@ more of these are measured:
 ## Transformation families
 
 ### Arrangement
-- shorten a repeated section
-- remove redundant bars
-- repeat a hook
-- return to an earlier hook
-- create a masked internal cut
+- rebuild onto the club phrase grid
+- return to the hook for drop 1 / drop 2
+- shorten redundant bars
 - compress or replace the outro
 
 ### Transition
 - filtered build
 - echo throw
-- brief dropout
+- intentional pre-drop void
 - reverse lead-in
 - equal-power overlap
-- micro-loop or stutter
+- hard hype cut with anti-click microfade
 
 ### Energy shaping
-- remove bass before a return
+- remove kick/bass before a return (build-out)
 - restore the full spectrum on a downbeat
 - increase or reduce effect intensity across 4–16 bars
 - use contrast rather than continuous loudness automation
 
-### SFX
-- riser
-- impact
-- short transitional accent
+### Pulse / SFX
+- club kick / bass weight (one at a time)
+- riser, snare roll, impact, hats
 
-SFX must support an underlying musical transformation. Adding an SFX
-without changing arrangement, spectrum, rhythm, or continuity does not
-count as a transformation.
+Pulse and SFX must support an underlying musical transformation.
 
 ## High-confidence behavior
 
-For a song longer than approximately 2.5 minutes with reliable section,
-beat, and phrase analysis:
+With reliable section, beat, and phrase analysis:
 
-- target 3–5 transformation zones
-- cover at least three structural regions of the song
-- include at least two non-SFX transformations
-- include arrangement transformation when repeat evidence supports it
-- avoid placing every edit around the single largest lift
-- maintain sufficient space between major interventions
-- preserve at least one complete primary hook
-- preserve at least one substantial continuous passage
+- emit the two-wave club shape across intro → drop 2
+- include non-SFX arrangement transformations
+- land the familiar hook on drop 1
+- add exactly one extra idea on drop 2
+- keep intentional voids phrase/beat aligned
 
-These are planning targets, not unconditional quotas. Explain any
-decision to emit fewer transformations.
+These are planning targets, not unconditional quotas. Explain fewer edits.
 
 ## Low-confidence behavior
 
 When structure, phrase, or beat confidence is low:
 
-- preserve continuous placement
-- permit edge trimming
-- permit only effects that do not require precise section understanding
-- do not invent cuts to satisfy transformation targets
+- do not invent structural cuts
+- still impose filter + pulse + SFX energy curve
+- permit edge trimming and intentional pre-drop void when beat grid allows
+- degrade handoffs to clean phrase-aligned crossfades in mashups
 
 ## Cut rules
 
@@ -110,30 +138,31 @@ When structure, phrase, or beat confidence is low:
 - Each cut requires a structured AutoCutRecord.
 - Reordering requires stronger evidence than shortening.
 - Prefer removing or repeating complete phrase units.
-- Mask cuts with overlap, dropout, impact, echo, or another justified
-  transition.
-- Do not use silence as a transition unless intentionally requested.
+- Mask cuts with overlap, dropout, impact, echo, void, or another justified transition.
+- Accidental silence is invalid; intentional pre-drop voids are valid.
 
 ## Variation
 
-Do not apply the same recipe to every song.
+Do not apply the same flavor to every song.
 
-Choose a recipe family based on the measured structure:
+Choose from measured texture + seed:
 
-- progressive build
-- hook-forward edit
-- condensed club edit
-- breakdown-and-return
-- rhythmic chop edit
-- subtle polished edit
+- sparse piano/vocal/bass (Calvin-class)
+- vocal + electronic drop (Guetta-class)
+- four-bar harmonic loop (Avicii-class)
+- hummable chop drop (Marshmello-class)
+- chant / aggressive low end (Snake-class)
 
-Avoid using the same transformation type twice consecutively unless the
-song structure strongly supports it.
+Avoid stacking two dense midrange leads on the drop.
 
 ## Decision audit
 
 Before declaring success, report:
 
+- tempo pocket decision and stretch/pitch gates
+- pulse policy (wrote kick vs skipped second kick)
+- club flavor
+- mashup vocal vs bed assignment (or refusal)
 - all opportunities considered
 - why each selected opportunity was chosen
 - why rejected opportunities were rejected

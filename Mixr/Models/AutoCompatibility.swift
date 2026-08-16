@@ -99,13 +99,16 @@ nonisolated enum AutoTempo {
         return Fit(ratio: 1.0, gridAligned: false, halfOrDoubleTime: false)
     }
 
-    /// Target BPM: the anchor's tempo when most songs can lock to it,
-    /// otherwise the median of the songs' tempos — always favoring
-    /// minimal total stretching.
+    /// Target BPM for a multi-song set: prefer a shared pocket, otherwise
+    /// the anchor when most songs can lock, otherwise the median.
     static func targetBPM(profiles: [AutoSongProfile], anchorID: UUID, maxStretch: Double) -> Double {
         let bpms = profiles.map(\.analysis.bpm)
         guard let anchorBPM = profiles.first(where: { $0.songID == anchorID })?.analysis.bpm else {
             return bpms.sorted()[bpms.count / 2]
+        }
+        if let pocket = AutoClubTempo.classify(anchorBPM) {
+            let samePocket = bpms.filter { AutoClubTempo.classify($0) == pocket }
+            if samePocket.count >= max(1, bpms.count / 2) { return anchorBPM }
         }
         let locked = bpms.filter { fit(songBPM: $0, targetBPM: anchorBPM, maxStretch: maxStretch).gridAligned }
         if Double(locked.count) >= Double(bpms.count) * 0.5 { return anchorBPM }

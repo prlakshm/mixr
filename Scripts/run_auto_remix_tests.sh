@@ -27,6 +27,9 @@ SOURCES=(
   "$ROOT/Mixr/Models/SongAnalysis.swift"
   "$ROOT/Mixr/Models/SongSignalAnalysis.swift"
   "$ROOT/Mixr/Models/SoundEffects.swift"
+  "$ROOT/Mixr/Models/AutoClubTempo.swift"
+  "$ROOT/Mixr/Models/AutoClubPulse.swift"
+  "$ROOT/Mixr/Models/AutoClubFlavor.swift"
   "$ROOT/Mixr/Models/AutoCompatibility.swift"
   "$ROOT/Mixr/Models/AutoSectionCatalog.swift"
   "$ROOT/Mixr/Models/AutoRemixPlan.swift"
@@ -65,4 +68,8 @@ fi
 
 if [[ "$WHICH" == "render" || "$WHICH" == "all" ]]; then
   run_harness "$ROOT/DevTests/AutoRemixRenderQualityTests.swift" /tmp/mixr_auto_render_tests
+fi
+
+if [[ "$WHICH" == "club" || "$WHICH" == "all" ]]; then
+  run_harness "$ROOT/DevTests/AutoClubRemixTests.swift" /tmp/mixr_auto_club_tests
 fi

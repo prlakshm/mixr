@@ -65,6 +65,14 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case savedStrongestForPeak
     case duoAlternationFallback
     case excludedLowConfidenceSong
+    case choseClubTempo
+    case wroteClubPulse
+    case skippedSecondKick
+    case imposedClubEnergyCurve
+    case assignedMashupRoles
+    case refusedMashupPair
+    case allowedPredropVoid
+    case choseClubFlavor
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -116,6 +124,22 @@ struct AutoDecision: Sendable, Equatable {
                 ?? "Could not reach the full A → B → A → B alternation without incomplete sections."
         case .excludedLowConfidenceSong:
             return "Excluded \(song): \(detail ?? "not enough timeline for a recognizable phrase")."
+        case .choseClubTempo:
+            return "Club tempo for \(song): \(detail ?? "pocket decision")."
+        case .wroteClubPulse:
+            return "Wrote a club pulse under \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .skippedSecondKick:
+            return "Skipped a second kick on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .imposedClubEnergyCurve:
+            return "Imposed a club energy curve on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .assignedMashupRoles:
+            return detail ?? "Assigned mashup roles (hook vs club bed)."
+        case .refusedMashupPair:
+            return detail ?? "Refused a mashup pairing that would wreck the vocal."
+        case .allowedPredropVoid:
+            return "Left an intentional pre-drop void\(detail.map { " (\($0))" } ?? "")."
+        case .choseClubFlavor:
+            return "Club flavor: \(detail ?? "festival rewrite")."
         }
     }
 }
@@ -259,11 +283,22 @@ struct AutoRemixPlan: Sendable {
     /// Structured record for EVERY internal cut (source discontinuity).
     /// A cut without a record here is invalid.
     var cutRecords: [AutoCutRecord] = []
-    /// Source range the one-song remix preserves (after evidence-based
-    /// edge trimming). nil for mashups.
+    /// Source range the one-song remix draws from after evidence-based
+    /// edge trimming. nil for mashups.
     var usableSourceRange: ClosedRange<Double>? = nil
     /// Deliberate micro-pauses / intentional silence the validator preserves.
+    /// Club remix uses this for the pre-drop void (hype = subtraction).
     var intentionalGaps: [AutoIntentionalGap] = []
+    /// Club pulse policy for the arrangement (one-kick rule).
+    var pulsePolicy: AutoClubPulse.Policy? = nil
+    /// Pulse regions on the timeline (mute kick in build-out / void / break).
+    var pulseRegions: [AutoClubPulse.Region] = []
+    /// Recipe flavor bias (Calvin / Guetta / … instincts).
+    var clubFlavor: AutoClubFlavor? = nil
+    /// Mashup: song chosen as the sung hook (nil for one-song remix).
+    var mashupVocalSongID: UUID? = nil
+    /// Mashup: song chosen as the club bed (nil for one-song remix).
+    var mashupBedSongID: UUID? = nil
     /// Song-change count between consecutive dominant slots.
     var handoffCount: Int
     /// Arrangement letter per song (anchor = "A").
@@ -318,23 +353,28 @@ struct AutoTuning: Sendable {
     var uniquenessWeight = 0.10
     var transitionWeight = 0.10
 
-    /// Max pitch-preserving tempo stretch for beatmatching (±).
-    var maxStretch = 0.08
+    /// Max pitch-preserving tempo stretch for beatmatching (±) — vocal gate.
+    var maxStretch = AutoClubTempo.maxVocalStretch
+    /// Instrumental / bed stretch preference for mashups.
+    var maxInstrumentalStretch = AutoClubTempo.maxInstrumentalStretch
     /// Supporting source gain during overlaps (≈ −7 dB).
     var supportVolume = 0.45
     /// Minimum directional-compatibility score before Auto risks an overlap.
     var minOverlapScore = 0.55
-    /// Analysis confidence below this → safe fallback (crossfades only).
+    /// Analysis confidence below this → energy-curve club-ify without invented cuts.
     var lowConfidenceThreshold = 0.5
-    /// Max corrective pitch on a supporting overlap, semitones.
-    var maxCorrectivePitchSemitones = 3
-    /// Timeline budget for the arrangement.
+    /// Max corrective pitch on a supporting overlap / bed, semitones.
+    /// Mashup pitches the BED, not the star vocal — keep ≤ ~2.
+    var maxCorrectivePitchSemitones = 2
+    /// Timeline budget for the arrangement (streaming-length club rewrite).
     var maxTimelineSeconds = 232.0
     /// Longest unintended silence tolerated between clips (beats).
     /// 0.5 beat = one eighth note at the target BPM.
     var maxGapBeats = 0.5
-    /// Max length of a deliberate pre-drop pause (beats).
-    var maxIntentionalPauseBeats = 0.25
+    /// Max length of a deliberate pre-drop void (beats). Half-bar = 2.
+    var maxIntentionalPauseBeats = 2.0
+    /// Preferred pre-drop void length (beats) when confidence supports it.
+    var preferredPredropVoidBeats = 1.0
     /// Minimum clip segment length in timeline seconds (model minimum ≈3.7 s).
     var minSegmentSeconds: Double = MixrTimeline.seconds(fromUnits: MixrTimeline.minClipLengthUnits) + 0.05
 
