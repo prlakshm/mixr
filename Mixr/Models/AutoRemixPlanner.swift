@@ -633,7 +633,17 @@ enum AutoRemixPlanner {
                         )
                     )
                 }
-                // Filter open is clip FX blur on build-out — not an airSweep whoosh.
+                // Siren/air into the drop is Diplo hype — not a crash every join.
+                if let sweep = SoundEffectLibrary.definition(for: "airSweep"),
+                   buildEnd - sweep.durationSeconds >= cursor {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "airSweep",
+                            timelineStart: max(cursor, buildEnd - sweep.durationSeconds),
+                            purpose: "air sweep into the drop"
+                        )
+                    )
+                }
             }
 
             if slot.role == .groove || slot.role == .intro {
@@ -686,19 +696,21 @@ enum AutoRemixPlanner {
                 if cymbalCount < 2 {
                     sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: dropAt, purpose: "crash punctuation on drop"))
                 }
+                // Keep density loud: air/siren + clap on drops (not on groove handoffs).
+                if stackHard || dropIndex >= 1 || flavor.bias.drop2AiryLayer {
+                    sfx.append(AutoSFXEvent(assetID: "airSweep", timelineStart: dropAt, purpose: "siren/air on drop"))
+                }
                 if stackHard || flavor.bias.vocalChopLead || dropIndex >= 1 {
                     sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: dropAt, purpose: "clap fill on drop"))
                 }
-                // Tape stop into the slam — Diplo void-then-pile instinct.
-                if stackHard || dropIndex >= 1 {
-                    sfx.append(
-                        AutoSFXEvent(
-                            assetID: "tapeStop",
-                            timelineStart: max(0, dropAt - 0.35),
-                            purpose: "tape stop into drop"
-                        )
+                // Tape stop into the slam — Diplo void-then-pile on every drop.
+                sfx.append(
+                    AutoSFXEvent(
+                        assetID: "tapeStop",
+                        timelineStart: max(0, dropAt - 0.35),
+                        purpose: "tape stop into drop"
                     )
-                }
+                )
                 // Mid-drop fill so a 16-bar drop stays hyped (no mid-drop crash).
                 let midDrop = dropAt + (dropEnd - dropAt) * 0.5
                 sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: midDrop, purpose: "mid-drop clap fill"))
@@ -1050,6 +1062,9 @@ enum AutoRemixPlanner {
                 if cymbalPunctuation < 2 {
                     sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "crash punctuation on drop"))
                     cymbalPunctuation += 1
+                }
+                if flavor.bias.maximalistStacks || flavor.bias.drop2AiryLayer {
+                    sfx.append(AutoSFXEvent(assetID: "airSweep", timelineStart: t0, purpose: "siren/air on drop"))
                 }
                 sfx.append(AutoSFXEvent(assetID: "clapFill", timelineStart: t0, purpose: "clap fill on drop"))
                 sfx.append(
@@ -2449,6 +2464,9 @@ enum AutoRemixPlanner {
                     if cymbalCount < 2 {
                         addSFX("crash", at: boundary, purpose: "crash punctuation on drop")
                     }
+                    if stackHard {
+                        addSFXEnding("airSweep", at: boundary, purpose: "siren/air into the drop")
+                    }
                     if stackHard || ps.slot.isFinalPeak || mode == .remix {
                         addSFX("clapFill", at: boundary, purpose: "clap fill on the drop")
                     }
@@ -2483,9 +2501,9 @@ enum AutoRemixPlanner {
                     addSFX("downlifter", at: boundary, purpose: "downlifter into breakdown")
                     lastMajorSFXTime = boundary
                 case .cleanCrossfade where mode == .remix:
-                    // No airSweep/crash on polite handoffs — Diplo density is
-                    // snare/impact/tape on drops, not a whoosh every 8 bars.
-                    break
+                    // Keep joins busy without cymbal cheese — clap fill, not crash.
+                    addSFX("clapFill", at: boundary, purpose: "clap fill across the handoff")
+                    lastMajorSFXTime = boundary
                 default:
                     break
                 }
