@@ -263,10 +263,10 @@ final class TrackLibrary: ObservableObject {
             ? .trackClips(existingSFXTrackID!)
             : .tracks
 
-        var newClipID = UUID()
+        let newClipID = UUID()
         performEdit("Add Sound Effect", scope: scope) {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                SoundEffectLibrary.placeExact(
+                _ = SoundEffectLibrary.placeExact(
                     definition: definition,
                     atUnit: max(0, unit),
                     into: &tracks,
