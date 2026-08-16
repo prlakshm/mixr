@@ -40,7 +40,6 @@ nonisolated enum SFXSynthesizer {
         case .airSweep:      samples = airSweep(duration, sr)
         case .clubKick:      samples = clubKick(duration, sr)
         case .clubBass:      samples = clubBass(duration, sr)
-        case .clubHat:       samples = clubHat(duration, sr)
         }
         normalize(&samples)
         edgeFades(&samples, sr: sr)
@@ -353,17 +352,6 @@ nonisolated enum SFXSynthesizer {
             let env = exp(-8 * t / max(duration, 0.01))
             phase += 2 * .pi * 45 / sr
             out.append(sin(phase) * env)
-        }
-        return out
-    }
-
-    private static func clubHat(_ duration: Double, _ sr: Double) -> [Double] {
-        let n = Int(duration * sr)
-        var noise = Noise(seed: 22)
-        var out = [Double](); out.reserveCapacity(n)
-        for i in 0..<n {
-            let t = Double(i) / sr
-            out.append(noise.next() * exp(-40 * t / max(duration, 0.01)) * 0.55)
         }
         return out
     }

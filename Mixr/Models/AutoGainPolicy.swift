@@ -47,9 +47,8 @@ nonisolated enum AutoGainPolicy {
         case "downlifter", "tapeStop": 0.25      // ≈ −12 dB
         case "airSweep", "sweepUp", "sweepDown": 0.20  // ≈ −14 dB
         case "clapFill": 0.28
-        case "clubKick": 0.14                    // pulse layer — soft under the song
+        case "clubKick": 0.14                    // Auto thin-song pulse
         case "clubBass": 0.12
-        case "clubHat": 0.08
         default: 0.25
         }
     }

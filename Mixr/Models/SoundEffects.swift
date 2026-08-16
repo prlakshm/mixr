@@ -20,12 +20,10 @@ enum SFXSynthesisType: String, Sendable {
     case bassDrop
     case tapeStop
     case airSweep
-    /// Short synthesized club kick for the Auto pulse layer.
+    /// Auto pulse-layer kick (thin songs only — not a manual SFX-row card).
     case clubKick
-    /// Short synthesized sub / bass weight for the Auto pulse layer.
+    /// Auto pulse-layer bass weight (thin songs only — not a manual SFX-row card).
     case clubBass
-    /// Light hat tick for pulse / slamming-source decoration.
-    case clubHat
 }
 
 // MARK: - Sound Effect Definition
@@ -53,6 +51,8 @@ struct SoundEffectDefinition: Identifiable, Equatable, Sendable {
 // MARK: - Library
 
 enum SoundEffectLibrary {
+    /// Manual SFX row — the twelve built-in one-shots only.
+    /// Auto's thin-song pulse (clubKick / clubBass) is NOT listed here.
     nonisolated static let all: [SoundEffectDefinition] = [
         SoundEffectDefinition(id: "riser",          title: "Riser",          icon: "chart.line.uptrend.xyaxis",   durationSeconds: 4.0, assetName: "riser.wav",          synthesisType: .riser),
         SoundEffectDefinition(id: "downlifter",     title: "Downlifter",     icon: "chart.line.downtrend.xyaxis", durationSeconds: 2.0, assetName: "downlifter.wav",     synthesisType: .downlifter),
@@ -66,15 +66,25 @@ enum SoundEffectLibrary {
         SoundEffectDefinition(id: "bassDrop",       title: "Bass Drop",      icon: "arrow.down.to.line",          durationSeconds: 1.5, assetName: "bass_drop.wav",      synthesisType: .bassDrop),
         SoundEffectDefinition(id: "tapeStop",       title: "Tape Stop",      icon: "recordingtape",               durationSeconds: 1.0, assetName: "tape_stop.wav",      synthesisType: .tapeStop),
         SoundEffectDefinition(id: "airSweep",       title: "Air Sweep",      icon: "wind",                        durationSeconds: 2.0, assetName: "air_sweep.wav",      synthesisType: .airSweep),
-        // Procedural pulse-layer hits (no bundled wav — synthesizer / mixdown).
-        SoundEffectDefinition(id: "clubKick",       title: "Club Kick",      icon: "circle.fill",                 durationSeconds: 0.18, assetName: "club_kick.wav",      synthesisType: .clubKick),
-        SoundEffectDefinition(id: "clubBass",       title: "Club Bass",      icon: "waveform.path",               durationSeconds: 0.28, assetName: "club_bass.wav",      synthesisType: .clubBass),
-        SoundEffectDefinition(id: "clubHat",        title: "Club Hat",       icon: "hat.widebrim.fill",           durationSeconds: 0.08, assetName: "club_hat.wav",       synthesisType: .clubHat),
+    ]
+
+    /// Auto-only thin-song pulse hits. Looked up by id for apply/render;
+    /// never shown on the manual SFX row.
+    nonisolated static let pulseLayer: [SoundEffectDefinition] = [
+        SoundEffectDefinition(id: "clubKick", title: "Club Kick", icon: "circle.fill",
+                              durationSeconds: 0.18, assetName: "club_kick.wav", synthesisType: .clubKick),
+        SoundEffectDefinition(id: "clubBass", title: "Club Bass", icon: "waveform.path",
+                              durationSeconds: 0.28, assetName: "club_bass.wav", synthesisType: .clubBass),
     ]
 
     /// nonisolated: looked up by the background export renderer too.
     nonisolated static func definition(for id: String) -> SoundEffectDefinition? {
-        all.first { $0.id == id }
+        all.first { $0.id == id } ?? pulseLayer.first { $0.id == id }
+    }
+
+    /// True for the Auto thin-song pulse assets (not manual SFX-row cards).
+    nonisolated static func isPulseLayer(_ id: String) -> Bool {
+        pulseLayer.contains { $0.id == id }
     }
 
     // MARK: - Collision-free placement

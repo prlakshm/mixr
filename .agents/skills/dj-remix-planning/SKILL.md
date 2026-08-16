@@ -51,9 +51,14 @@ Recipe flavors (instincts, not sound-alikes): Calvin sparse, Guetta vocal+electr
 
 ## Club pulse
 
-- Thin source → write kick+bass, duck/high-pass original low end.
-- Slamming kit → **no second kick**; only risers / snare / impact / hats.
+**Only new Auto sound** — thin songs only:
+
+- Four-on-the-floor kick + bass weight; duck/HPF original low end.
+- Slamming or moderate kits → **no pulse**. Use existing SFX-row one-shots.
 - Mute kick+bass in build-out, breakdown, and void regions.
+- Pulse assets are Auto-only (not manual SFX-row cards).
+
+Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + existing SFX one-shots + arrangement + this pulse.
 
 ## Tempo
 
@@ -105,8 +110,8 @@ Propose phrase-aligned opportunities when measured:
 - use contrast rather than continuous loudness automation
 
 ### Pulse / SFX
-- club kick / bass weight (one at a time)
-- riser, snare roll, impact, hats
+- thin-song club kick / bass weight (Auto-only; one at a time)
+- existing SFX-row one-shots: riser, snare build, impact, …
 
 Pulse and SFX must support an underlying musical transformation.
 

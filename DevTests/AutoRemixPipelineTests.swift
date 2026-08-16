@@ -194,7 +194,7 @@ do {
     case (.success(_, let rp, _), .success(_, let mp, _)):
         // Musical SFX (risers/impacts) stay sparse; club pulse lives in
         // pulseRegions and is expanded at apply/render time.
-        let musical = rp.sfxEvents.filter { !["clubKick", "clubBass", "clubHat"].contains($0.assetID) }
+        let musical = rp.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let rMinutes = max(rp.targetDuration / 60, 0.01)
         check(
             "One-song remix musical SFX ≤ 3 events/min",

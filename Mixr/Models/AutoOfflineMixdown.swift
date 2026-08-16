@@ -119,7 +119,7 @@ nonisolated enum AutoOfflineMixdown {
                 sampleRate: sampleRate
             )
             // Short edge fades on pulse hits so grid stacks never click.
-            if ["clubKick", "clubBass", "clubHat"].contains(event.assetID) {
+            if SoundEffectLibrary.isPulseLayer(event.assetID) {
                 let fade = max(1, Int(0.004 * sampleRate))
                 for i in 0..<min(fade, buffer.count) {
                     let g = Float(i) / Float(fade)
@@ -273,8 +273,6 @@ nonisolated enum AutoOfflineMixdown {
                 let env = attack * Float(exp(-8 * x))
                 let tone = Float(sin(2 * Double.pi * 45 * Double(i) / sampleRate))
                 value = tone * env * 0.9
-            case .clubHat:
-                value = noise * Float(exp(-40 * x)) * 0.5
             }
             out[i] = value
         }

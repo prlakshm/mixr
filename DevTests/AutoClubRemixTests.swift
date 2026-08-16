@@ -121,6 +121,17 @@ do {
     check("Slamming kit does not write second kick",
           slam.sourceHasClubKick && !slam.writesKick && !slam.writesBass)
     check("Slamming one-kick rule ok", !AutoClubPulse.violatesOneKickRule(policy: slam))
+
+    let mid = AutoClubPulse.policy(drumStrength: 0.55, bassDensity: 0.5)
+    check("Moderate kit gets no pulse layer",
+          !mid.writesKick && !mid.writesBass && !mid.duckSourceLowEnd)
+
+    check("Pulse assets are Auto-only (not on manual SFX row)",
+          !SoundEffectLibrary.all.contains { $0.id == "clubKick" || $0.id == "clubBass" }
+              && SoundEffectLibrary.definition(for: "clubKick") != nil
+              && SoundEffectLibrary.definition(for: "clubBass") != nil)
+    check("Manual SFX row stays at the twelve one-shots",
+          SoundEffectLibrary.all.count == 12)
 }
 
 do {

@@ -300,7 +300,7 @@ do {
         check("One song: plan records the usable source range",
               plan.usableSourceRange != nil)
 
-        let musicalSFX = plan.sfxEvents.filter { !["clubKick", "clubBass", "clubHat"].contains($0.assetID) }
+        let musicalSFX = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let minutes = max(plan.targetDuration / 60.0, 0.01)
         let sfxPerMinute = Double(musicalSFX.count) / minutes
         check("One song: musical SFX density bounded (≤ 3/min)",
@@ -379,7 +379,7 @@ if let plan = confidentPlan, let song = confidentSong {
         .filter { !$0.continuesPrevious && $0.timelineStart > 0.05 }
         .map(\.timelineStart)
         + plan.sfxEvents
-        .filter { !["clubKick", "clubBass", "clubHat", "impact", "bassDrop"].contains($0.assetID) }
+        .filter { !SoundEffectLibrary.isPulseLayer($0.assetID) && !["impact", "bassDrop"].contains($0.assetID) }
         .map(\.timelineStart)
     for t in inspectTimes {
         let lo = max(0, Int((t - 0.01) * SR))
@@ -629,7 +629,7 @@ do {
               plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
         check("Low confidence: pulse / filter energy present",
               !plan.pulseRegions.isEmpty || plan.placements.contains { $0.effects.level(for: "blur") > 0.5 })
-        let musical = plan.sfxEvents.filter { !["clubKick", "clubBass", "clubHat"].contains($0.assetID) }
+        let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         check("Low confidence: musical SFX stay sparse (≤ 4)", musical.count <= 4,
               "got \(musical.count)")
     case .failure(let message):

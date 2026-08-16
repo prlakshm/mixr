@@ -37,12 +37,18 @@ Target shape on the phrase grid (all structural cuts on phrase / downbeat bounda
 
 ## Club pulse (one kick rule)
 
-Write a club layer: kick, bass weight, risers, snare roll, impacts.
+**Only new Auto sound:** a kick/bass pulse layer for **thin** songs (piano ballad, weak drums).
 
+- Four-on-the-floor kick + bass weight.
 - **ONE kick and ONE bass at a time.**
-- If the source already has a club kick / slamming kit: do **not** add a second kick. Only add risers, snare roll, impact, hats.
-- If the source is thin (piano ballad, weak drums): write kick+bass and duck or high-pass the original low end.
+- Duck or high-pass the original low end (existing blur / gain) while the pulse is in.
+- If the source already slams (or has a moderate kit): do **not** add this pulse. Use existing SFX-row one-shots (riser, snare build, impact, …) only.
 - Two kicks flam and mud the club system — hard fail.
+
+**Sound sources (product lock):**
+1. Clip effects panel only: reverb, echo, pitch, flanger, blur (existing presets). No new clip-effect types.
+2. SFX row only: the twelve bundled one-shots. Pulse kick/bass are Auto-only and not SFX-row cards.
+3. Arrangement: cuts, tempo/pocket, ducking/HPF, intentional pre-drop void.
 
 ## Tempo pockets
 

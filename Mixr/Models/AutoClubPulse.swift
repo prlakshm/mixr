@@ -2,9 +2,12 @@ import Foundation
 
 // MARK: - Club Pulse Layer
 //
-// ONE kick and ONE bass at a time. Thin songs get a written pulse; songs
-// that already slam keep their kit and only receive risers / snare rolls /
-// impacts / hats. Two kicks flam — that is a hard fail.
+// Product lock: the ONLY new Auto sound is a kick/bass pulse for THIN
+// songs (piano ballad, weak drums). Four-on-the-floor kick + bass weight.
+// ONE kick at a time. Duck / high-pass the original low end while the
+// pulse plays. If the source already slams, do NOT write this pulse.
+// Existing SFX-row one-shots (riser, snare build, impact, …) still cover
+// hype on slamming kits — never a second competing kick.
 
 nonisolated enum AutoClubPulse {
 
@@ -12,16 +15,16 @@ nonisolated enum AutoClubPulse {
     struct Policy: Sendable, Equatable {
         /// Source already has a club kick / slamming kit.
         var sourceHasClubKick: Bool
-        /// Write a synthesized kick on the grid.
+        /// Write a synthesized four-on-the-floor kick (thin songs only).
         var writesKick: Bool
-        /// Write a synthesized bass/sub weight on the grid.
+        /// Write synthesized bass/sub weight (thin songs only).
         var writesBass: Bool
         /// High-pass / blur the original low end while the pulse plays.
         var duckSourceLowEnd: Bool
         var detail: String
     }
 
-    /// One scheduled pulse hit (kick / bass / hat) on the SFX bus.
+    /// One scheduled pulse hit on the SFX bus (Auto-only assets).
     struct Hit: Sendable, Equatable {
         var assetID: String
         var timelineStart: Double
@@ -66,7 +69,7 @@ nonisolated enum AutoClubPulse {
                 writesKick: false,
                 writesBass: false,
                 duckSourceLowEnd: false,
-                detail: "source already slams — pulse adds risers/hats only (no second kick)"
+                detail: "source already slams — no pulse kick (use existing SFX one-shots only)"
             )
         }
         if thin {
@@ -75,46 +78,37 @@ nonisolated enum AutoClubPulse {
                 writesKick: true,
                 writesBass: true,
                 duckSourceLowEnd: true,
-                detail: "thin source — writing kick+bass and ducking original low end"
+                detail: "thin source — four-on-the-floor kick+bass; ducking original low end"
             )
         }
-        // Mid: add kick weight carefully, skip bass to avoid mud.
+        // Mid kits keep their own drums — do not invent a competing pulse.
         return Policy(
             sourceHasClubKick: false,
-            writesKick: true,
+            writesKick: false,
             writesBass: false,
-            duckSourceLowEnd: true,
-            detail: "moderate kit — writing kick only, ducking source low end"
+            duckSourceLowEnd: false,
+            detail: "moderate kit — no pulse layer (source drums carry the groove)"
         )
     }
 
-    /// Schedules pulse hits for the given regions. Kick and bass are muted
-    /// in `buildOut`, `breakdown`, and `void`. Intro teases kick every
-    /// other bar; drops get every-beat kick + downbeat bass.
+    /// Schedules four-on-the-floor kick + bass-weight hits. Muted in
+    /// `buildOut`, `breakdown`, and `void`. Returns [] when the policy
+    /// does not write a pulse.
     static func scheduleHits(
         regions: [Region],
         policy: Policy,
         beatSeconds: Double,
         barSeconds: Double
     ) -> [Hit] {
-        var hits: [Hit] = []
-        guard policy.writesKick || policy.writesBass else {
-            // Still allow light hats on groove/drop for slamming sources.
-            for region in regions where region.role == .groove || region.role == .drop {
-                var t = region.timelineStart + beatSeconds * 2
-                while t < region.timelineEnd - 0.01 {
-                    hits.append(Hit(assetID: "clubHat", timelineStart: t, purpose: "hat layer"))
-                    t += barSeconds
-                }
-            }
-            return hits
-        }
+        guard policy.writesKick || policy.writesBass else { return [] }
 
+        var hits: [Hit] = []
         for region in regions {
             switch region.role {
             case .void, .breakdown, .buildOut:
                 continue
             case .introTease:
+                // Kick tease: every other bar (filtered intro identity).
                 if policy.writesKick {
                     var t = region.timelineStart
                     var barIndex = 0
@@ -131,6 +125,7 @@ nonisolated enum AutoClubPulse {
                     }
                 }
             case .groove, .build, .outro:
+                // Four-on-the-floor.
                 if policy.writesKick {
                     var t = region.timelineStart
                     while t < region.timelineEnd - 0.01 {

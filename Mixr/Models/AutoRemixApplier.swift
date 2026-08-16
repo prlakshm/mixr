@@ -72,7 +72,7 @@ nonisolated enum AutoRemixApplier {
                     )
                     continue
                 }
-                let isPulse = ["clubKick", "clubBass", "clubHat"].contains(definition.id)
+                let isPulse = SoundEffectLibrary.isPulseLayer(definition.id)
                 let placedStart: CGFloat
                 if isPulse {
                     // Pulse hits stay on the beat grid — never slide.
