@@ -240,13 +240,28 @@ do {
         check(
             "One-song remix used club phrase grid (not energy-curve only)",
             !rp.decisions.contains { $0.kind == .imposedClubEnergyCurve }
-                || musical.count >= 16,
+                || musical.count >= 8,
             "decisions include energy-curve=\(rp.decisions.contains { $0.kind == .imposedClubEnergyCurve }) count=\(musical.count)"
         )
+        let drops = rp.pulseRegions.filter { $0.role == .drop }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - rp.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + rp.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musical.filter {
+            !inMixWindow($0.timelineStart)
+                && ($0.assetID == "riser" || $0.assetID == "snareBuild" || $0.assetID == "clapFill"
+                    || $0.assetID == "tapeStop" || $0.assetID == "airSweep")
+        }
         check(
-            "One-song remix musical SFX ≥ 6 events/min (club density)",
-            perMin >= 6.0 - 0.0001,
-            String(format: "%.2f events/min count=%d dur=%.1f", perMin, musical.count, rp.targetDuration)
+            "One-song remix: no SFX wallpaper outside mix windows",
+            wallpaper.isEmpty,
+            "wallpaper=\(wallpaper.map(\.assetID))"
         )
         check(
             "One-song remix musical SFX stays finite (≤ 40/min)",
@@ -256,14 +271,14 @@ do {
         let ids = Set(musical.map(\.assetID))
         check(
             "One-song remix uses a variety of SFX ids",
-            ids.count >= 4,
+            ids.count >= 3,
             "ids=\(ids.sorted())"
         )
         check("Mashup still coordinates SFX moments", !mp.sfxEvents.isEmpty)
         let mashMusical = mp.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         check(
-            "Mashup musical SFX is denser than a polite drip",
-            mashMusical.count >= 6,
+            "Mashup has drop/join SFX (not a silent drip)",
+            mashMusical.count >= 3,
             "count=\(mashMusical.count)"
         )
         check("One-song remix records pulse regions", !rp.pulseRegions.isEmpty)

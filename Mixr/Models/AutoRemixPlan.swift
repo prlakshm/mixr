@@ -83,6 +83,8 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case rejectedDualBassStack
     /// Short same-song hook duplicate used as a DJ echo / stutter throw.
     case hookEchoThrow
+    /// Guest hook replaced the bed vocal on a drop (one melody).
+    case hookReplace
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -162,6 +164,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Rejected a dual kick/bass stack\(detail.map { " — \($0)" } ?? "")."
         case .hookEchoThrow:
             return "Threw a hook echo duplicate of \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .hookReplace:
+            return "Hook-replaced \(song)\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -385,10 +389,18 @@ struct AutoTuning: Sendable {
     var supportVolume = 0.45
     /// Duckier gain when two dense vocals share a drop (≈ −10 dB).
     var duckedVocalSupportVolume = 0.32
-    /// Vocal overlay length on a drop (bars) — chant / harmony window.
+    /// Optional call-and-response overlay on a drop (bars). Hook-replace
+    /// is the default — dual vocals are not stacked for the full drop.
     var vocalOverlayBars = 8
-    /// Bars into the drop before the second vocal enters.
-    var vocalOverlayEntryBars = 4
+    /// Bars into the drop before an optional call-and-response enters.
+    var vocalOverlayEntryBars = 0
+    /// When false (default), mashups are hook-replace: guest in, bed vocal
+    /// carved out. Set true only for an explicit ≤8-bar call-and-response.
+    var allowCallAndResponseOverlay = false
+    /// Mix window length in bars (last N of outgoing + first N of drop).
+    var mixWindowBars = 8
+    /// Max short echo-throw chops in one mix window (into the void).
+    var maxMixWindowEchoThrows = 1
     /// Minimum directional-compatibility score before Auto risks an overlap.
     var minOverlapScore = 0.55
     /// Analysis confidence below this → energy-curve club-ify without invented cuts.

@@ -261,7 +261,7 @@ do {
     }
 }
 
-// MARK: - Dual-vocal overlay on a drop is legal (Bollywood stack)
+// MARK: - Hook-replace mashup (two-deck): guest in, bed vocal out — not dual-vocal default
 
 do {
     let bed = makeSong(title: "ClubBedVocalOK", bpm: 128, key: "Am", color: .blue)
@@ -278,31 +278,44 @@ do {
         signals: feats
     ) {
     case .success(_, let plan, _):
-        check("Dual-vocal mashup mode", plan.mode == .mashup)
-        check("Dual-vocal plan accepted (not rejected)", true)
-        let stacked = plan.decisions.contains { $0.kind == .stackedVocalOverlay }
-        let ducked = plan.decisions.contains { $0.kind == .duckedSupportingVocal }
-        check("Dual-vocal overlay decision present", stacked, "stacked=\(stacked) ducked=\(ducked)")
-        // Supporting guest concurrent with a drop dominant = legal dual-vocal bars.
-        let dominants = plan.placements.filter { $0.role == .dominant }
-        let guestSupports = plan.placements.filter {
-            $0.role == .supporting && $0.songID != plan.mashupBedSongID
+        check("Hook-replace mashup mode", plan.mode == .mashup)
+        check("Hook-replace plan accepted", true)
+        // Default is ONE guest melody on the drop — not a stacked dual-vocal wallpaper.
+        let stacked = plan.decisions.filter { $0.kind == .stackedVocalOverlay }
+        let callResponseBars = stacked.compactMap { d -> Double? in
+            // Optional ≤8-bar call-and-response is allowed; full-drop dual vocals are not.
+            guard let detail = d.detail else { return nil }
+            // detail like "8 bars on Drop 1 under …"
+            let parts = detail.split(separator: " ")
+            return parts.first.flatMap { Double($0) }
         }
-        var dualVocalBars = false
-        for support in guestSupports {
-            let overDrop = dominants.contains {
-                $0.songID != support.songID
-                    && $0.timelineStart < support.timelineStart + support.timelineDuration - 0.01
-                    && support.timelineStart < $0.timelineStart + $0.timelineDuration - 0.01
+        check(
+            "No default dual-vocal wallpaper (overlay absent or ≤8-bar call-response)",
+            stacked.isEmpty || callResponseBars.allSatisfy { $0 <= 8.01 },
+            "stacked=\(stacked.count) bars=\(callResponseBars)"
+        )
+        // Guest hook replaces bed vocal: bed support under drop has heavy mid carve.
+        if let bedID = plan.mashupBedSongID, let vocalID = plan.mashupVocalSongID {
+            let drops = plan.placements.filter { $0.songID == vocalID && $0.role == .dominant }
+            let bedUnder = plan.placements.filter { $0.songID == bedID && $0.role == .supporting }
+            var hookReplace = false
+            for drop in drops {
+                for bed in bedUnder {
+                    let overlap = min(drop.timelineEnd, bed.timelineEnd) - max(drop.timelineStart, bed.timelineStart)
+                    if overlap > plan.barSeconds * 4 {
+                        hookReplace = true
+                        check(
+                            "Hook-replace carves bed vocal (heavy blur/HPF)",
+                            bed.effects.level(for: MixrEffect.blur.rawValue) >= 40,
+                            String(format: "blur=%.0f", bed.effects.level(for: MixrEffect.blur.rawValue))
+                        )
+                    }
+                }
             }
-            if overDrop { dualVocalBars = true }
+            check("Hook-replace places bed under guest drop", hookReplace)
         }
-        check("Dual-vocal bars on a drop are legal and present", dualVocalBars,
-              "guestSupports=\(guestSupports.count)")
-        check("Did not reject the plan for dual vocals",
-              !plan.decisions.contains { $0.kind == .avoidedVocalOverlap && $0.detail?.contains("reject") == true })
     case .failure(let message):
-        check("Dual-vocal overlay must be a legal plan", false, message)
+        check("Hook-replace mashup must be a legal plan", false, message)
     }
 }
 
@@ -345,7 +358,7 @@ do {
 // MARK: - N-song mashups (2…5): one bed, rotating hooks, legal plan
 
 /// Assert club mashup legality: one bed owner, phrase-aligned ≥8-bar stays,
-/// Drop 1 ≠ Drop 2 when multiple hooks exist. Dual-vocal overlays are legal.
+/// Drop 1 ≠ Drop 2 when multiple hooks exist. Hook-replace (not dual-vocal default).
 func assertLegalNSongMashup(
     _ plan: AutoRemixPlan,
     expectedSongCount: Int,
@@ -394,9 +407,15 @@ func assertLegalNSongMashup(
     flushStay(followedByVoid: voidFollowsEnd)
     check("\(label) no sub-8-bar identity stays", shortStays == 0, "shortStays=\(shortStays)")
 
-    // Dual-vocal overlays are legal — only dual full-mix kick/bass stacks fail.
+    // Supporting bed under hook is OK; dual full-mix kick/bass stacks fail.
     let supports = plan.placements.filter { $0.role == .supporting }
-    check("\(label) may include supporting layers", true, "supports=\(supports.count)")
+    check("\(label) may include supporting bed layers", true, "supports=\(supports.count)")
+    let stacked = plan.decisions.filter { $0.kind == .stackedVocalOverlay }
+    check(
+        "\(label) no dual-vocal wallpaper (overlay absent or ≤8-bar call-response)",
+        stacked.isEmpty || stacked.allSatisfy { ($0.detail ?? "").contains("8 bars") || ($0.detail ?? "").hasPrefix("4 ") || ($0.detail ?? "").hasPrefix("8 ") },
+        "stacked=\(stacked.map { $0.detail ?? "" })"
+    )
 
     // Roles: Drop 1 / Drop 2 when guests exist.
     if expectedSongCount >= 2 {
@@ -450,16 +469,29 @@ do {
                   "d1=\(d1 == h1.id ? "A" : d1 == h2.id ? "B" : "?") d2=\(d2 == h1.id ? "A" : d2 == h2.id ? "B" : d2 == bed.id ? "bed" : "?")")
         }
         let stacked = plan.decisions.filter { $0.kind == .stackedVocalOverlay }
-        check("N=3 stacks vocal overlay on a drop (legal)", !stacked.isEmpty,
-              "decisions=\(stacked.map { $0.detail ?? "" })")
-        // Rotate: overlays on drop 1 and drop 2 should not be the same guest when both exist.
-        let overlaySongs = Set(
-            plan.placements
-                .filter { $0.role == .supporting && $0.songID != bed.id }
-                .map(\.songID)
+        check(
+            "N=3 hook-replace default (no dual-vocal wallpaper)",
+            stacked.isEmpty || stacked.allSatisfy { d in
+                let detail = d.detail ?? ""
+                // Optional short call-and-response only.
+                return detail.contains("call-response") || detail.hasPrefix("4 ") || detail.hasPrefix("8 ")
+            },
+            "decisions=\(stacked.map { $0.detail ?? "" })"
         )
-        check("N=3 supporting vocal layer(s) present", !overlaySongs.isEmpty,
-              "overlaySongs=\(overlaySongs.count)")
+        // Drop 1 guest is dominant; other guests are not stacked supports under it by default.
+        if let vocalID = plan.mashupVocalSongID {
+            let guestSupportsUnderDrop1 = plan.placements.filter { p in
+                p.role == .supporting
+                    && p.songID != bed.id
+                    && p.songID != vocalID
+                    && p.timelineDuration > plan.barSeconds * 8.5
+            }
+            check(
+                "N=3 no full-drop second-guest vocal stack",
+                guestSupportsUnderDrop1.isEmpty,
+                "longGuestSupports=\(guestSupportsUnderDrop1.count)"
+            )
+        }
     case .failure(let message):
         check("N=3 mashup plan", false, message)
     }
@@ -849,19 +881,49 @@ do {
         }
         var layered = false
         for drop in dropLeads {
-            for bed in bedLayers {
+            for bed in bedLayers where bed.timelineDuration >= plan.barSeconds * 4 {
                 let overlap = min(drop.timelineEnd, bed.timelineEnd) - max(drop.timelineStart, bed.timelineStart)
                 if overlap > plan.barSeconds {
                     layered = true
                     check("Bed under drop stays audible (not muted)", bed.volume >= 0.70,
                           String(format: "vol=%.2f", bed.volume))
-                    check("Bed under drop carves mids (HPF/blur), not mute",
-                          bed.effects.level(for: MixrEffect.blur.rawValue) >= 20)
+                    check("Hook-replace carves bed vocal (heavy HPF/blur)",
+                          bed.effects.level(for: MixrEffect.blur.rawValue) >= 40,
+                          String(format: "blur=%.0f", bed.effects.level(for: MixrEffect.blur.rawValue)))
                 }
             }
         }
         check("Drop placement overlaps bed placement in time", layered,
               "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
+
+        // Two-deck: before Drop 1, only the bed is now-playing (no guest hook).
+        if let drop1Start = dropLeads.map(\.timelineStart).min() {
+            let guestBefore = plan.placements.filter {
+                $0.songID == vocalID
+                    && $0.timelineStart < drop1Start - 0.05
+                    && $0.timelineDuration > plan.barSeconds
+            }
+            check(
+                "Britney two-deck: no BOMT before Drop 1 mix",
+                guestBefore.isEmpty,
+                "earlyGuest=\(guestBefore.count)"
+            )
+            let echoSpam = plan.placements.filter {
+                $0.role == .supporting
+                    && $0.timelineDuration <= plan.barSeconds + 0.05
+                    && ($0.fadeOut.type == .echoOut
+                        || $0.effects.level(for: MixrEffect.echo.rawValue) >= 12)
+            }
+            check(
+                "Britney two-deck: no echo-throw wallpaper (≤2)",
+                echoSpam.count <= 2,
+                "echoes=\(echoSpam.count)"
+            )
+            check(
+                "Britney two-deck: no dual-vocal overlay default",
+                !plan.decisions.contains { $0.kind == .stackedVocalOverlay }
+            )
+        }
 
         // Riser must start during the outgoing phrase (before the cut/downbeat).
         let risers = plan.sfxEvents.filter { $0.assetID == "riser" || $0.assetID == "snareBuild" }
@@ -986,32 +1048,52 @@ do {
 }
 
 do {
-    // Club hype density: builds stack snare+riser; drops stack impact+crash.
+    // Two-deck club remix: Diplo energy on the drop; verses stay the record.
     let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
     let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 42, signals: [song.id: feat]) {
     case .success(_, let plan, _):
         let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
-        let minutes = max(plan.targetDuration / 60.0, 0.5)
-        check("Club remix musical SFX ≥ 6/min",
-              Double(musical.count) / minutes >= 6.0 - 0.01,
-              String(format: "%.1f/min count=%d", Double(musical.count) / minutes, musical.count))
-        check("Club remix has snareBuild on a build/drop",
-              musical.contains { $0.assetID == "snareBuild" })
-        check("Club remix has riser",
-              musical.contains { $0.assetID == "riser" })
-        check("Club remix has impact+crash stacks",
-              musical.contains { $0.assetID == "impact" }
-                && musical.contains { $0.assetID == "crash" })
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        let grooves = plan.pulseRegions.filter { $0.role == .groove || $0.role == .introTease }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - plan.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + plan.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musical.filter { ev in
+            !inMixWindow(ev.timelineStart)
+                && (ev.assetID == "riser" || ev.assetID == "snareBuild" || ev.assetID == "tapeStop"
+                    || ev.assetID == "airSweep" || ev.assetID == "clapFill")
+        }
+        check(
+            "Two-deck: no riser/snare/tape/clap wallpaper outside mix windows",
+            wallpaper.isEmpty,
+            "wallpaper=\(wallpaper.map(\.assetID)) @ \(wallpaper.map { String(format: "%.1f", $0.timelineStart) })"
+        )
+        check(
+            "Club remix has impact on Drop 1",
+            drops.first.map { d0 in
+                musical.contains { $0.assetID == "impact" && abs($0.timelineStart - d0.timelineStart) < 0.35 }
+            } ?? false
+        )
+        check(
+            "Club remix has snareBuild or riser in a mix window",
+            musical.contains {
+                ($0.assetID == "snareBuild" || $0.assetID == "riser") && inMixWindow($0.timelineStart)
+            }
+        )
         let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
         check("Club remix cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
-        let drops = plan.pulseRegions.filter { $0.role == .drop }
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
             check("Club remix Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,
                   String(format: "bar=%.1f", bar))
         }
-        // Drop 1 should be a high-hook chorus island, not a verse.
         if let dropPlacement = plan.placements.first(where: {
             abs($0.timelineStart - (drops.first?.timelineStart ?? -1)) < 0.05
         }) {
@@ -1025,16 +1107,23 @@ do {
             check("Club remix Drop 1 is a chorus/teaser island", matched || dropPlacement.sourceStart > 1.0,
                   String(format: "sourceStart=%.1f", dropPlacement.sourceStart))
         }
+        let grooveFXHeavy = plan.placements.filter { p in
+            let onGroove = grooves.contains {
+                p.timelineStart >= $0.timelineStart - 0.05 && p.timelineStart < $0.timelineEnd - 0.05
+            }
+            return onGroove
+                && (p.effects.level(for: MixrEffect.echo.rawValue) >= 20 || p.fadeOut.type == .echoOut)
+        }
+        check(
+            "Two-deck: verses/grooves stay the record (no heavy echo FX)",
+            grooveFXHeavy.isEmpty,
+            "heavyGrooveFX=\(grooveFXHeavy.count)"
+        )
         let buildOutFX = plan.placements.filter {
             $0.effects.level(for: MixrEffect.blur.rawValue) >= 45
                 || $0.fadeOut.type == .echoOut
         }
-        check("Club remix fires build-out blur / echo-out clip FX", !buildOutFX.isEmpty)
-        let breakFX = plan.placements.filter {
-            $0.effects.level(for: MixrEffect.reverb.rawValue) >= 24
-        }
-        check("Club remix fires breakdown reverb bloom", !breakFX.isEmpty)
-        // t.A.T.u. midtempo + slamming drums → Diplo global-bass instinct.
+        check("Club remix fires build-out blur / echo-out in mix window", !buildOutFX.isEmpty)
         check("Club remix picks Diplo for dancehall/festival midtempo",
               plan.clubFlavor == .diplo,
               "flavor=\(plan.clubFlavor?.rawValue ?? "nil")")
@@ -1042,10 +1131,23 @@ do {
               plan.clubFlavor?.bias.maximalistStacks == true)
         check("Diplo flavor allows half-time drop",
               plan.clubFlavor?.bias.halfTimeDrop == true)
-        check("Diplo drop stacks include tapeStop",
-              musical.contains { $0.assetID == "tapeStop" })
+        // Echo throws: mix-window only, not 3-chop wallpaper on every drop.
+        let echoes = plan.placements.filter { p in
+            p.role == .supporting
+                && p.songID == song.id
+                && p.timelineDuration <= plan.barSeconds + 0.05
+                && (p.overlapsPreviousSeconds > 0.05
+                    || p.effects.level(for: MixrEffect.echo.rawValue) >= 12
+                    || p.fadeOut.type == .echoOut)
+        }
+        let echoOutside = echoes.filter { !inMixWindow($0.timelineStart) }
+        check(
+            "Echo throws gated to mix windows (no wallpaper)",
+            echoOutside.isEmpty && echoes.count <= 2,
+            "echoes=\(echoes.count) outside=\(echoOutside.count)"
+        )
     case .failure(let message):
-        check("Club hype density remix", false, message)
+        check("Two-deck club remix", false, message)
     }
 }
 
@@ -1134,16 +1236,14 @@ do {
 }
 
 do {
-    // DJ echo throws: short same-song supporting duplicates (1–4 beats),
-    // delayed 1/8–1/2 bar into the pre-drop void / off the drop vocal —
-    // not full-verse repeats, and not deleted as redundantRepeat.
+    // Echo throws are mix-window tools (into the void), not wallpaper on every drop.
     let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
     let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 42, signals: [song.id: feat]) {
     case .success(_, let plan, _):
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         guard let drop0 = drops.first else {
-            check("Echo throws: Drop 1 exists", false)
+            check("Echo mix-window: Drop 1 exists", false)
             break
         }
         let bar = plan.barSeconds
@@ -1153,57 +1253,44 @@ do {
                 && p.songID == song.id
                 && p.timelineDuration <= bar + 0.05
                 && p.timelineDuration >= beat * 0.75
-                && abs(p.timelineStart - drop0.timelineStart) <= bar * 0.75
+                && (p.overlapsPreviousSeconds > 0.05
+                    || p.effects.level(for: MixrEffect.echo.rawValue) >= 12
+                    || p.fadeOut.type == .echoOut)
         }
+        // At most one short throw into the Drop 1 void — not 3 chops on every drop.
+        let nearDrop1 = echoes.filter { abs($0.timelineStart - drop0.timelineStart) <= bar * 0.75 }
         check(
-            "Club remix places ≥2 short hook echo-duplicate supports near Drop 1",
-            echoes.count >= 2,
-            "count=\(echoes.count)"
+            "Echo throws ≤2 near Drop 1 (mix window, not wallpaper)",
+            nearDrop1.count <= 2,
+            "count=\(nearDrop1.count)"
         )
-        check(
-            "Echo throws stay ≤4 beats (not full-verse duplicates)",
-            echoes.allSatisfy { $0.timelineDuration <= beat * 4.05 },
-            echoes.map { String(format: "%.2f", $0.timelineDuration) }.joined(separator: ",")
-        )
-        check(
-            "Echo throws are ducked under the lead",
-            echoes.allSatisfy { $0.volume <= 0.50 },
-            echoes.map { String(format: "%.2f", $0.volume) }.joined(separator: ",")
-        )
-        check(
-            "Echo throws declare same-song overlap and/or echo FX",
-            echoes.allSatisfy {
-                $0.overlapsPreviousSeconds > 0.05
-                    || $0.effects.level(for: MixrEffect.echo.rawValue) >= 12
-                    || $0.fadeOut.type == .echoOut
+        let nearDrop2: Int = {
+            guard drops.count > 1 else { return 0 }
+            let d2 = drops[1]
+            return echoes.filter { abs($0.timelineStart - d2.timelineStart) <= bar * 0.75 }.count
+        }()
+        check("No echo-throw wallpaper on Drop 2", nearDrop2 == 0, "count=\(nearDrop2)")
+        if !nearDrop1.isEmpty {
+            check(
+                "Mix-window echo stays ≤4 beats",
+                nearDrop1.allSatisfy { $0.timelineDuration <= beat * 4.05 }
+            )
+            check(
+                "Mix-window echo is ducked",
+                nearDrop1.allSatisfy { $0.volume <= 0.50 }
+            )
+            let void = plan.intentionalGaps.first {
+                $0.reason.contains("void") && abs($0.end - drop0.timelineStart) < 0.05
             }
-        )
-        check(
-            "Planner records hookEchoThrow decision",
-            plan.decisions.contains { $0.kind == .hookEchoThrow }
-        )
-        // Into the void and/or just after the drop downbeat.
-        let void = plan.intentionalGaps.first {
-            $0.reason.contains("void") && abs($0.end - drop0.timelineStart) < 0.05
-        }
-        if let void {
-            let intoVoid = echoes.contains { $0.timelineStart < drop0.timelineStart - 0.01 && $0.timelineStart >= void.start - 0.05 }
-            let afterDrop = echoes.contains {
-                $0.timelineStart >= drop0.timelineStart - 0.01
-                    && $0.timelineStart <= drop0.timelineStart + bar * 0.55
+            if let void {
+                let intoVoid = nearDrop1.contains {
+                    $0.timelineStart < drop0.timelineStart - 0.01 && $0.timelineStart >= void.start - 0.05
+                }
+                check("When present, echo lands in the pre-drop void", intoVoid)
             }
-            check("Echo throws land in the pre-drop void and/or off the drop", intoVoid || afterDrop,
-                  "intoVoid=\(intoVoid) afterDrop=\(afterDrop)")
         }
-        // Delays should land near classic 1/8, 1/4, or 1/2 bar grids.
-        let delayOK = echoes.contains { echo in
-            let delayBars = (echo.timelineStart - drop0.timelineStart) / max(bar, 0.001)
-            let targets: [Double] = [-0.125, 0.0, 0.125, 0.25, 0.5]
-            return targets.contains { abs(delayBars - $0) < 0.06 }
-        }
-        check("Echo throw delays sit on 1/8–1/2 bar grid", delayOK)
     case .failure(let message):
-        check("Hook echo-duplicate remix", false, message)
+        check("Mix-window echo gating", false, message)
     }
 }
 

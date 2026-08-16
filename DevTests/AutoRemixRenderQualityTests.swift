@@ -316,9 +316,24 @@ do {
         let musicalSFX = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let minutes = max(plan.targetDuration / 60.0, 0.01)
         let sfxPerMinute = Double(musicalSFX.count) / minutes
-        check("One song: musical SFX density clubby (≥ 6/min)",
-              sfxPerMinute >= 6.0 - 0.001,
-              String(format: "%.1f events/min", sfxPerMinute))
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - plan.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + plan.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musicalSFX.filter {
+            !inMixWindow($0.timelineStart)
+                && ($0.assetID == "riser" || $0.assetID == "snareBuild" || $0.assetID == "clapFill"
+                    || $0.assetID == "tapeStop" || $0.assetID == "airSweep")
+        }
+        check("One song: no SFX wallpaper outside mix windows",
+              wallpaper.isEmpty,
+              "wallpaper=\(wallpaper.map(\.assetID))")
         check("One song: musical SFX density finite (≤ 40/min)",
               sfxPerMinute <= 40.0 + 0.001,
               String(format: "%.1f events/min", sfxPerMinute))
@@ -669,16 +684,29 @@ do {
         let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let minutes = max(plan.targetDuration / 60.0, 0.01)
         let perMin = Double(musical.count) / minutes
-        check("Low confidence: musical SFX still clubby (≥ 6/min)",
-              perMin >= 6.0 - 0.001,
-              String(format: "%.1f/min count=%d", perMin, musical.count))
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - plan.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + plan.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musical.filter {
+            !inMixWindow($0.timelineStart)
+                && ($0.assetID == "riser" || $0.assetID == "snareBuild" || $0.assetID == "clapFill"
+                    || $0.assetID == "tapeStop" || $0.assetID == "airSweep")
+        }
+        check("Low confidence: no SFX wallpaper outside mix windows",
+              wallpaper.isEmpty,
+              "wallpaper=\(wallpaper.map(\.assetID))")
         check("Low confidence: musical SFX stays finite (≤ 40/min)",
               perMin <= 40.0 + 0.001,
               String(format: "%.1f/min", perMin))
-        check("Low confidence: drop stacks include impact+crash",
-              musical.contains { $0.assetID == "impact" }
-                && musical.contains { $0.assetID == "crash" })
-        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        check("Low confidence: drop has impact",
+              musical.contains { $0.assetID == "impact" })
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
             check("Low confidence: Drop 1 by bar 24–32", bar >= 23.5 && bar <= 32.5,

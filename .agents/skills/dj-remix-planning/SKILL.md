@@ -14,17 +14,32 @@ description: >-
 
 ## Product intent
 
-Auto Remix rewrites a song as a **streaming-length club mix**: builds, drops,
-breakdowns, and hype—while keeping the song's recognizable identity on the
-first drop.
+Auto Remix rewrites a song as a **streaming-length club mix** using a
+**two-deck DJ mind**: Deck A is NOW PLAYING, Deck B is COMING NEXT.
+Full-volume stacking is illegal except inside a **mix window**.
 
 Preservation constrains identity (familiar hook on drop 1), not arrangement.
 SFX alone do not count as transformation. Accidental silence is forbidden;
 **intentional pre-drop voids are allowed** (hype = subtraction then a downbeat).
 
-Mashups (2…5 songs) are **one club bed + rotating hooks**: one kick and one
-bass at a time. Complementary vocal stacks on drops are desirable (Bollywood
-feel); never stack two full-mix kicks/subs.
+Mashups (2…5 songs) are **hook-replace over one bed**: guest hook IN on the
+drop, bed vocal OUT (kick/bass stay). One melody, one kick. Call-and-response
+is an optional ≤8-bar island, not the default. Never stack two full-mix kicks/subs.
+
+## Two-deck model
+
+- **Deck A** = current phrase (bed or solo source). **Deck B** = next hook.
+- **Mix window** = last ~8 bars of A's phrase + first ~8 bars of the drop.
+  Extra layers (second vocal, SFX stacks, echo throws, filter sweeps) are
+  legal ONLY there, plus one impact on Drop 1.
+- **Verses / grooves** = one deck: the source, maybe light HPF. No echo
+  throws, no riser wallpaper, no guest vocal.
+- **Semantic joins**: wait until a phrase finishes. Outro/end of A meets
+  intro/hook of B (Mixxx AutoDJ phrase-match behavior; reimplement, don't
+  copy GPL). AutoMashUpper still picks WHICH 8–16 bar islands belong together.
+- **Drop 2** = a flip (different song's hook or bed chorus back), not the
+  same stack louder.
+- Diplo / festival energy lives **on the drop**, not on verses.
 
 ## Planning hierarchy
 
@@ -72,9 +87,9 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 ## Mashup (2…5 songs)
 
 - ONE club bed (drums / pocket / simple harmony); others = vocal-hook candidates.
-- Drop 1 = strongest full hook; Drop 2 = a different song’s hook (duo may flip to bed chorus).
-- Vocals may overlap on hooks/drops (chant / harmony / title line for 4–16 bars). Duck the supporting vocal when both are dense.
-- Rotate which vocals overlap on drop 1 vs drop 2 (3–5 songs).
+- Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
+- Drop 2 = a different song’s hook (duo may flip to bed chorus) — not louder stack.
+- Dual vocals are NOT the default. Optional call-and-response ≤ 8 bars, then back to one voice.
 - Still ONE kick and ONE bass — reject dual full-mix kick/sub stacks.
 - Remaining songs: 8–16 bar cameos (verse/breakdown/outro) or short chops if gates fail.
 - Pitch the bed (≤ ~2 st); never force a star vocal through illegal stretch.
@@ -110,8 +125,8 @@ Propose phrase-aligned opportunities when measured:
 - compress or replace the outro
 
 ### Transition
-- filtered build
-- echo throw (clip Echo Out **and** short same-song duplicate chops delayed 1/8–1/2 bar into the void / off the drop — not full-verse repeats)
+- filtered build (mix window only)
+- echo throw into the pre-drop void / mix window only (not wallpaper on every drop)
 - intentional pre-drop void
 - reverse lead-in
 - equal-power overlap
@@ -125,14 +140,14 @@ Propose phrase-aligned opportunities when measured:
 
 ### Pulse / SFX
 - thin-song club kick / bass weight (first-class SFX menu items; one at a time)
-- existing SFX-row one-shots stacked on extra SFX rows: riser, snare build,
-  impact, crash, clap fill, air sweep, reverse cymbal, tape stop, …
-- major SFX moments roughly every 4–8 bars on builds/drops/breaks — festival
-  density, not a polite ≤3 events/min radio edit
-- clip FX must fire too: echo throws, blur/filter sweeps, reverb bloom
+- existing SFX-row one-shots on extra SFX rows: riser, snare build, impact,
+  crash, clap fill, air sweep, reverse cymbal, tape stop, …
+- SFX live in the **mix window and on the drop** — not on verses/grooves
+- one impact on Drop 1; cymbal punctuation ≤ 2 total; no mid-drop wallpaper
+- clip FX in the mix window: echo throws, blur/filter sweeps, reverb bloom
 
 Pulse and SFX must support an underlying musical transformation. Hype is
-layer density (bed + vocal + SFX + FX), never a second kick.
+the join and the drop, never a second kick or verse wallpaper.
 
 ## High-confidence behavior
 
