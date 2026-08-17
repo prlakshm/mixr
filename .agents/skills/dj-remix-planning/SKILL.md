@@ -1,16 +1,69 @@
 ---
 name: dj-remix-planning
 description: >-
-  Plan Auto Remix club rewrites and mashups: phrase-grid arrangement, pulse
-  layer, tempo pockets, hook-over-bed roles, and transformation scoring.
-  Use when designing remix recipes, selecting cut/transition/SFX/pulse
-  opportunities, auditing remix decisions, or implementing Auto Remix planning.
+  Plan Auto Remix club rewrites and mashups using Mixr’s locked two-deck DJ
+  mix grammar (Xirex pivot wallpaper, hook-replace, one kick). Use when
+  designing remix recipes, selecting cut/transition/SFX/pulse opportunities,
+  auditing remix decisions, or implementing Auto Remix planning.
 ---
 
-> **Policy source of truth:** Mixr root `AGENTS.md`. This skill provides
-> planning procedure; if guidance conflicts, AGENTS.md wins.
+> **Join / mix-window grammar (locked):** this skill. It wins over root
+> `AGENTS.md` on two-deck joins, pivot wallpaper, hook-replace, Drop 1 timing,
+> and mix-window SFX.
+>
+> **Still in `AGENTS.md`:** tempo pockets, one-kick pulse, gain/DSP, analysis
+> confidence, testing, and the completion standard. Keep those locks.
 
 # DJ Remix Planning
+
+## Locked gold-standard join (DJ Xirex)
+
+Reference mix: **Oops I Did It Again → …Baby One More Time** (Instagram reel).
+Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fade-in.
+
+1. **Deck A chorus plays complete.** Do not chop the opening title. Do not
+   slice the first “Oops” or the first “baby”. The outgoing line finishes
+   (e.g. “Oops I did it again / I played with your heart / Got lost in the
+   game / Oh baby, baby”).
+2. **Pivot grain = last word of that completed line**, one quarter-note
+   (1 beat) on the downbeat. Loop it **16× = 4 bars** (8–16 repeats / 2–4 bars
+   is the general range). This is the **wallpaper chop**: one grain, steady,
+   predictable. **Not** 1/8 or 1/16 stutters, tape stops, echo throws, or chops
+   scattered on the drop or in verses.
+3. **Over those 4 bars:** high-pass / Sound Color (blur) the loop so kick and
+   lows leave. Thin, tinny vocal stutter. Builds tension. Kick out on this
+   window (`buildOut`).
+4. **Hard cut** (no echo, no crossfade, **no fade-in**, no volume ramp from
+   silence, no gentle EQ bloom) into Deck B’s hook that **starts on the same
+   word** (“baby, baby, one more time” / “hit me baby one more time”) at
+   **full gain**, full-frequency kick. Then the rest of B’s chorus rides.
+5. **Phrase math:** 4 bars of loop, incoming vocal on the downbeat of bar 5
+   of the mix window. First drop lands **~bar 16–24** after intro + one
+   complete Deck A hook + pivot — **earlier than it feels safe**. Do not wait
+   until bar 28 if the completed hook was available at bar 16–24.
+6. **Hook-replace:** guest vocal IN, bed vocal OUT (HPF/blur the bed under
+   the drop). One melody, **one kick**. Call-and-response is optional ≤8 bars,
+   not the default.
+7. **Diet SFX on the join:** pivot loop + ≤1 impact slam on the incoming
+   downbeat. No riser wallpaper, no tape+crash+snare pile on the same cut.
+   Verses stay one record.
+
+If the join is quiet, it failed.
+
+### Generalize (any pair / solo)
+
+- **Pivot grain** = last 1-beat of a **completed** chorus/hook line of Deck A,
+  preferably a short word that also starts Deck B’s hook (title/hook token
+  overlap, e.g. “baby”). Without lyrics, use title/hook tokens
+  (`AutoPivotWord`); grain is still the last 1-beat of the completed phrase.
+- Loop that grain 8–16× (2–4 bars) on extra vocal/SFX rows, grid-snapped,
+  with HPF sweep / duck the bed kick on that window.
+- Incoming hook-replace on the next downbeat, same-word attack, full gain.
+- Wallpaper chops are **this mix-window loop**, not verse decoration and not
+  1/8 spam on the drop.
+- **Pulse Drop 1** = that hard cut after the loop — never a fake drop on the
+  bed’s completed chorus (e.g. bar 16 of Oops playing through is still the
+  record, not Drop 1).
 
 ## Product intent
 
@@ -19,94 +72,112 @@ Auto Remix rewrites a song as a **streaming-length club mix** using a
 Full-volume stacking is illegal except inside a **mix window**.
 
 Preservation constrains identity (familiar hook on drop 1), not arrangement.
-SFX alone do not count as transformation. Accidental silence is forbidden;
-**intentional pre-drop voids are allowed** (hype = subtraction then a downbeat).
+SFX alone do not count as transformation. Accidental silence is forbidden.
 
-Mashups (2…5 songs) are **hook-replace over one bed**: guest hook IN on the
-drop, bed vocal OUT (kick/bass stay). One melody, one kick. Call-and-response
-is an optional ≤8-bar island, not the default. Never stack two full-mix kicks/subs.
+**Intentional 1-beat pre-drop voids** belong only to **plain club drops**
+(no pivot loop — e.g. Drop 2 after an 8-bar build). Pivot joins are a hard
+cut, not a hole. Do not put the old void back on a pivot wallpaper handoff.
 
 ## Two-deck model
 
 - **Deck A** = current phrase (bed or solo source). **Deck B** = next hook.
-- **Mix window** = last ~8 bars of A's phrase + first ~8 bars of the drop.
-  Extra layers (second vocal, SFX stacks, pivot wallpaper grains, filter sweeps)
-  are legal ONLY there, plus one impact on Drop 1.
-- **Verses / grooves** = one deck: the source, maybe light HPF. No wallpaper
-  chops, no riser spam, no guest vocal.
-- **Xirex pivot wallpaper** (gold standard): Deck A chorus/hook plays COMPLETE
-  once; catch only the last 1-beat grain; loop it 8–16× (2–4 bars) with rising
-  HPF; **hard cut** into Deck B's hook at full level on the downbeat (no fade-in).
-  Cut earlier (~bar 20 after intro + one hook + pivot). Diet SFX: loop + ≤1 slam.
-  Not 1/8 stutter spam, not tape/riser piles, not verse decoration.
-- **Semantic joins**: wait until a phrase finishes. Outro/end of A meets
-  intro/hook of B (Mixxx AutoDJ phrase-match behavior; reimplement, don't
-  copy GPL). AutoMashUpper still picks WHICH 8–16 bar islands belong together.
-- **Drop 2** = a flip (different song's hook or bed chorus back), not the
-  same stack louder.
+- **Mix window** = completed A hook tail + 2–4 bar pivot loop + first bars of
+  the drop. Extra layers (pivot grains, HPF sweep, ≤1 slam) are legal ONLY
+  there. Verses/grooves stay one deck.
+- **Verses / grooves** = the source, maybe light HPF. No wallpaper chops, no
+  riser spam, no guest vocal, no echo throws.
+- **Semantic joins**: wait until a phrase finishes. Important lines uncut.
+  Incoming hook starts on a real downbeat of a real line, not mid-word.
+- **Drop 2** = a flip (different song’s hook or bed chorus back), not the
+  same stack louder. May use a 1-beat void if there is no pivot loop.
 - Diplo / festival energy lives **on the drop**, not on verses.
+
+## On-device Mixr (no Demucs runtime)
+
+- Swift / AVFoundation only on device. **No Python, no Demucs, no PyTorch
+  in the app.** Do not add a Demucs runtime.
+- Mashability uses Swift role proxies from vocal/bass/drum **curves**
+  (AutoMashup 2025 idea; no stems required).
+- **Optional offline Demucs sidecars** (vocals / drums / bass / other) may
+  already exist next to a song. If present:
+  - pivot grains come from the **vocal** stem;
+  - kick ownership / pulse gating may read the **drums** stem.
+  If absent, keep today’s proxies: last 1-beat of the completed phrase +
+  HPF/blur for hook-replace. Never block planning on missing stems.
 
 ## Planning hierarchy
 
 1. Analyze musical structure (sections, beats, phrases, drum/bass density).
 2. Decide tempo pocket (keep strong pockets; stretch/double-time only within gates).
 3. Decide pulse policy (one-kick rule).
-4. Build the club phrase-grid recipe (or mashup hook/bed slots).
-5. Score and place sections; record structured cut / void / pulse decisions.
+4. Build the club phrase-grid recipe (or mashup hook/bed slots) using the
+   locked join above.
+5. Score and place sections; record structured cut / void / pulse / pivot decisions.
 6. Validate musical and audio integrity.
 7. Render and report every decision.
 
 ## Club shape (one song)
 
-Phrase-grid only — drops land on downbeats, never mid-bar:
+Phrase-grid only — drops land on downbeats, never mid-bar.
 
-1. Intro 8–16 — filtered identity / kick tease
-2. Groove 8–16 — identity below drop density
-3. Build 8–16 — riser / snare; kick+bass out last 4 bars; optional void
-4. Drop 1 = 16 — familiar hook, full pulse, one lead idea
+**Locked Drop 1 shape (Xirex):**
+
+1. Intro 8 — filtered identity / kick tease (opening title uncut; source near t=0)
+2. First complete hook/chorus 8 — still the record (no early chops)
+3. Pivot wallpaper 4 — 1-beat last-word loop ×8–16, HPF, kick out
+4. Drop 1 = 16 — hook-replace / familiar hook, **hard cut**, full pulse, one lead idea (~bar 16–24)
 5. Breakdown 8–16 — pulse out, breathe
-6. Build 2 — denser than build 1
-7. Drop 2 = 16 — drop 1 + exactly one extra layer
+6. Build 2 — denser than the pivot window (may carry snare/riser into Drop 2)
+7. Drop 2 = 16 — drop 1 + exactly one extra idea (flip). 1-beat void OK if no pivot.
 8. Outro — hook fragment + drums
 
-Recipe flavors (instincts, not sound-alikes): Calvin sparse (rare — clear piano ballads only), Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK, **Diplo / Major Lazer / Jack Ü** maximalist festival hype (void-then-slam, vocal chops over rolling bed, global-bass DNA, FX as groove). Default Auto Remix toward Diplo/Guetta/Snake — not a polite Calvin radio edit.
+Do not pad a long groove runway after the first hook just to hit bar 28.
+
+Recipe flavors (instincts, not sound-alikes): Calvin sparse (rare — clear piano ballads only), Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK, **Diplo / Major Lazer / Jack Ü** maximalist festival hype. Default toward Diplo/Guetta/Snake — not a polite Calvin radio edit. Maximalist on the **drop**, diet on the **pivot join**.
 
 ## Club pulse
 
-**Only new Auto sound** — thin songs only:
+**Only new Auto sound** — thin songs only. **Keep this lock.**
 
 - Four-on-the-floor kick + bass weight; duck/HPF original low end.
 - Slamming or moderate kits → **no pulse**. Use existing SFX-row one-shots.
-- Mute kick+bass in build-out, breakdown, and void regions.
+- Mute kick+bass in build-out, breakdown, void, **and the pivot wallpaper window**.
 - Pulse kick/bass are first-class SFX menu items (same library Auto places).
+- **ONE kick and ONE bass at a time.** Two kicks = hard fail.
 
 Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one-shots (including Club Kick / Club Bass) + arrangement.
 
 ## Tempo
 
+**Keep this lock.**
+
 - Keep midtempo (~90–100), house (~124–130), festival (~140–150) pockets.
 - Double-time only when 2× lands in a pocket; check half/double before stretch.
 - Vocal stretch ≤ ~8%; bed/instrumental ≤ ~15%.
 - If stretch wrecks the vocal → keep BPM, club-ify with arrangement + energy.
+- Britney-class mashups stay ~94 (Oops bed / BOMT vocal). Paramore-class stays ~144.
 
 ## Mashup (2…5 songs)
 
+**Keep role locks.** N-song club mashups use the same locked Drop 1 join.
+
 - ONE club bed (drums / pocket / simple harmony); others = vocal-hook candidates.
+- **Oops × BOMT:** Oops = bed, BOMT = Drop 1 vocal, Oops chorus may return as Drop 2 flip.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
 - Drop 2 = a different song’s hook (duo may flip to bed chorus) — not louder stack.
 - Dual vocals are NOT the default. Optional call-and-response ≤ 8 bars, then back to one voice.
 - Still ONE kick and ONE bass — reject dual full-mix kick/sub stacks.
-- Remaining songs: 8–16 bar cameos (verse/breakdown/outro) or short chops if gates fail.
+- Remaining songs: 8–16 bar cameos (verse/breakdown/outro) **after** Drop 1 so the join stays early, or short chops if gates fail.
 - Pitch the bed (≤ ~2 st); never force a star vocal through illegal stretch.
 - Prefer Camelot same → ±1 → relative. Skip or cameo-only when song 4/5 fails.
-- Minimum stay 8 bars; prefer 16 on choruses. No 4-bar ping-pong.
+- Minimum stay 8 bars; prefer 16 on choruses. No 4-bar ping-pong (pivot grains are supporting, not identity stays).
 - Ballad on a peak-time bed → breakdown runway, not a slam.
 - Cap at 5 songs.
 
 Ported heuristics (Swift reimplementations — cite in code):
 - **AutoMashUpper (Davies 2014):** mashability is LOCAL per 8–16 bar island (harmonic / rhythmic / spectral); search beat offsets; asymmetric vocal-over-bed.
-- **AutoMashup 2025 (BSD-3):** stem *role proxies* from vocalPresence vs bass/drum curves (no Demucs); directional compatibility.
-- **Mixxx AutoDJ phrase match:** transition = outro∩intro; delay long intros so endings meet; far BPM → tape-stop, not vocal wreck.
+- **AutoMashup 2025 (BSD-3):** stem *role proxies* from vocalPresence vs bass/drum curves (no Demucs runtime); directional compatibility. Optional Demucs **sidecars** may refine pivot grain + kick ownership if already on disk.
+- **Mixxx AutoDJ phrase match:** transition = outro∩intro; delay long intros so endings meet; far BPM → tape-stop on **non-pivot** joins, not vocal wreck. Pivot joins stay hard-cut.
 
 ## Opportunity evidence
 
@@ -120,36 +191,38 @@ Propose phrase-aligned opportunities when measured:
 - 8-, 16-, or 32-bar structural completion
 - low-information repeated material
 - strong novelty event
+- shared title/hook token between Deck A’s last word and Deck B’s attack
 
 ## Transformation families
 
 ### Arrangement
 - rebuild onto the club phrase grid
+- play one complete A hook, then pivot, then Drop 1 — do not skip the title
 - return to the hook for drop 1 / drop 2
-- shorten redundant bars
+- shorten redundant bars **after** the first join (cut earlier, not later)
 - compress or replace the outro
 
 ### Transition
-- filtered build (mix window only)
-- Xirex pivot wallpaper: 1-beat last-word loop 8–16× → hard cut (not echo spam)
-- intentional pre-drop void (skipped when pivot wallpaper owns the window)
-- reverse lead-in
-- equal-power overlap
-- hard hype cut with anti-click microfade
+- **Xirex pivot wallpaper (default Drop 1):** 1-beat last-word loop 8–16× + HPF → hard cut at full gain
+- intentional pre-drop void **only** when there is no pivot loop (plain Drop 2)
+- reverse lead-in (non-pivot)
+- equal-power overlap (verse→groove / non-pivot handoffs only)
+- hard hype cut: **no fade-in**. Anti-click is a tiny sample microfade at the
+  splice if required by the renderer — never an audible volume ramp
 
 ### Energy shaping
-- remove kick/bass before a return (build-out)
-- restore the full spectrum on a downbeat
-- increase or reduce effect intensity across 4–16 bars
-- use contrast rather than continuous loudness automation
+- remove kick/bass on the pivot window / build-out
+- restore the full spectrum on the incoming downbeat (the slam)
+- HPF/blur sweep across the 4-bar loop only
+- use contrast rather than a gradual fade-in into the new vocal
 
 ### Pulse / SFX
 - thin-song club kick / bass weight (first-class SFX menu items; one at a time)
-- existing SFX-row one-shots on extra SFX rows: riser, snare build, impact,
-  crash, clap fill, air sweep, reverse cymbal, tape stop, …
-- SFX live in the **mix window and on the drop** — not on verses/grooves
-- one impact on Drop 1; cymbal punctuation ≤ 2 total; no mid-drop wallpaper
-- clip FX in the mix window: pivot HPF sweep, blur/filter, reverb bloom
+- **Pivot join diet:** loop grains + ≤1 impact. That is the mix-window stack.
+- Extra one-shots (riser, snare build, crash, tape stop, …) may dress **later**
+  builds / Drop 2 — not the Xirex cut, not verses
+- cymbal punctuation ≤ 2 total; no mid-drop wallpaper; no verse wallpaper
+- clip FX in the mix window: pivot HPF/blur; not echo-throw spam
 
 Pulse and SFX must support an underlying musical transformation. Hype is
 the join and the drop, never a second kick or verse wallpaper.
@@ -158,32 +231,40 @@ the join and the drop, never a second kick or verse wallpaper.
 
 With reliable section, beat, and phrase analysis:
 
-- emit the two-wave club shape across intro → drop 2
-- include non-SFX arrangement transformations
-- land the familiar hook on drop 1
+- emit intro → complete hook → pivot → Drop 1 (~bar 16–24) → break → Drop 2
+- include non-SFX arrangement transformations (the pivot loop + hook-replace)
+- land the familiar hook on drop 1 **on a real line downbeat**
 - add exactly one extra idea on drop 2
-- keep intentional voids phrase/beat aligned
+- keep any non-pivot voids phrase/beat aligned
 
 These are planning targets, not unconditional quotas. Explain fewer edits.
+Never invent 1/8 spam to look busy.
 
 ## Low-confidence behavior
 
 When structure, phrase, or beat confidence is low:
 
-- do not invent structural cuts
+- do not invent structural cuts **through titles**
 - still impose filter + pulse + SFX energy curve
-- permit edge trimming and intentional pre-drop void when beat grid allows
-- degrade handoffs to clean phrase-aligned crossfades in mashups
+- prefer the same earlier Drop 1 shape if a complete hook island exists
+- permit edge trimming; 1-beat void only on plain (non-pivot) drops
+- degrade non-pivot mashup handoffs to clean phrase-aligned crossfades
+- if phrase confidence cannot support a last-word grain, **skip the loop**
+  rather than chopping the title — then Drop 1 may use a plain hard cut or void
 
 ## Cut rules
 
 - Cuts must land on verified beat and phrase boundaries.
-- Do not cut through an active vocal phrase without explicit masking.
+- **Cut none of the important lines.** Opening title/chorus of Deck A finishes.
+  Incoming hook starts on the downbeat of a real line, not mid-word.
+- Do not cut through an active vocal phrase without explicit masking (the
+  pivot grain is the *last beat after* the line completed).
 - Each cut requires a structured AutoCutRecord.
 - Reordering requires stronger evidence than shortening.
 - Prefer removing or repeating complete phrase units.
-- Mask cuts with overlap, dropout, impact, echo, void, or another justified transition.
-- Accidental silence is invalid; intentional pre-drop voids are valid.
+- Mask non-pivot cuts with overlap, dropout, impact, echo, void, or another
+  justified transition. Pivot Drop 1 is masked by the loop + slam, not a fade-in.
+- Accidental silence is invalid. Pivot joins must not go quiet.
 
 ## Variation
 
@@ -198,7 +279,8 @@ Choose from measured texture + seed (hype-biased):
 - chant / aggressive low end (Snake-class)
 - maximalist festival / global-bass (Diplo-class) — default for pop-over-club and dancehall midtempo
 
-Avoid stacking two dense midrange leads on the drop. Hype is density of FX/SFX layers — still one kick and one bass.
+Avoid stacking two dense midrange leads on the drop. Hype is density of FX/SFX
+layers **on the drop** — still one kick and one bass — and diet on the pivot join.
 
 ## Decision audit
 
@@ -208,9 +290,14 @@ Before declaring success, report:
 - pulse policy (wrote kick vs skipped second kick)
 - club flavor
 - mashup vocal vs bed assignment (or refusal)
+- whether Drop 1 used **pivot wallpaper + hard cut** (and token, repeat count, bar)
+- whether a 1-beat void was used (must be a non-pivot drop)
+- incoming Drop 1 fade-in (must be none / inaudible microfade) and volume (~full)
+- mix-window SFX (loop + ≤1 slam; list any extras — extras on the pivot join are a fail)
 - all opportunities considered
 - why each selected opportunity was chosen
 - why rejected opportunities were rejected
 - confidence in each decision
 - whether a test passes because an operation was avoided
 - which decisions were based on measured evidence versus a heuristic
+- stem sidecar use (vocal grain / drum kick) vs curve proxies

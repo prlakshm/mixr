@@ -8,7 +8,9 @@ For one-song Auto Remix, rebuild the track as a streaming-length club mix in the
 
 Preservation of identity means: the familiar hook lands on drop 1; arrangement, pulse, and energy do the transformation. SFX alone do not count as transformation.
 
-For mashups (2…5 songs), assign **one club bed** and rotate vocal hooks across the club islands. Complementary vocal stacks on drops are desirable; never stack two full mixes with two kicks/subs.
+**Mix-window / join grammar (locked):** `.agents/skills/dj-remix-planning/SKILL.md` (Xirex pivot wallpaper, hook-replace, hard cut, diet SFX, Drop 1 ~bar 16–24). That skill wins over this file on those topics. Tempo pockets, one-kick pulse, gain/DSP, analysis, testing, and this completion standard remain here.
+
+For mashups (2…5 songs), assign **one club bed** and rotate vocal hooks across the club islands (**hook-replace** on Drop 1: guest vocal in, bed vocal out). Never stack two full mixes with two kicks/subs.
 
 ## Confidence ladder (cuts vs energy)
 
@@ -16,28 +18,28 @@ Apply structural aggressiveness from measured analysis confidence:
 
 1. **Low confidence** (weak section/beat/phrase evidence): do **not** invent random structural cuts. Still impose a club **energy curve** (filter, pulse, coordinated SFX, optional pre-drop void). Prefer continuous source order with effect/pulse shaping.
 2. **Medium confidence**: phrase-aligned club shape with continuous preference; allow cuts only with strong local evidence and filled transitions.
-3. **High confidence** (reliable section/beat/phrase analysis): rebuild onto an 8 / 16 / 32 bar phrase grid with a two-wave club arrangement (build → drop → break → build → drop 2). Prefer arrangement changes when repeat evidence supports them. Preserve the primary hook on drop 1 and add exactly one extra idea on drop 2.
+3. **High confidence** (reliable section/beat/phrase analysis): rebuild onto an 8 / 16 / 32 bar phrase grid with intro → complete hook → pivot wallpaper → Drop 1 (~bar 16–24) → break → Drop 2. Prefer arrangement changes when repeat evidence supports them. Preserve the primary hook on drop 1 and add exactly one extra idea on drop 2.
 
 Never cut merely to increase variety, handoffs, effect count, or SFX density. When uncertain about a cut, keep the audio continuous and club-ify with energy, clip FX, and layered SFX.
 
-Club hype density (one-song Auto Remix / mashup): major SFX moments roughly every 4–8 bars (builds/drops/breaks), overlapping one-shots on extra SFX rows, plus audible clip FX (echo throws, filter/blur sweeps, reverb bloom). Sparse “≤ 3 musical SFX / min” is not a club mix. Still one kick and one bass. Flavor instincts bias toward Diplo / Guetta / Snake festival hype over Calvin sparse radio edits. Keep overall density loud (snare/riser/impact/tapeStop/air on drops, stacked rows, bed under hook). Only diet crash+reverseCymbal (≤2 punctuation hits) and skip verse filler so Drop 1 hits by ~bar 24–32 on the strongest chorus island.
+Club hype density (one-song Auto Remix / mashup): energy lives on the **drop**, not on verses. The **pivot join** is diet (1-beat last-word loop + ≤1 impact slam) — see `dj-remix-planning`. Extra one-shots may dress later builds / Drop 2. Still one kick and one bass. Flavor instincts bias toward Diplo / Guetta / Snake festival hype over Calvin sparse radio edits. Skip verse filler so Drop 1 hits ~bar **16–24** after one complete Deck A hook + pivot (not a bar-28 runway).
 
-Mashup algorithms (reimplemented in Swift — no Demucs/PyTorch/Mixxx source): AutoMashUpper local phrase mashability (harmonic/rhythmic/spectral + beat-offset islands); AutoMashup 2025 stem *role proxies* from vocal/bass/drum curves (directional bed≠vocal); Mixxx AutoDJ phrase matching (outro∩intro overlap, delay long intros, tape-stop on far BPM).
+Mashup algorithms (reimplemented in Swift — no Demucs/PyTorch/Mixxx **runtime**): AutoMashUpper local phrase mashability (harmonic/rhythmic/spectral + beat-offset islands); AutoMashup 2025 stem *role proxies* from vocal/bass/drum curves (directional bed≠vocal); Mixxx AutoDJ phrase matching (outro∩intro overlap, delay long intros, tape-stop on far-BPM **non-pivot** joins). Optional offline Demucs **sidecars** (vocals/drums/bass/other) may already exist; if present, pivot grains prefer the vocal stem and kick ownership may read drums. Do not add a Demucs runtime.
 
 ## Club arrangement (one song)
 
 Target shape on the phrase grid (all structural cuts on phrase / downbeat boundaries; a drop that lands on bar 3 of a phrase is a fail):
 
-1. Intro 8–16: filtered identity / kick tease
-2. Groove or verse 8–16: song identity, density below the drop
-3. Build 8–16: riser, snare roll; kick+bass OUT in the last 4 bars; optional half-bar or 1-beat void
-4. Drop 1 = 16: familiar hook on bar 1, full kick/sub, ONE lead idea
+1. Intro 8: filtered identity / kick tease (opening title uncut)
+2. First complete hook 8: still the record
+3. Pivot wallpaper 4: 1-beat last-word loop ×8–16, HPF, kick out
+4. Drop 1 = 16: familiar hook, hard cut at full gain (~bar 16–24)
 5. Breakdown 8–16: kick/sub out, vocal or piano breathe
-6. Build 2: denser than build 1
-7. Drop 2 = 16: drop 1 + exactly one extra layer (wider / harmony / vocal chop / perc)
+6. Build 2: denser than the pivot window
+7. Drop 2 = 16: drop 1 + exactly one extra layer (flip). 1-beat void OK if no pivot
 8. Short outro: hook fragment + drums
 
-**Hype is subtraction then a downbeat.** Intentional pre-drop voids are allowed and required when confidence supports them. The ban on *accidental* silence still applies.
+**Hype is subtraction then a downbeat.** Pivot Drop 1 is a hard cut (no fade-in, no quiet hole). A 1-beat pre-drop void is allowed only on **plain** (non-pivot) drops. Accidental silence is still a fail. Details: `dj-remix-planning`.
 
 ## Club pulse (one kick rule)
 
@@ -68,17 +70,16 @@ Decide per song / pair:
 
 ## Mashup (2…5 songs)
 
-N-song club mashups keep the same two-wave shape. More songs mean more hooks to rotate across islands — and complementary vocal stacks on drops — not chaotic full-mix layering.
+N-song club mashups keep the same locked Drop 1 join. More songs mean more hooks to rotate across islands — **hook-replace**, not dual full-mix stacks.
 
 - Pick **ONE club bed** (most mixable drums / already-in-pocket / simplest harmony). Everyone else is a vocal-hook candidate.
 - **ONE kick and ONE bass** at any moment. Never stack two full-mix drops with two kicks/subs.
-- **Vocals may overlap.** Midrange can hold two complementary vocals (different register, or one sparser / chopped). Typical shape: bed + primary hook, then a second (or third) vocal enters as a chant, title line, or harmony for 4–16 bars (Bollywood mashup feel).
-- Duck or EQ the supporting vocal under the lead when both are dense — do not slam two full verses for the entire drop.
-- For 3–5 song mashups, **rotate** which vocals overlap on drop 1 vs drop 2 rather than playing all of them the whole time.
-- Phrase grid still 8 / 16 / 32. Minimum identity stay **8 bars**; prefer **16** for a chorus/hook. Do not switch every 4 bars.
-- Club shape: intro → build → drop 1 → breakdown → build → drop 2 → outro.
+- **Hook-replace is the default** (guest hook in, bed vocal carved). Dual vocals are optional ≤8-bar call-and-response, not the Drop 1 stack. See `dj-remix-planning`.
+- For 3–5 song mashups, **rotate** which guest owns Drop 1 vs Drop 2 rather than stacking all of them.
+- Phrase grid still 8 / 16 / 32. Minimum identity stay **8 bars**; prefer **16** for a chorus/hook. Do not switch every 4 bars (pivot grains are supporting, not identity stays).
+- Club shape: intro → one complete A hook → 4-bar pivot → drop 1 → breakdown → build → drop 2 → outro. Drop 1 ~bar 16–24.
 - **Drop 1** = the single strongest familiar hook. **Drop 2** = a different song’s hook (the flip). On a duo, Drop 2 may be the bed’s own chorus flip.
-- Remaining songs get 8–16 bar cameos in verse / breakdown / outro, or a chopped ad-lib under a drop if they pass key/stretch gates.
+- Remaining songs get 8–16 bar cameos **after** Drop 1 (breakdown/outro), or skip if gates fail — not verse wallpaper chops.
 - Compatibility is **per added song**: Camelot same / ±1 / relative; vocal stretch ≤ 8%; pitch vocal ≤ 2 st; prefer pitching the bed. If song 4 or 5 fails the gate, skip it or use it only as a short chop — do not force a sour full-vocal overlay.
 - Energy matching still applies: a ballad on a peak-time bed needs a breakdown runway, not a slam.
 - Cap at 5 songs for a streaming-length club rewrite.
@@ -98,11 +99,11 @@ N-song club mashups keep the same two-wave shape. More songs mean more hooks to 
 ## Transitions
 
 - A crossfade must contain actual temporal overlap.
-- Use equal-power gain curves for music crossfades.
+- Use equal-power gain curves for music **non-pivot** crossfades (verse/groove joins).
 - Never fade both adjacent clips toward silence at the same boundary (unless an intentional void owns the gap).
-- Hard cuts require downbeat alignment and a short anti-click microfade.
-- Do not insert **accidental** silence. Intentional pre-drop voids are allowed.
-- A transition must conserve perceived energy unless the creative intent explicitly calls for a drop or void.
+- Pivot Drop 1 is a **hard cut at full gain** (no fade-in). A renderer anti-click microfade may exist; an audible volume ramp is a fail. See `dj-remix-planning`.
+- Do not insert **accidental** silence. Intentional 1-beat pre-drop voids are allowed only on **plain** (non-pivot) drops. Pivot joins must not go quiet.
+- A transition must conserve perceived energy unless the creative intent explicitly calls for a drop, pivot filter, or void.
 
 ## Analysis
 
