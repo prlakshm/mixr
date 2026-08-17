@@ -33,6 +33,7 @@ SOURCES=(
   "$ROOT/Mixr/Models/AutoCompatibility.swift"
   "$ROOT/Mixr/Models/AutoMashability.swift"
   "$ROOT/Mixr/Models/AutoPivotWord.swift"
+  "$ROOT/Mixr/Models/AutoStemSidecar.swift"
   "$ROOT/Mixr/Models/AutoSectionCatalog.swift"
   "$ROOT/Mixr/Models/AutoRemixPlan.swift"
   "$ROOT/Mixr/Models/AutoRemixPlanner.swift"

@@ -63,6 +63,8 @@ struct AutoSongProfile: Sendable {
     let anchorScore: Double
     /// Fit as the vocal/hook feature.
     let featureScore: Double
+    /// Offline Demucs sidecars when present (empty → full mix).
+    var stems: AutoStemSet = .empty
 
     var lowConfidence: Bool { analysis.analysisConfidence < AutoTuning.standard.lowConfidenceThreshold }
 
@@ -104,7 +106,11 @@ enum AutoSectionCatalog {
         tuning: AutoTuning = .standard,
         signal: SongSignalFeatures? = nil
     ) -> AutoSongProfile {
-        let analysis = SongAnalyzer.analyze(track: track, signal: signal)
+        var analysis = SongAnalyzer.analyze(track: track, signal: signal)
+        let stems = AutoStemResolver.resolve(track: track, tuning: tuning)
+        if let measured = AutoStemKickEnergy.drumStrength(from: stems.drums) {
+            analysis.drumStrength = measured
+        }
         let bar = analysis.barSeconds
         let duration = analysis.durationSeconds
         let confidence = analysis.analysisConfidence
@@ -208,7 +214,8 @@ enum AutoSectionCatalog {
             analysis: analysis,
             candidates: candidates,
             anchorScore: anchorScore,
-            featureScore: featureScore
+            featureScore: featureScore,
+            stems: stems
         )
     }
 }

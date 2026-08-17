@@ -83,6 +83,9 @@ nonisolated enum AutoRemixValidator {
             for pair in zip(sorted, sorted.dropFirst()) {
                 let a = plan.placements[pair.0]
                 let b = plan.placements[pair.1]
+                // Different Demucs sidecars are different files (vocal over
+                // drums+bass+other). They may share a song ID and timeline.
+                if a.stemKind != b.stemKind { continue }
                 let overlap = a.timelineEnd - b.timelineStart
                 let declared = max(a.overlapsPreviousSeconds, b.overlapsPreviousSeconds)
                 if overlap > 0.005 {

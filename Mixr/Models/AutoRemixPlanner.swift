@@ -245,6 +245,15 @@ enum AutoRemixPlanner {
                 AutoDecision(kind: .wroteClubPulse, songTitle: profile.title, detail: pulse.detail)
             )
         }
+        if profile.stems.drums != nil {
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: profile.title,
+                    detail: "kick energy from drums.wav"
+                )
+            )
+        }
 
         let targetBPM = tempo.targetBPM
         let beat = 60.0 / max(targetBPM, 40)
@@ -710,6 +719,7 @@ enum AutoRemixPlanner {
                         barSec: bar,
                         beatSec: beat,
                         tuning: tuning,
+                        grainStem: profile.stems.hasVocals ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         decisions: &decisions
@@ -798,7 +808,8 @@ enum AutoRemixPlanner {
             decisions: decisions,
             warnings: warnings,
             confidence: analysis.analysisConfidence,
-            randomSeed: seed
+            randomSeed: seed,
+            stemsBySongID: [profile.songID: profile.stems]
         )
     }
 
@@ -1063,6 +1074,7 @@ enum AutoRemixPlanner {
                         barSec: bar,
                         beatSec: beat,
                         tuning: tuning,
+                        grainStem: profile.stems.hasVocals ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         decisions: &decisions
@@ -1126,7 +1138,8 @@ enum AutoRemixPlanner {
             decisions: decisions,
             warnings: warnings,
             confidence: profile.analysis.analysisConfidence,
-            randomSeed: seed
+            randomSeed: seed,
+            stemsBySongID: [profile.songID: profile.stems]
         )
     }
 
@@ -1173,6 +1186,7 @@ enum AutoRemixPlanner {
         barSec: Double,
         beatSec: Double,
         tuning: AutoTuning,
+        grainStem: AutoStemKind? = nil,
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
         decisions: inout [AutoDecision]
@@ -1245,7 +1259,8 @@ enum AutoRemixPlanner {
                     effects: fx,
                     role: .supporting,
                     slotIndex: completedPhrase.slotIndex,
-                    overlapsPreviousSeconds: beatSec
+                    overlapsPreviousSeconds: beatSec,
+                    stemKind: grainStem
                 )
             )
         }
@@ -1255,13 +1270,23 @@ enum AutoRemixPlanner {
                 kind: .pivotWallpaperLoop,
                 songTitle: deckATitle,
                 detail: String(
-                    format: "%d×1-beat%@ → hard cut @%.1fs",
+                    format: "%d×1-beat%@%@ → hard cut @%.1fs",
                     repeats,
                     pivot.map { " “\($0)”" } ?? "",
+                    grainStem == .vocals ? " vocal-stem" : "",
                     dropTimelineStart
                 )
             )
         )
+        if grainStem == .vocals {
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: deckATitle,
+                    detail: "pivot grain from vocals.wav"
+                )
+            )
+        }
     }
 
     /// Fallback candidate when the catalog has no matching label.
@@ -1828,6 +1853,15 @@ enum AutoRemixPlanner {
         } else if pulse.writesKick {
             decisions.append(
                 AutoDecision(kind: .wroteClubPulse, songTitle: pulseSource.title, detail: pulse.detail)
+            )
+        }
+        if pulseSource.stems.drums != nil {
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: pulseSource.title,
+                    detail: "kick energy from drums.wav"
+                )
             )
         }
 
@@ -2454,6 +2488,11 @@ enum AutoRemixPlanner {
             }
 
             for seg in segments where seg.duration > 0.01 {
+                let hookVocalStem = mode == .mashup
+                    && ps.slot.role == .chorus
+                    && entry == .hardHypeCut
+                    && mashupBedID != profile.songID
+                    && profile.stems.hasVocals
                 placements.append(
                     AutoClipPlacement(
                         songID: profile.songID,
@@ -2466,7 +2505,8 @@ enum AutoRemixPlanner {
                         fadeOut: seg.fadeOut,
                         effects: AutoSupportedEffects.sanitize(seg.fx),
                         role: .dominant,
-                        slotIndex: i
+                        slotIndex: i,
+                        stemKind: hookVocalStem ? .vocals : nil
                     )
                 )
             }
@@ -2484,6 +2524,7 @@ enum AutoRemixPlanner {
                            && $0.role == .dominant
                            && $0.timelineEnd <= ps.timelineStart + 0.05
                    }) {
+                    let bedStems = ordered.first(where: { $0.songID == bedID })?.stems
                     appendPivotWallpaperLoop(
                         completedPhrase: phrase,
                         dropTimelineStart: ps.timelineStart,
@@ -2492,6 +2533,7 @@ enum AutoRemixPlanner {
                         barSec: barSec,
                         beatSec: beatSec,
                         tuning: tuning,
+                        grainStem: (bedStems?.hasVocals ?? false) ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         decisions: &decisions
@@ -2812,7 +2854,8 @@ enum AutoRemixPlanner {
             decisions: decisions,
             warnings: warnings,
             confidence: confidence,
-            randomSeed: seed
+            randomSeed: seed,
+            stemsBySongID: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0.stems) })
         )
     }
 
@@ -3005,7 +3048,9 @@ enum AutoRemixPlanner {
         decisions: inout [AutoDecision]
     ) {
         // Soften lead lows when a slamming guest sits over the bed kick.
+        // Skip when the guest is already a vocal stem (no kick in the file).
         if let bedID = mashupBedID, leadProfile.songID != bedID,
+           !leadProfile.stems.hasVocals,
            leadProfile.analysis.bassDensity > 0.55 || leadProfile.analysis.drumStrength > 0.65 {
             for i in placements.indices where placements[i].slotIndex == leadSlotIndex
                 && placements[i].songID == leadProfile.songID
@@ -3058,7 +3103,8 @@ enum AutoRemixPlanner {
                 )
             }
             if let section {
-                let dualBass = bed.analysis.bassDensity > 0.65
+                let dualBass = !leadProfile.stems.hasVocals
+                    && bed.analysis.bassDensity > 0.65
                     && leadProfile.analysis.bassDensity > 0.7
                     && bed.analysis.drumStrength > 0.7
                     && leadProfile.analysis.drumStrength > 0.7
@@ -3070,10 +3116,62 @@ enum AutoRemixPlanner {
                             detail: "under \(leadProfile.title) on \(dropLabel)"
                         )
                     )
+                } else if bed.stems.hasInstrumental {
+                    for kind in bed.stems.instrumentalKinds {
+                        let vol: Double
+                        switch kind {
+                        case .drums: vol = 0.92
+                        case .bass: vol = 0.88
+                        default: vol = 0.74
+                        }
+                        placements.append(
+                            AutoClipPlacement(
+                                songID: bed.songID,
+                                sourceStart: section.startSeconds,
+                                timelineStart: lead.timelineStart,
+                                timelineDuration: lead.timelineDuration,
+                                tempoRatio: bedFit.ratio,
+                                volume: vol,
+                                fadeIn: ClipTransition(type: .none, duration: 0),
+                                fadeOut: ClipTransition(type: .none, duration: 0),
+                                effects: AutoSupportedEffects.sanitize(ClipEffectSettings()),
+                                role: .supporting,
+                                slotIndex: leadSlotIndex,
+                                overlapsPreviousSeconds: lead.timelineDuration,
+                                stemKind: kind
+                            )
+                        )
+                    }
+                    usedRanges[bed.songID, default: []].append(
+                        (section.startSeconds, section.startSeconds + lead.timelineDuration * bedFit.ratio)
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .hookReplace,
+                            songTitle: leadProfile.title,
+                            detail: "guest vocal stem / bed drums+bass+other under \(dropLabel)"
+                        )
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .usedStemSidecar,
+                            songTitle: bed.title,
+                            detail: "bed instrumental stems under \(dropLabel)"
+                        )
+                    )
+                    if leadProfile.stems.hasVocals {
+                        decisions.append(
+                            AutoDecision(
+                                kind: .usedStemSidecar,
+                                songTitle: leadProfile.title,
+                                detail: "hook-replace from vocals.wav"
+                            )
+                        )
+                    }
                 } else {
                     var bedFX = ClipEffectSettings()
                     // Hook-replace: bed keeps kick/bass; carve bed vocal hard
-                    // so the guest melody is the only voice (no Demucs — HPF/blur).
+                    // so the guest melody is the only voice (HPF/blur fallback).
                     let midCarve: Double = lead.section.vocal > 0.35 ? 48 : 40
                     bedFX.setLevel(midCarve, for: MixrEffect.blur.rawValue)
                     bedFX = AutoSupportedEffects.sanitize(bedFX)
@@ -3189,7 +3287,9 @@ enum AutoRemixPlanner {
                 fadeOut: ClipTransition(type: .fadeOut, duration: 4),
                 effects: fx,
                 role: .supporting,
-                slotIndex: leadSlotIndex
+                slotIndex: leadSlotIndex,
+                overlapsPreviousSeconds: duration,
+                stemKind: overlay.stems.hasVocals ? .vocals : nil
             )
         )
         usedRanges[overlay.songID, default: []].append(
@@ -3202,6 +3302,15 @@ enum AutoRemixPlanner {
                 detail: "\(overlayBars) bars call-response on \(dropLabel) under \(leadProfile.title)"
             )
         )
+        if overlay.stems.hasVocals {
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: overlay.title,
+                    detail: "call-response from vocals.wav"
+                )
+            )
+        }
     }
 
     private static func countHandoffs(_ placed: [PlacedSlot]) -> Int {

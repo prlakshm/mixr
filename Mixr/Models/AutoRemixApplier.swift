@@ -26,16 +26,63 @@ nonisolated enum AutoRemixApplier {
         var appliedPlan = plan
         let placementsBySong = Dictionary(grouping: plan.placements, by: \.songID)
         let arrangedSongIDs = Set(plan.placements.map(\.songID))
+        var stemTracksByParent: [UUID: [MixrTrack]] = [:]
 
         for ti in result.indices where !result[ti].isSFXTrack {
             let trackID = result[ti].id
             if let placements = placementsBySong[trackID] {
-                result[ti].clips = placements
+                let resolvedStems = plan.stemsBySongID[trackID]
+                    ?? AutoStemResolver.resolve(songURL: result[ti].url)
+                func stemURL(_ kind: AutoStemKind) -> URL? { resolvedStems.url(for: kind) }
+
+                let fullMix = placements.filter { p in
+                    guard let kind = p.stemKind else { return true }
+                    return stemURL(kind) == nil
+                }
+                result[ti].clips = fullMix
                     .sorted { $0.timelineStart < $1.timelineStart }
                     .map(makeClip)
+
+                var extras: [MixrTrack] = []
+                for kind in AutoStemKind.allCases {
+                    let kindPlacements = placements.filter { $0.stemKind == kind }
+                    guard !kindPlacements.isEmpty, let url = stemURL(kind) else { continue }
+                    let parent = result[ti]
+                    extras.append(
+                        MixrTrack(
+                            id: UUID(),
+                            title: "\(parent.title) · \(kind.rawValue)",
+                            artist: parent.artist,
+                            duration: parent.duration,
+                            durationSeconds: parent.durationSeconds,
+                            bpm: parent.bpm,
+                            key: parent.key,
+                            color: parent.color,
+                            volume: parent.volume,
+                            isMuted: false,
+                            url: url,
+                            artworkData: nil,
+                            clips: kindPlacements
+                                .sorted { $0.timelineStart < $1.timelineStart }
+                                .map(makeClip)
+                        )
+                    )
+                }
+                if !extras.isEmpty {
+                    stemTracksByParent[trackID] = extras
+                }
             } else if !result[ti].clips.isEmpty, !arrangedSongIDs.isEmpty {
                 // Song excluded by the planner (reported in warnings).
                 result[ti].clips = []
+            }
+        }
+
+        let parentIDs = result.filter { !$0.isSFXTrack }.map(\.id)
+        for parentID in parentIDs.reversed() {
+            guard let extras = stemTracksByParent[parentID],
+                  let idx = result.firstIndex(where: { $0.id == parentID }) else { continue }
+            for (offset, extra) in extras.enumerated() {
+                result.insert(extra, at: idx + 1 + offset)
             }
         }
 

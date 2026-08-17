@@ -87,6 +87,8 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case hookReplace
     /// Xirex-style pivot: 1-beat last-word of a completed phrase, looped 2–4 bars.
     case pivotWallpaperLoop
+    /// Offline Demucs sidecar used (vocal grain, drums kick, or bed instrumental).
+    case usedStemSidecar
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -170,6 +172,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Hook-replaced \(song)\(detail.map { " — \($0)" } ?? "")."
         case .pivotWallpaperLoop:
             return "Pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .usedStemSidecar:
+            return "Used stem sidecar for \(song)\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -222,6 +226,8 @@ struct AutoClipPlacement: Sendable {
     /// echo / stutter layer under the lead. The validator only permits
     /// same-song overlap that is declared here (or a supporting echo throw).
     var overlapsPreviousSeconds: Double = 0
+    /// Offline Demucs sidecar this clip should play (`nil` = the song's full mix).
+    var stemKind: AutoStemKind? = nil
 
     nonisolated var timelineEnd: Double { timelineStart + timelineDuration }
     nonisolated var sourceDuration: Double { timelineDuration * tempoRatio }
@@ -345,6 +351,8 @@ struct AutoRemixPlan: Sendable {
     var confidence: Double
     /// Retained for deterministic re-runs / debugging (not shown in the UI sheet).
     var randomSeed: UInt64
+    /// Resolved Demucs sidecars per song (empty → full-mix fallback).
+    var stemsBySongID: [UUID: AutoStemSet] = [:]
 
     nonisolated var beatSeconds: Double { 60.0 / max(targetBPM, 40) }
     nonisolated var barSeconds: Double { beatSeconds * 4 }
@@ -409,6 +417,10 @@ struct AutoTuning: Sendable {
     var pivotWallpaperBars = 4
     /// Repeats of the 1-beat pivot grain (= bars × 4 when quarter-note).
     var pivotWallpaperBeats: Int { max(8, pivotWallpaperBars * 4) }
+    /// Optional bounce-harness stems root (`.../Stems/htdemucs_ft` or `.../Stems`).
+    var stemsRoot: URL? = nil
+    /// Test / harness override: song ID → sidecar URLs (no disk layout required).
+    var explicitStemsBySongID: [UUID: AutoStemSet] = [:]
     /// Minimum directional-compatibility score before Auto risks an overlap.
     var minOverlapScore = 0.55
     /// Analysis confidence below this → energy-curve club-ify without invented cuts.

@@ -1496,5 +1496,257 @@ do {
     }
 }
 
+// MARK: - Offline Demucs sidecars (fixture URLs / tiny WAVs — no Python)
+
+func mockStemSet(in directory: URL) -> AutoStemSet {
+    AutoStemSet(
+        vocals: directory.appendingPathComponent("vocals.wav"),
+        drums: directory.appendingPathComponent("drums.wav"),
+        bass: directory.appendingPathComponent("bass.wav"),
+        other: directory.appendingPathComponent("other.wav")
+    )
+}
+
+func pivotGrains(in plan: AutoRemixPlan, songID: UUID, before dropStart: Double) -> [AutoClipPlacement] {
+    let beat = plan.beatSeconds
+    let bar = plan.barSeconds
+    var grains: [AutoClipPlacement] = []
+    for p in plan.placements {
+        guard p.role == .supporting, p.songID == songID else { continue }
+        guard abs(p.timelineDuration - beat) < beat * 0.35 else { continue }
+        guard p.timelineStart >= dropStart - bar * 4.5 else { continue }
+        guard p.timelineStart < dropStart - 0.02 else { continue }
+        grains.append(p)
+    }
+    return grains
+}
+
+do {
+    let song = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Songs/Oops I Did It Again.mp3")
+    let vocals = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/vocals.wav")
+    let drums = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/drums.wav")
+    let present: Set<String> = [vocals.path, drums.path]
+    let resolved = AutoStemResolver.resolve(songURL: song, fileExists: { present.contains($0.path) })
+    check(
+        "Songs basename resolves …/Stems/htdemucs_ft/<basename>/vocals.wav",
+        resolved.vocals == vocals && resolved.drums == drums,
+        "vocals=\(resolved.vocals?.path ?? "nil")"
+    )
+
+    let elsewhere = URL(fileURLWithPath: "/tmp/crate/foo.mp3")
+    let root = URL(fileURLWithPath: "/tmp/explicit-stems/htdemucs_ft")
+    let rootedVocals = root.appendingPathComponent("foo/vocals.wav")
+    let rooted = AutoStemResolver.resolve(
+        songURL: elsewhere,
+        stemsRoot: root,
+        fileExists: { $0.path == rootedVocals.path }
+    )
+    check("Explicit stemsRoot wins over missing Songs layout", rooted.vocals == rootedVocals)
+
+    let missing = AutoStemResolver.resolve(songURL: song, fileExists: { _ in false })
+    check("Missing stems resolve empty (full-mix fallback)", missing.isEmpty)
+}
+
+do {
+    // Pivot grains + Drop 1: vocal stem for the wallpaper only; drop stays full mix.
+    let song = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
+    let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
+    var tuning = AutoTuning.standard
+    tuning.explicitStemsBySongID[song.id] = mockStemSet(
+        in: URL(fileURLWithPath: "/tmp/mixr-mock-stems/\(song.id.uuidString)")
+    )
+    switch AutoRemixRunner.runEntireProject(
+        tracks: [song],
+        tuning: tuning,
+        seed: 42,
+        signals: [song.id: feat]
+    ) {
+    case .success(let tracks, let plan, _):
+        let drops = plan.pulseRegions.filter { $0.role == AutoClubPulse.RegionRole.drop }
+        guard let drop0 = drops.first else {
+            check("Stem pivot: Drop 1 exists", false)
+            break
+        }
+        let grains = pivotGrains(in: plan, songID: song.id, before: drop0.timelineStart)
+        let grainKinds = grains.compactMap { $0.stemKind?.rawValue }.joined(separator: ",")
+        let allVocal = grains.allSatisfy { $0.stemKind == AutoStemKind.vocals }
+        check(
+            "Solo remix: pivot grains use vocal stem",
+            !grains.isEmpty && allVocal,
+            "grains=\(grains.count) kinds=\(grainKinds)"
+        )
+        var dropClips: [AutoClipPlacement] = []
+        for p in plan.placements where p.role == .dominant {
+            if abs(p.timelineStart - drop0.timelineStart) < 0.08 {
+                dropClips.append(p)
+            }
+        }
+        check(
+            "Solo remix: Drop 1 stays full mix (kick remains)",
+            dropClips.allSatisfy { $0.stemKind == nil },
+            "n=\(dropClips.count)"
+        )
+        let recordedVocal = plan.decisions.contains { d in
+            d.kind == AutoDecisionKind.usedStemSidecar && (d.detail ?? "").contains("vocals")
+        }
+        check("Solo remix records vocal-stem sidecar", recordedVocal)
+        let vocalTracks = tracks.filter { $0.title.contains("vocals") && $0.url != nil }
+        let titles = tracks.map { $0.title }.joined(separator: " | ")
+        check("Applier routes pivot clips onto a vocal-stem track", !vocalTracks.isEmpty, "titles=\(titles)")
+    case .failure(let message):
+        check("Solo remix with vocal stem", false, message)
+    }
+}
+
+do {
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    var tuning = AutoTuning.standard
+    tuning.explicitStemsBySongID[bomt.id] = mockStemSet(
+        in: URL(fileURLWithPath: "/tmp/mixr-mock-stems/\(bomt.id.uuidString)")
+    )
+    tuning.explicitStemsBySongID[oops.id] = mockStemSet(
+        in: URL(fileURLWithPath: "/tmp/mixr-mock-stems/\(oops.id.uuidString)")
+    )
+    switch AutoRemixRunner.runEntireProject(
+        tracks: [bomt, oops],
+        tuning: tuning,
+        seed: 20260815,
+        signals: signals
+    ) {
+    case .success(let tracks, let plan, _):
+        guard let bedID = plan.mashupBedSongID, let vocalID = plan.mashupVocalSongID else {
+            check("Stem mashup roles present", false)
+            break
+        }
+        let drops = plan.pulseRegions
+            .filter { $0.role == AutoClubPulse.RegionRole.drop }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        guard let drop0 = drops.first else {
+            check("Stem mashup Drop 1 exists", false)
+            break
+        }
+        let grains = pivotGrains(in: plan, songID: bedID, before: drop0.timelineStart)
+        check(
+            "Mashup pivot grains use bed vocal stem",
+            !grains.isEmpty && grains.allSatisfy { $0.stemKind == AutoStemKind.vocals },
+            "grains=\(grains.count)"
+        )
+        var guestDrop: [AutoClipPlacement] = []
+        for p in plan.placements where p.songID == vocalID && p.role == .dominant {
+            if abs(p.timelineStart - drop0.timelineStart) < 0.08 {
+                guestDrop.append(p)
+            }
+        }
+        let guestKinds = guestDrop.compactMap { $0.stemKind?.rawValue }.joined(separator: ",")
+        check(
+            "Hook-replace Drop 1 uses guest vocal stem",
+            !guestDrop.isEmpty && guestDrop.allSatisfy { $0.stemKind == AutoStemKind.vocals },
+            "n=\(guestDrop.count) kinds=\(guestKinds)"
+        )
+        check("Incoming vocal hard-cut (no fade-in)", guestDrop.allSatisfy { $0.fadeIn.type == .none })
+        var bedKinds = Set<AutoStemKind>()
+        for p in plan.placements where p.songID == bedID && p.role == .supporting {
+            guard p.timelineStart < drop0.timelineStart + plan.barSeconds else { continue }
+            guard p.timelineEnd > drop0.timelineStart + plan.barSeconds else { continue }
+            guard p.stemKind != AutoStemKind.vocals else { continue }
+            if let kind = p.stemKind { bedKinds.insert(kind) }
+        }
+        let kindList = bedKinds.map { $0.rawValue }.sorted().joined(separator: ",")
+        check(
+            "Bed under drop is drums+bass+other (not full mix)",
+            bedKinds.contains(.drums) && bedKinds.contains(.bass) && bedKinds.contains(.other),
+            "kinds=\(kindList)"
+        )
+        let recordedReplace = plan.decisions.contains { $0.kind == AutoDecisionKind.hookReplace }
+        let recordedStem = plan.decisions.contains { $0.kind == AutoDecisionKind.usedStemSidecar }
+        check("Mashup records hook-replace stem sidecar", recordedReplace && recordedStem)
+        let vocalTracks = tracks.filter { $0.title.contains("vocals") && $0.url != nil }
+        check("Applier exposes vocal-stem tracks for mashup", vocalTracks.count >= 1)
+    case .failure(let message):
+        check("Mashup with stem sidecars", false, message)
+    }
+}
+
+do {
+    // Full-mix fallback: no stemKind when sidecars are absent.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        check(
+            "No-stems mashup keeps full-mix placements",
+            plan.placements.allSatisfy { $0.stemKind == nil }
+        )
+        let emptySets = plan.stemsBySongID.values.allSatisfy { $0.isEmpty }
+        check("No-stems mashup has empty stem sets", emptySets || plan.stemsBySongID.isEmpty)
+    case .failure(let message):
+        check("No-stems mashup fallback", false, message)
+    }
+}
+
+do {
+    // One-kick: loud drums stem overrides thin analysis (no Club Kick pulse).
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-stem-kick-\(UUID().uuidString)", isDirectory: true)
+    let drumsURL = dir.appendingPathComponent("drums.wav")
+    do {
+        try AutoStemKickEnergy.writeFixtureWAV(to: drumsURL, frames: 8_000, amplitude: 0.95)
+        let measured = AutoStemKickEnergy.drumStrength(from: drumsURL) ?? -1
+        check("Loud drums fixture reads slamming", measured >= AutoClubPulse.slammingDrumThreshold,
+              String(format: "energy=%.3f", measured))
+
+        let song = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m")
+        let feat = crateFeatures(duration: 200, bpm: 95, drum: 0.19, bass: 0.20, vocal: 0.55, confidence: 1.00)
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[song.id] = AutoStemSet(drums: drumsURL)
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [song],
+            tuning: tuning,
+            seed: 11,
+            signals: [song.id: feat]
+        ) {
+        case .success(_, let plan, _):
+            check("Slamming drums stem skips Club Kick pulse", plan.pulsePolicy?.writesKick == false,
+                  plan.pulsePolicy?.detail ?? "")
+        case .failure(let message):
+            check("Slamming drums stem pulse policy", false, message)
+        }
+    } catch {
+        check("Wrote drums fixture WAV", false, "\(error)")
+    }
+
+    let thin = makeSong(title: "drivers license", bpm: 72, key: "Bb")
+    let olivia = crateFeatures(duration: 240, bpm: 72, drum: 0.19, bass: 0.20, vocal: 0.85, confidence: 1.00)
+    switch AutoRemixRunner.runEntireProject(tracks: [thin], seed: 3, signals: [thin.id: olivia]) {
+    case .success(_, let plan, _):
+        check("Thin source with no stems still allows pulse", plan.pulsePolicy?.writesKick == true,
+              plan.pulsePolicy?.detail ?? "")
+    case .failure(let message):
+        check("Thin no-stems pulse", false, message)
+    }
+}
+
+do {
+    var song = makeSong(title: "missing stems", bpm: 93, key: "C")
+    song.url = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Songs/does-not-exist.mp3")
+    let feat = crateFeatures(duration: 180, bpm: 93, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00)
+    switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 7, signals: [song.id: feat]) {
+    case .success(_, let plan, _):
+        check("Missing stem files do not crash Auto", !plan.placements.isEmpty)
+        check("Missing stem files keep full-mix clips", plan.placements.allSatisfy { $0.stemKind == nil })
+    case .failure(let message):
+        check("Missing stem files do not crash Auto", false, message)
+    }
+}
+
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")
 exit(failures == 0 ? 0 : 1)

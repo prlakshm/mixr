@@ -99,9 +99,13 @@ cut, not a hole. Do not put the old void back on a pivot wallpaper handoff.
 - Mashability uses Swift role proxies from vocal/bass/drum **curves**
   (AutoMashup 2025 idea; no stems required).
 - **Optional offline Demucs sidecars** (vocals / drums / bass / other) may
-  already exist next to a song. If present:
-  - pivot grains come from the **vocal** stem;
-  - kick ownership / pulse gating may read the **drums** stem.
+  already exist next to a song (`…/Songs/<file>` →
+  `…/Stems/htdemucs_ft/<basename>/{vocals,drums,bass,other}.wav`). If present:
+  - pivot grains come from the **vocal** stem (HPF as already planned);
+  - hook-replace uses Deck B **vocal** over bed **drums+bass+other**;
+  - dual-vocal islands use the guest vocal stem over the bed instrumental
+    (duck/HPF the bed vocal — do not stack two full mixes);
+  - kick ownership / pulse gating may read the **drums** stem (one kick).
   If absent, keep today’s proxies: last 1-beat of the completed phrase +
   HPF/blur for hook-replace. Never block planning on missing stems.
 
