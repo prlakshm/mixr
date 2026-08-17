@@ -585,7 +585,7 @@ nonisolated enum AutoRemixValidator {
             let pivotBefore = plan.placements.contains { g in
                 g.role == .supporting
                     && abs(g.timelineDuration - beatSec) < beatSec * 0.4
-                    && g.timelineStart >= next.timelineStart - barSec * 4.5
+                    && g.timelineStart >= next.timelineStart - tuning.pivotLookbackSeconds(barSec: barSec)
                     && g.timelineStart < next.timelineStart - 0.02
                     && g.timelineEnd <= next.timelineStart + 0.08
             } || plan.decisions.contains {
@@ -594,6 +594,10 @@ nonisolated enum AutoRemixValidator {
             }
             if pivotBefore {
                 plan.placements[nextIdx].fadeIn = .none
+                plan.placements[nextIdx].volume = max(
+                    plan.placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
                 continue
             }
 

@@ -26,21 +26,25 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
    (e.g. “Oops I did it again / I played with your heart / Got lost in the
    game / Oh baby, baby”).
 2. **Pivot grain = last word of that completed line**, one quarter-note
-   (1 beat) on the downbeat. Loop it **16× = 4 bars** (8–16 repeats / 2–4 bars
+   (1 beat) on the downbeat. Loop it **8× = 2 bars** (4–8 repeats / 1–2 bars
    is the general range). This is the **wallpaper chop**: one grain, steady,
    predictable. **Not** 1/8 or 1/16 stutters, tape stops, echo throws, or chops
-   scattered on the drop or in verses.
-3. **Over those 4 bars:** high-pass / Sound Color (blur) the loop so kick and
-   lows leave. Thin, tinny vocal stutter. Builds tension. Kick out on this
-   window (`buildOut`).
+   scattered on the drop or in verses. **Not** 16× / 4-bar wallpaper — that
+   is too long.
+3. **Over those 1–2 bars:** high-pass / Sound Color (blur) the loop so kick
+   and lows leave. Thin, tinny vocal stutter. Builds tension. Kick out on this
+   window (`buildOut`). **Volume stays loud** (near full clip volume). Blur
+   thins; it does not duck. A quiet wallpaper hole is a failed join.
 4. **Hard cut** (no echo, no crossfade, **no fade-in**, no volume ramp from
    silence, no gentle EQ bloom) into Deck B’s hook that **starts on the same
    word** (“baby, baby, one more time” / “hit me baby one more time”) at
-   **full gain**, full-frequency kick. Then the rest of B’s chorus rides.
-5. **Phrase math:** 4 bars of loop, incoming vocal on the downbeat of bar 5
+   **full clip volume**, full-frequency kick. Then the rest of B’s chorus rides.
+   A renderer anti-click microfade is fine; an audible quiet join is a fail.
+5. **Phrase math:** 2 bars of loop, incoming vocal on the downbeat of bar 3
    of the mix window. First drop lands **~bar 16–24** after intro + one
    complete Deck A hook + pivot — **earlier than it feels safe**. Do not wait
-   until bar 28 if the completed hook was available at bar 16–24.
+   until bar 28 if the completed hook was available at bar 16–24. A shorter
+   pivot can land Drop 1 earlier (~bar 18).
 6. **Hook-replace:** guest vocal IN, bed vocal OUT (HPF/blur the bed under
    the drop). One melody, **one kick**. Call-and-response is optional ≤8 bars,
    not the default.
@@ -50,15 +54,31 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
 
 If the join is quiet, it failed.
 
+### Clip-wise volume (product lock)
+
+Auto must set **per-clip volume** on every Auto-placed song clip (pivot grains,
+bed under hook, guest hook-replace, verse). Mixr already has clip volume —
+write it in the planner/applier. Do not only ride track faders or blur.
+
+Typical:
+
+- completed Deck A hook / verses: ~full
+- pivot grains: **loud** (not ducked); HPF/blur does the thin, volume stays up
+- incoming Drop 1 vocal: **full** (hard cut; no fade-in / equal-power bloom)
+- bed under hook: audible (don’t mute) with HPF/blur carving the bed vocal
+- never fade both sides toward silence at a pivot join
+
 ### Generalize (any pair / solo)
 
 - **Pivot grain** = last 1-beat of a **completed** chorus/hook line of Deck A,
   preferably a short word that also starts Deck B’s hook (title/hook token
   overlap, e.g. “baby”). Without lyrics, use title/hook tokens
   (`AutoPivotWord`); grain is still the last 1-beat of the completed phrase.
-- Loop that grain 8–16× (2–4 bars) on extra vocal/SFX rows, grid-snapped,
-  with HPF sweep / duck the bed kick on that window.
-- Incoming hook-replace on the next downbeat, same-word attack, full gain.
+- Loop that grain 4–8× (1–2 bars; default **8× = 2 bars**) on extra vocal/SFX
+  rows, grid-snapped, with HPF sweep / duck the bed kick on that window.
+  Pivot **clip volume stays loud** — HPF/blur does the thin.
+- Incoming hook-replace on the next downbeat, same-word attack, **full clip
+  volume** (no fade-in).
 - Wallpaper chops are **this mix-window loop**, not verse decoration and not
   1/8 spam on the drop.
 - **Pulse Drop 1** = that hard cut after the loop — never a fake drop on the
@@ -81,7 +101,7 @@ cut, not a hole. Do not put the old void back on a pivot wallpaper handoff.
 ## Two-deck model
 
 - **Deck A** = current phrase (bed or solo source). **Deck B** = next hook.
-- **Mix window** = completed A hook tail + 2–4 bar pivot loop + first bars of
+- **Mix window** = completed A hook tail + 1–2 bar pivot loop + first bars of
   the drop. Extra layers (pivot grains, HPF sweep, ≤1 slam) are legal ONLY
   there. Verses/grooves stay one deck.
 - **Verses / grooves** = the source, maybe light HPF. No wallpaper chops, no
@@ -128,7 +148,7 @@ Phrase-grid only — drops land on downbeats, never mid-bar.
 
 1. Intro 8 — filtered identity / kick tease (opening title uncut; source near t=0)
 2. First complete hook/chorus 8 — still the record (no early chops)
-3. Pivot wallpaper 4 — 1-beat last-word loop ×8–16, HPF, kick out
+3. Pivot wallpaper 2 — 1-beat last-word loop ×4–8 (default 8× = 2 bars), HPF, kick out; **loud clip volume**
 4. Drop 1 = 16 — hook-replace / familiar hook, **hard cut**, full pulse, one lead idea (~bar 16–24)
 5. Breakdown 8–16 — pulse out, breathe
 6. Build 2 — denser than the pivot window (may carry snare/riser into Drop 2)
@@ -208,7 +228,8 @@ Propose phrase-aligned opportunities when measured:
 - compress or replace the outro
 
 ### Transition
-- **Xirex pivot wallpaper (default Drop 1):** 1-beat last-word loop 8–16× + HPF → hard cut at full gain
+- **Xirex pivot wallpaper (default Drop 1):** 1-beat last-word loop 4–8×
+  (default 8× = 2 bars) + HPF → hard cut at **full clip volume**
 - intentional pre-drop void **only** when there is no pivot loop (plain Drop 2)
 - reverse lead-in (non-pivot)
 - equal-power overlap (verse→groove / non-pivot handoffs only)
@@ -218,7 +239,7 @@ Propose phrase-aligned opportunities when measured:
 ### Energy shaping
 - remove kick/bass on the pivot window / build-out
 - restore the full spectrum on the incoming downbeat (the slam)
-- HPF/blur sweep across the 4-bar loop only
+- HPF/blur sweep across the 1–2 bar loop only (volume stays up)
 - use contrast rather than a gradual fade-in into the new vocal
 
 ### Pulse / SFX
@@ -298,6 +319,8 @@ Before declaring success, report:
 - whether Drop 1 used **pivot wallpaper + hard cut** (and token, repeat count, bar)
 - whether a 1-beat void was used (must be a non-pivot drop)
 - incoming Drop 1 fade-in (must be none / inaudible microfade) and volume (~full)
+- pivot grain count (4–8× / 1–2 bars) and pivot clip volume (loud, not ducked)
+- mix-window placement volumes (every song clip has an explicit volume)
 - mix-window SFX (loop + ≤1 slam; list any extras — extras on the pivot join are a fail)
 - all opportunities considered
 - why each selected opportunity was chosen

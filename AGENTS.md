@@ -32,7 +32,7 @@ Target shape on the phrase grid (all structural cuts on phrase / downbeat bounda
 
 1. Intro 8: filtered identity / kick tease (opening title uncut)
 2. First complete hook 8: still the record
-3. Pivot wallpaper 4: 1-beat last-word loop ×8–16, HPF, kick out
+3. Pivot wallpaper 2: 1-beat last-word loop ×4–8 (default 8× = 2 bars), HPF, kick out; loud clip volume
 4. Drop 1 = 16: familiar hook, hard cut at full gain (~bar 16–24)
 5. Breakdown 8–16: kick/sub out, vocal or piano breathe
 6. Build 2: denser than the pivot window
@@ -77,7 +77,7 @@ N-song club mashups keep the same locked Drop 1 join. More songs mean more hooks
 - **Hook-replace is the default** (guest hook in, bed vocal carved). Dual vocals are optional ≤8-bar call-and-response, not the Drop 1 stack. See `dj-remix-planning`.
 - For 3–5 song mashups, **rotate** which guest owns Drop 1 vs Drop 2 rather than stacking all of them.
 - Phrase grid still 8 / 16 / 32. Minimum identity stay **8 bars**; prefer **16** for a chorus/hook. Do not switch every 4 bars (pivot grains are supporting, not identity stays).
-- Club shape: intro → one complete A hook → 4-bar pivot → drop 1 → breakdown → build → drop 2 → outro. Drop 1 ~bar 16–24.
+- Club shape: intro → one complete A hook → 2-bar pivot → drop 1 → breakdown → build → drop 2 → outro. Drop 1 ~bar 16–24.
 - **Drop 1** = the single strongest familiar hook. **Drop 2** = a different song’s hook (the flip). On a duo, Drop 2 may be the bed’s own chorus flip.
 - Remaining songs get 8–16 bar cameos **after** Drop 1 (breakdown/outro), or skip if gates fail — not verse wallpaper chops.
 - Compatibility is **per added song**: Camelot same / ±1 / relative; vocal stretch ≤ 8%; pitch vocal ≤ 2 st; prefer pitching the bed. If song 4 or 5 fails the gate, skip it or use it only as a short chop — do not force a sour full-vocal overlay.

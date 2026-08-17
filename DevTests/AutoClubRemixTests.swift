@@ -98,6 +98,16 @@ do {
 }
 
 do {
+    check(
+        "AutoTuning default pivot wallpaper is 2 bars / 4–8 beats (not 4-bar / 16×)",
+        AutoTuning.standard.pivotWallpaperBars == 2
+            && AutoTuning.standard.pivotWallpaperBeats >= 4
+            && AutoTuning.standard.pivotWallpaperBeats <= 8,
+        "bars=\(AutoTuning.standard.pivotWallpaperBars) beats=\(AutoTuning.standard.pivotWallpaperBeats)"
+    )
+}
+
+do {
     let pair = AutoClubTempo.mashupDecision(vocalBPM: 93, bedBPM: 95)
     check("Britney mashup stays ~94", abs(pair.targetBPM - 94) < 1.5 && pair.ok,
           pair.detail)
@@ -185,10 +195,10 @@ do {
             let grains = plan.placements.filter {
                 $0.role == .supporting
                     && abs($0.timelineDuration - beat) < beat * 0.35
-                    && $0.timelineStart >= drop1.timelineStart - plan.barSeconds * 4.5
+                    && $0.timelineStart >= drop1.timelineStart - plan.barSeconds * 2.5
                     && $0.timelineStart < drop1.timelineStart - 0.02
             }
-            return grains.count >= 8
+            return grains.count >= 4
                 || plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
         }()
         check(
@@ -851,12 +861,12 @@ do {
             let grains = plan.placements.filter {
                 $0.role == .supporting
                     && abs($0.timelineDuration - beat) < beat * 0.35
-                    && $0.timelineStart >= drop.timelineStart - plan.barSeconds * 4.5
+                    && $0.timelineStart >= drop.timelineStart - plan.barSeconds * 2.5
                     && $0.timelineStart < drop.timelineStart - 0.02
             }
             check(
                 "Britney void or Xirex pivot wallpaper before drop",
-                voidOK || grains.count >= 8,
+                voidOK || grains.count >= 4,
                 "void=\(voidOK) grains=\(grains.count)"
             )
         }
@@ -928,7 +938,7 @@ do {
         oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
     ]
     switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
-    case .success(_, let plan, _):
+    case .success(let applied, let plan, _):
         guard let bedID = plan.mashupBedSongID, let vocalID = plan.mashupVocalSongID else {
             check("Mashup bed under hook roles present", false, "missing roles")
             break
@@ -957,13 +967,13 @@ do {
               "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
 
         // Two-deck + Xirex pivot: Oops plays complete first; no early title chops.
-        // Real Drop 1 is after one complete Oops hook + 4-bar baby loop (~bar 20),
+        // Real Drop 1 is after one complete Oops hook + 2-bar baby loop (~bar 18),
         // never a fake drop on the bed chorus and never a quiet fade-in.
         let pulseDrops = plan.pulseRegions.filter { $0.role == .drop }.sorted { $0.timelineStart < $1.timelineStart }
         if let pulseDrop1 = pulseDrops.first {
             let dropBar = pulseDrop1.timelineStart / plan.barSeconds
             check(
-                "Britney: pulse Drop 1 after complete Oops + pivot (~bar 20), not bar 16 fake / not late bar 28",
+                "Britney: pulse Drop 1 after complete Oops + pivot (~bar 18), not bar 16 fake / not late bar 28",
                 dropBar >= 16.5 && dropBar <= 24.5,
                 String(format: "bar=%.1f t=%.2f", dropBar, pulseDrop1.timelineStart)
             )
@@ -1019,18 +1029,18 @@ do {
                 "earlyChops=\(earlyChops.count)"
             )
 
-            // Pivot wallpaper: 1-beat last-word grains, 8–16×, immediately before Drop 1.
+            // Pivot wallpaper: 1-beat last-word grains, 4–8× (~1–2 bars), immediately before Drop 1.
             let beat = plan.beatSeconds
             let grains = plan.placements.filter { p in
                 p.role == .supporting
                     && p.songID == bedID
                     && abs(p.timelineDuration - beat) < beat * 0.35
-                    && p.timelineStart >= drop1Start - plan.barSeconds * 4.5
+                    && p.timelineStart >= drop1Start - plan.barSeconds * 2.5
                     && p.timelineStart < drop1Start - 0.02
             }.sorted { $0.timelineStart < $1.timelineStart }
             check(
-                "Britney: pivot wallpaper is 8–16× of a 1-beat grain",
-                grains.count >= 8 && grains.count <= 16,
+                "Britney: pivot wallpaper is 4–8× of a 1-beat grain (~1–2 bars)",
+                grains.count >= 4 && grains.count <= 8,
                 "count=\(grains.count)"
             )
             if let g0 = grains.first {
@@ -1039,6 +1049,15 @@ do {
                 check(
                     "Britney: pivot loop is HPF/thinned (blur)",
                     grains.allSatisfy { $0.effects.level(for: MixrEffect.blur.rawValue) >= 36 }
+                )
+                check(
+                    "Britney: pivot grains stay loud (HPF thins; volume does not duck)",
+                    grains.allSatisfy { $0.volume >= 0.90 },
+                    "vols=\(grains.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
+                )
+                check(
+                    "Britney: pivot grains have no fade-in",
+                    grains.allSatisfy { $0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02 }
                 )
                 if let last = grains.last {
                     check(
@@ -1074,7 +1093,7 @@ do {
             }
 
             // Diet SFX on the pivot join: loop grains + ≤1 slam (impact). No riser pile.
-            let mixLo = drop1Start - plan.barSeconds * 4.5
+            let mixLo = drop1Start - plan.barSeconds * 2.5
             let mixHi = drop1Start + plan.beatSeconds
             let joinSFX = plan.sfxEvents.filter {
                 $0.timelineStart >= mixLo - 0.05 && $0.timelineStart <= mixHi + 0.05
@@ -1117,6 +1136,55 @@ do {
                 deckBTitle: "Baby One More Time"
             )
             check("Britney pivot token is 'baby'", token == "baby", "token=\(token ?? "nil")")
+
+            // Product lock: Auto writes per-clip volume (not track faders / blur only).
+            let songClips = applied.filter { !$0.isSFXTrack }.flatMap(\.clips)
+            check("Britney: Auto applied song clips exist", !songClips.isEmpty)
+            let unityOnly = songClips.allSatisfy { abs($0.volume - 1.0) < 0.001 }
+            check(
+                "Britney: Auto writes clip-wise volume (not all 1.0 by accident)",
+                !unityOnly,
+                "vols=\(Set(songClips.map { String(format: "%.2f", $0.volume) }).sorted().joined(separator: ","))"
+            )
+            let beatUnits = MixrTimeline.units(fromSeconds: beat)
+            let drop1Unit = MixrTimeline.units(fromSeconds: drop1Start)
+            let lookbackUnits = MixrTimeline.units(fromSeconds: plan.barSeconds * 2.5)
+            let grainClips = songClips.filter { clip in
+                abs(clip.length - beatUnits) < beatUnits * 0.4
+                    && clip.start >= drop1Unit - lookbackUnits
+                    && clip.start < drop1Unit - MixrTimeline.units(fromSeconds: 0.02)
+            }
+            check(
+                "Britney: applied pivot clips stay loud (not a quiet wallpaper hole)",
+                !grainClips.isEmpty && grainClips.allSatisfy { $0.volume >= 0.90 },
+                "n=\(grainClips.count) vols=\(grainClips.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
+            )
+            if let g0 = grains.first {
+                let g0Start = MixrTimeline.units(fromSeconds: g0.timelineStart)
+                if let appliedGrain = grainClips.min(by: { abs($0.start - g0Start) < abs($1.start - g0Start) }) {
+                    check(
+                        "Britney: applier copies pivot placement volume onto MixrClip",
+                        abs(appliedGrain.volume - g0.volume) < 0.02,
+                        String(format: "clip=%.2f placement=%.2f", appliedGrain.volume, g0.volume)
+                    )
+                }
+            }
+            if let drop1 = dropLeads.min(by: { $0.timelineStart < $1.timelineStart }) {
+                let dStart = MixrTimeline.units(fromSeconds: drop1.timelineStart)
+                let dropClips = songClips.filter { abs($0.start - dStart) < MixrTimeline.units(fromSeconds: 0.08) }
+                if let appliedDrop = dropClips.max(by: { $0.volume < $1.volume }) {
+                    check(
+                        "Britney: applied Drop 1 clip is ~full volume",
+                        appliedDrop.volume >= 0.92,
+                        String(format: "vol=%.2f", appliedDrop.volume)
+                    )
+                    check(
+                        "Britney: applied Drop 1 clip has no audible fade-in",
+                        appliedDrop.transitionIn.type == .none || appliedDrop.transitionIn.duration <= 0.02,
+                        "fadeIn=\(appliedDrop.transitionIn.type.rawValue) dur=\(appliedDrop.transitionIn.duration)"
+                    )
+                }
+            }
         }
 
         // Pivot Drop 1: impact slam only (no riser wallpaper required).
@@ -1468,13 +1536,18 @@ do {
             p.role == .supporting
                 && p.songID == song.id
                 && abs(p.timelineDuration - beat) < beat * 0.35
-                && p.timelineStart >= drop0.timelineStart - bar * 4.5
+                && p.timelineStart >= drop0.timelineStart - bar * 2.5
                 && p.timelineStart < drop0.timelineStart - 0.02
         }
         check(
-            "Solo remix: pivot wallpaper 8–16× before Drop 1",
-            grains.count >= 8 && grains.count <= 16,
+            "Solo remix: pivot wallpaper 4–8× before Drop 1",
+            grains.count >= 4 && grains.count <= 8,
             "count=\(grains.count)"
+        )
+        check(
+            "Solo remix: pivot grains stay loud",
+            grains.allSatisfy { $0.volume >= 0.90 },
+            "vols=\(grains.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
         )
         check(
             "Solo remix records pivotWallpaperLoop",
@@ -1514,7 +1587,7 @@ func pivotGrains(in plan: AutoRemixPlan, songID: UUID, before dropStart: Double)
     for p in plan.placements {
         guard p.role == .supporting, p.songID == songID else { continue }
         guard abs(p.timelineDuration - beat) < beat * 0.35 else { continue }
-        guard p.timelineStart >= dropStart - bar * 4.5 else { continue }
+        guard p.timelineStart >= dropStart - bar * 2.5 else { continue }
         guard p.timelineStart < dropStart - 0.02 else { continue }
         grains.append(p)
     }

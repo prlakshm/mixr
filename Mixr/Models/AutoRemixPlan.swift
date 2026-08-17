@@ -414,9 +414,22 @@ struct AutoTuning: Sendable {
     /// Max short echo-throw chops in one mix window (legacy; prefer pivot loop).
     var maxMixWindowEchoThrows = 0
     /// Bars of 1-beat pivot-grain wallpaper before hook-replace (Xirex move).
-    var pivotWallpaperBars = 4
+    /// Default 2 bars = 8× quarter-note grains. Range 1–2 bars (4–8×).
+    /// 4-bar / 16× wallpaper is too long.
+    var pivotWallpaperBars = 2
     /// Repeats of the 1-beat pivot grain (= bars × 4 when quarter-note).
-    var pivotWallpaperBeats: Int { max(8, pivotWallpaperBars * 4) }
+    var pivotWallpaperBeats: Int { max(4, min(8, clampedPivotWallpaperBars * 4)) }
+    /// Clamped wallpaper length: 1–2 bars.
+    var clampedPivotWallpaperBars: Int { max(1, min(2, pivotWallpaperBars)) }
+
+    /// Reserved mix-window length for the pivot loop (seconds).
+    func pivotWindowSeconds(barSec: Double) -> Double {
+        Double(clampedPivotWallpaperBars) * barSec
+    }
+    /// Grain-search lookback slightly wider than the reserved window.
+    func pivotLookbackSeconds(barSec: Double) -> Double {
+        pivotWindowSeconds(barSec: barSec) + barSec * 0.5
+    }
     /// Optional bounce-harness stems root (`.../Stems/htdemucs_ft` or `.../Stems`).
     var stemsRoot: URL? = nil
     /// Test / harness override: song ID → sidecar URLs (no disk layout required).

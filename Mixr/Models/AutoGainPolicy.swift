@@ -99,6 +99,13 @@ nonisolated enum AutoGainPolicy {
     /// Fallback song volume when a placement has no energy story.
     static let preservationSongVolume = 0.9
 
+    /// Pivot wallpaper grain volume. HPF/blur takes the kick out; clip
+    /// volume stays loud so the join is not a ducked hole.
+    static let pivotGrainVolume = 0.96
+
+    /// Incoming Drop 1 / hook-replace attack — full clip volume, no fade-in.
+    static let incomingDropVolume = 1.0
+
     /// Placement volume for an energy-storied club / mashup slot.
     /// Enough contrast for build-out subtraction vs drop payoff without
     /// creating unexplained join jumps > 4 dB in offline PCM.

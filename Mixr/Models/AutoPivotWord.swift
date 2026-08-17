@@ -5,7 +5,7 @@ import Foundation
 // Xirex-style wordplay transitions (Oops × Baby One More Time):
 //  1. Deck A chorus/hook plays COMPLETE once (no early title chops).
 //  2. Catch ONLY the last 1-beat of that phrase as the pivot grain.
-//  3. Loop that grain 8–16× (2–4 bars) on the grid — wallpaper chop.
+//  3. Loop that grain 4–8× (1–2 bars; default 8× = 2 bars) on the grid.
 //  4. Hard cut into Deck B's hook that attacks on the same word.
 //
 // Without lyrics we approximate shared tokens from titles + hook labels.
