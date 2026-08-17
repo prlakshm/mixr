@@ -400,6 +400,62 @@ nonisolated enum AutoRemixDiagnostics {
         return cuts
     }
 
+    /// Complete hook / title line. Catalog teasers are 2–4 bars; a first
+    /// Deck A hook shorter than this is a sub-phrase chop.
+    static let minCompleteHookBars = 7.5
+    /// Opening title region (first “Oops” / first hook line).
+    static let titleRegionBars = 4.0
+
+    /// Deck A is the mashup bed, else the remix anchor.
+    static func firstDeckASongID(plan: AutoRemixPlan) -> UUID? {
+        plan.mashupBedSongID ?? plan.anchorSongIDs.first
+    }
+
+    /// First Deck A hook before Drop 1: the groove-pulse phrase after the
+    /// intro tease, not the intro itself and not Drop 1.
+    static func firstDeckAHookPlacement(plan: AutoRemixPlan) -> AutoClipPlacement? {
+        guard let deckA = firstDeckASongID(plan: plan) else { return nil }
+        let dropStart = plan.pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .min() ?? plan.targetDuration
+        let preDrop = plan.placements
+            .filter {
+                $0.songID == deckA
+                    && $0.role == .dominant
+                    && $0.timelineStart < dropStart - 0.05
+            }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        guard !preDrop.isEmpty else { return nil }
+
+        let grooves = plan.pulseRegions.filter {
+            $0.role == .groove && $0.timelineStart < dropStart - 0.05
+        }
+        let inGroove = preDrop.filter { p in
+            grooves.contains { g in
+                p.timelineStart < g.timelineEnd - 0.05
+                    && p.timelineEnd > g.timelineStart + 0.05
+            }
+        }
+        if let hook = inGroove.max(by: { $0.timelineStart < $1.timelineStart }) {
+            return hook
+        }
+        // Intro + hook without groove tags: last pre-drop phrase is the hook.
+        if preDrop.count >= 2 { return preDrop.last }
+        return preDrop.first
+    }
+
+    /// True when the first Deck A hook is a sub-phrase slice of the opening
+    /// title (e.g. a 4-bar teaser of “Oops I did it again”). Complete 8-bar
+    /// title/hook lines are not chops.
+    static func firstDeckAHookIsSubPhraseTitleChop(plan: AutoRemixPlan) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let bar = max(plan.barSeconds, 1e-6)
+        let subPhrase = hook.timelineDuration + 0.05 < bar * minCompleteHookBars
+        let inTitle = hook.sourceStart <= bar * titleRegionBars + 0.05
+        return subPhrase && inTitle
+    }
+
     /// True when dominant placements consume the source in strictly
     /// non-decreasing order (no rewinds), ignoring placements listed in
     /// `justifiedReturnStarts` (timeline seconds of an explicit hook return).

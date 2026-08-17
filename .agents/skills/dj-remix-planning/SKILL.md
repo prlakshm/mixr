@@ -16,6 +16,33 @@ description: >-
 
 # DJ Remix Planning
 
+## Club rewrite, not preservation (product lock)
+
+Auto is a **festival club rewrite** (Diplo / Guetta / Snake energy) — not a
+polite preservation edit and not a shuffled highlight reel. Hype lives **on
+the drop**. Verses stay one record. Pivot join is short and loud (default
+**8× / 2 bars**, clip volume up, HPF/blur — not a volume duck). No quiet hole
+just to switch songs (overlap or hard cut at full clip volume). Diet SFX on
+the join (loop + ≤1 impact). Drop 1 after **one complete A hook**.
+
+Preservation constrains **identity** (familiar hook on drop 1; important
+lines uncut). It is not a ban on arrangement. SFX alone do not count as
+transformation.
+
+## Important lines uncut (product lock)
+
+Never cut the best / most identifiable lines. Opening titles and hook lines
+**finish**. Do not chop the first “Oops”. Do not chop the first “baby”.
+
+- Pivot grain is the **LAST word of a completed line**, after it has played
+  once — never the first syllable of the title.
+- Incoming hook starts on the **downbeat of a real line**, not mid-word.
+- If phrase confidence cannot support a last-word grain, **skip the loop**
+  rather than slicing the title. Keep playing through the window so the join
+  does not go quiet.
+
+A first Deck A hook that is a 2–4 bar teaser of the opening title is a fail.
+
 ## Locked gold-standard join (DJ Xirex)
 
 Reference mix: **Oops I Did It Again → …Baby One More Time** (Instagram reel).
@@ -97,10 +124,11 @@ Typical:
 
 Auto Remix rewrites a song as a **streaming-length club mix** using a
 **two-deck DJ mind**: Deck A is NOW PLAYING, Deck B is COMING NEXT.
-Full-volume stacking is illegal except inside a **mix window**.
+Full-volume stacking is illegal except inside a **mix window**. See
+**Club rewrite, not preservation** and **Important lines uncut** above —
+those locks win over any urge to leave the record untouched.
 
-Preservation constrains identity (familiar hook on drop 1), not arrangement.
-SFX alone do not count as transformation. Accidental silence is forbidden.
+Accidental silence is forbidden.
 
 **Intentional 1-beat pre-drop voids** belong only to **plain club drops**
 (no pivot loop — e.g. Drop 2 after an 8-bar build). Pivot joins are a hard
@@ -320,6 +348,10 @@ layers **on the drop** — still one kick and one bass — and diet on the pivot
 
 Before declaring success, report:
 
+- **First Deck A hook is a complete phrase (≥8 bars), not a title teaser**
+  (no first-“Oops” / first-“baby” chop). If the loop was skipped, say why.
+- **Club flavor is festival (Diplo / Guetta / Snake), not a polite
+  preservation / Calvin radio edit** — unless the song is a clear piano ballad.
 - tempo pocket decision and stretch/pitch gates
 - pulse policy (wrote kick vs skipped second kick)
 - club flavor

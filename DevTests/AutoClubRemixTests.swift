@@ -1042,6 +1042,25 @@ do {
                 check("Britney: Oops bed dominant exists", false)
             }
 
+            check(
+                "Britney: first Deck A hook is not a sub-phrase chop of the title",
+                !AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: plan),
+                {
+                    let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+                    return String(
+                        format: "src=%.2f dur=%.2f bar=%.2f",
+                        hook?.sourceStart ?? -1,
+                        hook?.timelineDuration ?? -1,
+                        plan.barSeconds
+                    )
+                }()
+            )
+            check(
+                "Britney mashup is clubby (Diplo/Guetta/Snake), not Calvin preservation",
+                plan.clubFlavor == .diplo || plan.clubFlavor == .guetta || plan.clubFlavor == .snake,
+                "flavor=\(plan.clubFlavor?.rawValue ?? "nil")"
+            )
+
             // No supporting chops in the opening 8–16 bars (wallpaper is mix-window only).
             let earlyChops = plan.placements.filter {
                 $0.role == .supporting
@@ -1391,9 +1410,25 @@ do {
             let matched = hooks.contains {
                 abs($0.startSeconds - dropPlacement.sourceStart) < 0.5
             }
-            check("Club remix Drop 1 is a chorus/teaser island", matched || dropPlacement.sourceStart > 1.0,
-                  String(format: "sourceStart=%.1f", dropPlacement.sourceStart))
+            check(
+                "Club remix Drop 1 is a chorus/teaser island",
+                matched || dropPlacement.sourceStart > 1.0,
+                String(format: "sourceStart=%.1f", dropPlacement.sourceStart)
+            )
         }
+        check(
+            "Club remix: first Deck A hook is not a sub-phrase chop of the title",
+            !AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: plan),
+            {
+                let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+                return String(
+                    format: "src=%.2f dur=%.2f bar=%.2f",
+                    hook?.sourceStart ?? -1,
+                    hook?.timelineDuration ?? -1,
+                    plan.barSeconds
+                )
+            }()
+        )
         let grooveFXHeavy = plan.placements.filter { p in
             let onGroove = grooves.contains {
                 p.timelineStart >= $0.timelineStart - 0.05 && p.timelineStart < $0.timelineEnd - 0.05
@@ -1936,17 +1971,141 @@ do {
             )
             let pivot = plan.decisions.first { $0.kind == AutoDecisionKind.pivotWallpaperLoop }
             let detail = pivot?.detail ?? ""
-            check(
-                "Britney pivot token is baby (not oops) with stems",
-                detail.lowercased().contains("baby") && !detail.lowercased().contains("oops"),
-                "detail=\(detail)"
-            )
+        check(
+            "Britney pivot token is baby (not oops) with stems",
+            detail.lowercased().contains("baby") && !detail.lowercased().contains("oops"),
+            "detail=\(detail)"
+        )
+        check(
+            "Stem-hot Britney: first Deck A hook is not a title teaser chop",
+            !AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: plan)
+        )
         case .failure(let message):
             check("Britney stem role lock mashup", false, message)
         }
     } catch {
         check("Wrote Britney inverted-stem fixtures", false, "\(error)")
     }
+}
+
+do {
+    // First Deck A hook must be a completed title/hook line, not a 2–4 bar
+    // teaser of “Oops”. The helper must fail the previous (chop) behavior.
+    let bpm = 95.0
+    let bar = 240.0 / bpm
+    let deckA = UUID()
+    func clip(
+        sourceStart: Double,
+        timelineStart: Double,
+        duration: Double,
+        role: AutoPlacementRole = .dominant,
+        slot: Int = 0
+    ) -> AutoClipPlacement {
+        AutoClipPlacement(
+            songID: deckA,
+            sourceStart: sourceStart,
+            timelineStart: timelineStart,
+            timelineDuration: duration,
+            tempoRatio: 1,
+            volume: 1,
+            fadeIn: ClipTransition(type: .none, duration: 0),
+            fadeOut: ClipTransition(type: .none, duration: 0),
+            effects: ClipEffectSettings(),
+            role: role,
+            slotIndex: slot
+        )
+    }
+    func plan(
+        placements: [AutoClipPlacement],
+        pulses: [AutoClubPulse.Region],
+        duration: Double
+    ) -> AutoRemixPlan {
+        AutoRemixPlan(
+            mode: .mashup,
+            targetBPM: bpm,
+            targetDuration: duration,
+            anchorSongIDs: [deckA],
+            selectedSections: [],
+            placements: placements,
+            sfxEvents: [],
+            pulseRegions: pulses,
+            mashupBedSongID: deckA,
+            handoffCount: 0,
+            songLetters: [deckA: "A"],
+            sequence: ["A"],
+            transitionsUsed: [],
+            decisions: [],
+            warnings: [],
+            confidence: 1,
+            randomSeed: 1
+        )
+    }
+
+    let chopped = plan(
+        placements: [
+            clip(sourceStart: 0, timelineStart: 0, duration: bar * 4),
+            clip(sourceStart: 40, timelineStart: bar * 4, duration: bar * 16, slot: 1),
+        ],
+        pulses: [
+            AutoClubPulse.Region(role: .groove, timelineStart: 0, timelineEnd: bar * 4),
+            AutoClubPulse.Region(role: .drop, timelineStart: bar * 4, timelineEnd: bar * 20),
+        ],
+        duration: bar * 20
+    )
+    check(
+        "Title-chop detector flags a 4-bar Deck A hook from source 0",
+        AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: chopped),
+        {
+            let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: chopped)
+            return String(format: "src=%.2f dur=%.2f", hook?.sourceStart ?? -1, hook?.timelineDuration ?? -1)
+        }()
+    )
+
+    let complete = plan(
+        placements: [
+            clip(sourceStart: 0, timelineStart: 0, duration: bar * 8, slot: 0),
+            clip(sourceStart: bar * 8, timelineStart: bar * 8, duration: bar * 8, slot: 1),
+            clip(sourceStart: 80, timelineStart: bar * 18, duration: bar * 16, slot: 2),
+        ],
+        pulses: [
+            AutoClubPulse.Region(role: .introTease, timelineStart: 0, timelineEnd: bar * 8),
+            AutoClubPulse.Region(role: .groove, timelineStart: bar * 8, timelineEnd: bar * 16),
+            AutoClubPulse.Region(role: .buildOut, timelineStart: bar * 16, timelineEnd: bar * 18),
+            AutoClubPulse.Region(role: .drop, timelineStart: bar * 18, timelineEnd: bar * 34),
+        ],
+        duration: bar * 34
+    )
+    check(
+        "Title-chop detector accepts intro 8 + complete 8-bar A hook",
+        !AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: complete)
+    )
+    if let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: complete) {
+        check(
+            "First Deck A hook is the groove phrase (≥8 bars), not the intro teaser",
+            hook.timelineDuration + 0.05 >= bar * 7.5 && abs(hook.timelineStart - bar * 8) < 0.05,
+            String(format: "t=%.2f dur=%.2f", hook.timelineStart, hook.timelineDuration)
+        )
+    } else {
+        check("First Deck A hook placement exists on a complete plan", false)
+    }
+
+    let rewindTeaser = plan(
+        placements: [
+            clip(sourceStart: 0, timelineStart: 0, duration: bar * 8, slot: 0),
+            clip(sourceStart: 0, timelineStart: bar * 8, duration: bar * 4, slot: 1),
+            clip(sourceStart: 80, timelineStart: bar * 14, duration: bar * 16, slot: 2),
+        ],
+        pulses: [
+            AutoClubPulse.Region(role: .introTease, timelineStart: 0, timelineEnd: bar * 8),
+            AutoClubPulse.Region(role: .groove, timelineStart: bar * 8, timelineEnd: bar * 12),
+            AutoClubPulse.Region(role: .drop, timelineStart: bar * 12, timelineEnd: bar * 28),
+        ],
+        duration: bar * 28
+    )
+    check(
+        "Title-chop detector flags a 4-bar title rewind used as the first A hook",
+        AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: rewindTeaser)
+    )
 }
 
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")

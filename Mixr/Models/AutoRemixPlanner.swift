@@ -321,7 +321,9 @@ enum AutoRemixPlanner {
             case .intro: labels = [.intro, .groove] // never teaser — protect title
             case .groove: labels = [.groove, .chorus]
             case .build: labels = [.build, .groove]
-            case .chorus: labels = [.chorus, .teaser]
+            // First complete A hook stays chorus/groove — never a 2–4 bar title teaser.
+            case .chorus:
+                labels = slot.entry == .hardHypeCut ? [.chorus, .teaser] : [.chorus, .groove]
             case .breakdown: labels = [.breakdown, .groove]
             case .ending: labels = [.ending, .teaser, .chorus]
             default: labels = [slot.role]
@@ -350,9 +352,10 @@ enum AutoRemixPlanner {
                 )
             }
 
-            // Drop slots (hard hype): strongest chorus islands.
+            // Drop slots (hard hype): strongest chorus islands ≥8 bars.
             // First complete hook (pulse .groove / clean crossfade) keeps the
-            // record playing — no mid-song jump that chops into the title.
+            // record playing — never a title teaser or mid-song jump that
+            // chops the first “Oops”.
             if slot.role == .chorus {
                 let hooks = profile.candidates
                     .filter { ($0.label == .chorus || $0.label == .teaser) && $0.barCount >= 8 }
@@ -363,11 +366,12 @@ enum AutoRemixPlanner {
                     } else if let bestHook = hooks.first {
                         section = bestHook
                     }
-                } else if slot.pulse == .groove, let last = lastSourceEnd {
+                } else if slot.pulse == .groove {
+                    let start = lastSourceEnd ?? usableStart
                     section = AutoCandidateSection(
                         songID: section.songID,
                         label: .chorus,
-                        startSeconds: min(last, max(usableStart, usableEnd - Double(slot.bars) * bar * ratio)),
+                        startSeconds: min(start, max(usableStart, usableEnd - Double(slot.bars) * bar * ratio)),
                         barCount: slot.bars,
                         barSeconds: section.barSeconds,
                         hook: max(section.hook, 0.85),
@@ -379,8 +383,6 @@ enum AutoRemixPlanner {
                         transitionUse: section.transitionUse,
                         confidence: section.confidence
                     )
-                } else if let bestHook = hooks.first {
-                    section = bestHook
                 }
             }
 
@@ -1203,10 +1205,23 @@ enum AutoRemixPlanner {
         let loopStart = dropTimelineStart - loopDur
         guard loopStart >= 0.05 else { return }
 
-        // Grain = last 1 beat of the completed phrase (must have already sounded).
+        // Grain = last 1 beat of a COMPLETED line (must have already sounded).
+        // If the phrase is a title teaser / sub-8-bar chop, skip the loop
+        // rather than slicing the first “Oops” — keep playing through the
+        // reserved window so the song-switch join does not go quiet.
         let phraseEnd = min(completedPhrase.sourceEnd, completedPhrase.sourceStart + completedPhrase.timelineDuration * completedPhrase.tempoRatio)
-        guard phraseEnd - completedPhrase.sourceStart >= beatSec * completedPhrase.tempoRatio * 3.5 else {
-            // Phrase too short — refuse to invent an early chop.
+        let phraseBars = (phraseEnd - completedPhrase.sourceStart)
+            / max(barSec * completedPhrase.tempoRatio, 0.001)
+        guard phraseBars + 0.05 >= AutoRemixDiagnostics.minCompleteHookBars else {
+            fillPivotWindowWithoutLoop(
+                completedPhrase: completedPhrase,
+                loopStart: loopStart,
+                dropTimelineStart: dropTimelineStart,
+                deckATitle: deckATitle,
+                reason: "phrase too short for a last-word grain — skip loop rather than slice the title",
+                placements: &placements,
+                decisions: &decisions
+            )
             return
         }
         let grainSource = AutoPivotWord.lastBeatGrainSource(
@@ -1293,6 +1308,72 @@ enum AutoRemixPlanner {
                 )
             )
         }
+    }
+
+    /// Keep Deck A playing through a reserved pivot window when we skip the
+    /// last-word loop — no quiet hole just to switch songs.
+    private static func fillPivotWindowWithoutLoop(
+        completedPhrase: AutoClipPlacement,
+        loopStart: Double,
+        dropTimelineStart: Double,
+        deckATitle: String?,
+        reason: String,
+        placements: inout [AutoClipPlacement],
+        decisions: inout [AutoDecision]
+    ) {
+        for i in placements.indices where placements[i].role == .dominant
+            && placements[i].songID == completedPhrase.songID
+        {
+            let p = placements[i]
+            let endsAtWindow = abs(p.timelineEnd - loopStart) <= 0.08
+            let straddlesWindow = p.timelineStart < loopStart
+                && p.timelineEnd > loopStart - 0.05
+                && p.timelineEnd < dropTimelineStart - 0.05
+            if endsAtWindow || straddlesWindow {
+                placements[i].timelineDuration = max(
+                    p.timelineDuration,
+                    dropTimelineStart - p.timelineStart
+                )
+                placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
+            }
+        }
+        decisions.append(
+            AutoDecision(
+                kind: .skippedPivotWallpaper,
+                songTitle: deckATitle,
+                detail: reason
+            )
+        )
+    }
+
+    /// 8-bar chorus continuation from `from` (snapped to a downbeat). Nil
+    /// when the source cannot host a complete line — caller must skip.
+    private static func completePhraseSection(
+        profile: AutoSongProfile,
+        from: Double,
+        bars: Int,
+        energy: Double
+    ) -> AutoCandidateSection? {
+        let bar = profile.analysis.barSeconds
+        let want = Double(max(8, bars))
+        let snapped = profile.analysis.downbeats.last { $0 <= from + 0.01 } ?? max(0, from)
+        let need = want * bar
+        guard snapped + need <= profile.analysis.durationSeconds - 0.15 else { return nil }
+        return AutoCandidateSection(
+            songID: profile.songID,
+            label: .chorus,
+            startSeconds: snapped,
+            barCount: max(8, bars),
+            barSeconds: bar,
+            hook: 0.9,
+            energy: energy,
+            vocal: 0.7,
+            clarity: 0.7,
+            rhythm: profile.analysis.drumStrength,
+            uniqueness: 0.7,
+            transitionUse: 0.55,
+            confidence: profile.analysis.analysisConfidence
+        )
     }
 
     /// Fallback candidate when the catalog has no matching label.
@@ -1977,9 +2058,21 @@ enum AutoRemixPlanner {
             let used = usedRanges[profile.songID] ?? []
 
             let labelChain: [[AutoCandidateSection.Label]]
+            let isFirstCompleteAHook = mode == .mashup
+                && slot.songIdx == 0
+                && slot.role == .chorus
+                && slot.entry != .hardHypeCut
+                && !slot.isReturn
             switch slot.role {
             case .teaser: labelChain = [[.teaser], [.chorus], [.groove]]
-            case .chorus: labelChain = [[.chorus], [.groove], [.teaser]]
+            case .chorus:
+                // First complete Deck A hook never falls through to a 2–4 bar
+                // title teaser. Skip the loop later if no last-word grain.
+                if isFirstCompleteAHook {
+                    labelChain = [[.chorus], [.groove]]
+                } else {
+                    labelChain = [[.chorus], [.groove], [.teaser]]
+                }
             case .groove: labelChain = [[.groove], [.chorus], [.breakdown]]
             case .build: labelChain = [[.build], [.groove]]
             case .breakdown: labelChain = [[.breakdown], [.groove], [.chorus]]
@@ -1997,6 +2090,28 @@ enum AutoRemixPlanner {
                 ) {
                     section = s
                     break
+                }
+            }
+
+            // First complete A hook: never keep a title teaser. Continue from
+            // the last used source (intro end) as an 8-bar line. If that will
+            // not fit, skip rather than slice the opening “Oops”.
+            if isFirstCompleteAHook {
+                let lastUsedEnd = used.map(\.1).max()
+                let bad = section.map { $0.barCount < 8 || $0.label == .teaser } ?? true
+                let rewind = section.flatMap { s in lastUsedEnd.map { s.startSeconds < $0 - 0.05 } } ?? false
+                if section == nil || bad || rewind {
+                    let from = lastUsedEnd ?? max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
+                    if let complete = completePhraseSection(
+                        profile: profile,
+                        from: from,
+                        bars: max(8, slot.bars),
+                        energy: slot.energy
+                    ) {
+                        section = complete
+                    } else if bad {
+                        section = nil
+                    }
                 }
             }
 

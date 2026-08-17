@@ -87,6 +87,9 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case hookReplace
     /// Xirex-style pivot: 1-beat last-word of a completed phrase, looped 2–4 bars.
     case pivotWallpaperLoop
+    /// Phrase too short / low confidence for a last-word grain — skip the
+    /// loop rather than slicing the title.
+    case skippedPivotWallpaper
     /// Offline Demucs sidecar used (vocal grain, drums kick, or bed instrumental).
     case usedStemSidecar
 }
@@ -172,6 +175,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Hook-replaced \(song)\(detail.map { " — \($0)" } ?? "")."
         case .pivotWallpaperLoop:
             return "Pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .skippedPivotWallpaper:
+            return "Skipped the pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
         case .usedStemSidecar:
             return "Used stem sidecar for \(song)\(detail.map { " — \($0)" } ?? "")."
         }
