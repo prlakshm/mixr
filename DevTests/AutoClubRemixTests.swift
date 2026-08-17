@@ -185,10 +185,8 @@ do {
                   return abs(bars - bars.rounded()) < 0.08
               },
               "first drop at \(drops.first.map { String(format: "%.3f", $0.timelineStart) } ?? "?") bar=\(drops.first.map { String(format: "%.3f", $0.timelineStart / plan.barSeconds) } ?? "?")")
-        // Pivot Drop 1 = hard cut (no void). Plain club drops (Drop 2+) still get a 1-beat void.
-        let voidBeforeSomeDrop = plan.intentionalGaps.contains { gap in
-            drops.contains { abs($0.timelineStart - gap.end) < 0.05 }
-        }
+        // Pivot Drop 1 = hard cut (no void). A pivoted plan must not emit
+        // allowedPredropVoid at all — crate bounce treats that pair as a hole.
         let pivotBeforeDrop1: Bool = {
             guard let drop1 = drops.first else { return false }
             let beat = plan.beatSeconds
@@ -202,8 +200,8 @@ do {
                 || plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
         }()
         check(
-            "Drop 1 has void or Xirex pivot (pivot joins need not void)",
-            voidBeforeSomeDrop || pivotBeforeDrop1,
+            "Drop 1 is Xirex pivot (no quiet void on a pivoted plan)",
+            pivotBeforeDrop1 && !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
             "voids=\(plan.intentionalGaps.count) pivot=\(pivotBeforeDrop1)"
         )
         check("Kept midtempo pocket (not shoved to 128)",
@@ -668,6 +666,46 @@ func crateFeatures(
 }
 
 do {
+    // Real AutoRemixPlanner via runEntireProject — not a hand-built plan.
+    // Crate bounce of 1afcbc0 still listed allowedPredropVoid next to
+    // pivotWallpaperLoop on BOMT+Oops (seed 20260815).
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        check(
+            "Planner BOMT+Oops: pivotWallpaperLoop",
+            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        )
+        check(
+            "Planner BOMT+Oops: zero allowedPredropVoid",
+            !plan.decisions.contains { $0.kind == .allowedPredropVoid },
+            "\(plan.decisions.filter { $0.kind == .allowedPredropVoid }.compactMap(\.detail))"
+        )
+        if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+            check(
+                "Planner BOMT+Oops: zero intentionalGaps on Drop 1",
+                !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
+                    && plan.intentionalGaps.isEmpty,
+                "gaps=\(plan.intentionalGaps.count)"
+            )
+        } else {
+            check("Planner BOMT+Oops: Drop 1 exists", false)
+        }
+        check(
+            "Planner BOMT+Oops: pivot join has no quiet void",
+            !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan)
+        )
+    case .failure(let message):
+        check("Planner BOMT+Oops mashup", false, message)
+    }
+}
+
+do {
     // Pulse / one-kick against measured crate features.
     let britney = AutoClubPulse.policy(drumStrength: 1.00, bassDensity: 0.37, bpm: 93, analysisConfidence: 1.00)
     check("Britney 93 drum=1.00 bass=0.37 → no pulse", !britney.writesKick && britney.sourceHasClubKick)
@@ -894,6 +932,11 @@ do {
                 voidOK || grains.count >= 4,
                 "void=\(voidOK) grains=\(grains.count)"
             )
+            check(
+                "Britney solo: pivot join has no quiet void",
+                !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
+                "gaps=\(plan.intentionalGaps.count)"
+            )
         }
     case .failure(let message):
         check("Britney solo remix", false, message)
@@ -1064,20 +1107,32 @@ do {
                 "Britney: Drop 1 has pivot wallpaper (loop + hard cut)",
                 AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: plan)
             )
+            check(
+                "Britney: pivotWallpaperLoop recorded",
+                plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+            )
+            check(
+                "Britney: zero allowedPredropVoid on a pivoted plan",
+                !plan.decisions.contains { $0.kind == .allowedPredropVoid },
+                "voidDecisions=\(plan.decisions.filter { $0.kind == .allowedPredropVoid }.map { $0.detail ?? "" })"
+            )
             if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
                 check(
-                    "Britney: pivot Drop 1 has no allowedPredropVoid / intentional gap",
+                    "Britney: zero intentionalGaps on Drop 1",
                     !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
-                )
-                let drop1VoidDecision = plan.decisions.contains { $0.kind == .allowedPredropVoid }
-                    && AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
-                check(
-                    "Britney: allowedPredropVoid is not parked on Drop 1",
-                    !drop1VoidDecision
+                        && plan.intentionalGaps.allSatisfy {
+                            abs($0.end - drop1) >= 0.08
+                        },
+                    "gaps=\(plan.intentionalGaps.count)"
                 )
             } else {
                 check("Britney: Drop 1 exists for void check", false)
             }
+            check(
+                "Britney: pivot join has no quiet void (planner emit, not a hand-built plan)",
+                !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
+                "gaps=\(plan.intentionalGaps.count)"
+            )
 
             // No supporting chops in the opening 8–16 bars (wallpaper is mix-window only).
             let earlyChops = plan.placements.filter {
@@ -2010,10 +2065,14 @@ do {
             AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: plan)
         )
         if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
-            check(
-                "Stem-hot Britney: pivot Drop 1 has no pre-drop void",
-                !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
-            )
+        check(
+            "Stem-hot Britney: pivot Drop 1 has no pre-drop void",
+            !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
+        )
+        check(
+            "Stem-hot Britney: zero allowedPredropVoid",
+            !plan.decisions.contains { $0.kind == .allowedPredropVoid }
+        )
         }
         case .failure(let message):
             check("Britney stem role lock mashup", false, message)
@@ -2179,8 +2238,7 @@ do {
     ]
     check(
         "Void detector flags a 1-beat hole on pivot Drop 1 (previous behavior fails)",
-        AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: holey)
-            && AutoRemixDiagnostics.preDropVoidAt(plan: holey, dropStart: drop1)
+        AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: holey)
     )
     check(
         "Title-chop detector still fails a 4-bar title teaser",

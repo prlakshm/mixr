@@ -493,6 +493,29 @@ nonisolated enum AutoRemixDiagnostics {
         return grains.count >= 4
     }
 
+    /// True when the planner emitted a quiet void on a pivoted Drop 1 join.
+    /// Crate bounce treats `pivotWallpaperLoop` + `allowedPredropVoid` /
+    /// any intentional gap as that hole — not only a gap whose end matches
+    /// Drop 1's pulse time.
+    static func pivotJoinHasQuietVoid(plan: AutoRemixPlan) -> Bool {
+        guard drop1HasPivotWallpaper(plan: plan) else { return false }
+        if let drop1 = firstDropStart(plan: plan),
+           preDropVoidAt(plan: plan, dropStart: drop1) {
+            return true
+        }
+        if plan.decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) {
+            if plan.decisions.contains(where: { $0.kind == .allowedPredropVoid }) {
+                return true
+            }
+            if plan.intentionalGaps.contains(where: {
+                $0.reason.localizedCaseInsensitiveContains("void")
+            }) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// True when dominant placements consume the source in strictly
     /// non-decreasing order (no rewinds), ignoring placements listed in
     /// `justifiedReturnStarts` (timeline seconds of an explicit hook return).

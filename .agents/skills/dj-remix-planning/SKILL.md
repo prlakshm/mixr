@@ -80,7 +80,9 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
    Verses stay one record.
 8. **No 1-beat void on this join.** Pivot Drop 1 is loop + hard cut at full
    clip volume. A pre-drop void next to the wallpaper is the old quiet hole.
-   Drop 2 may still void only when there is no pivot loop.
+   Do not emit `allowedPredropVoid` on the same plan as `pivotWallpaperLoop`
+   — crate bounce treats that pair as a Drop 1 hole. Drop 2 is a hard cut /
+   impact, not a quiet pause.
 
 If the join is quiet, it failed.
 
@@ -133,9 +135,9 @@ those locks win over any urge to leave the record untouched.
 
 Accidental silence is forbidden.
 
-**Intentional 1-beat pre-drop voids** belong only to **plain club drops**
-(no pivot loop — e.g. Drop 2 after an 8-bar build). Pivot joins are a hard
-cut, not a hole. Do not put the old void back on a pivot wallpaper handoff.
+**No 1-beat pre-drop void on a pivoted plan.** Pivot Drop 1 is a hard cut,
+not a hole. Do not emit `allowedPredropVoid` next to `pivotWallpaperLoop`.
+Drop 2 is also a hard cut / impact — not a quiet pause to “make the drop.”
 
 ## Two-deck model
 
@@ -148,7 +150,7 @@ cut, not a hole. Do not put the old void back on a pivot wallpaper handoff.
 - **Semantic joins**: wait until a phrase finishes. Important lines uncut.
   Incoming hook starts on a real downbeat of a real line, not mid-word.
 - **Drop 2** = a flip (different song’s hook or bed chorus back), not the
-  same stack louder. May use a 1-beat void if there is no pivot loop.
+  same stack louder. Hard cut / impact — no 1-beat void on a pivoted plan.
 - Diplo / festival energy lives **on the drop**, not on verses.
 
 ## On-device Mixr (no Demucs runtime)

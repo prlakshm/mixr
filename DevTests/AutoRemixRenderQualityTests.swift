@@ -292,15 +292,16 @@ do {
                   justifiedReturnStarts: justifiedReturns(plan)
               ))
 
-        // Club remix: intentional pre-drop voids on plain drops (Drop 2+).
-        // Pivot Drop 1 uses a hard cut — gaps list may be Drop-2-only.
-        check("One song: club shape allows intentional pre-drop voids",
-              plan.intentionalGaps.allSatisfy { $0.reason.contains("pre-drop") },
+        // Club remix: Pivot Drop 1 is a hard cut. A pivoted plan must not
+        // carry allowedPredropVoid / intentionalGaps (crate bounce hole).
+        check("One song: pivoted plan has no pre-drop void gaps",
+              !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
               "\(plan.intentionalGaps.count) gaps")
         let hasPivot = plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
         check(
-            "One song: Drop 1 pivot hard-cut and/or a plain-drop void exist",
-            hasPivot || !plan.intentionalGaps.isEmpty,
+            "One song: Drop 1 is a pivot hard-cut (no quiet void)",
+            hasPivot && plan.intentionalGaps.isEmpty
+                && !plan.decisions.contains { $0.kind == .allowedPredropVoid },
             "pivot=\(hasPivot) voids=\(plan.intentionalGaps.count)"
         )
 

@@ -465,42 +465,10 @@ enum AutoRemixPlanner {
                 buildBodyBars = slot.bars - 4
             }
 
-            // Intentional pre-drop void — skip on Drop 1 when the previous
-            // shape slot is the Xirex 1–2 bar pivot window. A void next to
-            // the wallpaper is the old quiet hole. Drop 2+ still get the
-            // classic 1-beat void (plain club drop, no pivot loop).
-            if slot.entry == .hardHypeCut, cursor > 0, slot.bars >= 8 {
-                let pivotBefore = dropIndex == 0
-                    && slotIdx > 0
-                    && shape[slotIdx - 1].role == .build
-                    && shape[slotIdx - 1].bars <= 4
-                if !pivotBefore {
-                    let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
-                    let voidSec = voidBeats * beat
-                    if voidSec > 0.05, cursor > voidSec {
-                        let dropStart = cursor
-                        let voidStart = dropStart - voidSec
-                        carvePredropVoid(
-                            voidStart: voidStart,
-                            dropStart: dropStart,
-                            placements: &placements,
-                            pulseRegions: &pulseRegions,
-                            intentionalGaps: &intentionalGaps,
-                            minSegmentSeconds: tuning.minSegmentSeconds
-                        )
-                        if let last = placements.last {
-                            lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
-                        }
-                        decisions.append(
-                            AutoDecision(
-                                kind: .allowedPredropVoid,
-                                songTitle: profile.title,
-                                detail: String(format: "%.2f beats before drop (drop on downbeat)", voidBeats)
-                            )
-                        )
-                    }
-                }
-            }
+            // No 1-beat pre-drop void. Pivot Drop 1 is loop + hard cut at
+            // full clip volume. Auto must not emit `allowedPredropVoid` on
+            // the same plan as `pivotWallpaperLoop` (crate bounce flags
+            // that pair as a quiet Drop 1 hole).
 
             if slot.entry != .none { transitionsUsed.append(slot.entry) }
 
@@ -790,6 +758,15 @@ enum AutoRemixPlanner {
             cutRecords: &cutRecords
         )
 
+        stripVoidsWhenDrop1HasPivot(
+            placements: placements,
+            beatSec: beat,
+            barSec: bar,
+            decisions: &decisions,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
+        )
+
         let totalDuration = placements.map(\.timelineEnd).max() ?? cursor
         return AutoRemixPlan(
             mode: .remix,
@@ -885,42 +862,6 @@ enum AutoRemixPlanner {
             let segDur = Double(seg.bars) * bar
             let t0 = cursor
             let t1 = cursor + segDur
-
-            if seg.role == .drop, t0 > beat {
-                // Skip void only for Drop 1 after the dedicated 1–2 bar pivot.
-                // Later buildOut segments before Drop 2 are plain club mute + void.
-                let pivotBefore = dropIndex == 0
-                    && i > 0
-                    && shape[i - 1].role == .buildOut
-                    && shape[i - 1].bars <= 4
-                if !pivotBefore {
-                    let voidSec = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats) * beat
-                    if voidSec > 0.05 {
-                        let dropStart = t0
-                        let voidStart = dropStart - voidSec
-                        carvePredropVoid(
-                            voidStart: voidStart,
-                            dropStart: dropStart,
-                            placements: &placements,
-                            pulseRegions: &pulseRegions,
-                            intentionalGaps: &intentionalGaps,
-                            minSegmentSeconds: tuning.minSegmentSeconds
-                        )
-                        if let last = placements.last {
-                            lastSourceEnd = last.sourceStart + last.timelineDuration * last.tempoRatio
-                        }
-                        if dropIndex == 0 {
-                            decisions.append(
-                                AutoDecision(
-                                    kind: .allowedPredropVoid,
-                                    songTitle: profile.title,
-                                    detail: "low-confidence club shape (drop on downbeat)"
-                                )
-                            )
-                        }
-                    }
-                }
-            }
 
             let role = seg.role
             pulseRegions.append(AutoClubPulse.Region(role: role, timelineStart: t0, timelineEnd: t1))
@@ -1109,6 +1050,15 @@ enum AutoRemixPlanner {
             beatSeconds: beat,
             barSeconds: bar,
             halfTimeDrop: flavor.bias.halfTimeDrop
+        )
+
+        stripVoidsWhenDrop1HasPivot(
+            placements: placements,
+            beatSec: beat,
+            barSec: bar,
+            decisions: &decisions,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
         )
 
         let timelineDur = cursor
@@ -1336,6 +1286,34 @@ enum AutoRemixPlanner {
         pulseRegions.removeAll {
             $0.role == .void && abs($0.timelineEnd - dropTimelineStart) < 0.08
         }
+    }
+
+    /// Crate bounce flags `pivotWallpaperLoop` + `allowedPredropVoid` as a
+    /// quiet Drop 1 hole even when the gap was meant for Drop 2. If Drop 1
+    /// has a pivot join, strip every pre-drop void from the plan.
+    private static func stripVoidsWhenDrop1HasPivot(
+        placements: [AutoClipPlacement],
+        beatSec: Double,
+        barSec: Double,
+        decisions: inout [AutoDecision],
+        intentionalGaps: inout [AutoIntentionalGap],
+        pulseRegions: inout [AutoClubPulse.Region]
+    ) {
+        let drop1 = pulseRegions.filter { $0.role == .drop }.map(\.timelineStart).min()
+        let hasPivotDecision = decisions.contains { $0.kind == .pivotWallpaperLoop }
+        let hasPivotGrains: Bool = {
+            guard let drop1 else { return false }
+            return placements.contains {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beatSec) < beatSec * 0.35
+                    && $0.timelineStart >= drop1 - barSec * 2.5
+                    && $0.timelineStart < drop1 - 0.02
+            }
+        }()
+        guard hasPivotDecision || hasPivotGrains else { return }
+        intentionalGaps.removeAll { $0.reason.localizedCaseInsensitiveContains("void") }
+        pulseRegions.removeAll { $0.role == .void }
+        decisions.removeAll { $0.kind == .allowedPredropVoid }
     }
 
     /// Keep Deck A playing through a reserved pivot window when we skip the
@@ -2080,7 +2058,7 @@ enum AutoRemixPlanner {
         var skippedIntroNoted = Set<UUID>()
         var lowConfidenceNoted = Set<UUID>()
 
-        for (slotIndex, slot) in slots.enumerated() {
+        for slot in slots {
             let profile = ordered[slot.songIdx]
             let fit = fits[slot.songIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: false, halfOrDoubleTime: false)
             let used = usedRanges[profile.songID] ?? []
@@ -2308,60 +2286,9 @@ enum AutoRemixPlanner {
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional pre-drop void — NEVER on a pivot join (loop + hard
-            // cut at full clip volume). A 1-beat hole next to the wallpaper
-            // is the old quiet song-switch. Also skip song-switch joins
-            // (overlap or hard cut, never dead air). Plain same-song club
-            // Drop 2 after an 8-bar build may still get the 1-beat void.
-            let prevIsPivotSlot = slotIndex > 0
-                && slots[slotIndex - 1].role == .build
-                && slots[slotIndex - 1].bars <= 4
-                && !slots[slotIndex - 1].isReturn
-            let prevIsPivotWindow: Bool = {
-                guard let last = placed.last else { return false }
-                let lastEnd = last.timelineStart + last.timelineDuration
-                let gap = cursor - lastEnd
-                let window = tuning.pivotWindowSeconds(barSec: barSec)
-                return gap >= window - barSec * 0.5 && gap <= window + barSec * 0.5
-            }()
-            let prevIsSongSwitch = placed.last.map { $0.slot.songIdx != slot.songIdx } ?? false
-            let isPivotDrop1 = entry == .hardHypeCut && !slot.isFinalPeak
-            if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0,
-               !prevIsPivotSlot, !prevIsPivotWindow, !prevIsSongSwitch, !isPivotDrop1 {
-                let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
-                let pause = voidBeats * beatSec
-                if pause > 0.05, cursor > pause {
-                    let dropStart = cursor
-                    let voidStart = dropStart - pause
-                    if let idx = placed.indices.last {
-                        let newDur = voidStart - placed[idx].timelineStart
-                        if newDur >= tuning.minSegmentSeconds {
-                            placed[idx].timelineDuration = newDur
-                        }
-                    }
-                    for i in pulseRegions.indices where pulseRegions[i].timelineEnd > voidStart + 0.001 {
-                        if pulseRegions[i].timelineStart >= voidStart - 0.001 {
-                            pulseRegions[i].timelineEnd = pulseRegions[i].timelineStart
-                        } else {
-                            pulseRegions[i].timelineEnd = voidStart
-                        }
-                    }
-                    pulseRegions.removeAll { $0.timelineEnd - $0.timelineStart < 0.02 }
-                    intentionalGaps.append(
-                        AutoIntentionalGap(start: voidStart, end: dropStart, reason: "pre-drop void")
-                    )
-                    pulseRegions.append(
-                        AutoClubPulse.Region(role: .void, timelineStart: voidStart, timelineEnd: dropStart)
-                    )
-                    decisions.append(
-                        AutoDecision(
-                            kind: .allowedPredropVoid,
-                            songTitle: profile.title,
-                            detail: String(format: "%.2f beats (drop on downbeat)", voidBeats)
-                        )
-                    )
-                }
-            }
+            // No 1-beat pre-drop void. Pivot Drop 1 is loop + hard cut at full
+            // clip volume; a void next to `pivotWallpaperLoop` is the quiet
+            // hole crate bounce flags. Drop 2 is also a hard cut / impact.
 
             let duration = Double(bars) * barSec
             var mutableSlot = slot
@@ -2999,6 +2926,15 @@ enum AutoRemixPlanner {
             beatSeconds: beatSec,
             barSeconds: barSec,
             halfTimeDrop: mashupFlavor.bias.halfTimeDrop
+        )
+
+        stripVoidsWhenDrop1HasPivot(
+            placements: placements,
+            beatSec: beatSec,
+            barSec: barSec,
+            decisions: &decisions,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
         )
 
         return AutoRemixPlan(
