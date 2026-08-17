@@ -54,6 +54,14 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
 
 If the join is quiet, it failed.
 
+### Song-switch energy (product lock)
+
+No choppy transitions that go quiet just to switch songs. **Dead air**,
+**fade-to-silence**, and **both-sides ducking** as a handoff are fails.
+Switch songs by **overlapping** (equal-power with real temporal overlap) or
+by a **hard cut at full clip volume**. The mix must keep energy through the
+join. Pivot still thins with HPF/blur, not by turning volume down.
+
 ### Clip-wise volume (product lock)
 
 Auto must set **per-clip volume** on every Auto-placed song clip (pivot grains,
@@ -319,6 +327,7 @@ Before declaring success, report:
 - whether Drop 1 used **pivot wallpaper + hard cut** (and token, repeat count, bar)
 - whether a 1-beat void was used (must be a non-pivot drop)
 - incoming Drop 1 fade-in (must be none / inaudible microfade) and volume (~full)
+- mix-window RMS before incoming (must not drop into a hole; dead air / fade-to-silence is a fail)
 - pivot grain count (4–8× / 1–2 bars) and pivot clip volume (loud, not ducked)
 - mix-window placement volumes (every song clip has an explicit volume)
 - mix-window SFX (loop + ≤1 slam; list any extras — extras on the pivot join are a fail)

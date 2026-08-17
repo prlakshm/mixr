@@ -478,6 +478,31 @@ func assertLegalNSongMashup(
         }
     }
 
+    // Song switches keep energy: overlap or hard cut at full clip volume.
+    // Dead air / fade-to-silence as a handoff is a fail.
+    var quietSwitch = false
+    var switchDetail = ""
+    for (prev, next) in zip(dominants, dominants.dropFirst()) where prev.songID != next.songID {
+        let voidBefore = plan.intentionalGaps.contains {
+            $0.reason.contains("void") && abs($0.end - next.timelineStart) < 0.05
+        }
+        let overlap = prev.timelineEnd - next.timelineStart
+        let hardCut = (next.fadeIn.type == .none || next.fadeIn.duration <= 0.02)
+            && next.volume >= 0.90
+        if voidBefore || (!hardCut && overlap <= 0.05) {
+            quietSwitch = true
+            switchDetail = String(
+                format: "void=%d overlap=%.2f fadeIn=%@ vol=%.2f @%.2fs",
+                voidBefore ? 1 : 0, overlap, next.fadeIn.type.rawValue, next.volume, next.timelineStart
+            )
+        }
+    }
+    check(
+        "\(label) song switches keep energy (overlap or hard cut, no dead air)",
+        !quietSwitch,
+        switchDetail
+    )
+
     check("\(label) roles decision recorded",
           plan.decisions.contains { $0.kind == .assignedMashupRoles || $0.kind == .selectedAnchor })
 }

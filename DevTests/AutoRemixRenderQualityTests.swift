@@ -13,6 +13,7 @@ import Foundation
 //     intentional pre-drop voids, structured cut records, pulse policy)
 //   • no clipping, true peak ≤ −1 dBTP, limiter as safety not glue
 //   • no join-centered loudness troughs > 3 dB, no unexplained > 4 dB jumps
+//   • no mix-window RMS hole before an incoming song (dead air / fade-to-silence)
 //   • no unintended silence ≥ 100 ms below −45 dBFS inside musical content
 //     (intentional pre-drop voids excluded)
 //   • no fixed silent export tail
@@ -592,6 +593,189 @@ do {
         }
     }
     check("Validator repairs sequential fade-out + fade-in (level hole)", holeFree)
+}
+
+// MARK: - 6b. Mix-window RMS hole before an incoming song is a failed join
+
+do {
+    let n = Int(SR * 4)
+    var pcm = [Float](repeating: 0, count: n)
+    for i in 0..<n {
+        pcm[i] = Float(0.4 * sin(2 * .pi * 220 * Double(i) / SR))
+    }
+    // Dead air in the half-second before t=2, then restore — a quiet join.
+    let incoming = 2.0
+    for i in Int((incoming - 0.5) * SR)..<Int(incoming * SR) {
+        pcm[i] = 0
+    }
+    let hole = AutoRemixDiagnostics.mixWindowPreIncoming(
+        samples: pcm, sampleRate: SR, incomingStart: incoming
+    )
+    check(
+        "Detector flags a mix-window RMS hole before incoming",
+        hole.isEnergyHole,
+        String(format: "hole=%.1f dB pre=%.1f est=%.1f", hole.holeDB, hole.preIncomingDB, hole.establishedDB)
+    )
+
+    var solid = [Float](repeating: 0, count: n)
+    for i in 0..<n {
+        solid[i] = Float(0.4 * sin(2 * .pi * 220 * Double(i) / SR))
+    }
+    let held = AutoRemixDiagnostics.mixWindowPreIncoming(
+        samples: solid, sampleRate: SR, incomingStart: incoming
+    )
+    check(
+        "Detector passes a hard cut that holds level through the join",
+        !held.isEnergyHole,
+        String(format: "hole=%.1f dB", held.holeDB)
+    )
+}
+
+do {
+    // Rendered two-song join: fade-to-silence out + fade-in in, no overlap.
+    let outgoing = makeSong(title: "Outgoing Join", durationSeconds: 20)
+    let incoming = makeSong(title: "Incoming Join", durationSeconds: 20)
+    let tone = (0..<Int(SR * 20)).map { Float(0.4 * sin(2 * .pi * 220 * Double($0) / SR)) }
+    let source = AutoOfflineMixdown.Source(samples: tone, sampleRate: SR)
+    let badPlan = AutoRemixPlan(
+        mode: .mashup,
+        targetBPM: 120,
+        targetDuration: 8,
+        anchorSongIDs: [outgoing.id, incoming.id],
+        selectedSections: [],
+        placements: [
+            AutoClipPlacement(
+                songID: outgoing.id, sourceStart: 0, timelineStart: 0, timelineDuration: 4,
+                tempoRatio: 1, volume: 1.0,
+                fadeIn: .none,
+                fadeOut: ClipTransition(type: .fadeOut, duration: 8),
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 0
+            ),
+            AutoClipPlacement(
+                songID: incoming.id, sourceStart: 0, timelineStart: 4, timelineDuration: 4,
+                tempoRatio: 1, volume: 1.0,
+                fadeIn: ClipTransition(type: .crossfade, duration: 8),
+                fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 1
+            ),
+        ],
+        sfxEvents: [],
+        handoffCount: 1,
+        songLetters: [outgoing.id: "A", incoming.id: "B"],
+        sequence: ["A", "B"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let rendered = AutoOfflineMixdown.render(
+        plan: badPlan,
+        sources: [outgoing.id: source, incoming.id: source],
+        sampleRate: SR,
+        includeTail: false
+    )
+    let switches = AutoRemixDiagnostics.songSwitchIncomingStarts(placements: badPlan.placements)
+    check("Bad join exposes a song-switch incoming time", switches.contains { abs($0 - 4) < 0.05 })
+    var foundHole = false
+    var holeDetail = ""
+    for t in switches {
+        let w = AutoRemixDiagnostics.mixWindowPreIncoming(
+            samples: rendered.mix, sampleRate: SR, incomingStart: t
+        )
+        if w.isEnergyHole {
+            foundHole = true
+            holeDetail = String(format: "hole=%.1f dB @%.2fs", w.holeDB, t)
+        }
+    }
+    check(
+        "Rendered fade-to-silence song switch is an RMS hole (previous behavior fails)",
+        foundHole,
+        holeDetail
+    )
+}
+
+do {
+    // Auto mashup: song-switch joins must keep energy (overlap or hard cut).
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", durationSeconds: 200)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", durationSeconds: 200)
+    func clubFeat(bpm: Double, drum: Double, bass: Double, vocal: Double) -> SongSignalFeatures {
+        var f = makeFeatures(
+            duration: 200, leadingSilence: 0, trailingSilence: 0, bpm: bpm, confidence: 1.0
+        )
+        f.drumConfidence = drum
+        f.bassEnergyCurve = [Double](repeating: bass, count: f.bassEnergyCurve.count)
+        f.vocalPresenceCurve = [Double](repeating: vocal, count: f.vocalPresenceCurve.count)
+        return f
+    }
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: clubFeat(bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55),
+        oops.id: clubFeat(bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55),
+    ]
+    switch AutoRemixRunner.runEntireProject(
+        tracks: [bomt, oops], seed: 20260815, signals: signals
+    ) {
+    case .success(_, let plan, _):
+        let switches = AutoRemixDiagnostics.songSwitchIncomingStarts(placements: plan.placements)
+        check("Britney mashup has a song-switch join", !switches.isEmpty)
+        let toneOops = syntheticSong(durationSeconds: 200, bpm: 95, flatAmplitude: 0.4)
+        let toneBomt = syntheticSong(durationSeconds: 200, bpm: 93, flatAmplitude: 0.4)
+        let rendered = AutoOfflineMixdown.render(
+            plan: plan,
+            sources: [
+                oops.id: AutoOfflineMixdown.Source(samples: toneOops, sampleRate: SR),
+                bomt.id: AutoOfflineMixdown.Source(samples: toneBomt, sampleRate: SR),
+            ],
+            sampleRate: SR,
+            includeTail: false
+        )
+        var worst = 0.0
+        var worstAt = 0.0
+        var anyHole = false
+        for t in switches {
+            let w = AutoRemixDiagnostics.mixWindowPreIncoming(
+                samples: rendered.mix, sampleRate: SR, incomingStart: t
+            )
+            if w.holeDB > worst {
+                worst = w.holeDB
+                worstAt = t
+            }
+            if w.isEnergyHole { anyHole = true }
+        }
+        check(
+            "Auto mashup song-switch mix window has no RMS hole before incoming",
+            !anyHole,
+            String(format: "worst hole=%.1f dB @%.2fs", worst, worstAt)
+        )
+        let dominants = plan.placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        var switchGrammarOK = true
+        var grammarDetail = ""
+        for (prev, next) in zip(dominants, dominants.dropFirst()) where prev.songID != next.songID {
+            let voidBefore = plan.intentionalGaps.contains {
+                $0.reason.contains("void") && abs($0.end - next.timelineStart) < 0.05
+            }
+            let overlap = prev.timelineEnd - next.timelineStart
+            let hardCut = (next.fadeIn.type == .none || next.fadeIn.duration <= 0.02)
+                && next.volume >= 0.90
+            let realOverlap = overlap > 0.05
+            if voidBefore || (!hardCut && !realOverlap) {
+                switchGrammarOK = false
+                grammarDetail = String(
+                    format: "void=%d overlap=%.2f fadeIn=%@ vol=%.2f @%.2fs",
+                    voidBefore ? 1 : 0, overlap, next.fadeIn.type.rawValue, next.volume, next.timelineStart
+                )
+            }
+        }
+        check(
+            "Auto mashup switches songs by overlap or hard cut at full volume (no dead-air handoff)",
+            switchGrammarOK,
+            grammarDetail
+        )
+    case .failure(let message):
+        check("Britney mashup energy-through-join render", false, message)
+    }
 }
 
 // MARK: - 7. Signal analysis is measured, not seeded

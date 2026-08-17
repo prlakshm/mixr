@@ -614,6 +614,7 @@ nonisolated enum AutoRemixValidator {
             }
 
             // Different songs: never extend two dominants into each other.
+            // Switch by hard cut at full clip volume — no fade-in from silence.
             if prev.songID != next.songID {
                 if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
                     let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
@@ -621,22 +622,12 @@ nonisolated enum AutoRemixValidator {
                         plan.placements[prevIdx].timelineDuration = trimmed
                     }
                 }
-                let hasSupport = plan.placements.contains {
-                    $0.role == .supporting
-                        && $0.songID == prev.songID
-                        && $0.timelineStart < next.timelineStart + overlapSec
-                        && $0.timelineEnd > next.timelineStart + 0.05
-                }
-                if hasSupport || plan.sfxEvents.contains(where: {
-                    $0.timelineEnd > next.timelineStart - 0.05 && $0.timelineStart < next.timelineStart + 0.05
-                }) {
-                    plan.placements[nextIdx].fadeIn = ClipTransition(
-                        type: .crossfade, duration: overlapBeats, curve: equalPower
-                    )
-                    plan.placements[nextIdx].overlapsPreviousSeconds = max(
-                        plan.placements[nextIdx].overlapsPreviousSeconds, overlapSec * 0.5
-                    )
-                }
+                plan.placements[prevIdx].fadeOut = .none
+                plan.placements[nextIdx].fadeIn = .none
+                plan.placements[nextIdx].volume = max(
+                    plan.placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
                 continue
             }
 

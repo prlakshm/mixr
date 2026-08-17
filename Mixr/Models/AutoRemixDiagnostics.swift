@@ -207,6 +207,56 @@ nonisolated enum AutoRemixDiagnostics {
         nonisolated var jumpDB: Double { abs(afterDB - beforeDB) }
     }
 
+    /// Mix-window energy immediately before an incoming song attacks.
+    struct MixWindowPreIncoming {
+        var incomingStart: Double
+        var establishedDB: Double
+        var preIncomingDB: Double
+        var incomingAttackDB: Double
+
+        /// How far RMS dropped in the last half-second before incoming, dB.
+        nonisolated var holeDB: Double { max(0, establishedDB - preIncomingDB) }
+
+        /// Dead air / fade-to-silence / both-sides duck before the new song.
+        /// Spectral thinning at full clip volume is not this — the mix must
+        /// actually collapse relative to the audio that was already playing.
+        nonisolated var isEnergyHole: Bool { holeDB >= 8.0 }
+    }
+
+    /// RMS in the mix window before `incomingStart` vs the established
+    /// level just earlier. A hole here is a failed song-switch join.
+    static func mixWindowPreIncoming(
+        samples: [Float],
+        sampleRate: Double,
+        incomingStart t: Double
+    ) -> MixWindowPreIncoming {
+        MixWindowPreIncoming(
+            incomingStart: t,
+            establishedDB: meanLoudnessDB(
+                samples: samples, sampleRate: sampleRate, from: t - 1.35, to: t - 0.55
+            ),
+            preIncomingDB: meanLoudnessDB(
+                samples: samples, sampleRate: sampleRate, from: t - 0.45, to: t - 0.02
+            ),
+            incomingAttackDB: meanLoudnessDB(
+                samples: samples, sampleRate: sampleRate, from: t + 0.02, to: t + 0.45
+            )
+        )
+    }
+
+    /// Timeline starts where a dominant clip of a *different* song takes over.
+    static func songSwitchIncomingStarts(placements: [AutoClipPlacement]) -> [Double] {
+        let dominants = placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        var starts: [Double] = []
+        for (prev, next) in zip(dominants, dominants.dropFirst()) where prev.songID != next.songID {
+            if starts.last.map({ abs($0 - next.timelineStart) < 0.05 }) == true { continue }
+            starts.append(next.timelineStart)
+        }
+        return starts
+    }
+
     /// Short-term loudness immediately before / across / after a
     /// transition boundary.
     static func boundaryLoudness(

@@ -2165,11 +2165,10 @@ enum AutoRemixPlanner {
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional pre-drop void — skipped only for the Xirex pivot
-            // wallpaper handoff (hard cut after the 1–2 bar loop). Plain club
+            // Intentional pre-drop void — skipped for the Xirex pivot
+            // wallpaper handoff AND for song-switch joins (hard cut or overlap,
+            // never dead air just to change records). Plain same-song club
             // drops (e.g. Drop 2 after an 8-bar build) still get the 1-beat void.
-            // Detect pivot by a reserved ~2-bar gap before the drop — not by any
-            // trailing buildOut pulse (return builds also end in buildOut).
             let prevIsPivotWindow: Bool = {
                 guard let last = placed.last else { return false }
                 let lastEnd = last.timelineStart + last.timelineDuration
@@ -2177,7 +2176,9 @@ enum AutoRemixPlanner {
                 let window = tuning.pivotWindowSeconds(barSec: barSec)
                 return gap >= window - barSec * 0.5 && gap <= window + barSec * 0.5
             }()
-            if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0, !prevIsPivotWindow {
+            let prevIsSongSwitch = placed.last.map { $0.slot.songIdx != slot.songIdx } ?? false
+            if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0,
+               !prevIsPivotWindow, !prevIsSongSwitch {
                 let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
                 let pause = voidBeats * beatSec
                 if pause > 0.05, cursor > pause {
@@ -2432,6 +2433,11 @@ enum AutoRemixPlanner {
                 bodyFadeOut = next == nil
                     ? bodyFadeOut
                     : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
+            }
+            // Song-switch into a hard cut: outgoing stays at full clip volume
+            // through the join (no fade-to-silence just to change records).
+            if nextIsHandoff, nextEntry == .hardHypeCut, tailSeconds == 0 {
+                bodyFadeOut = .none
             }
             if ps.slot.isEnding {
                 bodyFadeOut = ClipTransition(type: .echoOut, duration: 6)
@@ -2942,7 +2948,7 @@ enum AutoRemixPlanner {
             }
 
             // Different songs: never overlap two dominants (dual full mixes).
-            // Layer the outgoing as a supporting deck under the incoming.
+            // Switch by a hard cut at full clip volume — no fade-in from silence.
             if prev.songID != next.songID {
                 if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
                     let trimmed = next.timelineStart - placements[prevIdx].timelineStart
@@ -2950,6 +2956,12 @@ enum AutoRemixPlanner {
                         placements[prevIdx].timelineDuration = trimmed
                     }
                 }
+                placements[prevIdx].fadeOut = .none
+                placements[nextIdx].fadeIn = .none
+                placements[nextIdx].volume = max(
+                    placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
                 let hasSupport = placements.contains {
                     $0.role == .supporting
                         && $0.songID == prev.songID
@@ -2970,7 +2982,7 @@ enum AutoRemixPlanner {
                                 timelineStart: next.timelineStart,
                                 timelineDuration: min(overlapSec, next.timelineDuration),
                                 tempoRatio: prev.tempoRatio,
-                                volume: tuning.supportVolume,
+                                volume: max(0.78, tuning.supportVolume + 0.30),
                                 fadeIn: .none,
                                 fadeOut: ClipTransition(
                                     type: .crossfade, duration: overlapBeats, curve: equalPower
@@ -2982,12 +2994,6 @@ enum AutoRemixPlanner {
                         )
                     }
                 }
-                placements[nextIdx].fadeIn = ClipTransition(
-                    type: .crossfade, duration: overlapBeats, curve: equalPower
-                )
-                placements[nextIdx].overlapsPreviousSeconds = max(
-                    placements[nextIdx].overlapsPreviousSeconds, overlapSec
-                )
                 continue
             }
 
