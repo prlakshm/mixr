@@ -990,6 +990,11 @@ do {
                     && g.timelineStart < next.timelineStart - 0.02
             }
             if pivotBefore { continue }
+            // Club Drop 1 / Drop 2: hard cut + impact, not an equal-power overlap.
+            if AutoRemixDiagnostics.incomingIsClubDrop(
+                pulseRegions: plan.pulseRegions,
+                timelineStart: next.timelineStart
+            ) { continue }
             // Source-continuous splits (build body → build-out) abut without
             // overlap by design — they are the same reading, not a handoff.
             let sourceContinuous = next.continuesPrevious
