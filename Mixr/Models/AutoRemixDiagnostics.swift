@@ -456,6 +456,43 @@ nonisolated enum AutoRemixDiagnostics {
         return subPhrase && inTitle
     }
 
+    /// True when a 1-beat (or similar) pre-drop void is parked on this drop.
+    /// Pivot Drop 1 must not have one — that hole is the old quiet song-switch.
+    static func preDropVoidAt(plan: AutoRemixPlan, dropStart: Double, toleranceSeconds: Double = 0.08) -> Bool {
+        let gap = plan.intentionalGaps.contains {
+            $0.reason.localizedCaseInsensitiveContains("void")
+                && abs($0.end - dropStart) < toleranceSeconds
+        }
+        let pulse = plan.pulseRegions.contains {
+            $0.role == .void && abs($0.timelineEnd - dropStart) < toleranceSeconds
+        }
+        return gap || pulse
+    }
+
+    /// First pulse Drop 1, if the plan wrote one.
+    static func firstDropStart(plan: AutoRemixPlan) -> Double? {
+        plan.pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .min()
+    }
+
+    /// True when Drop 1 has a pivot wallpaper loop (decision or 1-beat grains).
+    static func drop1HasPivotWallpaper(plan: AutoRemixPlan) -> Bool {
+        guard let dropStart = firstDropStart(plan: plan) else { return false }
+        if plan.decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) {
+            return true
+        }
+        let beat = plan.beatSeconds
+        let grains = plan.placements.filter {
+            $0.role == .supporting
+                && abs($0.timelineDuration - beat) < beat * 0.35
+                && $0.timelineStart >= dropStart - plan.barSeconds * 2.5
+                && $0.timelineStart < dropStart - 0.02
+        }
+        return grains.count >= 4
+    }
+
     /// True when dominant placements consume the source in strictly
     /// non-decreasing order (no rewinds), ignoring placements listed in
     /// `justifiedReturnStarts` (timeline seconds of an explicit hook return).

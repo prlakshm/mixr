@@ -78,6 +78,9 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
 7. **Diet SFX on the join:** pivot loop + ≤1 impact slam on the incoming
    downbeat. No riser wallpaper, no tape+crash+snare pile on the same cut.
    Verses stay one record.
+8. **No 1-beat void on this join.** Pivot Drop 1 is loop + hard cut at full
+   clip volume. A pre-drop void next to the wallpaper is the old quiet hole.
+   Drop 2 may still void only when there is no pivot loop.
 
 If the join is quiet, it failed.
 

@@ -465,9 +465,10 @@ enum AutoRemixPlanner {
                 buildBodyBars = slot.bars - 4
             }
 
-            // Intentional pre-drop void — skip only on Drop 1 when the previous
-            // shape slot is the Xirex 1–2 bar pivot window. Drop 2+ still get the
-            // classic 1-beat void (plain club drop).
+            // Intentional pre-drop void — skip on Drop 1 when the previous
+            // shape slot is the Xirex 1–2 bar pivot window. A void next to
+            // the wallpaper is the old quiet hole. Drop 2+ still get the
+            // classic 1-beat void (plain club drop, no pivot loop).
             if slot.entry == .hardHypeCut, cursor > 0, slot.bars >= 8 {
                 let pivotBefore = dropIndex == 0
                     && slotIdx > 0
@@ -727,6 +728,7 @@ enum AutoRemixPlanner {
                         grainStem: profile.stems.hasVocals ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
                         decisions: &decisions
                     )
                 }
@@ -1085,6 +1087,7 @@ enum AutoRemixPlanner {
                         grainStem: profile.stems.hasVocals ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
                         decisions: &decisions
                     )
                 }
@@ -1198,12 +1201,21 @@ enum AutoRemixPlanner {
         grainStem: AutoStemKind? = nil,
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
+        intentionalGaps: inout [AutoIntentionalGap],
         decisions: inout [AutoDecision]
     ) {
         let repeats = tuning.pivotWallpaperBeats
         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
         let loopStart = dropTimelineStart - loopDur
         guard loopStart >= 0.05 else { return }
+
+        // Pivot join owns this downbeat — never keep a 1-beat void beside
+        // the wallpaper (that hole is the old quiet song-switch).
+        clearPredropVoidOnPivotJoin(
+            dropTimelineStart: dropTimelineStart,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
+        )
 
         // Grain = last 1 beat of a COMPLETED line (must have already sounded).
         // If the phrase is a title teaser / sub-8-bar chop, skip the loop
@@ -1307,6 +1319,22 @@ enum AutoRemixPlanner {
                     detail: "pivot grain from vocals.wav"
                 )
             )
+        }
+    }
+
+    /// A 1-beat void next to pivot wallpaper is the old quiet hole.
+    /// Strip it from the plan when the join is loop + hard cut.
+    private static func clearPredropVoidOnPivotJoin(
+        dropTimelineStart: Double,
+        intentionalGaps: inout [AutoIntentionalGap],
+        pulseRegions: inout [AutoClubPulse.Region]
+    ) {
+        intentionalGaps.removeAll {
+            $0.reason.localizedCaseInsensitiveContains("void")
+                && abs($0.end - dropTimelineStart) < 0.08
+        }
+        pulseRegions.removeAll {
+            $0.role == .void && abs($0.timelineEnd - dropTimelineStart) < 0.08
         }
     }
 
@@ -2052,7 +2080,7 @@ enum AutoRemixPlanner {
         var skippedIntroNoted = Set<UUID>()
         var lowConfidenceNoted = Set<UUID>()
 
-        for slot in slots {
+        for (slotIndex, slot) in slots.enumerated() {
             let profile = ordered[slot.songIdx]
             let fit = fits[slot.songIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: false, halfOrDoubleTime: false)
             let used = usedRanges[profile.songID] ?? []
@@ -2280,10 +2308,15 @@ enum AutoRemixPlanner {
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional pre-drop void — skipped for the Xirex pivot
-            // wallpaper handoff AND for song-switch joins (hard cut or overlap,
-            // never dead air just to change records). Plain same-song club
-            // drops (e.g. Drop 2 after an 8-bar build) still get the 1-beat void.
+            // Intentional pre-drop void — NEVER on a pivot join (loop + hard
+            // cut at full clip volume). A 1-beat hole next to the wallpaper
+            // is the old quiet song-switch. Also skip song-switch joins
+            // (overlap or hard cut, never dead air). Plain same-song club
+            // Drop 2 after an 8-bar build may still get the 1-beat void.
+            let prevIsPivotSlot = slotIndex > 0
+                && slots[slotIndex - 1].role == .build
+                && slots[slotIndex - 1].bars <= 4
+                && !slots[slotIndex - 1].isReturn
             let prevIsPivotWindow: Bool = {
                 guard let last = placed.last else { return false }
                 let lastEnd = last.timelineStart + last.timelineDuration
@@ -2292,8 +2325,9 @@ enum AutoRemixPlanner {
                 return gap >= window - barSec * 0.5 && gap <= window + barSec * 0.5
             }()
             let prevIsSongSwitch = placed.last.map { $0.slot.songIdx != slot.songIdx } ?? false
+            let isPivotDrop1 = entry == .hardHypeCut && !slot.isFinalPeak
             if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0,
-               !prevIsPivotWindow, !prevIsSongSwitch {
+               !prevIsPivotSlot, !prevIsPivotWindow, !prevIsSongSwitch, !isPivotDrop1 {
                 let voidBeats = min(tuning.preferredPredropVoidBeats, tuning.maxIntentionalPauseBeats)
                 let pause = voidBeats * beatSec
                 if pause > 0.05, cursor > pause {
@@ -2672,6 +2706,7 @@ enum AutoRemixPlanner {
                         grainStem: (bedStems?.hasVocals ?? false) ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
                         decisions: &decisions
                     )
                 }

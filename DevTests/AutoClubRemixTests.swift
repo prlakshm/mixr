@@ -1060,6 +1060,24 @@ do {
                 plan.clubFlavor == .diplo || plan.clubFlavor == .guetta || plan.clubFlavor == .snake,
                 "flavor=\(plan.clubFlavor?.rawValue ?? "nil")"
             )
+            check(
+                "Britney: Drop 1 has pivot wallpaper (loop + hard cut)",
+                AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: plan)
+            )
+            if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+                check(
+                    "Britney: pivot Drop 1 has no allowedPredropVoid / intentional gap",
+                    !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
+                )
+                let drop1VoidDecision = plan.decisions.contains { $0.kind == .allowedPredropVoid }
+                    && AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
+                check(
+                    "Britney: allowedPredropVoid is not parked on Drop 1",
+                    !drop1VoidDecision
+                )
+            } else {
+                check("Britney: Drop 1 exists for void check", false)
+            }
 
             // No supporting chops in the opening 8–16 bars (wallpaper is mix-window only).
             let earlyChops = plan.placements.filter {
@@ -1429,6 +1447,13 @@ do {
                 )
             }()
         )
+        if AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: plan),
+           let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+            check(
+                "Club remix: pivot Drop 1 has no pre-drop void",
+                !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
+            )
+        }
         let grooveFXHeavy = plan.placements.filter { p in
             let onGroove = grooves.contains {
                 p.timelineStart >= $0.timelineStart - 0.05 && p.timelineStart < $0.timelineEnd - 0.05
@@ -1980,6 +2005,16 @@ do {
             "Stem-hot Britney: first Deck A hook is not a title teaser chop",
             !AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: plan)
         )
+        check(
+            "Stem-hot Britney: Drop 1 has pivot wallpaper",
+            AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: plan)
+        )
+        if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+            check(
+                "Stem-hot Britney: pivot Drop 1 has no pre-drop void",
+                !AutoRemixDiagnostics.preDropVoidAt(plan: plan, dropStart: drop1)
+            )
+        }
         case .failure(let message):
             check("Britney stem role lock mashup", false, message)
         }
@@ -2105,6 +2140,51 @@ do {
     check(
         "Title-chop detector flags a 4-bar title rewind used as the first A hook",
         AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: rewindTeaser)
+    )
+
+    // Pivot Drop 1 with a 1-beat void beside the wallpaper is the old hole.
+    let drop1 = bar * 18
+    let beat = bar / 4
+    var pivotPlacements: [AutoClipPlacement] = [
+        clip(sourceStart: 0, timelineStart: 0, duration: bar * 16, slot: 0),
+        clip(sourceStart: 80, timelineStart: drop1, duration: bar * 16, slot: 2),
+    ]
+    for i in 0..<8 {
+        pivotPlacements.append(
+            clip(
+                sourceStart: bar * 16 - beat,
+                timelineStart: drop1 - bar * 2 + Double(i) * beat,
+                duration: beat,
+                role: .supporting,
+                slot: 1
+            )
+        )
+    }
+    let holeyPivot = plan(
+        placements: pivotPlacements,
+        pulses: [
+            AutoClubPulse.Region(role: .groove, timelineStart: 0, timelineEnd: bar * 16),
+            AutoClubPulse.Region(role: .void, timelineStart: drop1 - beat, timelineEnd: drop1),
+            AutoClubPulse.Region(role: .drop, timelineStart: drop1, timelineEnd: drop1 + bar * 16),
+        ],
+        duration: drop1 + bar * 16
+    )
+    var holey = holeyPivot
+    holey.intentionalGaps = [
+        AutoIntentionalGap(start: drop1 - beat, end: drop1, reason: "pre-drop void")
+    ]
+    holey.decisions = [
+        AutoDecision(kind: .pivotWallpaperLoop, songTitle: "Oops", detail: "8×1-beat"),
+        AutoDecision(kind: .allowedPredropVoid, songTitle: "Oops", detail: "1.00 beats (drop on downbeat)"),
+    ]
+    check(
+        "Void detector flags a 1-beat hole on pivot Drop 1 (previous behavior fails)",
+        AutoRemixDiagnostics.drop1HasPivotWallpaper(plan: holey)
+            && AutoRemixDiagnostics.preDropVoidAt(plan: holey, dropStart: drop1)
+    )
+    check(
+        "Title-chop detector still fails a 4-bar title teaser",
+        AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: chopped)
     )
 }
 
