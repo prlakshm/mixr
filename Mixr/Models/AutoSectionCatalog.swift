@@ -65,8 +65,18 @@ struct AutoSongProfile: Sendable {
     let featureScore: Double
     /// Offline Demucs sidecars when present (empty → full mix).
     var stems: AutoStemSet = .empty
+    /// Kick/drum energy measured from the drums stem (nil if unread).
+    /// Pulse uses `max(analysis.drumStrength, stemDrumStrength)` so a quiet
+    /// Demucs file cannot invent a second kick on a kit the full mix already
+    /// measured as slamming. Bed/hook roles keep full-mix `drumStrength`.
+    var stemDrumStrength: Double? = nil
 
     var lowConfidence: Bool { analysis.analysisConfidence < AutoTuning.standard.lowConfidenceThreshold }
+
+    /// One-kick pulse input: never weaker than the full-mix drum reading.
+    var pulseDrumStrength: Double {
+        max(analysis.drumStrength, stemDrumStrength ?? 0)
+    }
 
     /// Best unused candidate for a label, by SectionValue. `used` ranges
     /// are (start, end) source intervals already placed; overlap > 50%
@@ -106,11 +116,12 @@ enum AutoSectionCatalog {
         tuning: AutoTuning = .standard,
         signal: SongSignalFeatures? = nil
     ) -> AutoSongProfile {
-        var analysis = SongAnalyzer.analyze(track: track, signal: signal)
+        let analysis = SongAnalyzer.analyze(track: track, signal: signal)
         let stems = AutoStemResolver.resolve(track: track, tuning: tuning)
-        if let measured = AutoStemKickEnergy.drumStrength(from: stems.drums) {
-            analysis.drumStrength = measured
-        }
+        let stemDrumStrength = AutoStemKickEnergy.drumStrength(from: stems.drums)
+        // Do not overwrite analysis.drumStrength — bed/hook scoring and the
+        // Britney title/groove lock must keep full-mix curves. Pulse reads
+        // stemDrumStrength separately.
         let bar = analysis.barSeconds
         let duration = analysis.durationSeconds
         let confidence = analysis.analysisConfidence
@@ -215,7 +226,8 @@ enum AutoSectionCatalog {
             candidates: candidates,
             anchorScore: anchorScore,
             featureScore: featureScore,
-            stems: stems
+            stems: stems,
+            stemDrumStrength: stemDrumStrength
         )
     }
 }

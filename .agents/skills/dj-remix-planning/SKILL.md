@@ -167,6 +167,7 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 
 - ONE club bed (drums / pocket / simple harmony); others = vocal-hook candidates.
 - **Oops × BOMT:** Oops = bed, BOMT = Drop 1 vocal, Oops chorus may return as Drop 2 flip.
+  Title/groove lock wins over stem kick-energy and vocal-density skew.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
 - Drop 2 = a different song’s hook (duo may flip to bed chorus) — not louder stack.
 - Dual vocals are NOT the default. Optional call-and-response ≤ 8 bars, then back to one voice.

@@ -726,6 +726,79 @@ do {
     }
 }
 
+// MARK: - Stem-kind mixdown routing
+
+do {
+    let songID = UUID()
+    let frames = 8_000
+    let fullMix = AutoOfflineMixdown.Source(
+        samples: [Float](repeating: 0.10, count: frames),
+        sampleRate: SR
+    )
+    let vocals = AutoOfflineMixdown.Source(
+        samples: [Float](repeating: 0.80, count: frames),
+        sampleRate: SR
+    )
+    let placement = AutoClipPlacement(
+        songID: songID,
+        sourceStart: 0,
+        timelineStart: 0,
+        timelineDuration: 0.10,
+        tempoRatio: 1,
+        volume: 1,
+        fadeIn: .none,
+        fadeOut: .none,
+        effects: ClipEffectSettings(),
+        role: .dominant,
+        slotIndex: 0,
+        stemKind: .vocals
+    )
+    let plan = AutoRemixPlan(
+        mode: .remix,
+        targetBPM: 120,
+        targetDuration: 0.10,
+        anchorSongIDs: [songID],
+        selectedSections: [],
+        placements: [placement],
+        sfxEvents: [],
+        handoffCount: 0,
+        songLetters: [songID: "A"],
+        sequence: ["A"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 1,
+        randomSeed: 1
+    )
+    let mixed = AutoOfflineMixdown.render(
+        plan: plan,
+        sources: [songID: fullMix],
+        stemSources: [songID: [.vocals: vocals]],
+        sampleRate: SR,
+        includeTail: false
+    )
+    let peak = mixed.mix.map { abs($0) }.max() ?? 0
+    // Vocal stem is 0.80; full mix is 0.10. Headroom (~−6 dB) still leaves
+    // stem peak well above a full-mix render.
+    check(
+        "Mixdown uses stemKind source (not always the full mix)",
+        peak > 0.25,
+        String(format: "peak=%.3f", peak)
+    )
+    let fullOnly = AutoOfflineMixdown.render(
+        plan: plan,
+        sources: [songID: fullMix],
+        sampleRate: SR,
+        includeTail: false
+    )
+    let fullPeak = fullOnly.mix.map { abs($0) }.max() ?? 0
+    check(
+        "Mixdown falls back to full mix when stem source is omitted",
+        fullPeak > 0.01 && fullPeak < 0.20,
+        String(format: "fullPeak=%.3f", fullPeak)
+    )
+}
+
 // MARK: - Diagnostics evidence (printed, not asserted)
 
 if let plan = confidentPlan, let song = confidentSong {

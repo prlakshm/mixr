@@ -1724,6 +1724,54 @@ do {
         check("Wrote drums fixture WAV", false, "\(error)")
     }
 
+    // Sparse slamming kicks (quiet mean, high transients) must not read "thin".
+    do {
+        let sparseURL = dir.appendingPathComponent("sparse-kicks.wav")
+        try AutoStemKickEnergy.writeKickPatternWAV(
+            to: sparseURL,
+            frames: 44_100,
+            periodFrames: 22_050,
+            kickFrames: 80,
+            amplitude: 0.85
+        )
+        let sparse = AutoStemKickEnergy.drumStrength(from: sparseURL) ?? -1
+        check(
+            "Sparse slamming kick pattern reads as slamming (not thin mean)",
+            sparse >= AutoClubPulse.slammingDrumThreshold,
+            String(format: "energy=%.3f", sparse)
+        )
+    } catch {
+        check("Wrote sparse kick fixture WAV", false, "\(error)")
+    }
+
+    // t.A.T.u. full-mix crate is drum=0.82 / no pulse. A quiet Demucs drums
+    // stem must not invent Club Kick (one-kick lock).
+    do {
+        let quietURL = dir.appendingPathComponent("tatu-quiet-drums.wav")
+        try AutoStemKickEnergy.writeFixtureWAV(to: quietURL, frames: 8_000, amplitude: 0.04)
+        let tatu = makeSong(title: "All The Things She Said", bpm: 90, key: "Am")
+        let feat = crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00)
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[tatu.id] = AutoStemSet(drums: quietURL)
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [tatu],
+            tuning: tuning,
+            seed: 42,
+            signals: [tatu.id: feat]
+        ) {
+        case .success(_, let plan, _):
+            check(
+                "tatu solo with drums stem keeps writesKick=false",
+                plan.pulsePolicy?.writesKick == false,
+                plan.pulsePolicy?.detail ?? ""
+            )
+        case .failure(let message):
+            check("tatu solo with drums stem pulse", false, message)
+        }
+    } catch {
+        check("Wrote tatu quiet drums fixture", false, "\(error)")
+    }
+
     let thin = makeSong(title: "drivers license", bpm: 72, key: "Bb")
     let olivia = crateFeatures(duration: 240, bpm: 72, drum: 0.19, bass: 0.20, vocal: 0.85, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [thin], seed: 3, signals: [thin.id: olivia]) {
@@ -1745,6 +1793,61 @@ do {
         check("Missing stem files keep full-mix clips", plan.placements.allSatisfy { $0.stemKind == nil })
     case .failure(let message):
         check("Missing stem files do not crash Auto", false, message)
+    }
+}
+
+do {
+    // Title/groove lock: even when BOMT's drums stem reads hotter and Oops
+    // looks more vocal, Oops stays the bed and BOMT is Drop 1 (pivot = baby).
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-britney-stems-\(UUID().uuidString)", isDirectory: true)
+    let bomtDrums = dir.appendingPathComponent("bomt-drums.wav")
+    let oopsDrums = dir.appendingPathComponent("oops-drums.wav")
+    do {
+        try AutoStemKickEnergy.writeFixtureWAV(to: bomtDrums, frames: 8_000, amplitude: 0.95)
+        try AutoStemKickEnergy.writeFixtureWAV(to: oopsDrums, frames: 8_000, amplitude: 0.08)
+        var tuning = AutoTuning.standard
+        var bomtStems = mockStemSet(in: dir.appendingPathComponent("bomt"))
+        var oopsStems = mockStemSet(in: dir.appendingPathComponent("oops"))
+        bomtStems.drums = bomtDrums
+        oopsStems.drums = oopsDrums
+        tuning.explicitStemsBySongID[bomt.id] = bomtStems
+        tuning.explicitStemsBySongID[oops.id] = oopsStems
+        let signals: [UUID: SongSignalFeatures] = [
+            bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.60, vocal: 0.40, confidence: 1.00),
+            oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.22, vocal: 0.75, confidence: 1.00),
+        ]
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [bomt, oops],
+            tuning: tuning,
+            seed: 20260815,
+            signals: signals
+        ) {
+        case .success(_, let plan, _):
+            check(
+                "Stem-hot BOMT still Oops bed (title lock)",
+                plan.mashupBedSongID == oops.id,
+                "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")"
+            )
+            check(
+                "Stem-hot BOMT still BOMT Drop 1 vocal",
+                plan.mashupVocalSongID == bomt.id,
+                "vocal=\(plan.mashupVocalSongID == bomt.id ? "BOMT" : plan.mashupVocalSongID == oops.id ? "Oops" : "?")"
+            )
+            let pivot = plan.decisions.first { $0.kind == AutoDecisionKind.pivotWallpaperLoop }
+            let detail = pivot?.detail ?? ""
+            check(
+                "Britney pivot token is baby (not oops) with stems",
+                detail.lowercased().contains("baby") && !detail.lowercased().contains("oops"),
+                "detail=\(detail)"
+            )
+        case .failure(let message):
+            check("Britney stem role lock mashup", false, message)
+        }
+    } catch {
+        check("Wrote Britney inverted-stem fixtures", false, "\(error)")
     }
 }
 

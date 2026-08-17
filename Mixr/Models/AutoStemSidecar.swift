@@ -144,24 +144,51 @@ enum AutoStemResolver {
 
 enum AutoStemKickEnergy {
     /// 0…1 drum/kick strength from a sidecar WAV. nil if unreadable.
+    ///
+    /// Kick drums are sparse: global mean of a slamming kit is low. Score the
+    /// loudest windows (transients) plus peak so Demucs drums.wav of a club
+    /// kit does not read as a thin piano bed.
     static func drumStrength(from url: URL?) -> Double? {
         guard let url else { return nil }
         guard let samples = readPCM(url: url), !samples.isEmpty else { return nil }
-        var absSum = 0.0
         var peak = 0.0
         for s in samples {
             let a = abs(Double(s))
-            absSum += a
             if a > peak { peak = a }
         }
-        let mean = absSum / Double(samples.count)
-        // Crest-ish: kicks are peaky. Combine mean energy + peak.
-        let energy = min(1.0, mean * 8.0 + peak * 0.35)
-        return energy
+        let win = 2048
+        if samples.count < win {
+            return min(1.0, peak * 0.90)
+        }
+        var windowRMS: [Double] = []
+        var windowPeak: [Double] = []
+        windowRMS.reserveCapacity(samples.count / win)
+        var i = 0
+        while i + win <= samples.count {
+            var sumSq = 0.0
+            var wpeak = 0.0
+            let end = i + win
+            var j = i
+            while j < end {
+                let a = abs(Double(samples[j]))
+                sumSq += a * a
+                if a > wpeak { wpeak = a }
+                j += 1
+            }
+            windowRMS.append((sumSq / Double(win)).squareRoot())
+            windowPeak.append(wpeak)
+            i += win
+        }
+        windowRMS.sort()
+        windowPeak.sort()
+        let topN = max(1, windowRMS.count / 8)
+        let topRMS = windowRMS.suffix(topN).reduce(0, +) / Double(topN)
+        let topPeak = windowPeak.suffix(topN).reduce(0, +) / Double(topN)
+        return min(1.0, topPeak * 0.70 + topRMS * 2.5)
     }
 
     /// Minimal WAV reader: PCM s16 and IEEE float32, mono or stereo.
-    static func readPCM(url: URL, maxFrames: Int = 44100 * 12) -> [Float]? {
+    static func readPCM(url: URL, maxFrames: Int = 44100 * 45) -> [Float]? {
         guard let data = try? Data(contentsOf: url), data.count >= 44 else { return nil }
         return parseWAV(data, maxFrames: maxFrames)
     }
@@ -265,6 +292,59 @@ enum AutoStemKickEnergy {
         let pcm = Int16(max(-32767, min(32767, Int(amplitude * 32767))))
         var stereo = Data(capacity: dataBytes)
         for _ in 0..<frames {
+            var le = UInt16(bitPattern: pcm).littleEndian
+            stereo.append(Data(bytes: &le, count: 2))
+            stereo.append(Data(bytes: &le, count: 2))
+        }
+        data.append(stereo)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// Sparse kick hits (silence + short transients) for tests.
+    static func writeKickPatternWAV(
+        to url: URL,
+        frames: Int,
+        periodFrames: Int,
+        kickFrames: Int,
+        amplitude: Float,
+        sampleRate: Int = 44100
+    ) throws {
+        let channels = 2
+        let bytesPerSample = 2
+        let dataBytes = frames * channels * bytesPerSample
+        var data = Data()
+        func appendU32(_ v: UInt32) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 4))
+        }
+        func appendU16(_ v: UInt16) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 2))
+        }
+        data.append(contentsOf: Array("RIFF".utf8))
+        appendU32(UInt32(36 + dataBytes))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8))
+        appendU32(16)
+        appendU16(1)
+        appendU16(UInt16(channels))
+        appendU32(UInt32(sampleRate))
+        appendU32(UInt32(sampleRate * channels * bytesPerSample))
+        appendU16(UInt16(channels * bytesPerSample))
+        appendU16(16)
+        data.append(contentsOf: Array("data".utf8))
+        appendU32(UInt32(dataBytes))
+        let hot = Int16(max(-32767, min(32767, Int(amplitude * 32767))))
+        let period = max(kickFrames + 1, periodFrames)
+        let kick = max(1, kickFrames)
+        var stereo = Data(capacity: dataBytes)
+        for f in 0..<frames {
+            let inKick = (f % period) < kick
+            let pcm = inKick ? hot : 0
             var le = UInt16(bitPattern: pcm).littleEndian
             stereo.append(Data(bytes: &le, count: 2))
             stereo.append(Data(bytes: &le, count: 2))

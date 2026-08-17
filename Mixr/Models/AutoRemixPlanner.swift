@@ -227,7 +227,7 @@ enum AutoRemixPlanner {
         )
 
         let pulse = AutoClubPulse.policy(
-            drumStrength: analysis.drumStrength,
+            drumStrength: profile.pulseDrumStrength,
             bassDensity: analysis.bassDensity,
             bpm: analysis.bpm,
             analysisConfidence: analysis.analysisConfidence
@@ -1648,6 +1648,11 @@ enum AutoRemixPlanner {
 
         if pool.count == 2 {
             let a = pool[0], b = pool[1]
+            // Locked gold-standard pair: Oops = bed, BOMT = Drop 1 vocal.
+            // Stem kick energy / vocal-density skew must not invert this.
+            if let locked = AutoMashupRoleLock.britneyBed(in: pool) {
+                return locked
+            }
             let pa = AutoClubTempo.classify(a.analysis.bpm)
             let pb = AutoClubTempo.classify(b.analysis.bpm)
             if let pa, let pb, pa == pb {
@@ -1841,7 +1846,7 @@ enum AutoRemixPlanner {
         // Pulse from the bed (or first song): one-kick rule for mashups.
         let pulseSource = ordered.first(where: { $0.songID == mashupBedID }) ?? ordered[0]
         let pulse = AutoClubPulse.policy(
-            drumStrength: pulseSource.analysis.drumStrength,
+            drumStrength: pulseSource.pulseDrumStrength,
             bassDensity: pulseSource.analysis.bassDensity,
             bpm: pulseSource.analysis.bpm,
             analysisConfidence: pulseSource.analysis.analysisConfidence

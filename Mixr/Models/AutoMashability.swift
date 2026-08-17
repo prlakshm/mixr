@@ -72,6 +72,30 @@ nonisolated enum AutoStemRoleProxy: String, Sendable {
     }
 }
 
+// MARK: - Locked mashup pair (title/groove)
+
+/// Product locks that measurement must not invert. Stem kick energy is for
+/// pulse/one-kick only — it does not crown the club bed.
+nonisolated enum AutoMashupRoleLock {
+    static func isOopsTitle(_ title: String) -> Bool {
+        let t = title.lowercased()
+        return t.contains("oops") || t.contains("did it again")
+    }
+
+    static func isBOMTTitle(_ title: String) -> Bool {
+        let t = title.lowercased()
+        return t.contains("baby one more time") || t.contains("hit me baby")
+    }
+
+    /// Oops I Did It Again = bed when paired with Baby One More Time.
+    static func britneyBed(in pool: [AutoSongProfile]) -> AutoSongProfile? {
+        let oops = pool.first { isOopsTitle($0.title) }
+        let bomt = pool.first { isBOMTTitle($0.title) }
+        guard let oops, bomt != nil else { return nil }
+        return oops
+    }
+}
+
 // MARK: - Local mashability (AutoMashUpper 2014)
 
 /// Best 8–16 bar island pairing between a guest hook phrase and a bed

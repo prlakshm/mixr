@@ -35,9 +35,12 @@ nonisolated enum AutoOfflineMixdown {
 
     /// Renders a plan against per-song sources. `trackVolume` mirrors the
     /// song tracks' mixer volume; `sfxTrackVolume` mirrors the SFX track.
+    /// `stemSources[songID][kind]` is used when a placement has `stemKind`;
+    /// missing stem PCM falls back to the full-mix `sources` entry.
     static func render(
         plan: AutoRemixPlan,
         sources: [UUID: Source],
+        stemSources: [UUID: [AutoStemKind: Source]] = [:],
         sampleRate: Double = 44_100,
         trackVolume: Double = 1.0,
         sfxTrackVolume: Double = 0.85,
@@ -67,9 +70,17 @@ nonisolated enum AutoOfflineMixdown {
         // ── Song placements ──
         let bySong = Dictionary(grouping: plan.placements) { $0.songID }
         for (songID, placements) in bySong {
-            guard let source = sources[songID] else { continue }
+            let stems = stemSources[songID] ?? [:]
             let ordered = placements.sorted { $0.timelineStart < $1.timelineStart }
             for (idx, p) in ordered.enumerated() {
+                let source: Source
+                if let kind = p.stemKind, let stem = stems[kind] {
+                    source = stem
+                } else if let full = sources[songID] {
+                    source = full
+                } else {
+                    continue
+                }
                 let continuity = AutoTransitionEnvelope.Continuity(
                     previous: p.continuesPrevious,
                     next: idx + 1 < ordered.count && ordered[idx + 1].continuesPrevious
