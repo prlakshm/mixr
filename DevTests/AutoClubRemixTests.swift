@@ -700,6 +700,26 @@ do {
             "Planner BOMT+Oops: pivot join has no quiet void",
             !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan)
         )
+        check(
+            "Planner BOMT+Oops: club drops stay hard cuts (no equal-power fade-in)",
+            !AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: plan),
+            "dropCuts=\(plan.cutRecords.filter { rec in AutoRemixDiagnostics.clubDropStarts(plan: plan).contains { abs($0 - rec.timelineAt) < 0.1 } }.map { AutoRemixDiagnostics.maskingDescription($0.masking) })"
+        )
+        let dropStarts = AutoRemixDiagnostics.clubDropStarts(plan: plan)
+        if dropStarts.count >= 2 {
+            let drop2 = dropStarts[1]
+            let incoming = plan.placements.filter {
+                $0.role == .dominant && abs($0.timelineStart - drop2) < 0.08
+            }
+            check(
+                "Planner BOMT+Oops: Drop 2 hard cut at full clip volume",
+                incoming.contains {
+                    ($0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02)
+                        && $0.volume >= 0.92
+                },
+                incoming.map { "fade=\($0.fadeIn.type.rawValue) vol=\(String(format: "%.2f", $0.volume))" }.joined(separator: ",")
+            )
+        }
     case .failure(let message):
         check("Planner BOMT+Oops mashup", false, message)
     }
@@ -1132,6 +1152,10 @@ do {
                 "Britney: pivot join has no quiet void (planner emit, not a hand-built plan)",
                 !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
                 "gaps=\(plan.intentionalGaps.count)"
+            )
+            check(
+                "Britney: club drops stay hard cuts (no equal-power fade-in)",
+                !AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: plan)
             )
 
             // No supporting chops in the opening 8–16 bars (wallpaper is mix-window only).
@@ -2239,6 +2263,37 @@ do {
     check(
         "Void detector flags a 1-beat hole on pivot Drop 1 (previous behavior fails)",
         AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: holey)
+    )
+
+    var fadedDrop2 = holey
+    let drop2 = drop1 + bar * 16
+    fadedDrop2.pulseRegions.append(
+        AutoClubPulse.Region(role: .drop, timelineStart: drop2, timelineEnd: drop2 + bar * 16)
+    )
+    fadedDrop2.placements.append(
+        clip(sourceStart: 40, timelineStart: drop2, duration: bar * 16, slot: 3)
+    )
+    if let idx = fadedDrop2.placements.indices.last {
+        fadedDrop2.placements[idx].fadeIn = ClipTransition(
+            type: .crossfade,
+            duration: 4,
+            curve: AutoTransitionEnvelope.equalPowerCurveName
+        )
+    }
+    fadedDrop2.cutRecords = [
+        AutoCutRecord(
+            timelineAt: drop2,
+            sourceFrom: 80,
+            sourceTo: 40,
+            reason: .hookReturn,
+            confidence: 0.7,
+            expectedEnergyDeltaDB: 0,
+            masking: .equalPowerCrossfade(seconds: 3.74)
+        )
+    ]
+    check(
+        "Equal-power detector flags a Drop 2 fade-in (previous behavior fails)",
+        AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: fadedDrop2)
     )
     check(
         "Title-chop detector still fails a 4-bar title teaser",

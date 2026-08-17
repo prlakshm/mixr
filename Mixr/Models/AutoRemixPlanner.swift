@@ -746,11 +746,13 @@ enum AutoRemixPlanner {
             halfTimeDrop: flavor.bias.halfTimeDrop
         )
 
-        // Blend every join except the intentional pre-drop void — equal-power
-        // overlaps so verse→build→drop stays continuous (void is the only hole).
+        // Blend verse→build joins with equal-power. Club drops stay hard
+        // cuts (pivot Drop 1, hook-return Drop 2) — never a quiet void and
+        // never an equal-power fade-in that dives energy after the slam.
         blendAdjacentHandoffs(
             placements: &placements,
             intentionalGaps: intentionalGaps,
+            pulseRegions: pulseRegions,
             songDurations: [profile.songID: analysis.durationSeconds],
             barSec: bar,
             beatSec: beat,
@@ -2902,8 +2904,8 @@ enum AutoRemixPlanner {
             }
         }
 
-        // Continuous energy through handoffs — equal-power overlaps everywhere
-        // except the intentional pre-drop void. Bed stays under the hook drop.
+        // Continuous energy through verse handoffs. Club drops stay hard cuts
+        // at full clip volume (no 1-beat void, no equal-power fade-in).
         var songDurations: [UUID: Double] = [:]
         for p in ordered {
             songDurations[p.songID] = p.analysis.durationSeconds
@@ -2912,6 +2914,7 @@ enum AutoRemixPlanner {
         blendAdjacentHandoffs(
             placements: &placements,
             intentionalGaps: intentionalGaps,
+            pulseRegions: pulseRegions,
             songDurations: songDurations,
             barSec: barSec,
             beatSec: beatSec,
@@ -2966,12 +2969,13 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// Equal-power overlaps on every dominant join except the intentional
-    /// pre-drop void. Keeps continuous energy through verse→build→drop;
-    /// the only quiet hole is the 1-beat void into a drop.
+    /// Equal-power overlaps on verse→build joins. Club drops (pivot Drop 1,
+    /// hook-return Drop 2) stay hard cuts at full clip volume — no quiet
+    /// void and no equal-power fade-in.
     private static func blendAdjacentHandoffs(
         placements: inout [AutoClipPlacement],
         intentionalGaps: [AutoIntentionalGap],
+        pulseRegions: [AutoClubPulse.Region],
         songDurations: [UUID: Double],
         barSec: Double,
         beatSec: Double,
@@ -2992,7 +2996,7 @@ enum AutoRemixPlanner {
             let prev = placements[prevIdx]
             let next = placements[nextIdx]
 
-            // Keep the pre-drop void as the only intentional hole.
+            // Legacy pre-drop void (must not be present on a pivoted plan).
             let voidBeforeNext = intentionalGaps.contains { abs($0.end - next.timelineStart) < 0.05 }
             if voidBeforeNext { continue }
 
@@ -3019,6 +3023,51 @@ enum AutoRemixPlanner {
                     if trimmed >= tuning.minSegmentSeconds * 0.5 {
                         placements[prevIdx].timelineDuration = trimmed
                         placements[prevIdx].fadeOut = .none
+                    }
+                }
+                continue
+            }
+
+            // Drop 1 / Drop 2: hard cut at full clip volume. Do not invent
+            // an equal-power fade (that dive appeared after the Drop 2 void
+            // was removed) and do not park a 1-beat quiet hole.
+            if AutoRemixDiagnostics.incomingIsClubDrop(
+                pulseRegions: pulseRegions,
+                timelineStart: next.timelineStart
+            ) {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .none
+                placements[nextIdx].fadeIn = .none
+                placements[nextIdx].volume = max(
+                    placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
+                let sourceJump = abs(next.sourceStart - prev.sourceEnd) > 0.05
+                if sourceJump {
+                    if let i = cutRecords.firstIndex(where: { abs($0.timelineAt - next.timelineStart) < 0.1 }) {
+                        if AutoRemixDiagnostics.isEqualPowerMasking(cutRecords[i].masking) {
+                            cutRecords[i].masking = .sfx(assetID: "impact")
+                            cutRecords[i].expectedEnergyDeltaDB = max(
+                                cutRecords[i].expectedEnergyDeltaDB, 8.0
+                            )
+                        }
+                    } else {
+                        cutRecords.append(
+                            AutoCutRecord(
+                                timelineAt: next.timelineStart,
+                                sourceFrom: prev.sourceEnd,
+                                sourceTo: next.sourceStart,
+                                reason: .hookReturn,
+                                confidence: 0.7,
+                                expectedEnergyDeltaDB: 8.0,
+                                masking: .sfx(assetID: "impact")
+                            )
+                        )
                     }
                 }
                 continue

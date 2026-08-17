@@ -493,6 +493,48 @@ nonisolated enum AutoRemixDiagnostics {
         return grains.count >= 4
     }
 
+    /// Pulse Drop starts (Drop 1, Drop 2, …), earliest first.
+    static func clubDropStarts(plan: AutoRemixPlan) -> [Double] {
+        plan.pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .sorted()
+    }
+
+    /// True when this timeline instant is a club drop attack (Drop 1 or Drop 2).
+    static func incomingIsClubDrop(
+        pulseRegions: [AutoClubPulse.Region],
+        timelineStart: Double,
+        toleranceSeconds: Double = 0.08
+    ) -> Bool {
+        pulseRegions.contains {
+            $0.role == .drop && abs($0.timelineStart - timelineStart) < toleranceSeconds
+        }
+    }
+
+    static func isEqualPowerMasking(_ masking: AutoCutMasking) -> Bool {
+        if case .equalPowerCrossfade = masking { return true }
+        return false
+    }
+
+    /// True when a club drop was rewritten into an equal-power fade-in.
+    /// Killing the Drop 2 void without this gate produced a ~10 dB energy dive
+    /// (`masking=equal-power crossfade`) on the same-song hook return.
+    static func clubDropHasEqualPowerFade(plan: AutoRemixPlan) -> Bool {
+        let starts = clubDropStarts(plan: plan)
+        let masked = plan.cutRecords.contains { rec in
+            starts.contains { abs($0 - rec.timelineAt) < 0.1 }
+                && isEqualPowerMasking(rec.masking)
+        }
+        let fadedIn = plan.placements.contains { p in
+            p.role == .dominant
+                && incomingIsClubDrop(pulseRegions: plan.pulseRegions, timelineStart: p.timelineStart)
+                && p.fadeIn.type != .none
+                && p.fadeIn.duration > 0.02
+        }
+        return masked || fadedIn
+    }
+
     /// True when the planner emitted a quiet void on a pivoted Drop 1 join.
     /// Crate bounce treats `pivotWallpaperLoop` + `allowedPredropVoid` /
     /// any intentional gap as that hole — not only a gap whose end matches

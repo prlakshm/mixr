@@ -553,7 +553,8 @@ nonisolated enum AutoRemixValidator {
     }
 
     /// Dominant joins need real temporal overlap + equal-power fades, unless
-    /// they are the intentional pre-drop void (or already SFX-covered butts).
+    /// they are a club drop hard cut (pivot / hook-return slam) or already
+    /// SFX-covered butts.
     private static func ensureHandoffOverlaps(
         _ plan: inout AutoRemixPlan,
         profiles: [UUID: AutoSongProfile],
@@ -593,6 +594,26 @@ nonisolated enum AutoRemixValidator {
                     && ($0.detail ?? "").contains(String(format: "%.1f", next.timelineStart))
             }
             if pivotBefore {
+                plan.placements[nextIdx].fadeIn = .none
+                plan.placements[nextIdx].volume = max(
+                    plan.placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
+                continue
+            }
+
+            // Club Drop 1 / Drop 2: hard cut + impact, not equal-power fade-in.
+            if AutoRemixDiagnostics.incomingIsClubDrop(
+                pulseRegions: plan.pulseRegions,
+                timelineStart: next.timelineStart
+            ) {
+                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        plan.placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                plan.placements[prevIdx].fadeOut = .none
                 plan.placements[nextIdx].fadeIn = .none
                 plan.placements[nextIdx].volume = max(
                     plan.placements[nextIdx].volume,

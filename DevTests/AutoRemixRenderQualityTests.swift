@@ -304,6 +304,11 @@ do {
                 && !plan.decisions.contains { $0.kind == .allowedPredropVoid },
             "pivot=\(hasPivot) voids=\(plan.intentionalGaps.count)"
         )
+        check(
+            "One song: Drop 2 stays a hard cut (no equal-power fade after killing the void)",
+            !AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: plan),
+            "dropCuts=\(plan.cutRecords.filter { rec in AutoRemixDiagnostics.clubDropStarts(plan: plan).contains { abs($0 - rec.timelineAt) < 0.1 } }.map { AutoRemixDiagnostics.maskingDescription($0.masking) })"
+        )
 
         let dropRegions = plan.pulseRegions.filter { $0.role == .drop }
         check("One song: two-wave club drops", dropRegions.count >= 2,
