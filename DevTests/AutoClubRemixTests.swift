@@ -1586,8 +1586,19 @@ do {
             String(format: "guest=%.1f want=%.1f", guestSrc, bomtTitle)
         )
         check(
-            "59fe1e8 crate: pivotWallpaperLoop 8× baby preserved",
-            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+            "59fe1e8 crate: last 8 of A is title chorus hold (not verse 2 @66s)",
+            !AutoRemixDiagnostics.lastEightOfAWalksIntoVerseTwo(
+                plan: plan, titleChorusStart: oopsTitle, verseTwoStart: 65.7
+            ),
+            AutoRemixDiagnostics.lastEightOfAPlacements(plan: plan)
+                .map { String(format: "t=%.1f src=%.1f", $0.timelineStart, $0.sourceStart) }
+                .joined(separator: " ")
+        )
+        check(
+            "59fe1e8 crate: title chorus hold decision recorded",
+            plan.decisions.contains {
+                $0.kind == .returnedToHook && ($0.detail ?? "").contains("title chorus hold")
+            }
         )
         check(
             "59fe1e8 crate: zero allowedPredropVoid",
@@ -2088,16 +2099,31 @@ do {
                     "Britney: first complete Oops hook is title chorus island (not verse-1 intro)",
                     hook.map {
                         $0.sourceStart >= 44.0 && $0.sourceStart <= 46.5
-                            && $0.timelineDuration >= plan.barSeconds * 15.5
+                            && $0.timelineDuration >= plan.barSeconds * 7.5
                     } ?? false,
                     String(format: "hookSrc=%.2f hookDur=%.2f firstBedSrc=%.2f",
                            hook?.sourceStart ?? -1, hook?.timelineDuration ?? -1, firstBed.sourceStart)
                 )
                 let bedBeforeDrop = bedDoms.filter { $0.timelineStart < drop1Start - 0.05 }
+                let titleHolds = bedBeforeDrop.filter {
+                    abs($0.sourceStart - 45.5) < plan.barSeconds * 1.2
+                        && $0.timelineDuration >= plan.barSeconds * 7.5
+                }
                 check(
-                    "Britney: Oops opening title/chorus finishes before pivot (important lines uncut)",
-                    bedBeforeDrop.contains { $0.timelineDuration >= plan.barSeconds * 15.5 },
-                    "bedPhrasesBeforeDrop=\(bedBeforeDrop.count)"
+                    "Britney: Oops title chorus played twice (8+8 hold, not 16-bar verse-2 walk)",
+                    titleHolds.count >= 2,
+                    "titleHolds=\(titleHolds.count) src=\(titleHolds.map { String(format: "%.1f", $0.sourceStart) })"
+                )
+                check(
+                    "Britney: last 8 of A is still title chorus (not verse 2 @66s)",
+                    !AutoRemixDiagnostics.lastEightOfAWalksIntoVerseTwo(
+                        plan: plan, titleChorusStart: 45.5, verseTwoStart: 65.7
+                    ),
+                    {
+                        let last8 = AutoRemixDiagnostics.lastEightOfAPlacements(plan: plan)
+                        return last8.map { String(format: "t=%.1f src=%.1f", $0.timelineStart, $0.sourceStart) }
+                            .joined(separator: " ")
+                    }()
                 )
             } else {
                 check("Britney: Oops bed dominant exists", false)

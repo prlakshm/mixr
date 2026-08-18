@@ -29,6 +29,9 @@ enum AutoRemixPlanner {
         /// Shrink priority when the arrangement exceeds the timeline budget
         /// (higher shrinks first).
         var shrinkPriority = 1
+        /// Repeat the same ~8-bar title chorus (do not walk 16 source bars
+        /// into verse 2). Timeline still fills 16 bars before Drop 1.
+        var holdTitleChorus = false
     }
 
     private struct PlacedSlot {
@@ -1395,7 +1398,10 @@ enum AutoRemixPlanner {
         energy: Double,
         tuning: AutoTuning
     ) -> AutoCandidateSection? {
-        let wantBars = max(8, bars)
+        // Title chorus is ~8 bars (Oops). A 16-bar request used to walk source
+        // linearly into verse 2 — callers fill 16 timeline bars via a hold slot.
+        _ = bars
+        let wantBars = 8
         let bar = profile.analysis.barSeconds
         let introEnd = profile.analysis.introCandidate?.endSeconds ?? bar * 8
         let phrase = profile.analysis.phraseBoundaries.count >= 2
@@ -1965,11 +1971,16 @@ enum AutoRemixPlanner {
         var slots: [Slot] = [
             Slot(songIdx: 0, role: .intro, bars: 6, entry: .none, energy: 0.45, shrinkPriority: 2),
         ]
-        // Complete Deck A title chorus BEFORE pivot — 16 bars so “Oops” title
-        // sits inside the last-8-of-A mix window (bars 17–24).
+        // Complete Deck A title chorus BEFORE pivot: 8 bars + 8-bar HOLD of
+        // the same island (16 timeline bars). Do not linearly walk 16 source
+        // bars from 45.5s into verse 2 (“you see my problem is this”).
         slots.append(Slot(
-            songIdx: 0, role: .chorus, bars: 16, entry: .cleanCrossfade, energy: 0.88,
+            songIdx: 0, role: .chorus, bars: 8, entry: .cleanCrossfade, energy: 0.88,
             shrinkPriority: 0
+        ))
+        slots.append(Slot(
+            songIdx: 0, role: .chorus, bars: 8, entry: .none, energy: 0.88,
+            shrinkPriority: 0, holdTitleChorus: true
         ))
         // 2-bar pivot window — replaced with 1-beat wallpaper grains at emit time.
         slots.append(Slot(songIdx: 0, role: .build, bars: 2, entry: .flangerBuild, energy: 0.72, shrinkPriority: 1))
@@ -2179,6 +2190,7 @@ enum AutoRemixPlanner {
                 && slot.role == .chorus
                 && slot.entry != .hardHypeCut
                 && !slot.isReturn
+                && !slot.holdTitleChorus
             switch slot.role {
             case .teaser: labelChain = [[.teaser], [.chorus], [.groove]]
             case .chorus:
@@ -2209,8 +2221,41 @@ enum AutoRemixPlanner {
                 }
             }
 
-            // First complete A hook: jump to the bed's first chorus island.
-            // Never continue linearly from the intro into verse apology.
+            // Title-chorus hold: replay the same 8-bar island (not verse 2).
+            if mode == .mashup, slot.holdTitleChorus, slot.role == .chorus {
+                if let prior = placed.last(where: {
+                    $0.slot.songIdx == slot.songIdx
+                        && $0.slot.role == .chorus
+                        && !$0.slot.holdTitleChorus
+                        && $0.slot.entry != .hardHypeCut
+                }) {
+                    section = AutoCandidateSection(
+                        songID: prior.section.songID,
+                        label: .chorus,
+                        startSeconds: prior.section.startSeconds,
+                        barCount: 8,
+                        barSeconds: prior.section.barSeconds,
+                        hook: prior.section.hook,
+                        energy: prior.section.energy,
+                        vocal: prior.section.vocal,
+                        clarity: prior.section.clarity,
+                        rhythm: prior.section.rhythm,
+                        uniqueness: prior.section.uniqueness,
+                        transitionUse: prior.section.transitionUse,
+                        confidence: prior.section.confidence
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .returnedToHook,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "title chorus hold @%.1fs (repeat 8-bar island, not verse-2 walk)",
+                                prior.section.startSeconds
+                            )
+                        )
+                    )
+                }
+            }
             if isFirstCompleteAHook {
                 let introEnd = profile.analysis.introCandidate?.endSeconds ?? barSec * 8
                 let phrase = profile.analysis.phraseBoundaries.count >= 2
@@ -2449,7 +2494,7 @@ enum AutoRemixPlanner {
             // Never emit the exact same clip solely to pad handoff count.
             var entry = slot.entry
             var energy = slot.energy
-            if reused, slot.isReturn {
+            if reused, slot.isReturn, !slot.holdTitleChorus {
                 if entry == .none || entry == .cleanCrossfade {
                     entry = .hardHypeCut
                 }
@@ -3247,6 +3292,34 @@ enum AutoRemixPlanner {
                 prev.sourceStart + prev.timelineDuration * prev.tempoRatio
             )) < 0.05 || next.continuesPrevious
             if sourceContinuous {
+                continue
+            }
+
+            // Title-chorus hold: rewind to the same 8-bar island — hard cut.
+            // Do not linearly extend the previous clip into verse 2.
+            let titleHoldRewind = prev.songID == next.songID
+                && next.sourceStart < prev.sourceEnd - 0.05
+                && abs(next.sourceStart - prev.sourceStart) < barSec * 0.75
+            if titleHoldRewind {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .none
+                placements[nextIdx].fadeIn = .none
+                cutRecords.append(
+                    AutoCutRecord(
+                        timelineAt: next.timelineStart,
+                        sourceFrom: prev.sourceEnd,
+                        sourceTo: next.sourceStart,
+                        reason: .hookReturn,
+                        confidence: 0.75,
+                        expectedEnergyDeltaDB: 2.0,
+                        masking: .alignedHardCut
+                    )
+                )
                 continue
             }
 

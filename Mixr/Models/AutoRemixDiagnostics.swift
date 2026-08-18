@@ -512,6 +512,35 @@ nonisolated enum AutoRemixDiagnostics {
         return onTail && !onTitle
     }
 
+    /// Pre-drop Deck A dominants overlapping the last 8 bars of A (mix window).
+    static func lastEightOfAPlacements(plan: AutoRemixPlan) -> [AutoClipPlacement] {
+        guard let deckA = firstDeckASongID(plan: plan) else { return [] }
+        guard let dropStart = firstDropStart(plan: plan) else { return [] }
+        let windowStart = dropStart - plan.barSeconds * 8
+        return plan.placements
+            .filter {
+                $0.songID == deckA
+                    && $0.role == .dominant
+                    && $0.timelineEnd > windowStart + 0.05
+                    && $0.timelineStart < dropStart - 0.05
+            }
+            .sorted { $0.timelineStart < $1.timelineStart }
+    }
+
+    /// True when last-8-of-A walks into verse 2 (16-bar linear from 45.5s → ~66s).
+    static func lastEightOfAWalksIntoVerseTwo(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        verseTwoStart: Double = 65.7,
+        toleranceSeconds: Double = 6.0
+    ) -> Bool {
+        let hits = lastEightOfAPlacements(plan: plan)
+        guard !hits.isEmpty else { return false }
+        let onVerse = hits.contains { abs($0.sourceStart - verseTwoStart) < toleranceSeconds }
+        let onTitle = hits.contains { abs($0.sourceStart - titleChorusStart) < plan.barSeconds * 1.2 }
+        return onVerse && !onTitle
+    }
+
     /// True when guest Drop 1 sources a late verse groove (BOMT loneliness
     /// verse ~95s) instead of the first title chorus (~43s).
     static func guestDrop1IsLateVerseGroove(

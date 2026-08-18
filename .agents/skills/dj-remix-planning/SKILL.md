@@ -242,7 +242,9 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
   detection prefers **stem vocal onset** in the title window over full-mix
   energy that peaks on the chorus tail (“got lost in the game / oh baby”).
   Bounce score dumps `chorusOrDrop`, measured entrance, catalog pool, and
-  raw qualifying downbeats. Guest Drop 1 uses the same first-title window (BOMT “hit me”
+  raw qualifying downbeats. A 16-bar Deck A **timeline** before Drop 1
+  repeats the same **~8-bar title island** (hold), never walking source
+  linearly into verse 2. Guest Drop 1 uses the same first-title window (BOMT “hit me”
   ~43s), not loneliness verse.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
   When stretch gate fails, **cameoChop** guests still own Drop 1 as phrase-aligned
