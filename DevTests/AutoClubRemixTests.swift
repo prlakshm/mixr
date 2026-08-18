@@ -2909,7 +2909,13 @@ do {
                     && $0.timelineDuration > plan.beatSeconds * 2
                     && $0.timelineStart < drop1Start - plan.barSeconds
             }.map(\.volume).max() ?? 0
-            let joinVols = grains.map(\.volume) + dropLeads.map(\.volume)
+            let drop1Vols = dropLeads.filter { abs($0.timelineStart - drop1Start) < 0.12 }.map(\.volume)
+            let bedKickVols = bedLayers.filter {
+                abs($0.timelineStart - drop1Start) < 0.12
+                    && ($0.stemKind == .drums || $0.stemKind == .bass || $0.stemKind == nil)
+                    && $0.timelineDuration >= plan.barSeconds * 4
+            }.map(\.volume)
+            let joinVols = grains.map(\.volume) + drop1Vols + bedKickVols
             check(
                 "Britney: pivot and Drop 1 clips are at least as loud as the bed verse",
                 !joinVols.isEmpty && verseVol > 0 && joinVols.allSatisfy { $0 + 0.001 >= verseVol },
