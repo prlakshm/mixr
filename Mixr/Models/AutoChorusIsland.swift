@@ -412,13 +412,9 @@ nonisolated enum AutoChorusIsland {
         return unique
     }
 
-    /// First isolated-vocal onset in `[lo, hi]`, nearest downbeat.
-    /// BOMT Drop 1 uses 40…45.2s so “hit me” (~43s) wins over confess (~32s)
-    /// and mashability body (~47.1s).
-    static func stemOnsetInBand(
+    /// First isolated-vocal onset peak in `[lo, hi]` (local maxima on stem rise).
+    private static func firstStemOnsetPeak(
         signal: SongSignalFeatures,
-        downbeats: [Double],
-        barSeconds: Double,
         lo: Double,
         hi: Double
     ) -> Double? {
@@ -441,8 +437,37 @@ nonisolated enum AutoChorusIsland {
                 peaks.append((t, o))
             }
         }
-        guard let first = peaks.min(by: { $0.t < $1.t }) else { return nil }
-        return snapDownbeat(first.t, downbeats: downbeats, barSeconds: barSeconds)
+        return peaks.min(by: { $0.t < $1.t })?.t
+    }
+
+    /// First isolated-vocal onset in `[lo, hi]`, nearest downbeat.
+    static func stemOnsetInBand(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double,
+        lo: Double,
+        hi: Double
+    ) -> Double? {
+        guard let first = firstStemOnsetPeak(signal: signal, lo: lo, hi: hi) else { return nil }
+        return snapDownbeat(first, downbeats: downbeats, barSeconds: barSeconds)
+    }
+
+    /// BOMT Drop 1: lock to “hit me baby one more time” title chorus (~59.5–60.5s
+    /// on vocals.wav), after confess prechorus. Never verse @39s or confess @47s.
+    static func bomtDrop1HitMeStart(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double
+    ) -> Double? {
+        let lo = 58.0
+        let hi = 62.0
+        guard let peak = firstStemOnsetPeak(signal: signal, lo: lo, hi: hi) else { return nil }
+        return snapDownbeatAtOrAfter(
+            peak,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            minSeconds: lo
+        )
     }
 
     /// First downbeat of the title chorus in a lift — not prechorus, not tail line.
@@ -543,6 +568,31 @@ nonisolated enum AutoChorusIsland {
             return (t / barSeconds).rounded() * barSeconds
         }
         return t
+    }
+
+    /// Nearest downbeat to `peak`, never before `minSeconds` (avoids verse/prechorus snap-back).
+    private static func snapDownbeatAtOrAfter(
+        _ peak: Double,
+        downbeats: [Double],
+        barSeconds: Double,
+        minSeconds: Double
+    ) -> Double {
+        let eligible = downbeats.filter { $0 >= minSeconds - 0.02 }.sorted()
+        if !eligible.isEmpty {
+            if let nearest = eligible.min(by: { abs($0 - peak) < abs($1 - peak) }),
+               abs(nearest - peak) <= barSeconds * 0.55 {
+                return nearest
+            }
+            if let after = eligible.first(where: { $0 >= peak - 0.08 && $0 <= peak + barSeconds * 0.45 }) {
+                return after
+            }
+            return eligible.min(by: { abs($0 - peak) < abs($1 - peak) })!
+        }
+        if barSeconds > 0 {
+            let grid = (peak / barSeconds).rounded() * barSeconds
+            return max(minSeconds, grid)
+        }
+        return max(peak, minSeconds)
     }
 
     /// Snap stem title onset to the downbeat that uncuts “Oops” (~44.5–45.5s on

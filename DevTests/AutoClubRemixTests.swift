@@ -666,7 +666,7 @@ func crateFeatures(
 }
 
 /// Crate-shaped pop: repeated medium prechorus then a loud title chorus.
-/// Oops: prechorus ~20s and ~40s, title chorus ~46s. BOMT: “hit me” ~43s.
+/// Oops: prechorus ~20s and ~40s, title chorus ~46s. BOMT: “hit me” ~59.5s.
 func popTitleChorusFeatures(
     duration: Double,
     bpm: Double,
@@ -941,35 +941,65 @@ func popTitleChorusRealCrate59fe1e8(
     return feat
 }
 
-/// Real crate 398d7de: AutoMashUpper picked BOMT @47.1s (confess pickup /
-/// late body) over “hit me” title ~43s. Stem onset at 43 must win Drop 1.
+/// Real BOMT vocals.wav stem shape: verse onset @39.3, confess @47.1, hit-me @59.5.
+func applyBOMTStemHitMeDecoys(
+    _ feat: inout SongSignalFeatures,
+    bpm: Double,
+    hitMeStart: Double = 59.5,
+    verseOnset: Double = 39.3,
+    confessStart: Double = 47.1
+) {
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    if feat.stemVocalPresenceCurve.count != feat.energyCurve.count {
+        feat.stemVocalPresenceCurve = [Double](repeating: 0.04, count: feat.energyCurve.count)
+    }
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if abs(t - verseOnset) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = 0.96
+        }
+        if t >= verseOnset && t < verseOnset + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.78)
+        }
+        if t >= confessStart && t < confessStart + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.82)
+        }
+        if t >= hitMeStart && t < hitMeStart + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = 0.93
+        }
+        if abs(t - hitMeStart) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = 0.99
+        }
+    }
+}
+
+/// Real crate: AutoMashUpper picked BOMT @47.1s (confess) over hit-me @59.5s.
+/// Stem band 58–62s must win Drop 1; verse @39.3 and confess must not.
 func popBOMTMashability471(
     duration: Double,
     bpm: Double,
     drum: Double,
     bass: Double,
     vocal: Double,
-    titleChorusStart: Double = 43.0,
+    titleChorusStart: Double = 59.5,
     mashabilityHotStart: Double = 47.1,
-    confessStart: Double = 32.0,
+    confessStart: Double = 47.1,
+    verseOnset: Double = 39.3,
     confidence: Double = 1.0
 ) -> SongSignalFeatures {
     var feat = popTitleChorusFeatures(
         duration: duration, bpm: bpm, drum: drum, bass: bass, vocal: vocal,
-        titleChorusStarts: [titleChorusStart, 118.0],
-        prechorusStarts: [20.6, 41.3],
+        titleChorusStarts: [titleChorusStart, 83.2],
+        prechorusStarts: [20.6, confessStart],
         confidence: confidence
     )
     let hop = feat.hopSeconds
     let bar = 240.0 / max(bpm, 40)
-    feat.stemVocalPresenceCurve = [Double](repeating: 0.04, count: feat.energyCurve.count)
     for i in 0..<feat.energyCurve.count {
         let t = Double(i) * hop
         if t >= titleChorusStart && t < titleChorusStart + bar * 8 {
-            feat.stemVocalPresenceCurve[i] = 0.92
-        }
-        if abs(t - titleChorusStart) < hop * 1.5 {
-            feat.stemVocalPresenceCurve[i] = 0.99
+            feat.energyCurve[i] = max(feat.energyCurve[i], 0.94)
         }
         if t >= mashabilityHotStart && t < mashabilityHotStart + bar * 4 {
             feat.energyCurve[i] = 0.99
@@ -979,7 +1009,38 @@ func popBOMTMashability471(
         if t >= confessStart && t < confessStart + bar * 4 {
             feat.energyCurve[i] = max(feat.energyCurve[i], 0.80)
         }
+        if t >= verseOnset && t < verseOnset + bar * 8 {
+            feat.energyCurve[i] = max(feat.energyCurve[i], 0.72)
+        }
     }
+    applyBOMTStemHitMeDecoys(
+        &feat,
+        bpm: bpm,
+        hitMeStart: titleChorusStart,
+        verseOnset: verseOnset,
+        confessStart: confessStart
+    )
+    return feat
+}
+
+/// BOMT guest signal with hit-me stem decoys for Drop 1 placement tests.
+func popBOMTTitleChorusFeatures(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    hitMeStart: Double = 59.5,
+    prechorusStarts: [Double] = [20.6, 47.1],
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorusFeatures(
+        duration: duration, bpm: bpm, drum: drum, bass: bass, vocal: vocal,
+        titleChorusStarts: [hitMeStart, 83.2],
+        prechorusStarts: prechorusStarts,
+        confidence: confidence
+    )
+    applyBOMTStemHitMeDecoys(&feat, bpm: bpm, hitMeStart: hitMeStart)
     return feat
 }
 
@@ -1031,13 +1092,13 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 46.0
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let oopsPre: [Double] = [20.2, 40.4]
     let signals: [UUID: SongSignalFeatures] = [
-        bomt.id: popTitleChorusFeatures(
+        bomt.id: popBOMTTitleChorusFeatures(
             duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-            titleChorusStarts: [bomtTitle, 118.0],
-            prechorusStarts: [20.6, 41.3]
+            hitMeStart: bomtTitle,
+            prechorusStarts: [20.6, 47.1]
         ),
         oops.id: popTitleChorusFeatures(
             duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
@@ -1101,7 +1162,7 @@ do {
             }
             .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }
         check(
-            "Shaped BOMT Drop 1 island is title chorus ~43s (hit me), not a 28% prechorus snap",
+            "Shaped BOMT Drop 1 island is title chorus ~59.5s (hit me), not verse/confess",
             abs((guestDrop?.sourceStart ?? -1) - bomtTitle) < plan.barSeconds * 2.5,
             String(
                 format: "guestSrc=%.1f want=%.1f %@",
@@ -1130,17 +1191,19 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 46.0
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let oopsVerseTwo = 78.3
     let bomtLateVerse = 95.0
     let oopsPre: [Double] = [20.2, 40.4]
+    var bomtSignal = popTitleChorusWithLouderLateVerse(
+        duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+        titleChorusStarts: [bomtTitle, 83.2],
+        prechorusStarts: [20.6, 47.1],
+        lateVerseStart: bomtLateVerse
+    )
+    applyBOMTStemHitMeDecoys(&bomtSignal, bpm: 93, hitMeStart: bomtTitle)
     let signals: [UUID: SongSignalFeatures] = [
-        bomt.id: popTitleChorusWithLouderLateVerse(
-            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-            titleChorusStarts: [bomtTitle, 118.0],
-            prechorusStarts: [20.6, 41.3],
-            lateVerseStart: bomtLateVerse
-        ),
+        bomt.id: bomtSignal,
         oops.id: popTitleChorusWithLouderVerseTwo(
             duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
             titleChorusStarts: [oopsTitle, 120.0],
@@ -1211,7 +1274,7 @@ do {
             String(format: "guestSrc=%.1f lateVerse=%.1f analysis=[%@]", guestSrc, bomtLateVerse, bomtChorusList)
         )
         check(
-            "Real-crate shape: BOMT Drop 1 is title chorus ~43s (hit me)",
+            "Real-crate shape: BOMT Drop 1 is title chorus ~59.5s (hit me)",
             abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
             String(format: "guestSrc=%.1f want=%.1f %@ analysis=[%@]", guestSrc, bomtTitle, chorusCandidateDump(bomtProfile), bomtChorusList)
         )
@@ -1234,15 +1297,15 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 46.0
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let oopsPreTwo = 40.4
     let bomtLateVerse = 95.0
     let oopsPre: [Double] = [20.2, oopsPreTwo]
     var bomtSignal = popTitleChorusRealCrateQualifyingPrechorus(
         duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-        titleChorusStarts: [bomtTitle, 118.0],
-        prechorusStarts: [20.6, 41.3],
-        prechorusTwoStart: 41.3
+        titleChorusStarts: [bomtTitle, 83.2],
+        prechorusStarts: [20.6, 47.1],
+        prechorusTwoStart: 47.1
     )
     let bomtHop = bomtSignal.hopSeconds
     let bomtBar = 240.0 / 93.0
@@ -1253,6 +1316,7 @@ do {
             bomtSignal.vocalPresenceCurve[i] = min(1, 0.55 * 1.18)
         }
     }
+    applyBOMTStemHitMeDecoys(&bomtSignal, bpm: 93, hitMeStart: bomtTitle)
     let signals: [UUID: SongSignalFeatures] = [
         bomt.id: bomtSignal,
         oops.id: popTitleChorusRealCrateQualifyingPrechorus(
@@ -1324,7 +1388,7 @@ do {
             String(format: "guest=%.1f analysis=[%@] catalog=%@", guestSrc, bomtAnalysis, chorusCandidateDump(bomtProfile))
         )
         check(
-            "03370e8 crate: BOMT Drop 1 is title chorus ~43s (hit me)",
+            "03370e8 crate: BOMT Drop 1 is title chorus ~59.5s (hit me)",
             abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
             String(format: "guest=%.1f want=%.1f", guestSrc, bomtTitle)
         )
@@ -1339,13 +1403,13 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 46.0
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let oopsPreTwo = 40.4
     let verseTwoLift = 65.7
     let bomtLateVerse = 95.0
     var bomtSignal = popTitleChorus591bef3Regression(
         duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-        titleChorusStart: bomtTitle, prechorusTwoStart: 41.3, verseTwoLiftStart: 70.0
+        titleChorusStart: bomtTitle, prechorusTwoStart: 47.1, verseTwoLiftStart: 70.0
     )
     let bomtHop = bomtSignal.hopSeconds
     let bomtBar = 240.0 / 93.0
@@ -1356,6 +1420,7 @@ do {
             bomtSignal.vocalPresenceCurve[i] = min(1, 0.55 * 1.18)
         }
     }
+    applyBOMTStemHitMeDecoys(&bomtSignal, bpm: 93, hitMeStart: bomtTitle)
     let signals: [UUID: SongSignalFeatures] = [
         bomt.id: bomtSignal,
         oops.id: popTitleChorus591bef3Regression(
@@ -1440,7 +1505,7 @@ do {
             String(format: "guest=%.1f analysis=[%@]", guestSrc, bomtAnalysis)
         )
         check(
-            "591bef3 crate: BOMT Drop 1 is title chorus ~43s (hit me)",
+            "591bef3 crate: BOMT Drop 1 is title chorus ~59.5s (hit me)",
             abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
             String(format: "guest=%.1f want=%.1f catalog=%@", guestSrc, bomtTitle, chorusCandidateDump(bomtProfile))
         )
@@ -1455,7 +1520,7 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 46.0
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let chorusTail = 50.5
     let oopsPreTwo = 40.4
     let oopsSignal = popTitleChorusChorusTail505(
@@ -1463,9 +1528,10 @@ do {
         titleChorusStart: oopsTitle, chorusTailStart: chorusTail, prechorusTwoStart: oopsPreTwo
     )
     let signals: [UUID: SongSignalFeatures] = [
-        bomt.id: popTitleChorus591bef3Regression(
+        bomt.id: popBOMTTitleChorusFeatures(
             duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-            titleChorusStart: bomtTitle, prechorusTwoStart: 41.3, verseTwoLiftStart: 78.0
+            hitMeStart: bomtTitle,
+            prechorusStarts: [20.6, 47.1]
         ),
         oops.id: oopsSignal,
     ]
@@ -1537,7 +1603,7 @@ do {
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 45.5
     let prechorusLeadIn = 43.0
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let chorusTail = 50.5
     let oopsPreTwo = 40.4
     let oopsSignal = popTitleChorusRealCrate59fe1e8(
@@ -1545,9 +1611,10 @@ do {
         titleChorusStart: oopsTitle, chorusTailStart: chorusTail, prechorusTwoStart: oopsPreTwo
     )
     let signals: [UUID: SongSignalFeatures] = [
-        bomt.id: popTitleChorus591bef3Regression(
+        bomt.id: popBOMTTitleChorusFeatures(
             duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-            titleChorusStart: bomtTitle, prechorusTwoStart: 41.3, verseTwoLiftStart: 78.0
+            hitMeStart: bomtTitle,
+            prechorusStarts: [20.6, 47.1]
         ),
         oops.id: oopsSignal,
     ]
@@ -1702,18 +1769,20 @@ do {
 }
 
 do {
-    // Real crate bounce of 398d7de: Drop 1 mashability @47.1s started on
-    // BOMT confess pickup, not “hit me” @43s.
+    // Real crate bounce of 398d7de / f7c219a: Drop 1 must land on hit-me ~59.5s,
+    // not verse @39.3, confess @47.1, or mashability island.
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
-    let bomtTitle = 43.0
+    let bomtTitle = 59.5
     let mashHot = 47.1
-    let confess = 32.0
+    let confess = 47.1
+    let verseOnset = 39.3
     let oopsTitle = 45.5
     let signals: [UUID: SongSignalFeatures] = [
         bomt.id: popBOMTMashability471(
             duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-            titleChorusStart: bomtTitle, mashabilityHotStart: mashHot, confessStart: confess
+            titleChorusStart: bomtTitle, mashabilityHotStart: mashHot,
+            confessStart: confess, verseOnset: verseOnset
         ),
         oops.id: popTitleChorusRealCrate59fe1e8(
             duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
@@ -1739,16 +1808,26 @@ do {
             String(format: "guest=%.1f hot=%.1f %@", guestSrc, mashHot, dump)
         )
         check(
-            "398d7de crate: Drop 1 guest is NOT confess @32s",
-            abs(guestSrc - confess) > 4.0,
+            "398d7de crate: Drop 1 guest is NOT verse @39.3s",
+            abs(guestSrc - verseOnset) > 4.0,
+            String(format: "guest=%.1f verse=%.1f", guestSrc, verseOnset)
+        )
+        check(
+            "398d7de crate: Drop 1 guest is NOT confess @47.1s",
+            abs(guestSrc - confess) > 2.0,
             String(format: "guest=%.1f confess=%.1f", guestSrc, confess)
         )
         check(
-            "398d7de crate: Drop 1 guest is hit-me title ~43s",
+            "398d7de crate: Drop 1 guest is hit-me title ~59.5s",
             !AutoRemixDiagnostics.guestDrop1MissesTitleDownbeat(
                 plan: plan, guestSongID: bomt.id, titleChorusStart: bomtTitle, maxBarsLate: 1.25
             ),
             String(format: "guest=%.1f want=%.1f %@", guestSrc, bomtTitle, dump)
+        )
+        check(
+            "398d7de crate: decision dump placed start ~59.5s",
+            dump.contains("Drop 1 guest placed") && guestSrc >= 58.0 && guestSrc <= 62.0,
+            dump
         )
         check(
             "398d7de crate: dump includes placed vs mashability",
@@ -2148,10 +2227,10 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let signals: [UUID: SongSignalFeatures] = [
-        bomt.id: popTitleChorusFeatures(
+        bomt.id: popBOMTTitleChorusFeatures(
             duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
-            titleChorusStarts: [43.0, 118.0],
-            prechorusStarts: [20.6, 41.3]
+            hitMeStart: 59.5,
+            prechorusStarts: [20.6, 47.1]
         ),
         oops.id: popTitleChorusFeatures(
             duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,

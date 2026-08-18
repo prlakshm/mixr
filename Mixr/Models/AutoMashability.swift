@@ -241,9 +241,9 @@ nonisolated enum AutoMashability {
         return best
     }
 
-    /// Drop 1 vocal: lock guest start to the title-chorus downbeat (“hit me”
-    /// ~43s). Mashability may still choose a bed offset; it must not slide
-    /// the guest into a prechorus pickup (confess @32s / island @47.1s).
+    /// Drop 1 vocal: lock BOMT guest start to “hit me” title chorus (~59.5–60.5s
+    /// on vocals.wav). Mashability may still choose a bed offset; it must not
+    /// slide the guest into verse @39s, confess @47s, or island @47.1s.
     static func drop1GuestStart(
         guest: AutoSongProfile,
         island: AutoMashabilityIsland?
@@ -251,27 +251,31 @@ nonisolated enum AutoMashability {
         let phrase = phraseSeconds(for: guest)
         if AutoMashupRoleLock.isBOMTTitle(guest.title),
            let signal = guest.analysis.signal {
-            if let hit = AutoChorusIsland.stemOnsetInBand(
+            if let hit = AutoChorusIsland.bomtDrop1HitMeStart(
                 signal: signal,
                 downbeats: guest.analysis.downbeats,
-                barSeconds: guest.analysis.barSeconds,
-                lo: 40.0,
-                hi: 45.2
+                barSeconds: guest.analysis.barSeconds
             ) {
                 return hit
             }
+            let drops = guest.analysis.chorusOrDropCandidates.sorted { $0.startSeconds < $1.startSeconds }
+            if drops.count >= 2, drops[1].startSeconds >= 75 {
+                return drops[1].startSeconds
+            }
         }
-        let titleStart = AutoChorusIsland.bestEntrance(
-            signal: guest.analysis.signal,
-            downbeats: guest.analysis.downbeats,
-            barSeconds: guest.analysis.barSeconds,
-            duration: guest.analysis.durationSeconds,
-            introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8,
-            phraseSeconds: phrase,
-            title: guest.title
-        )?.startSeconds
-        if let titleStart {
-            return titleStart
+        if !AutoMashupRoleLock.isBOMTTitle(guest.title) {
+            let titleStart = AutoChorusIsland.bestEntrance(
+                signal: guest.analysis.signal,
+                downbeats: guest.analysis.downbeats,
+                barSeconds: guest.analysis.barSeconds,
+                duration: guest.analysis.durationSeconds,
+                introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8,
+                phraseSeconds: phrase,
+                title: guest.title
+            )?.startSeconds
+            if let titleStart {
+                return titleStart
+            }
         }
         if let island {
             return island.guestStart
