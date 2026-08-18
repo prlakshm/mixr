@@ -430,13 +430,19 @@ if let plan = confidentPlan, let song = confidentSong {
         "impact", "bassDrop", "crash", "tapeStop", "clapFill",
         "airSweep", "riser", "snareBuild",
     ]
+    func overlapsPunch(_ t: Double) -> Bool {
+        plan.sfxEvents.contains { ev in
+            guard punchSFX.contains(ev.assetID) else { return false }
+            return ev.timelineStart < t + 0.06 && ev.timelineEnd > t - 0.02
+        }
+    }
     let inspectTimes: [Double] = plan.placements
         .filter { !$0.continuesPrevious && $0.timelineStart > 0.05 }
         .map(\.timelineStart)
         + plan.sfxEvents
         .filter { !SoundEffectLibrary.isPulseLayer($0.assetID) && !punchSFX.contains($0.assetID) }
         .map(\.timelineStart)
-    for t in inspectTimes {
+    for t in inspectTimes where !overlapsPunch(t) {
         let lo = max(0, Int((t - 0.01) * SR))
         let hi = min(pcm.count, Int((t + 0.05) * SR))
         guard hi > lo + 2 else { continue }
