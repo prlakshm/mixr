@@ -479,6 +479,7 @@ nonisolated enum AutoChorusIsland {
             var energyAfter: Double
             var energy8: Double
             var energyDip: Double
+            var energyLastBar: Double
             var energyRise: Double
             var novelty: Double
             var onsetCount: Int
@@ -501,6 +502,7 @@ nonisolated enum AutoChorusIsland {
                 u += barSeconds * 0.5
             }
             let energyBefore = mean(signal.energyCurve, hop: hop, from: t - barSeconds * 4, to: t)
+            let energyLastBar = mean(signal.energyCurve, hop: hop, from: t - barSeconds, to: t)
             let novelty = mean(signal.noveltyCurve, hop: hop, from: t - 0.15, to: t + 0.6)
             let localPeaks = onsetPeaks(
                 curve: vocal, hop: hop, lo: t, hi: t + min(0.90, barSeconds * 0.5)
@@ -514,6 +516,7 @@ nonisolated enum AutoChorusIsland {
                     energyAfter: energyAfter,
                     energy8: energy8,
                     energyDip: energyDip,
+                    energyLastBar: energyLastBar,
                     energyRise: energyAfter - energyBefore,
                     novelty: novelty,
                     onsetCount: localPeaks.count,
@@ -534,9 +537,9 @@ nonisolated enum AutoChorusIsland {
         func vocalBefore(_ s: Island) -> Double { s.mean1 - s.vocalRise }
         func isPlateauStart(_ s: Island) -> Bool {
             let before = vocalBefore(s)
-            let alreadyInHold = before >= s.mean8 * 0.86
-                && s.vocalRise < 0.08
-                && s.energyRise < 0.08
+            let alreadyInHold = before >= s.mean8 * 0.90
+                && s.vocalRise < 0.06
+                && s.energyLastBar >= s.energyAfter * 0.92
             if alreadyInHold { return false }
             // 4-bar energy spike with a hole before the real 8-bar chorus.
             if s.energyDip + 0.08 < s.energyAfter && s.energyDip < s.energyAfter * 0.88 {
