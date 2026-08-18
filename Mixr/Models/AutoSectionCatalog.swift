@@ -127,7 +127,7 @@ enum AutoSectionCatalog {
         signal: SongSignalFeatures? = nil
     ) -> AutoSongProfile {
         let stems = AutoStemResolver.resolve(track: track, tuning: tuning)
-        let enrichedSignal = stems.vocals.map { vocalsURL in
+        let withVocals = stems.vocals.map { vocalsURL in
             AutoStemVocalCurve.merge(
                 into: signal,
                 vocalsURL: vocalsURL,
@@ -135,6 +135,11 @@ enum AutoSectionCatalog {
                 bpmHint: track.bpm.map(Double.init)
             )
         } ?? signal
+        let enrichedSignal = AutoLyricSidecar.merge(
+            into: withVocals,
+            lyricsURL: stems.lyrics,
+            title: track.title
+        ) ?? withVocals
         let analysis = SongAnalyzer.analyze(track: track, signal: enrichedSignal)
         let stemDrumStrength = AutoStemKickEnergy.drumStrength(from: stems.drums)
         // Do not overwrite analysis.drumStrength — bed/hook scoring and the

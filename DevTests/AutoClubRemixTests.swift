@@ -1119,6 +1119,25 @@ func writeVocalStemOnsetFixture(
     try AutoStemKickEnergy.writeRawPCM(to: url, stereoPCM: stereo, frames: frames, sampleRate: sampleRate)
 }
 
+func writeLyricsJSON(
+    to url: URL,
+    title: String,
+    titleHookStart: Double? = nil,
+    words: [(t: Double, word: String)] = []
+) throws {
+    var dict: [String: Any] = ["title": title]
+    if let titleHookStart {
+        dict["titleHookStart"] = titleHookStart
+    }
+    dict["words"] = words.map { ["t": $0.t, "word": $0.word] as [String: Any] }
+    let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted])
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try data.write(to: url, options: .atomic)
+}
+
 func chorusCandidateDump(_ profile: AutoSongProfile) -> String {
     let choruses = profile.candidates
         .filter { $0.label == .chorus }
@@ -3338,6 +3357,191 @@ do {
 
     let missing = AutoStemResolver.resolve(songURL: song, fileExists: { _ in false })
     check("Missing stems resolve empty (full-mix fallback)", missing.isEmpty)
+
+    let lyrics = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/lyrics.json")
+    let withLyrics: Set<String> = [vocals.path, drums.path, lyrics.path]
+    let resolvedLyrics = AutoStemResolver.resolve(songURL: song, fileExists: { withLyrics.contains($0.path) })
+    check(
+        "Songs basename resolves lyrics.json beside vocals.wav",
+        resolvedLyrics.lyrics == lyrics && resolvedLyrics.vocals == vocals,
+        "lyrics=\(resolvedLyrics.lyrics?.path ?? "nil")"
+    )
+}
+
+do {
+    // lyrics.json titleHookStart is the title-hook / Drop 1 snap — not energy islands.
+    let oopsHook = 48.12
+    let bomtHook = 59.52
+    let parsed = AutoLyricSidecar.parse(
+        """
+        {"title":"Oops I Did It Again","titleHookStart":\(oopsHook),
+         "words":[{"t":45.5,"word":"baby"},{"t":\(oopsHook),"word":"oops"},{"t":48.4,"word":"I"}]}
+        """.data(using: .utf8)!
+    )
+    check(
+        "lyrics.json parse reads titleHookStart",
+        abs((parsed.flatMap { AutoLyricSidecar.hookStart(in: $0, title: "Oops I Did It Again") } ?? -1) - oopsHook) < 0.001,
+        String(format: "got=%.2f", parsed?.titleHookStart ?? -1)
+    )
+
+    let wordsOnly = AutoLyricSidecar.parse(
+        """
+        {"title":"Baby One More Time","words":[
+          {"t":40.0,"word":"baby"},{"t":40.4,"word":"you"},
+          {"t":\(bomtHook),"word":"hit"},{"t":59.7,"word":"me"},
+          {"t":59.9,"word":"baby"},{"t":60.2,"word":"one"},
+          {"t":60.4,"word":"more"},{"t":60.6,"word":"time"}
+        ]}
+        """.data(using: .utf8)!
+    )
+    let derived = wordsOnly.flatMap { AutoLyricSidecar.hookStart(in: $0, title: "Baby One More Time") } ?? -1
+    check(
+        "lyrics.json words: title phrase / hit extra beats verse filler baby",
+        abs(derived - bomtHook) < 0.05,
+        String(format: "derived=%.2f verse=40.0 hook=%.2f", derived, bomtHook)
+    )
+
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    var oopsSignal = popTitleChorusRealCrate59fe1e8(
+        duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+        titleChorusStart: 48.0, chorusTailStart: 50.5, prechorusTwoStart: 40.4
+    )
+    oopsSignal.lyricTitleHookStart = oopsHook
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: oopsSignal)
+    let oopsPhrase = oopsProfile.analysis.phraseBoundaries.count >= 2
+        ? oopsProfile.analysis.phraseBoundaries[1] - oopsProfile.analysis.phraseBoundaries[0]
+        : oopsProfile.analysis.barSeconds * 8
+    let oopsOnset = AutoChorusIsland.titleHookOnset(
+        signal: oopsSignal,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsProfile.analysis.barSeconds,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        phraseSeconds: oopsPhrase,
+        title: oops.title
+    ) ?? -1
+    let oopsBar = oopsProfile.analysis.barSeconds
+    check(
+        "lyrics sidecar: titleHookOnset snaps to Oops word, not catalog tail",
+        abs(oopsOnset - oopsHook) < oopsBar * 0.45 && abs(oopsOnset - 50.5) > 1.5,
+        String(format: "onset=%.2f hook=%.2f tail=50.5 bar=%.2f", oopsOnset, oopsHook, oopsBar)
+    )
+    let snapped = AutoChorusIsland.snapLyricWordOnset(
+        oopsHook, downbeats: oopsProfile.analysis.downbeats, barSeconds: oopsBar
+    )
+    check(
+        "lyrics sidecar: snap is the word's bar downbeat (not the next bar)",
+        snapped <= oopsHook + 0.08 && oopsHook - snapped < oopsBar * 0.85 && abs(snapped - 50.5) > 1.5,
+        String(format: "snap=%.2f word=%.2f", snapped, oopsHook)
+    )
+
+    let sidecarOverride = 61.30
+    var overrideSignal = oopsSignal
+    overrideSignal.lyricTitleHookStart = sidecarOverride
+    let overrideOnset = AutoChorusIsland.titleHookOnset(
+        signal: overrideSignal,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsBar,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        phraseSeconds: oopsPhrase,
+        title: oops.title
+    ) ?? -1
+    check(
+        "lyrics sidecar wins over energy island (hook start is the JSON field, not vocal peak)",
+        abs(overrideOnset - sidecarOverride) < oopsBar * 0.45 && abs(overrideOnset - 48.0) > 2.0,
+        String(format: "onset=%.2f lyric=%.2f energy=48.0", overrideOnset, sidecarOverride)
+    )
+
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let stemRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-lyrics-sidecar-\(UUID().uuidString)", isDirectory: true)
+    let oopsLyrics = stemRoot
+        .appendingPathComponent("Oops I Did It Again", isDirectory: true)
+        .appendingPathComponent("lyrics.json")
+    let bomtLyrics = stemRoot
+        .appendingPathComponent("Baby One More Time", isDirectory: true)
+        .appendingPathComponent("lyrics.json")
+    do {
+        try writeLyricsJSON(
+            to: oopsLyrics, title: oops.title, titleHookStart: oopsHook,
+            words: [(45.5, "baby"), (oopsHook, "oops"), (48.4, "I"), (48.7, "did"), (49.1, "it"), (49.4, "again")]
+        )
+        try writeLyricsJSON(
+            to: bomtLyrics, title: bomt.title, titleHookStart: bomtHook,
+            words: [(40.0, "baby"), (40.5, "loneliness"), (bomtHook, "hit"), (59.7, "me"),
+                    (59.9, "baby"), (60.2, "one"), (60.4, "more"), (60.6, "time")]
+        )
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[oops.id] = AutoStemSet(lyrics: oopsLyrics)
+        tuning.explicitStemsBySongID[bomt.id] = AutoStemSet(lyrics: bomtLyrics)
+        let signals: [UUID: SongSignalFeatures] = [
+            oops.id: popTitleChorusRealCrate59fe1e8(
+                duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+                titleChorusStart: 48.0, chorusTailStart: 50.5, prechorusTwoStart: 40.4
+            ),
+            bomt.id: popBOMTTitleChorusFeatures(
+                duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+                hitMeStart: 59.5, prechorusStarts: [20.6, 47.1]
+            ),
+        ]
+        let mergedOops = AutoSectionCatalog.profile(track: oops, tuning: tuning, signal: signals[oops.id]!)
+        check(
+            "catalog merge writes lyricTitleHookStart from lyrics.json",
+            abs((mergedOops.analysis.signal?.lyricTitleHookStart ?? -1) - oopsHook) < 0.001,
+            String(format: "lyric=%.2f", mergedOops.analysis.signal?.lyricTitleHookStart ?? -1)
+        )
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [bomt, oops],
+            tuning: tuning,
+            seed: 20260818,
+            signals: signals
+        ) {
+        case .success(_, let plan, _):
+            let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+            let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+            let guestSrc = plan.placements
+                .filter {
+                    $0.songID == bomt.id && $0.role == .dominant
+                        && abs($0.timelineStart - drop1Start) < 0.15
+                }
+                .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+                .sourceStart ?? -1
+            let bedDump = plan.decisions.first {
+                $0.kind == .selectedAnchor && ($0.detail ?? "").contains("bed complete hook")
+            }?.detail ?? ""
+            let guestDump = plan.decisions.first {
+                $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
+            }?.detail ?? ""
+            check(
+                "lyrics sidecar: planner bed hook is titleHookStart (not energy tail)",
+                abs(hookSrc - oopsHook) < plan.barSeconds * 0.45 && abs(hookSrc - 50.5) > 1.5,
+                String(format: "src=%.2f want=%.2f %@", hookSrc, oopsHook, bedDump)
+            )
+            check(
+                "lyrics sidecar: planner Drop 1 is titleHookStart (not verse)",
+                abs(guestSrc - bomtHook) < plan.barSeconds * 0.55 && abs(guestSrc - 40.0) > 4.0,
+                String(format: "src=%.2f want=%.2f %@", guestSrc, bomtHook, guestDump)
+            )
+            check(
+                "lyrics sidecar: dump includes lyric= and fadeDur=0",
+                (bedDump.contains("lyric=") || guestDump.contains("lyric="))
+                    && plan.decisions.contains { ($0.detail ?? "").contains("fadeDur=0") },
+                bedDump
+            )
+            check(
+                "lyrics sidecar: title-hook clips hard-cut",
+                plan.placements.contains {
+                    abs($0.sourceStart - hookSrc) < 0.25 && $0.fadeIn.duration == 0
+                },
+                String(format: "hookSrc=%.2f", hookSrc)
+            )
+        case .failure(let message):
+            check("lyrics sidecar mashup planner", false, message)
+        }
+    } catch {
+        check("lyrics sidecar fixture write", false, "\(error)")
+    }
 }
 
 do {

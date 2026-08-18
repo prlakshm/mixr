@@ -22,11 +22,13 @@ struct AutoStemSet: Sendable, Equatable {
     var drums: URL? = nil
     var bass: URL? = nil
     var other: URL? = nil
+    /// Whisper word timestamps next to Demucs stems (`lyrics.json`).
+    var lyrics: URL? = nil
 
     static let empty = AutoStemSet()
 
     var isEmpty: Bool {
-        vocals == nil && drums == nil && bass == nil && other == nil
+        vocals == nil && drums == nil && bass == nil && other == nil && lyrics == nil
     }
 
     var hasVocals: Bool { vocals != nil }
@@ -136,7 +138,140 @@ enum AutoStemResolver {
                 set.set(kind, url: url)
             }
         }
+        let lyrics = directory.appendingPathComponent("lyrics.json")
+        if fileExists(lyrics) {
+            set.lyrics = lyrics
+        }
         return set
+    }
+}
+
+// MARK: - Whisper lyrics.json (word onsets beside vocals.wav)
+
+/// Sidecar written next to Demucs stems:
+/// `{ "title": "...", "words": [{"t": 48.12, "word": "oops"}, ...], "titleHookStart": 48.12 }`
+struct AutoLyricSidecar: Sendable, Equatable {
+    var title: String?
+    var words: [(t: Double, word: String)]
+    /// First sung title/hook **phrase** (not a verse filler, not a later chorus bar).
+    var titleHookStart: Double?
+
+    static func == (lhs: AutoLyricSidecar, rhs: AutoLyricSidecar) -> Bool {
+        lhs.title == rhs.title
+            && lhs.titleHookStart == rhs.titleHookStart
+            && lhs.words.count == rhs.words.count
+            && zip(lhs.words, rhs.words).allSatisfy { $0.t == $1.t && $0.word == $1.word }
+    }
+
+    static func load(url: URL) -> AutoLyricSidecar? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return parse(data)
+    }
+
+    static func parse(_ data: Data) -> AutoLyricSidecar? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        let title = obj["title"] as? String
+        let hook = jsonDouble(obj["titleHookStart"])
+            ?? jsonDouble(obj["title_hook_start"])
+            ?? jsonDouble(obj["hookStart"])
+        var words: [(t: Double, word: String)] = []
+        let rawWords = obj["words"] as? [Any] ?? obj["tokens"] as? [Any] ?? []
+        for item in rawWords {
+            guard let row = item as? [String: Any] else { continue }
+            let word = (row["word"] as? String)
+                ?? (row["text"] as? String)
+                ?? (row["w"] as? String)
+            let t = jsonDouble(row["t"])
+                ?? jsonDouble(row["start"])
+                ?? jsonDouble(row["t0"])
+            guard let word, let t else { continue }
+            words.append((t, word))
+        }
+        if hook == nil && words.isEmpty { return nil }
+        return AutoLyricSidecar(title: title, words: words, titleHookStart: hook)
+    }
+
+    /// Prefer `titleHookStart`; else first in-order title/hook **phrase** in `words`.
+    static func hookStart(in sidecar: AutoLyricSidecar, title: String?) -> Double? {
+        if let t = sidecar.titleHookStart, t >= 0 { return t }
+        return firstTitlePhraseOnset(
+            words: sidecar.words,
+            title: title ?? sidecar.title ?? ""
+        )
+    }
+
+    /// Merge Whisper title-hook onset into signal features (nil URL → unchanged).
+    static func merge(
+        into base: SongSignalFeatures?,
+        lyricsURL: URL?,
+        title: String?
+    ) -> SongSignalFeatures? {
+        guard let lyricsURL, let sidecar = load(url: lyricsURL),
+              let start = hookStart(in: sidecar, title: title)
+        else {
+            return base
+        }
+        guard var merged = base else { return nil }
+        merged.lyricTitleHookStart = start
+        return merged
+    }
+
+    /// First time the title tokens (plus distinctive extras like “hit”) run as a
+    /// line — not the first generic filler alone.
+    static func firstTitlePhraseOnset(
+        words: [(t: Double, word: String)],
+        title: String
+    ) -> Double? {
+        let tokens = AutoPivotWord.hookTokens(in: title)
+        guard !tokens.all.isEmpty else { return nil }
+        let norm: [(t: Double, tok: String)] = words.compactMap { w in
+            let tok = AutoPivotWord.tokens(in: w.word).first
+                ?? String(w.word.lowercased().filter { $0.isLetter })
+            guard tok.count >= 2 else { return nil }
+            return (w.t, tok)
+        }
+        func find(_ phrase: [String]) -> Double? {
+            guard !phrase.isEmpty else { return nil }
+            let lineSeconds = 8.0
+            for i in norm.indices {
+                var p = 0
+                var j = i
+                while j < norm.count, p < phrase.count, norm[j].t - norm[i].t <= lineSeconds {
+                    if norm[j].tok == phrase[p] {
+                        p += 1
+                        if p == phrase.count { return norm[i].t }
+                    }
+                    j += 1
+                }
+            }
+            return nil
+        }
+
+        var hits: [Double] = []
+        if let t = find(tokens.all) { hits.append(t) }
+        let rareExtras = tokens.extras.filter { AutoPivotWord.distinctiveLexicon.contains($0) }
+        for extra in rareExtras {
+            var phrase = [extra]
+            phrase.append(contentsOf: tokens.all)
+            if let t = find(phrase) { hits.append(t) }
+            if let t = find([extra]) { hits.append(t) }
+        }
+        if tokens.hasLexiconRare {
+            for rare in tokens.distinctive {
+                if let t = find([rare]) { hits.append(t) }
+            }
+        }
+        return hits.min()
+    }
+
+    private static func jsonDouble(_ any: Any?) -> Double? {
+        if let d = any as? Double { return d }
+        if let i = any as? Int { return Double(i) }
+        if let n = any as? NSNumber { return n.doubleValue }
+        if let s = any as? String { return Double(s) }
+        return nil
     }
 }
 

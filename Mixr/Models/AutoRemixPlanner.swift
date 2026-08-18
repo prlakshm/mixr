@@ -2298,17 +2298,19 @@ enum AutoRemixPlanner {
                         chosenStart: chorus.startSeconds
                     )
                     let tokensDump = AutoChorusIsland.titleTokensDump(profile.title)
+                    let lyricDump = AutoChorusIsland.lyricHookDump(profile.analysis.signal)
                     decisions.append(
                         AutoDecision(
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@] | %@",
+                                format: "bed complete hook @%.1fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@] | %@ | %@",
                                 chorus.startSeconds,
                                 slot.entry.rawValue,
                                 dump,
                                 rawList,
-                                tokensDump
+                                tokensDump,
+                                lyricDump
                             )
                         )
                     )
@@ -2390,9 +2392,10 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "Drop 1 guest placed @%.1fs (titleEntrance=%@ mashability=%.1f chorusOrDrop=[%@]) over bed @%.1fs (score %.2f) %@",
+                                format: "Drop 1 guest placed @%.1fs (titleEntrance=%@ mashability=%.1f chorusOrDrop=[%@]) over bed @%.1fs (score %.2f) %@ %@",
                                 placedStart, titleStr, island.guestStart, catalog, island.bedStart, island.score,
-                                AutoChorusIsland.titleTokensDump(profile.title)
+                                AutoChorusIsland.titleTokensDump(profile.title),
+                                AutoChorusIsland.lyricHookDump(profile.analysis.signal)
                             )
                         )
                     )
@@ -2816,13 +2819,14 @@ enum AutoRemixPlanner {
                         kind: .selectedAnchor,
                         songTitle: profile.title,
                         detail: String(
-                            format: "title-hook clip src=%.1fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@",
+                            format: "title-hook clip src=%.1fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@",
                             ps.section.startSeconds,
                             ps.timelineStart,
                             entry.rawValue,
                             bodyFadeIn.type.rawValue,
                             bodyFadeIn.duration,
-                            AutoChorusIsland.titleTokensDump(profile.title)
+                            AutoChorusIsland.titleTokensDump(profile.title),
+                            AutoChorusIsland.lyricHookDump(profile.analysis.signal)
                         )
                     )
                 )

@@ -48,21 +48,11 @@ nonisolated enum AutoChorusIsland {
         phraseSeconds: Double? = nil,
         title: String? = nil
     ) -> Entrance? {
-        guard hasUsableEnergyShape(signal), barSeconds > 0.05, duration > barSeconds * 16 else {
+        guard barSeconds > 0.05, duration > barSeconds * 16 else {
             return nil
         }
         let phrase = max(barSeconds * 4, phraseSeconds ?? barSeconds * 8)
-        let lo = max(barSeconds * 8, min(introEnd, barSeconds * 16) * 0.35)
-        let globalHi = min(duration * 0.42, duration - barSeconds * 8)
-        let hi = firstTitleWindowHi(
-            introEnd: introEnd,
-            phraseSeconds: phrase,
-            barSeconds: barSeconds,
-            duration: duration,
-            globalHi: globalHi
-        )
-        guard hi > lo + barSeconds else { return nil }
-
+        // Whisper lyrics.json title-hook onset wins over energy islands.
         if let hook = titleHookEntrance(
             signal: signal,
             downbeats: downbeats,
@@ -74,6 +64,17 @@ nonisolated enum AutoChorusIsland {
         ) {
             return hook
         }
+        guard hasUsableEnergyShape(signal) else { return nil }
+        let lo = max(barSeconds * 8, min(introEnd, barSeconds * 16) * 0.35)
+        let globalHi = min(duration * 0.42, duration - barSeconds * 8)
+        let hi = firstTitleWindowHi(
+            introEnd: introEnd,
+            phraseSeconds: phrase,
+            barSeconds: barSeconds,
+            duration: duration,
+            globalHi: globalHi
+        )
+        guard hi > lo + barSeconds else { return nil }
 
         if let stem = stemTitleOnsetEntrance(
             signal: signal,
@@ -133,7 +134,9 @@ nonisolated enum AutoChorusIsland {
         let measuredStr = measured.map { String(format: "%.1f", $0.startSeconds) } ?? "nil"
         let chosenStr = chosenStart.map { String(format: "%.1f", $0) } ?? "nil"
         let stem = profile.stems.hasVocals ? "stem=vocals" : "stem=none"
-        return "chorusOrDrop=[\(chorusSecs)] measured=\(measuredStr) chosen=\(chosenStr) catalog=[\(catalog)] \(stem)"
+        let lyric = profile.analysis.signal?.lyricTitleHookStart
+            .map { String(format: "lyric=%.2f", $0) } ?? "lyric=none"
+        return "chorusOrDrop=[\(chorusSecs)] measured=\(measuredStr) chosen=\(chosenStr) catalog=[\(catalog)] \(stem) \(lyric)"
     }
 
     /// Raw qualifying downbeats in the first-title window (debug / bounce score).
@@ -441,12 +444,72 @@ nonisolated enum AutoChorusIsland {
         AutoPivotWord.hookTokens(in: title ?? "").dump
     }
 
+    static func lyricHookDump(_ signal: SongSignalFeatures?) -> String {
+        signal?.lyricTitleHookStart.map { String(format: "lyric=%.2f", $0) } ?? "lyric=none"
+    }
+
     /// First isolated-vocal onset of a title/hook line after the prechorus.
-    /// Uses title/hook tokens (`AutoPivotWord.hookTokens`): earliest 8-bar
-    /// high-vocal island whose **opening bar** aligns with distinctive tokens
-    /// — not max vocal-mean later in the chorus, not the first verse filler.
-    /// Opening word = **first** stem onset at that downbeat (not last peak).
+    /// Uses Whisper `lyrics.json` `titleHookStart` when present (snapped to the
+    /// downbeat of that word). Else title/hook tokens + energy islands.
     static func titleHookOnset(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double,
+        duration: Double,
+        introEnd: Double,
+        phraseSeconds: Double,
+        title: String?
+    ) -> Double? {
+        if let lyric = snapLyricTitleHook(
+            signal: signal, downbeats: downbeats, barSeconds: barSeconds
+        ) {
+            return lyric
+        }
+        return energyTitleHookOnset(
+            signal: signal,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            duration: duration,
+            introEnd: introEnd,
+            phraseSeconds: phraseSeconds,
+            title: title
+        )
+    }
+
+    /// Whisper word onset → hard-cut downbeat of the bar the word sits in.
+    /// Never the following bar (that cuts the title word). Never fade-in.
+    static func snapLyricTitleHook(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double
+    ) -> Double? {
+        guard let t = signal.lyricTitleHookStart, t >= 0, barSeconds > 0.05 else {
+            return nil
+        }
+        return snapLyricWordOnset(t, downbeats: downbeats, barSeconds: barSeconds)
+    }
+
+    static func snapLyricWordOnset(
+        _ t: Double,
+        downbeats: [Double],
+        barSeconds: Double
+    ) -> Double {
+        guard barSeconds > 0.05 else { return t }
+        let inBar = downbeats.filter { db in
+            db <= t + 0.08 && t - db < barSeconds * 0.85
+        }
+        if let db = inBar.max() {
+            return db
+        }
+        let after = downbeats.filter { $0 >= t - 0.05 }.sorted()
+        if let db = after.first, db <= t + barSeconds * 0.35 {
+            return db
+        }
+        return t
+    }
+
+    /// Energy-island fallback when `lyrics.json` is missing.
+    private static func energyTitleHookOnset(
         signal: SongSignalFeatures,
         downbeats: [Double],
         barSeconds: Double,

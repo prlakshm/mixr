@@ -53,6 +53,8 @@ struct SongSignalFeatures: Sendable {
     /// Isolated vocal stem RMS per hop when a Demucs sidecar is present.
     /// Title-chorus detection prefers this over full-mix vocal proxy.
     var stemVocalPresenceCurve: [Double] = []
+    /// Whisper `lyrics.json` title/hook phrase onset (seconds). Nil → energy fallback.
+    var lyricTitleHookStart: Double? = nil
     /// Spectral-novelty proxy per hop (band-energy change), normalized.
     var noveltyCurve: [Double]
 
