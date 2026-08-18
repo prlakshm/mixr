@@ -9,7 +9,8 @@ import Foundation
 //
 // First title chorus: cap the search window before verse 2, compute the
 // energy floor from that window only, boost vocal/title-token onset, and
-// within a lift cluster prefer the **later** peak (title after prechorus).
+// within a lift cluster pick the **first title downbeat** (~46s), not
+// prechorus (~40s) or chorus tail (~50.5s).
 
 nonisolated enum AutoChorusIsland {
 
@@ -19,6 +20,7 @@ nonisolated enum AutoChorusIsland {
         var rise: Double
         var energyAfter: Double
         var vocalAfter: Double
+        var titleBoost: Double
     }
 
     /// True when the energy curve actually varies — flat crate stubs cannot
@@ -80,7 +82,12 @@ nonisolated enum AutoChorusIsland {
             .filter { qualifiesAsTitleEntrance($0, titleEnergyFloor: titleEnergyFloor) }
             .sorted { $0.startSeconds < $1.startSeconds }
 
-        return clusterPeaks(qualifying, phraseSeconds: phrase, barSeconds: barSeconds).first
+        return clusterPeaks(
+            qualifying,
+            phraseSeconds: phrase,
+            barSeconds: barSeconds,
+            titleOnset: true
+        ).first
     }
 
     /// All chorus entrance peaks (full early-song window) — for repeat chorus / refine c2.
@@ -120,7 +127,12 @@ nonisolated enum AutoChorusIsland {
             .filter { qualifiesAsTitleEntrance($0, titleEnergyFloor: titleEnergyFloor) }
             .sorted { $0.startSeconds < $1.startSeconds }
 
-        return clusterPeaks(qualifying, phraseSeconds: phrase, barSeconds: barSeconds)
+        return clusterPeaks(
+            qualifying,
+            phraseSeconds: phrase,
+            barSeconds: barSeconds,
+            titleOnset: false
+        )
     }
 
     static func bestEntrance(
@@ -246,7 +258,14 @@ nonisolated enum AutoChorusIsland {
             let score = max(0, rise) * 0.44 + after * 0.18 + vocal * 0.22 + max(0, vocalRise) * 0.10
                 + novelty * 0.06 + titleBoost
             sampled.append(
-                Entrance(startSeconds: t, score: score, rise: rise, energyAfter: after, vocalAfter: vocal)
+                Entrance(
+                    startSeconds: t,
+                    score: score,
+                    rise: rise,
+                    energyAfter: after,
+                    vocalAfter: vocal,
+                    titleBoost: titleBoost
+                )
             )
         }
         return sampled
@@ -266,7 +285,7 @@ nonisolated enum AutoChorusIsland {
         let tokens = Set(AutoPivotWord.tokens(in: title))
         guard !tokens.isEmpty else { return 0 }
         let afterIntro = t - introEnd
-        guard afterIntro >= phraseSeconds * 1.22 && afterIntro <= phraseSeconds * 1.58 else {
+        guard afterIntro >= phraseSeconds * 1.24 && afterIntro <= phraseSeconds * 1.50 else {
             return 0
         }
         var boost = max(0, vocal - 0.46) * 0.18 + max(0, vocalRise) * 0.16 + novelty * 0.05
@@ -275,11 +294,12 @@ nonisolated enum AutoChorusIsland {
         return boost
     }
 
-    /// Group qualifying lifts within one phrase; peak = best score, tie → later (title after prechorus).
+    /// Group qualifying lifts within one phrase.
     private static func clusterPeaks(
         _ qualifying: [Entrance],
         phraseSeconds: Double,
-        barSeconds: Double
+        barSeconds: Double,
+        titleOnset: Bool
     ) -> [Entrance] {
         guard !qualifying.isEmpty else { return [] }
         var clusters: [[Entrance]] = []
@@ -295,8 +315,10 @@ nonisolated enum AutoChorusIsland {
         clusters.append(current)
 
         let peaks = clusters.map { cluster -> Entrance in
-            // Title chorus is the tail of a prechorus→chorus lift — not the first downbeat.
-            cluster.max(by: { a, b in a.startSeconds < b.startSeconds })!
+            if titleOnset {
+                return titleOnsetEntrance(in: cluster)
+            }
+            return cluster.max(by: { a, b in a.score < b.score })!
         }
 
         var unique: [Entrance] = []
@@ -308,6 +330,25 @@ nonisolated enum AutoChorusIsland {
             if unique.count >= 4 { break }
         }
         return unique
+    }
+
+    /// First downbeat of the title chorus in a lift — not prechorus, not tail line.
+    private static func titleOnsetEntrance(in cluster: [Entrance]) -> Entrance {
+        let withTitle = cluster.filter { $0.titleBoost >= 0.035 }
+        if let first = withTitle.min(by: { $0.startSeconds < $1.startSeconds }) {
+            return first
+        }
+        let peakE = cluster.map(\.energyAfter).max() ?? 0
+        let nearPeak = cluster.filter { $0.energyAfter >= peakE * 0.86 && $0.titleBoost > 0.01 }
+        if let first = nearPeak.min(by: { $0.startSeconds < $1.startSeconds }) {
+            return first
+        }
+        let maxRise = cluster.map(\.rise).max() ?? 0
+        let riseOnset = cluster.filter { $0.rise >= max(0.06, maxRise * 0.70) }
+        if let first = riseOnset.min(by: { $0.startSeconds < $1.startSeconds }) {
+            return first
+        }
+        return cluster.min(by: { $0.startSeconds < $1.startSeconds })!
     }
 
     private static func qualifiesAsTitleEntrance(_ e: Entrance, titleEnergyFloor: Double) -> Bool {

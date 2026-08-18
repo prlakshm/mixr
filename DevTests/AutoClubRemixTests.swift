@@ -863,6 +863,43 @@ func popTitleChorus591bef3Regression(
     return feat
 }
 
+/// Real crate bounce of 3e7dd8d: cluster **tail** rule picked @50.5s
+/// (“got lost in the game / oh baby baby”) instead of title downbeat ~46s.
+func popTitleChorusChorusTail505(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStart: Double = 46.0,
+    chorusTailStart: Double = 50.5,
+    prechorusTwoStart: Double = 40.4,
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorus591bef3Regression(
+        duration: duration,
+        bpm: bpm,
+        drum: drum,
+        bass: bass,
+        vocal: vocal,
+        titleChorusStart: titleChorusStart,
+        prechorusTwoStart: prechorusTwoStart,
+        verseTwoLiftStart: 78.0,
+        confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if t >= chorusTailStart && t < chorusTailStart + bar * 2 {
+            feat.energyCurve[i] = 0.99
+            feat.vocalPresenceCurve[i] = min(1, vocal * 1.25)
+            feat.noveltyCurve[i] = max(feat.noveltyCurve[i], 0.90)
+        }
+    }
+    return feat
+}
+
 func chorusCandidateDump(_ profile: AutoSongProfile) -> String {
     let choruses = profile.candidates
         .filter { $0.label == .chorus }
@@ -1131,7 +1168,8 @@ do {
         barSeconds: oopsProfile.analysis.barSeconds,
         duration: oopsProfile.analysis.durationSeconds,
         introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
-        phraseSeconds: phrase
+        phraseSeconds: phrase,
+        title: oops.title
     )
     check(
         "03370e8 crate: Oops refine entrance is NOT prechorus snap @40.4s",
@@ -1297,6 +1335,88 @@ do {
         )
     case .failure(let message):
         check("591bef3 regression Britney mashup", false, message)
+    }
+}
+
+do {
+    // Real crate bounce of 3e7dd8d: tail rule picked @50.5s — Whisper heard
+    // “got lost in the game / oh baby baby”, oops_count=0.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let oopsTitle = 46.0
+    let bomtTitle = 43.0
+    let chorusTail = 50.5
+    let oopsPreTwo = 40.4
+    let oopsSignal = popTitleChorusChorusTail505(
+        duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+        titleChorusStart: oopsTitle, chorusTailStart: chorusTail, prechorusTwoStart: oopsPreTwo
+    )
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: popTitleChorus591bef3Regression(
+            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+            titleChorusStart: bomtTitle, prechorusTwoStart: 41.3, verseTwoLiftStart: 78.0
+        ),
+        oops.id: oopsSignal,
+    ]
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: oopsSignal)
+    let oopsAnalysis = oopsProfile.analysis.chorusOrDropCandidates
+        .map { String(format: "%.1fs", $0.startSeconds) }
+        .joined(separator: ",")
+    let phrase = oopsProfile.analysis.phraseBoundaries.count >= 2
+        ? oopsProfile.analysis.phraseBoundaries[1] - oopsProfile.analysis.phraseBoundaries[0]
+        : oopsProfile.analysis.barSeconds * 8
+    let entrance = AutoChorusIsland.firstTitleEntrance(
+        signal: oopsSignal,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsProfile.analysis.barSeconds,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        phraseSeconds: phrase,
+        title: oops.title
+    )
+    check(
+        "3e7dd8d crate: firstTitleEntrance is NOT chorus tail @50.5s",
+        abs((entrance?.startSeconds ?? -1) - chorusTail) > 3,
+        String(format: "entrance=%.1f tail=%.1f analysis=[%@]", entrance?.startSeconds ?? -1, chorusTail, oopsAnalysis)
+    )
+    check(
+        "3e7dd8d crate: firstTitleEntrance is title downbeat ~46s",
+        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.6,
+        String(format: "entrance=%.1f want=%.1f catalog=%@", entrance?.startSeconds ?? -1, oopsTitle, chorusCandidateDump(oopsProfile))
+    )
+
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+        check(
+            "3e7dd8d crate: bed hook is NOT chorus tail @50.5s",
+            !AutoRemixDiagnostics.firstDeckAHookIsChorusTail(
+                plan: plan, titleChorusStart: oopsTitle, chorusTailStart: chorusTail
+            ),
+            String(format: "hook=%.1f tail=%.1f analysis=[%@]", hookSrc, chorusTail, oopsAnalysis)
+        )
+        check(
+            "3e7dd8d crate: bed hook is title downbeat ~46s (uncut Oops)",
+            abs(hookSrc - oopsTitle) < plan.barSeconds * 1.6
+                && abs(hookSrc - oopsPreTwo) > 3
+                && abs(hookSrc - chorusTail) > 3,
+            String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
+        )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let guestSrc = plan.placements
+            .filter {
+                $0.songID == bomt.id && $0.role == .dominant
+                    && abs($0.timelineStart - drop1Start) < 0.15
+            }
+            .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+            .sourceStart ?? -1
+        check(
+            "3e7dd8d crate: BOMT Drop 1 stays title hook (not loneliness)",
+            abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
+            String(format: "guest=%.1f want=%.1f", guestSrc, bomtTitle)
+        )
+    case .failure(let message):
+        check("3e7dd8d chorus-tail Britney mashup", false, message)
     }
 }
 

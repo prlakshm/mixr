@@ -236,7 +236,8 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
   N-song crates when both Britney tracks are present.
 - First complete **bed** hook before the pivot must source the bed's **title
   chorus** (measured **first-title window**: capped before verse 2, local
-  energy floor, title-token vocal boost). Not prechorus @40.4s, not verse 2
+  energy floor, title-token vocal boost). Pick the **first downbeat** of the
+  title lift (~46s), not prechorus @40.4s, chorus tail @50.5s, or verse 2
   @65.7s / @78s. Guest Drop 1 uses the same first-title window (BOMT “hit me”
   ~43s), not loneliness verse.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).

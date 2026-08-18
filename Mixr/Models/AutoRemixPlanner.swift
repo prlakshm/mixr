@@ -2218,7 +2218,7 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs (first title-chorus window, not prechorus/verse-2)",
+                                format: "bed complete hook @%.1fs (first title-chorus downbeat, not prechorus/tail/verse-2)",
                                 chorus.startSeconds
                             )
                         )

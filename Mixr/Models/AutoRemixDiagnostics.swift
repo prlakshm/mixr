@@ -499,6 +499,19 @@ nonisolated enum AutoRemixDiagnostics {
         return onPre && !onTitle
     }
 
+    /// True when bed hook starts on the chorus tail (~50.5s “oh baby baby” line).
+    static func firstDeckAHookIsChorusTail(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        chorusTailStart: Double = 50.5,
+        toleranceSeconds: Double = 3.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onTail = abs(hook.sourceStart - chorusTailStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onTail && !onTitle
+    }
+
     /// True when guest Drop 1 sources a late verse groove (BOMT loneliness
     /// verse ~95s) instead of the first title chorus (~43s).
     static func guestDrop1IsLateVerseGroove(
