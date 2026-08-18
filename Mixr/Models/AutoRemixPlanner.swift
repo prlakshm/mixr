@@ -2297,16 +2297,18 @@ enum AutoRemixPlanner {
                         measured: measuredEntrance,
                         chosenStart: chorus.startSeconds
                     )
+                    let tokensDump = AutoChorusIsland.titleTokensDump(profile.title)
                     decisions.append(
                         AutoDecision(
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@]",
+                                format: "bed complete hook @%.1fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@] | %@",
                                 chorus.startSeconds,
                                 slot.entry.rawValue,
                                 dump,
-                                rawList
+                                rawList,
+                                tokensDump
                             )
                         )
                     )
@@ -2388,8 +2390,9 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "Drop 1 guest placed @%.1fs (titleEntrance=%@ mashability=%.1f chorusOrDrop=[%@]) over bed @%.1fs (score %.2f)",
-                                placedStart, titleStr, island.guestStart, catalog, island.bedStart, island.score
+                                format: "Drop 1 guest placed @%.1fs (titleEntrance=%@ mashability=%.1f chorusOrDrop=[%@]) over bed @%.1fs (score %.2f) %@",
+                                placedStart, titleStr, island.guestStart, catalog, island.bedStart, island.score,
+                                AutoChorusIsland.titleTokensDump(profile.title)
                             )
                         )
                     )
@@ -2756,11 +2759,11 @@ enum AutoRemixPlanner {
                 && !ps.slot.isFinalPeak
                 && (ps.slot.holdTitleChorus || (ps.slot.songIdx == 0 && !ps.slot.isReturn))
             if isTitleHookSlot, headSeconds == 0 {
-                bodyFadeIn = .none
+                bodyFadeIn = .hardCut
             }
             // Xirex: hard cut into the hook-replace drop (no crossfade, no fade-in).
             if entry == .hardHypeCut, headSeconds == 0 {
-                bodyFadeIn = .none
+                bodyFadeIn = .hardCut
                 bodyFadeOut = next == nil
                     ? bodyFadeOut
                     : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
@@ -2813,12 +2816,13 @@ enum AutoRemixPlanner {
                         kind: .selectedAnchor,
                         songTitle: profile.title,
                         detail: String(
-                            format: "title-hook clip src=%.1fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f",
+                            format: "title-hook clip src=%.1fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@",
                             ps.section.startSeconds,
                             ps.timelineStart,
                             entry.rawValue,
                             bodyFadeIn.type.rawValue,
-                            bodyFadeIn.duration
+                            bodyFadeIn.duration,
+                            AutoChorusIsland.titleTokensDump(profile.title)
                         )
                     )
                 )
@@ -3364,8 +3368,8 @@ enum AutoRemixPlanner {
                         placements[prevIdx].timelineDuration = trimmed
                     }
                 }
-                placements[prevIdx].fadeOut = .none
-                placements[nextIdx].fadeIn = .none
+                placements[prevIdx].fadeOut = .hardCut
+                placements[nextIdx].fadeIn = .hardCut
                 cutRecords.append(
                     AutoCutRecord(
                         timelineAt: next.timelineStart,
@@ -3397,8 +3401,8 @@ enum AutoRemixPlanner {
                         placements[prevIdx].timelineDuration = trimmed
                     }
                 }
-                placements[prevIdx].fadeOut = .none
-                placements[nextIdx].fadeIn = .none
+                placements[prevIdx].fadeOut = .hardCut
+                placements[nextIdx].fadeIn = .hardCut
                 cutRecords.append(
                     AutoCutRecord(
                         timelineAt: next.timelineStart,
@@ -3422,8 +3426,8 @@ enum AutoRemixPlanner {
                         placements[prevIdx].timelineDuration = trimmed
                     }
                 }
-                placements[prevIdx].fadeOut = .none
-                placements[nextIdx].fadeIn = .none
+                placements[prevIdx].fadeOut = .hardCut
+                placements[nextIdx].fadeIn = .hardCut
                 placements[nextIdx].volume = max(
                     placements[nextIdx].volume,
                     AutoGainPolicy.incomingDropVolume

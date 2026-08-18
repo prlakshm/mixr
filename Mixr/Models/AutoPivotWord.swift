@@ -19,6 +19,47 @@ nonisolated enum AutoPivotWord {
         "things", "all", "hit", "play", "game", "lost",
     ]
 
+    /// Verse fillers that appear in many titles. Alone they lock the first
+    /// verse “baby”; they only count as a hook cue with a rare token or as
+    /// a multi-token title phrase (“baby one more time”).
+    static let genericFillers: Set<String> = [
+        "baby", "one", "more", "time", "you", "did", "all", "the",
+        "and", "for", "your", "me", "my", "it",
+    ]
+
+    /// Rare title/hook words — opening-bar attacks, not later chorus body.
+    static let distinctiveLexicon: Set<String> = [
+        "oops", "hit", "wanted", "stupid", "things", "again", "lonely",
+    ]
+
+    /// Title/hook tokens actually used to place the first chorus island.
+    struct TitleHookTokens: Sendable {
+        var all: [String]
+        var distinctive: [String]
+        var generic: [String]
+
+        var hasRare: Bool { !distinctive.isEmpty }
+        /// Generic fillers co-occur as a phrase, or with a rare token.
+        var hasDistinctivePhrase: Bool {
+            hasRare || all.count >= 3
+        }
+        var genericOnly: Bool { distinctive.isEmpty && all.count < 3 && !generic.isEmpty }
+
+        var dump: String {
+            let d = distinctive.joined(separator: ",")
+            let a = all.joined(separator: ",")
+            return "tokens=[\(a)] distinctive=[\(d)]"
+        }
+    }
+
+    /// Split title tokens into distinctive vs generic verse fillers.
+    static func hookTokens(in title: String) -> TitleHookTokens {
+        let all = tokens(in: title)
+        let distinctive = all.filter { distinctiveLexicon.contains($0) }
+        let generic = all.filter { genericFillers.contains($0) }
+        return TitleHookTokens(all: all, distinctive: distinctive, generic: generic)
+    }
+
     /// Tokenize a song title into candidate pivot words.
     static func tokens(in title: String) -> [String] {
         let cleaned = title.lowercased()

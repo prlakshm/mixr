@@ -374,8 +374,8 @@ nonisolated enum AutoChorusIsland {
         novelty: Double
     ) -> Double {
         guard let title, !title.isEmpty else { return 0 }
-        let tokens = Set(AutoPivotWord.tokens(in: title))
-        guard !tokens.isEmpty else { return 0 }
+        let hook = AutoPivotWord.hookTokens(in: title)
+        guard !hook.all.isEmpty else { return 0 }
         let afterIntro = t - introEnd
         // After a verse/prechorus phrase, through a late first chorus — not
         // a song-specific second mark.
@@ -383,8 +383,11 @@ nonisolated enum AutoChorusIsland {
             return 0
         }
         var boost = max(0, vocal - 0.46) * 0.18 + max(0, vocalRise) * 0.16 + novelty * 0.05
-        let lexiconHits = tokens.filter { AutoPivotWord.pivotLexicon.contains($0) }.count
-        boost += min(0.14, Double(lexiconHits) * 0.045)
+        if hook.hasRare {
+            boost += min(0.16, Double(hook.distinctive.count) * 0.06)
+        } else if hook.hasDistinctivePhrase {
+            boost += 0.08
+        }
         return boost
     }
 
@@ -433,9 +436,16 @@ nonisolated enum AutoChorusIsland {
         return signal.energyCurve
     }
 
+    /// Bounce dump: title tokens actually considered for the hook island.
+    static func titleTokensDump(_ title: String?) -> String {
+        AutoPivotWord.hookTokens(in: title ?? "").dump
+    }
+
     /// First isolated-vocal onset of a title/hook line after the prechorus.
-    /// Phrase-relative: first 8-bar high-vocal island, then the last attack in
-    /// the opening beat (skip pickup), snapped forward — never earlier.
+    /// Uses title/hook tokens (`AutoPivotWord.hookTokens`): earliest 8-bar
+    /// high-vocal island whose **opening bar** aligns with distinctive tokens
+    /// — not max vocal-mean later in the chorus, not the first verse filler.
+    /// Opening word = **first** stem onset at that downbeat (not last peak).
     static func titleHookOnset(
         signal: SongSignalFeatures,
         downbeats: [Double],
@@ -445,7 +455,7 @@ nonisolated enum AutoChorusIsland {
         phraseSeconds: Double,
         title: String?
     ) -> Double? {
-        _ = title
+        let tokens = AutoPivotWord.hookTokens(in: title ?? "")
         let vocal = hookVocalCurve(signal)
         guard vocal.count >= 8, signal.hopSeconds > 0, barSeconds > 0.05 else { return nil }
         let lo = max(introEnd, barSeconds * 8)
@@ -453,52 +463,182 @@ nonisolated enum AutoChorusIsland {
         guard hi > lo + barSeconds * 4 else { return nil }
 
         let beats = downbeats.filter { $0 >= lo - 0.02 && $0 <= hi - barSeconds * 2 }
-        let onsets = onsetPeaks(curve: vocal, hop: signal.hopSeconds, lo: lo, hi: hi - barSeconds * 2).map(\.t)
-        var grid = beats + onsets
+        let onsets = onsetPeaks(curve: vocal, hop: signal.hopSeconds, lo: lo, hi: hi - barSeconds * 2)
+        var grid = beats + onsets.map(\.t)
         if grid.count < 4 {
             grid += stride(from: lo, through: hi - barSeconds * 2, by: barSeconds).map { $0 }
         }
         grid = Array(Set(grid.map { ($0 * 100).rounded() / 100 })).sorted()
         guard !grid.isEmpty else { return nil }
 
-        let oneBar = barSeconds
-        var scored: [(t: Double, mean1: Double, mean8: Double)] = []
+        struct Island {
+            var t: Double
+            var mean1: Double
+            var mean8: Double
+            var vocalRise: Double
+            var energyAfter: Double
+            var energyRise: Double
+            var novelty: Double
+            var onsetCount: Int
+            var firstOnsetStrength: Double
+            var alignment: Double
+        }
+
+        let hop = signal.hopSeconds
+        var scored: [Island] = []
         for t in grid {
-            let m1 = mean(vocal, hop: signal.hopSeconds, from: t, to: t + oneBar)
-            let m8 = mean(vocal, hop: signal.hopSeconds, from: t, to: t + barSeconds * 8)
-            scored.append((t, m1, m8))
+            let m1 = mean(vocal, hop: hop, from: t, to: t + barSeconds)
+            let m8 = mean(vocal, hop: hop, from: t, to: t + barSeconds * 8)
+            let vocalBefore = mean(vocal, hop: hop, from: t - barSeconds * 4, to: t)
+            let energyAfter = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds * 4)
+            let energyBefore = mean(signal.energyCurve, hop: hop, from: t - barSeconds * 4, to: t)
+            let novelty = mean(signal.noveltyCurve, hop: hop, from: t - 0.15, to: t + 0.6)
+            let localPeaks = onsetPeaks(
+                curve: vocal, hop: hop, lo: t, hi: t + min(0.90, barSeconds * 0.5)
+            )
+            scored.append(
+                Island(
+                    t: t,
+                    mean1: m1,
+                    mean8: m8,
+                    vocalRise: m1 - vocalBefore,
+                    energyAfter: energyAfter,
+                    energyRise: energyAfter - energyBefore,
+                    novelty: novelty,
+                    onsetCount: localPeaks.count,
+                    firstOnsetStrength: localPeaks.min(by: { $0.t < $1.t })?.strength ?? 0,
+                    alignment: 0
+                )
+            )
         }
         let best8 = scored.map(\.mean8).max() ?? 0
         guard best8 >= 0.28 else { return nil }
+        let peakEnergy = scored.map(\.energyAfter).max() ?? 0
 
-        let longIslands = scored.filter { $0.mean8 >= best8 * 0.88 }
-        let best1 = longIslands.map(\.mean1).max() ?? 0
-        guard best1 >= 0.28 else { return nil }
+        // Chorus-length vocal — not 88% of the *max* mean (that walks to
+        // denser chorus body). Opening bar may be sparser than later bars.
+        let vocalFloor = max(0.32, best8 * 0.62)
+        var chorusLike = scored.filter { $0.mean8 >= vocalFloor && $0.mean1 >= 0.28 }
+        guard !chorusLike.isEmpty else { return nil }
 
-        let chorusLike = longIslands
-            .filter { $0.mean1 >= best1 * 0.93 }
-            .sorted { $0.t < $1.t }
-        guard let first = chorusLike.first else { return nil }
+        for i in chorusLike.indices {
+            let s = chorusLike[i]
+            chorusLike[i].alignment = distinctiveOpeningAlignment(
+                IslandProxy(
+                    t: s.t,
+                    mean1: s.mean1,
+                    mean8: s.mean8,
+                    vocalRise: s.vocalRise,
+                    energyAfter: s.energyAfter,
+                    energyRise: s.energyRise,
+                    novelty: s.novelty,
+                    onsetCount: s.onsetCount,
+                    firstOnsetStrength: s.firstOnsetStrength
+                ),
+                tokens: tokens,
+                peakEnergy: peakEnergy,
+                phraseSeconds: phraseSeconds,
+                introEnd: introEnd
+            )
+        }
 
-        var cluster = [first]
-        for s in chorusLike.dropFirst() {
-            if s.t - (cluster.last?.t ?? 0) <= barSeconds * 2.2 {
-                cluster.append(s)
+        let island: Double
+        if tokens.all.isEmpty {
+            // No title cue: first 8-bar high-vocal island (legacy).
+            island = chorusLike.min(by: { $0.t < $1.t })!.t
+        } else {
+            let aligned = chorusLike
+                .filter { $0.alignment > 0 }
+                .sorted { $0.t < $1.t }
+            if let first = aligned.first {
+                var cluster = [first]
+                for s in aligned.dropFirst() {
+                    if s.t - (cluster.last?.t ?? 0) <= barSeconds * 2.2 {
+                        cluster.append(s)
+                    } else {
+                        break
+                    }
+                }
+                island = cluster.min(by: { $0.t < $1.t })!.t
+            } else if let best = chorusLike.max(by: { $0.alignment < $1.alignment }) {
+                island = best.t
             } else {
-                break
+                return nil
             }
         }
-        let island = cluster.min(by: { $0.t < $1.t })!.t
 
+        // Opening word = FIRST stem onset at the island downbeat, not the
+        // last attack in 0.9s (`peaks.max` by t skips the title word).
         let wordHi = island + min(0.90, barSeconds * 0.38)
-        let peaks = onsetPeaks(curve: vocal, hop: signal.hopSeconds, lo: island, hi: wordHi)
-        let raw = peaks.max(by: { $0.t < $1.t })?.t ?? island
+        let peaks = onsetPeaks(curve: vocal, hop: hop, lo: island, hi: wordHi)
+        let raw = peaks.min(by: { $0.t < $1.t })?.t ?? island
         return snapForwardOrKeep(
             raw,
             downbeats: downbeats,
             barSeconds: barSeconds,
             minSeconds: island
         )
+    }
+
+    /// Opening-bar score from title tokens + local attack/lift. Generic verse
+    /// fillers do not win unless they co-occur as a distinctive phrase.
+    private struct IslandProxy {
+        var t: Double
+        var mean1: Double
+        var mean8: Double
+        var vocalRise: Double
+        var energyAfter: Double
+        var energyRise: Double
+        var novelty: Double
+        var onsetCount: Int
+        var firstOnsetStrength: Double
+    }
+
+    private static func distinctiveOpeningAlignment(
+        _ island: IslandProxy,
+        tokens: AutoPivotWord.TitleHookTokens,
+        peakEnergy: Double,
+        phraseSeconds: Double,
+        introEnd: Double
+    ) -> Double {
+        // Prechorus that swallows the chorus: opening bar colder than the 8-bar.
+        guard island.mean1 >= island.mean8 * 0.70 else { return 0 }
+
+        let chorusFloor = max(0.55, peakEnergy * 0.78)
+        let verseLike = island.energyAfter < chorusFloor
+        let continuation = island.vocalRise < 0.05 && island.energyRise < 0.06 && island.novelty < 0.35
+        let afterVerse = island.t >= introEnd + phraseSeconds * 0.75
+
+        var score = 0.0
+        score += max(0, island.energyRise) * 0.40
+        score += max(0, island.vocalRise) * 0.22
+        score += island.novelty * 0.35
+        score += min(0.20, island.firstOnsetStrength * 0.25)
+        if afterVerse { score += 0.04 }
+
+        if tokens.hasRare {
+            // Rare title word = novel attack at the chorus downbeat, not
+            // prechorus filler and not later chorus body.
+            guard island.novelty >= 0.28 else { return 0 }
+            if continuation { return 0 }
+            score += island.novelty * 0.25
+        }
+
+        if tokens.hasDistinctivePhrase {
+            // “baby one more time” is a chorus-energy phrase, not verse “baby”.
+            if verseLike { return 0 }
+            if island.onsetCount >= 2 { score += 0.08 }
+            score += min(0.14, Double(tokens.all.count) * 0.035)
+        }
+
+        if tokens.genericOnly {
+            if verseLike || !afterVerse { return 0 }
+            score *= 0.45
+        }
+
+        if verseLike { score *= 0.25 }
+        if continuation { score *= 0.20 }
+        return score
     }
 
     private static func titleHookEntrance(

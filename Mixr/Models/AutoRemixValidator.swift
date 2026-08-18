@@ -639,8 +639,8 @@ nonisolated enum AutoRemixValidator {
                         plan.placements[prevIdx].timelineDuration = trimmed
                     }
                 }
-                plan.placements[prevIdx].fadeOut = .none
-                plan.placements[nextIdx].fadeIn = .none
+                plan.placements[prevIdx].fadeOut = .hardCut
+                plan.placements[nextIdx].fadeIn = .hardCut
                 continue
             }
 
@@ -665,8 +665,8 @@ nonisolated enum AutoRemixValidator {
                         plan.placements[prevIdx].timelineDuration = trimmed
                     }
                 }
-                plan.placements[prevIdx].fadeOut = .none
-                plan.placements[nextIdx].fadeIn = .none
+                plan.placements[prevIdx].fadeOut = .hardCut
+                plan.placements[nextIdx].fadeIn = .hardCut
                 plan.placements[nextIdx].volume = max(
                     plan.placements[nextIdx].volume,
                     AutoGainPolicy.incomingDropVolume

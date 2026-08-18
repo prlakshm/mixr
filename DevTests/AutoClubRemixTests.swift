@@ -947,6 +947,25 @@ func popTitleChorusRealCrate59fe1e8(
             feat.stemVocalPresenceCurve[i] = 0.99
         }
     }
+    // 71773f0: chorus BODY (~55.6s “lost in my game / oh baby baby”) is
+    // denser than the title opening — max vocal-mean must not walk there.
+    // A later peak in the opening 0.9s is “I did it again”, not the title word.
+    let chorusBodyStart = 55.6
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if t >= titleChorusStart + 0.20 && t < titleChorusStart + bar * 0.55 {
+            feat.stemVocalPresenceCurve[i] = min(feat.stemVocalPresenceCurve[i], 0.58)
+        }
+        if abs(t - (titleChorusStart + 0.72)) < hop * 0.55 {
+            feat.stemVocalPresenceCurve[i] = 1.0
+        }
+        if t >= chorusBodyStart && t < chorusBodyStart + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.97)
+        }
+        if abs(t - chorusBodyStart) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = 1.0
+        }
+    }
     return feat
 }
 
@@ -979,6 +998,15 @@ func applyBOMTStemHitMeDecoys(
         }
         if abs(t - hitMeStart) < hop * 1.5 {
             feat.stemVocalPresenceCurve[i] = 0.99
+        }
+        // 71773f0: verse/prechorus “baby” island ~42s — high isolated vocal
+        // so first-island / generic-filler lock must not beat hit-me.
+        let verseBaby = 42.0
+        if t >= verseBaby && t < verseBaby + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.90)
+        }
+        if abs(t - verseBaby) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.97)
         }
     }
 }
@@ -1607,6 +1635,120 @@ do {
 }
 
 do {
+    // Title tokens: distinctive vs generic verse fillers (no Britney time bands).
+    let oopsTok = AutoPivotWord.hookTokens(in: "Oops I Did It Again")
+    check(
+        "71773f0: Oops title uses distinctive oops/again, not generic baby",
+        oopsTok.hasRare && oopsTok.distinctive.contains("oops") && oopsTok.distinctive.contains("again")
+            && !oopsTok.all.contains("baby"),
+        oopsTok.dump
+    )
+    let bomtTok = AutoPivotWord.hookTokens(in: "Baby One More Time")
+    check(
+        "71773f0: BOMT generic fillers co-occur as a distinctive phrase",
+        !bomtTok.hasRare && bomtTok.hasDistinctivePhrase
+            && bomtTok.generic.contains("baby") && bomtTok.generic.contains("time"),
+        bomtTok.dump
+    )
+    let babyOnly = AutoPivotWord.hookTokens(in: "Baby")
+    check(
+        "71773f0: lone generic filler is down-weighted (not a title phrase)",
+        babyOnly.genericOnly && !babyOnly.hasDistinctivePhrase,
+        babyOnly.dump
+    )
+}
+
+do {
+    // 71773f0: title-hook finder must USE the title. Same stems, different
+    // titles: distinctive Oops tokens lock the title opening; empty title
+    // falls back to the first high-vocal island (verse baby / chorus body).
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let oopsTitle = 48.0
+    let chorusBody = 55.6
+    let lastPeakDecoy = oopsTitle + 0.72
+    let oopsSignal = popTitleChorusRealCrate59fe1e8(
+        duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+        titleChorusStart: oopsTitle, chorusTailStart: 50.5, prechorusTwoStart: 40.4
+    )
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: oopsSignal)
+    let phrase = oopsProfile.analysis.phraseBoundaries.count >= 2
+        ? oopsProfile.analysis.phraseBoundaries[1] - oopsProfile.analysis.phraseBoundaries[0]
+        : oopsProfile.analysis.barSeconds * 8
+    let introEnd = oopsProfile.analysis.introCandidate?.endSeconds ?? 0
+    func onset(title: String?) -> Double {
+        AutoChorusIsland.titleHookOnset(
+            signal: oopsSignal,
+            downbeats: oopsProfile.analysis.downbeats,
+            barSeconds: oopsProfile.analysis.barSeconds,
+            duration: oopsProfile.analysis.durationSeconds,
+            introEnd: introEnd,
+            phraseSeconds: phrase,
+            title: title
+        ) ?? -1
+    }
+    let withTitle = onset(title: oops.title)
+    let noTitle = onset(title: nil)
+    check(
+        "71773f0: title-hook onset STARTS on Oops (~48s), not chorus body @55.6",
+        withTitle >= 47.8 && withTitle <= 48.8 && abs(withTitle - chorusBody) > 2.0,
+        String(format: "onset=%.2f body=%.1f tokens=%@", withTitle, chorusBody, AutoChorusIsland.titleTokensDump(oops.title))
+    )
+    check(
+        "71773f0: opening word is FIRST stem onset, not last peak @48.7",
+        withTitle <= lastPeakDecoy - 0.25,
+        String(format: "onset=%.2f lastPeak=%.2f", withTitle, lastPeakDecoy)
+    )
+    check(
+        "71773f0: ignoring title walks off the Oops word (title is actually used)",
+        abs(noTitle - withTitle) > 0.8 || abs(noTitle - chorusBody) < 2.5 || noTitle < 46.5,
+        String(format: "withTitle=%.2f noTitle=%.2f", withTitle, noTitle)
+    )
+
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let bomtTitle = 59.5
+    let verseBaby = 42.0
+    let bomtSignal = popBOMTTitleChorusFeatures(
+        duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+        hitMeStart: bomtTitle, prechorusStarts: [20.6, 47.1]
+    )
+    let bomtProfile = AutoSectionCatalog.profile(track: bomt, signal: bomtSignal)
+    let bomtPhrase = bomtProfile.analysis.phraseBoundaries.count >= 2
+        ? bomtProfile.analysis.phraseBoundaries[1] - bomtProfile.analysis.phraseBoundaries[0]
+        : bomtProfile.analysis.barSeconds * 8
+    let bomtIntro = bomtProfile.analysis.introCandidate?.endSeconds ?? 0
+    let bomtOnset = AutoChorusIsland.titleHookOnset(
+        signal: bomtSignal,
+        downbeats: bomtProfile.analysis.downbeats,
+        barSeconds: bomtProfile.analysis.barSeconds,
+        duration: bomtProfile.analysis.durationSeconds,
+        introEnd: bomtIntro,
+        phraseSeconds: bomtPhrase,
+        title: bomt.title
+    ) ?? -1
+    let junkOnset = AutoChorusIsland.titleHookOnset(
+        signal: bomtSignal,
+        downbeats: bomtProfile.analysis.downbeats,
+        barSeconds: bomtProfile.analysis.barSeconds,
+        duration: bomtProfile.analysis.durationSeconds,
+        introEnd: bomtIntro,
+        phraseSeconds: bomtPhrase,
+        title: "xx"
+    ) ?? -1
+    check(
+        "71773f0: BOMT title phrase locks hit-me ~59.5s, not verse baby @42",
+        abs(bomtOnset - bomtTitle) < bomtProfile.analysis.barSeconds * 0.55
+            && abs(bomtOnset - verseBaby) > 4.0,
+        String(format: "onset=%.2f want=%.1f verse=%.1f %@", bomtOnset, bomtTitle, verseBaby,
+               AutoChorusIsland.titleTokensDump(bomt.title))
+    )
+    check(
+        "71773f0: BOMT generic-only title is not enough — empty/junk tokens differ",
+        abs(junkOnset - bomtOnset) > 1.5,
+        String(format: "phrase=%.2f junk=%.2f", bomtOnset, junkOnset)
+    )
+}
+
+do {
     // Real crate 9ddf228: stem must land ~48.0–48.8s (Oops word), not baby @45.5 / not tail @50.5s.
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
@@ -1698,8 +1840,18 @@ do {
             String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
         )
         check(
+            "59fe1e8 crate: bed hook is NOT chorus body @55.6",
+            abs(hookSrc - 55.6) > 2.0,
+            String(format: "hook=%.1f body=55.6 %@", hookSrc, bedDecision)
+        )
+        check(
             "59fe1e8 crate: dump placed start is ~48s",
             bedDecision.contains("bed complete hook") && hookSrc >= 47.8 && hookSrc <= 48.8,
+            bedDecision
+        )
+        check(
+            "59fe1e8 crate: dump includes title tokens considered",
+            bedDecision.contains("tokens=[") && bedDecision.contains("oops"),
             bedDecision
         )
         let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
@@ -1710,19 +1862,22 @@ do {
                 && $0.timelineStart < drop1Start - 0.05
         }
         check(
-            "59fe1e8 crate: title-hook chorus slots hard-cut (no fade-in)",
+            "59fe1e8 crate: title-hook chorus slots hard-cut (fadeDur=0)",
             !titleHookClips.isEmpty
-                && titleHookClips.allSatisfy { $0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02 },
+                && titleHookClips.allSatisfy { $0.fadeIn.type == .none && $0.fadeIn.duration <= 0.001 },
             titleHookClips.map {
                 String(format: "src=%.1f t=%.1f fade=%@ dur=%.2f", $0.sourceStart, $0.timelineStart, $0.fadeIn.type.rawValue, $0.fadeIn.duration)
             }.joined(separator: " | ")
         )
         check(
-            "59fe1e8 crate: dump includes title-hook src+entry+fade",
+            "59fe1e8 crate: dump includes title-hook src+entry+fadeDur=0+tokens",
             plan.decisions.contains {
-                ($0.detail ?? "").contains("title-hook clip")
-                    && ($0.detail ?? "").contains("entry=")
-                    && ($0.detail ?? "").contains("fadeIn=")
+                let d = $0.detail ?? ""
+                return d.contains("title-hook clip")
+                    && d.contains("entry=")
+                    && d.contains("fadeIn=")
+                    && d.contains("fadeDur=0.00")
+                    && d.contains("tokens=[")
             },
             plan.decisions.filter { ($0.detail ?? "").contains("title-hook") }.compactMap(\.detail).joined(separator: " || ")
         )
@@ -1868,6 +2023,11 @@ do {
             String(format: "guest=%.1f confess=%.1f", guestSrc, confess)
         )
         check(
+            "398d7de crate: Drop 1 guest is NOT verse baby @42.0s",
+            abs(guestSrc - 42.0) > 4.0,
+            String(format: "guest=%.1f verseBaby=42.0 %@", guestSrc, dump)
+        )
+        check(
             "398d7de crate: Drop 1 guest is hit-me title ~59.5s",
             !AutoRemixDiagnostics.guestDrop1MissesTitleDownbeat(
                 plan: plan, guestSongID: bomt.id, titleChorusStart: bomtTitle, maxBarsLate: 1.25
@@ -1881,7 +2041,9 @@ do {
         )
         check(
             "398d7de crate: dump includes placed vs mashability",
-            dump.contains("Drop 1 guest placed") && dump.contains("mashability="),
+            dump.contains("Drop 1 guest placed") && dump.contains("mashability=")
+                && dump.contains("tokens=[")
+                && dump.contains("baby"),
             dump
         )
         check(
