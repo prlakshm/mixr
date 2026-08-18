@@ -2350,10 +2350,14 @@ enum AutoRemixPlanner {
                    titleEntranceOnly: profile.songID == mashupVocalID && !slot.isReturn
                ),
                let base = section {
+                let isDrop1Vocal = profile.songID == mashupVocalID && !slot.isReturn && !slot.isFinalPeak
+                let placedStart = isDrop1Vocal
+                    ? AutoMashability.drop1GuestStart(guest: profile, island: island)
+                    : island.guestStart
                 section = AutoCandidateSection(
                     songID: base.songID,
                     label: base.label,
-                    startSeconds: island.guestStart,
+                    startSeconds: placedStart,
                     barCount: max(base.barCount, island.bars),
                     barSeconds: base.barSeconds,
                     hook: max(base.hook, island.score),
@@ -2365,16 +2369,43 @@ enum AutoRemixPlanner {
                     transitionUse: base.transitionUse,
                     confidence: base.confidence
                 )
-                decisions.append(
-                    AutoDecision(
-                        kind: .selectedAnchor,
-                        songTitle: profile.title,
-                        detail: String(
-                            format: "AutoMashUpper island @%.1fs over bed @%.1fs (score %.2f)",
-                            island.guestStart, island.bedStart, island.score
+                let titleStr = AutoChorusIsland.bestEntrance(
+                    signal: profile.analysis.signal,
+                    downbeats: profile.analysis.downbeats,
+                    barSeconds: profile.analysis.barSeconds,
+                    duration: profile.analysis.durationSeconds,
+                    introEnd: profile.analysis.introCandidate?.endSeconds ?? barSec * 8,
+                    phraseSeconds: profile.analysis.phraseBoundaries.count >= 2
+                        ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+                        : barSec * 8,
+                    title: profile.title
+                ).map { String(format: "%.1f", $0.startSeconds) } ?? "nil"
+                let catalog = profile.analysis.chorusOrDropCandidates
+                    .map { String(format: "%.1f", $0.startSeconds) }
+                    .joined(separator: ",")
+                if isDrop1Vocal {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .selectedAnchor,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "Drop 1 guest placed @%.1fs (titleEntrance=%@ mashability=%.1f chorusOrDrop=[%@]) over bed @%.1fs (score %.2f)",
+                                placedStart, titleStr, island.guestStart, catalog, island.bedStart, island.score
+                            )
                         )
                     )
-                )
+                } else {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .selectedAnchor,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "AutoMashUpper island @%.1fs over bed @%.1fs (score %.2f)",
+                                island.guestStart, island.bedStart, island.score
+                            )
+                        )
+                    )
+                }
             }
 
             guard var section = section else {

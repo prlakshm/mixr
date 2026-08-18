@@ -941,6 +941,48 @@ func popTitleChorusRealCrate59fe1e8(
     return feat
 }
 
+/// Real crate 398d7de: AutoMashUpper picked BOMT @47.1s (confess pickup /
+/// late body) over “hit me” title ~43s. Stem onset at 43 must win Drop 1.
+func popBOMTMashability471(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStart: Double = 43.0,
+    mashabilityHotStart: Double = 47.1,
+    confessStart: Double = 32.0,
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorusFeatures(
+        duration: duration, bpm: bpm, drum: drum, bass: bass, vocal: vocal,
+        titleChorusStarts: [titleChorusStart, 118.0],
+        prechorusStarts: [20.6, 41.3],
+        confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    feat.stemVocalPresenceCurve = [Double](repeating: 0.04, count: feat.energyCurve.count)
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if t >= titleChorusStart && t < titleChorusStart + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = 0.92
+        }
+        if abs(t - titleChorusStart) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = 0.99
+        }
+        if t >= mashabilityHotStart && t < mashabilityHotStart + bar * 4 {
+            feat.energyCurve[i] = 0.99
+            feat.vocalPresenceCurve[i] = min(1, vocal * 1.28)
+            feat.noveltyCurve[i] = 0.95
+        }
+        if t >= confessStart && t < confessStart + bar * 4 {
+            feat.energyCurve[i] = max(feat.energyCurve[i], 0.80)
+        }
+    }
+    return feat
+}
+
 /// Write a vocal stem WAV with silence then a sharp title onset (for stem merge path).
 func writeVocalStemOnsetFixture(
     to url: URL,
@@ -1582,8 +1624,16 @@ do {
             .sourceStart ?? -1
         check(
             "59fe1e8 crate: BOMT Drop 1 stays title hook (hit me, not confess)",
-            abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
+            !AutoRemixDiagnostics.guestDrop1MissesTitleDownbeat(
+                plan: plan, guestSongID: bomt.id, titleChorusStart: bomtTitle, maxBarsLate: 1.6
+            ),
             String(format: "guest=%.1f want=%.1f", guestSrc, bomtTitle)
+        )
+        check(
+            "59fe1e8 crate: Drop 1 guest dump includes placed start",
+            plan.decisions.contains {
+                $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
+            }
         )
         check(
             "59fe1e8 crate: last 8 of A is title chorus hold (not verse 2 @66s)",
@@ -1648,6 +1698,81 @@ do {
         )
     } catch {
         check("59fe1e8 crate: vocal stem fixture write", false, "\(error)")
+    }
+}
+
+do {
+    // Real crate bounce of 398d7de: Drop 1 mashability @47.1s started on
+    // BOMT confess pickup, not “hit me” @43s.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let bomtTitle = 43.0
+    let mashHot = 47.1
+    let confess = 32.0
+    let oopsTitle = 45.5
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: popBOMTMashability471(
+            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+            titleChorusStart: bomtTitle, mashabilityHotStart: mashHot, confessStart: confess
+        ),
+        oops.id: popTitleChorusRealCrate59fe1e8(
+            duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+            titleChorusStart: oopsTitle, chorusTailStart: 50.5, prechorusTwoStart: 40.4
+        ),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let guestSrc = plan.placements
+            .filter {
+                $0.songID == bomt.id && $0.role == .dominant
+                    && abs($0.timelineStart - drop1Start) < 0.15
+            }
+            .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+            .sourceStart ?? -1
+        let dump = plan.decisions.first {
+            $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
+        }?.detail ?? ""
+        check(
+            "398d7de crate: Drop 1 guest is NOT mashability @47.1s",
+            abs(guestSrc - mashHot) > 2.0,
+            String(format: "guest=%.1f hot=%.1f %@", guestSrc, mashHot, dump)
+        )
+        check(
+            "398d7de crate: Drop 1 guest is NOT confess @32s",
+            abs(guestSrc - confess) > 4.0,
+            String(format: "guest=%.1f confess=%.1f", guestSrc, confess)
+        )
+        check(
+            "398d7de crate: Drop 1 guest is hit-me title ~43s",
+            !AutoRemixDiagnostics.guestDrop1MissesTitleDownbeat(
+                plan: plan, guestSongID: bomt.id, titleChorusStart: bomtTitle, maxBarsLate: 1.25
+            ),
+            String(format: "guest=%.1f want=%.1f %@", guestSrc, bomtTitle, dump)
+        )
+        check(
+            "398d7de crate: dump includes placed vs mashability",
+            dump.contains("Drop 1 guest placed") && dump.contains("mashability="),
+            dump
+        )
+        check(
+            "398d7de crate: Oops 8+8 chorus hold kept",
+            plan.decisions.contains {
+                $0.kind == .returnedToHook && ($0.detail ?? "").contains("title chorus hold")
+            }
+        )
+        let dropBar = drop1Start / plan.barSeconds
+        check(
+            "398d7de crate: Drop 1 stays bar 24",
+            dropBar >= 22.5 && dropBar <= 26.5,
+            String(format: "bar=%.1f", dropBar)
+        )
+        check(
+            "398d7de crate: pivotWallpaperLoop 8× baby",
+            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        )
+    case .failure(let message):
+        check("398d7de BOMT title-downbeat mashup", false, message)
     }
 }
 

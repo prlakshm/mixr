@@ -244,7 +244,11 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
   Bounce score dumps `chorusOrDrop`, measured entrance, catalog pool, and
   raw qualifying downbeats. A 16-bar Deck A **timeline** before Drop 1
   repeats the same **~8-bar title island** (hold), never walking source
-  linearly into verse 2. Guest Drop 1 uses the same first-title window (BOMT “hit me”
+  linearly into verse 2. Guest Drop 1 **places** the title-chorus downbeat
+  (BOMT “hit me” ~43s on vocals.wav), not AutoMashUpper’s best-score island
+  when that island is a prechorus pickup (confess ~32s / @47.1s). Bounce
+  dumps `Drop 1 guest placed @Xs (titleEntrance= mashability= chorusOrDrop=)`.
+  Guest Drop 1 uses the same first-title window (BOMT “hit me”
   ~43s), not loneliness verse.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
   When stretch gate fails, **cameoChop** guests still own Drop 1 as phrase-aligned

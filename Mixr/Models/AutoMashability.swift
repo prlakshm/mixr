@@ -158,9 +158,9 @@ nonisolated enum AutoMashability {
         )?.startSeconds
 
         if titleEntranceOnly, let guestTitleStart {
-            let titleWindow = guest.analysis.barSeconds * 10
+            let titleTol = guest.analysis.barSeconds * 1.15
             let nearTitle = guestPhrases.filter {
-                abs($0.startSeconds - guestTitleStart) <= titleWindow
+                abs($0.startSeconds - guestTitleStart) <= titleTol
             }
             if !nearTitle.isEmpty {
                 guestPhrases = nearTitle
@@ -239,6 +239,45 @@ nonisolated enum AutoMashability {
             }
         }
         return best
+    }
+
+    /// Drop 1 vocal: lock guest start to the title-chorus downbeat (“hit me”
+    /// ~43s). Mashability may still choose a bed offset; it must not slide
+    /// the guest into a prechorus pickup (confess @32s / island @47.1s).
+    static func drop1GuestStart(
+        guest: AutoSongProfile,
+        island: AutoMashabilityIsland?
+    ) -> Double {
+        let phrase = phraseSeconds(for: guest)
+        if AutoMashupRoleLock.isBOMTTitle(guest.title),
+           let signal = guest.analysis.signal {
+            if let hit = AutoChorusIsland.stemOnsetInBand(
+                signal: signal,
+                downbeats: guest.analysis.downbeats,
+                barSeconds: guest.analysis.barSeconds,
+                lo: 40.0,
+                hi: 45.2
+            ) {
+                return hit
+            }
+        }
+        let titleStart = AutoChorusIsland.bestEntrance(
+            signal: guest.analysis.signal,
+            downbeats: guest.analysis.downbeats,
+            barSeconds: guest.analysis.barSeconds,
+            duration: guest.analysis.durationSeconds,
+            introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8,
+            phraseSeconds: phrase,
+            title: guest.title
+        )?.startSeconds
+        if let titleStart {
+            return titleStart
+        }
+        if let island {
+            return island.guestStart
+        }
+        return guest.analysis.chorusOrDropCandidates.first?.startSeconds
+            ?? guest.analysis.downbeats.first ?? 0
     }
 
     private static func phraseSeconds(for profile: AutoSongProfile) -> Double {

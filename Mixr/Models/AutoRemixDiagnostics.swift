@@ -541,6 +541,25 @@ nonisolated enum AutoRemixDiagnostics {
         return onVerse && !onTitle
     }
 
+    /// True when Drop 1 guest starts on BOMT prechorus pickup (confess ~32s
+    /// or mashability @47.1s) instead of “hit me” title downbeat ~43s.
+    static func guestDrop1MissesTitleDownbeat(
+        plan: AutoRemixPlan,
+        guestSongID: UUID,
+        titleChorusStart: Double,
+        maxBarsLate: Double = 1.25
+    ) -> Bool {
+        guard let dropStart = firstDropStart(plan: plan) else { return true }
+        guard let guest = plan.placements
+            .filter({
+                $0.songID == guestSongID && $0.role == .dominant
+                    && abs($0.timelineStart - dropStart) < 0.15
+            })
+            .min(by: { abs($0.timelineStart - dropStart) < abs($1.timelineStart - dropStart) })
+        else { return true }
+        return abs(guest.sourceStart - titleChorusStart) > plan.barSeconds * maxBarsLate
+    }
+
     /// True when guest Drop 1 sources a late verse groove (BOMT loneliness
     /// verse ~95s) instead of the first title chorus (~43s).
     static func guestDrop1IsLateVerseGroove(

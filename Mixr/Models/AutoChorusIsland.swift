@@ -412,6 +412,39 @@ nonisolated enum AutoChorusIsland {
         return unique
     }
 
+    /// First isolated-vocal onset in `[lo, hi]`, nearest downbeat.
+    /// BOMT Drop 1 uses 40…45.2s so “hit me” (~43s) wins over confess (~32s)
+    /// and mashability body (~47.1s).
+    static func stemOnsetInBand(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double,
+        lo: Double,
+        hi: Double
+    ) -> Double? {
+        let stem = signal.stemVocalPresenceCurve
+        guard stem.count >= 8, signal.hopSeconds > 0, hi > lo else { return nil }
+        var onset = [Double](repeating: 0, count: stem.count)
+        for i in 1..<stem.count {
+            onset[i] = max(0, stem[i] - stem[i - 1])
+        }
+        let sorted = onset.sorted()
+        let p90 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.90))]
+        let threshold = max(0.08, p90 * 0.42)
+        var peaks: [(t: Double, strength: Double)] = []
+        for i in 2..<(stem.count - 2) {
+            let t = Double(i) * signal.hopSeconds
+            guard t >= lo && t <= hi else { continue }
+            let o = onset[i]
+            guard o >= threshold else { continue }
+            if o >= onset[i - 1] && o >= onset[i + 1] && o >= onset[i - 2] && o >= onset[i + 2] {
+                peaks.append((t, o))
+            }
+        }
+        guard let first = peaks.min(by: { $0.t < $1.t }) else { return nil }
+        return snapDownbeat(first.t, downbeats: downbeats, barSeconds: barSeconds)
+    }
+
     /// First downbeat of the title chorus in a lift — not prechorus, not tail line.
     private static func titleOnsetEntrance(in cluster: [Entrance]) -> Entrance {
         let withTitle = cluster.filter { $0.titleBoost >= 0.035 }
