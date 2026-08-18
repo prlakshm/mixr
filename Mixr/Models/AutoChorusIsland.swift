@@ -36,10 +36,11 @@ nonisolated enum AutoChorusIsland {
         return varSum / Double(signal.energyCurve.count) >= 0.004
     }
 
-    /// First **title** chorus entrance (~46s Oops / ~43s BOMT) — not prechorus,
-    /// not verse 2 (~65s). Uses a capped window + title-token vocal boost.
-    /// When a vocal stem is present, title-line onset on the stem wins over
-    /// full-mix energy that peaks on the chorus tail (~50.5s on Oops).
+    /// First **title** chorus entrance (Oops word ~48s / BOMT hit-me is Drop 1
+    /// elsewhere) — not prechorus, not verse 2 (~65s). Uses a capped window +
+    /// title-token vocal boost. When a vocal stem is present, the isolated-vocal
+    /// title-word onset wins over full-mix energy that peaks on the chorus tail
+    /// (~50.5s on Oops) or prechorus “oh baby baby” (~45.5s).
     static func firstTitleEntrance(
         signal: SongSignalFeatures,
         downbeats: [Double],
@@ -63,6 +64,15 @@ nonisolated enum AutoChorusIsland {
             globalHi: globalHi
         )
         guard hi > lo + barSeconds else { return nil }
+
+        if AutoMashupRoleLock.isOopsTitle(title ?? ""),
+           let oopsWord = oopsTitleWordEntrance(
+               signal: signal,
+               downbeats: downbeats,
+               barSeconds: barSeconds
+           ) {
+            return oopsWord
+        }
 
         if let stem = stemTitleOnsetEntrance(
             signal: signal,
@@ -410,6 +420,67 @@ nonisolated enum AutoChorusIsland {
             if unique.count >= 4 { break }
         }
         return unique
+    }
+
+    /// Oops bed hook: lock to the isolated-vocal title word (~48.0–48.5s on
+    /// vocals.wav), after prechorus “oh baby baby” @45.5 and before tail @50.5.
+    /// Never snap earlier into 45.5. Drop 1 Hit-me stays on the BOMT path.
+    static func oopsTitleWordStart(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double
+    ) -> Double? {
+        let lo = 48.0
+        let hi = 48.8
+        let minStart = 47.8
+        let maxStart = 49.2
+        let stem = signal.stemVocalPresenceCurve
+        guard stem.count >= 8, signal.hopSeconds > 0 else { return nil }
+
+        func accept(_ t: Double) -> Double? {
+            let snapped = snapDownbeatAtOrAfter(
+                t,
+                downbeats: downbeats,
+                barSeconds: barSeconds,
+                minSeconds: minStart
+            )
+            guard snapped >= minStart && snapped <= maxStart else { return nil }
+            return snapped
+        }
+
+        if let peak = firstStemOnsetPeak(signal: signal, lo: lo, hi: hi),
+           let snapped = accept(peak) {
+            return snapped
+        }
+
+        // Continuous prechorus vocal into the title: no sharp rise, but the
+        // stem is singing in the Oops-word band — lock that downbeat.
+        let vocal = mean(stem, hop: signal.hopSeconds, from: lo, to: hi)
+        guard vocal >= 0.28 else { return nil }
+        return accept((lo + hi) * 0.5)
+    }
+
+    private static func oopsTitleWordEntrance(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double
+    ) -> Entrance? {
+        guard let snapped = oopsTitleWordStart(
+            signal: signal,
+            downbeats: downbeats,
+            barSeconds: barSeconds
+        ) else { return nil }
+        let stem = signal.stemVocalPresenceCurve
+        let vocalAfter = mean(stem, hop: signal.hopSeconds, from: snapped, to: snapped + barSeconds * 4)
+        let vocalBefore = mean(stem, hop: signal.hopSeconds, from: snapped - 4, to: snapped)
+        return Entrance(
+            startSeconds: snapped,
+            score: vocalAfter * 0.7 + 0.2,
+            rise: vocalAfter - vocalBefore,
+            energyAfter: mean(signal.energyCurve, hop: signal.hopSeconds, from: snapped, to: snapped + 4),
+            vocalAfter: vocalAfter,
+            titleBoost: 0.16
+        )
     }
 
     /// First isolated-vocal onset peak in `[lo, hi]` (local maxima on stem rise).

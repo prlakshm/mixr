@@ -1430,11 +1430,9 @@ enum AutoRemixPlanner {
         }
 
         if let measured {
-            let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 2.0 }
-            let atOrAfter = near.filter { $0.startSeconds >= measured.startSeconds - bar * 0.25 }
-            let pickPool = atOrAfter.isEmpty ? near : atOrAfter
-            // Closest to measured entrance — not max hook (tail @50.5s beats title @46s).
-            if let best = pickPool.min(by: {
+            let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 0.45 }
+            let atOrAfter = near.filter { $0.startSeconds >= measured.startSeconds - bar * 0.15 }
+            if let best = atOrAfter.min(by: {
                 abs($0.startSeconds - measured.startSeconds) < abs($1.startSeconds - measured.startSeconds)
             }) {
                 return best
@@ -1973,7 +1971,7 @@ enum AutoRemixPlanner {
         ]
         // Complete Deck A title chorus BEFORE pivot: 8 bars + 8-bar HOLD of
         // the same island (16 timeline bars). Do not linearly walk 16 source
-        // bars from 45.5s into verse 2 (“you see my problem is this”).
+        // bars from the title downbeat into verse 2 (“you see my problem is this”).
         slots.append(Slot(
             songIdx: 0, role: .chorus, bars: 8, entry: .cleanCrossfade, energy: 0.88,
             shrinkPriority: 0
