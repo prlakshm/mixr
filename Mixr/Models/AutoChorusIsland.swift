@@ -534,7 +534,7 @@ nonisolated enum AutoChorusIsland {
                 && s.energyRise < 0.08
             if alreadyInHold { return false }
             // 4-bar energy spike with a hole before the real 8-bar chorus.
-            if s.energyGap < s.energyAfter * 0.82 && s.energyGap < s.energy8 * 0.90 {
+            if s.energyGap + 0.04 < s.energyAfter && s.energyGap < s.energyAfter * 0.88 {
                 return false
             }
             return before < s.mean8 * 0.92 || s.energyRise >= 0.05 || s.vocalRise >= 0.05
