@@ -1156,7 +1156,8 @@ do {
         downbeats: oopsProfile.analysis.downbeats,
         barSeconds: oopsProfile.analysis.barSeconds,
         duration: oopsProfile.analysis.durationSeconds,
-        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        title: oops.title
     )
     check(
         "Oops analysis: title-chorus entrance is not the 40.4s prechorus snap",
@@ -1261,7 +1262,8 @@ do {
         downbeats: oopsProfile.analysis.downbeats,
         barSeconds: oopsProfile.analysis.barSeconds,
         duration: oopsProfile.analysis.durationSeconds,
-        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        title: oops.title
     )
     check(
         "Real-crate shape: Oops entrance is NOT verse 2 @78s (score-sort bug)",

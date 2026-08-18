@@ -490,7 +490,7 @@ nonisolated enum AutoChorusIsland {
             let m1 = mean(vocal, hop: hop, from: t, to: t + barSeconds)
             let m8 = mean(vocal, hop: hop, from: t, to: t + barSeconds * 8)
             let vocalBefore = mean(vocal, hop: hop, from: t - barSeconds * 4, to: t)
-            let energyAfter = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds * 4)
+            let energyAfter = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds)
             let energyBefore = mean(signal.energyCurve, hop: hop, from: t - barSeconds * 4, to: t)
             let novelty = mean(signal.noveltyCurve, hop: hop, from: t - 0.15, to: t + 0.6)
             let localPeaks = onsetPeaks(
@@ -537,6 +537,7 @@ nonisolated enum AutoChorusIsland {
                 ),
                 tokens: tokens,
                 peakEnergy: peakEnergy,
+                bestVocal8: best8,
                 phraseSeconds: phraseSeconds,
                 introEnd: introEnd
             )
@@ -547,20 +548,14 @@ nonisolated enum AutoChorusIsland {
             // No title cue: first 8-bar high-vocal island (legacy).
             island = chorusLike.min(by: { $0.t < $1.t })!.t
         } else {
+            let bestAlign = chorusLike.map(\.alignment).max() ?? 0
+            let cutoff = max(0.10, bestAlign * 0.75)
             let aligned = chorusLike
-                .filter { $0.alignment > 0 }
+                .filter { $0.alignment >= cutoff }
                 .sorted { $0.t < $1.t }
             if let first = aligned.first {
-                var cluster = [first]
-                for s in aligned.dropFirst() {
-                    if s.t - (cluster.last?.t ?? 0) <= barSeconds * 2.2 {
-                        cluster.append(s)
-                    } else {
-                        break
-                    }
-                }
-                island = cluster.min(by: { $0.t < $1.t })!.t
-            } else if let best = chorusLike.max(by: { $0.alignment < $1.alignment }) {
+                island = first.t
+            } else if let best = chorusLike.max(by: { $0.alignment < $1.alignment }), best.alignment > 0 {
                 island = best.t
             } else {
                 return nil
@@ -598,6 +593,7 @@ nonisolated enum AutoChorusIsland {
         _ island: IslandProxy,
         tokens: AutoPivotWord.TitleHookTokens,
         peakEnergy: Double,
+        bestVocal8: Double,
         phraseSeconds: Double,
         introEnd: Double
     ) -> Double {
@@ -617,18 +613,26 @@ nonisolated enum AutoChorusIsland {
         if afterVerse { score += 0.04 }
 
         if tokens.hasRare {
-            // Rare title word = novel attack at the chorus downbeat, not
-            // prechorus filler and not later chorus body.
-            guard island.novelty >= 0.28 else { return 0 }
+            // Rare title word = novel attack on a chorus-energy downbeat.
             if continuation { return 0 }
+            guard island.energyAfter >= max(0.60, peakEnergy * 0.90) else { return 0 }
+            guard island.novelty >= 0.28 else { return 0 }
             score += island.novelty * 0.25
         }
 
-        if tokens.hasDistinctivePhrase {
-            // “baby one more time” is a chorus-energy phrase, not verse “baby”.
+        if tokens.hasDistinctivePhrase && !tokens.hasRare {
+            // “baby one more time” is an 8-bar chorus-energy title line with
+            // a real opening attack — not verse “baby” and not a prechorus
+            // or mashability spike that swallows the later hook.
             if verseLike { return 0 }
+            guard island.mean8 >= max(0.32, bestVocal8 * 0.88) else { return 0 }
+            guard island.energyAfter >= max(0.60, peakEnergy * 0.90) else { return 0 }
+            guard island.firstOnsetStrength >= 0.08 else { return 0 }
             if island.onsetCount >= 2 { score += 0.08 }
             score += min(0.14, Double(tokens.all.count) * 0.035)
+        } else if tokens.hasDistinctivePhrase {
+            if verseLike { return 0 }
+            if island.onsetCount >= 2 { score += 0.08 }
         }
 
         if tokens.genericOnly {
