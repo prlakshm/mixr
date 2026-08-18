@@ -545,7 +545,11 @@ nonisolated enum AutoChorusIsland {
             if s.energyDip + 0.08 < s.energyAfter && s.energyDip < s.energyAfter * 0.88 {
                 return false
             }
-            return before < s.mean8 * 0.92 || s.energyRise >= 0.05 || s.vocalRise >= 0.05
+            let lastBarLift = s.energyAfter >= s.energyLastBar + 0.08
+            return lastBarLift
+                || before < s.mean8 * 0.92
+                || s.energyRise >= 0.05
+                || s.vocalRise >= 0.05
         }
 
         var starts = chorusLike.filter(isPlateauStart)
