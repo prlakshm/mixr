@@ -968,7 +968,6 @@ func popTitleChorusRealCrate59fe1e8(
         }
         // 6a75fb6: later bar of the SAME chorus (~58.1 “you think I'm in love”)
         // has denser vocal + novelty — must not outscore the island opening.
-        let laterChorusLine = 58.1
         if t >= laterChorusLine && t < laterChorusLine + bar * 4 {
             feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.99)
         }
