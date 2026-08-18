@@ -477,6 +477,7 @@ nonisolated enum AutoChorusIsland {
             var mean8: Double
             var vocalRise: Double
             var energyAfter: Double
+            var energy8: Double
             var energyRise: Double
             var novelty: Double
             var onsetCount: Int
@@ -491,6 +492,7 @@ nonisolated enum AutoChorusIsland {
             let m8 = mean(vocal, hop: hop, from: t, to: t + barSeconds * 8)
             let vocalBefore = mean(vocal, hop: hop, from: t - barSeconds * 4, to: t)
             let energyAfter = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds)
+            let energy8 = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds * 8)
             let energyBefore = mean(signal.energyCurve, hop: hop, from: t - barSeconds * 4, to: t)
             let novelty = mean(signal.noveltyCurve, hop: hop, from: t - 0.15, to: t + 0.6)
             let localPeaks = onsetPeaks(
@@ -503,6 +505,7 @@ nonisolated enum AutoChorusIsland {
                     mean8: m8,
                     vocalRise: m1 - vocalBefore,
                     energyAfter: energyAfter,
+                    energy8: energy8,
                     energyRise: energyAfter - energyBefore,
                     novelty: novelty,
                     onsetCount: localPeaks.count,
@@ -532,7 +535,25 @@ nonisolated enum AutoChorusIsland {
 
         var starts = chorusLike.filter(isPlateauStart)
         if starts.isEmpty { starts = chorusLike }
+        // Pickup / prechorus: a stronger chorus plateau starts 1–5 bars later.
+        starts = starts.filter { s in
+            !starts.contains { later in
+                later.t > s.t + barSeconds * 0.5
+                    && later.t <= s.t + barSeconds * 5.5
+                    && later.energyAfter >= s.energyAfter + 0.03
+                    && later.energy8 >= s.energy8 * 0.97
+            }
+        }
+        if starts.isEmpty {
+            let raw = chorusLike.filter(isPlateauStart)
+            if let best = raw.max(by: { $0.energy8 < $1.energy8 }) {
+                starts = [best]
+            } else {
+                starts = chorusLike
+            }
+        }
         let peakEnergy = starts.map(\.energyAfter).max() ?? (chorusLike.map(\.energyAfter).max() ?? 0)
+        let peakEnergy8 = starts.map(\.energy8).max() ?? peakEnergy
         let peakStart8 = starts.map(\.mean8).max() ?? best8
 
         for i in starts.indices {
@@ -544,13 +565,14 @@ nonisolated enum AutoChorusIsland {
                     mean8: s.mean8,
                     vocalRise: s.vocalRise,
                     energyAfter: s.energyAfter,
+                    energy8: s.energy8,
                     energyRise: s.energyRise,
                     novelty: s.novelty,
                     onsetCount: s.onsetCount,
                     firstOnsetStrength: s.firstOnsetStrength
                 ),
                 tokens: tokens,
-                peakEnergy: peakEnergy,
+                peakEnergy: max(peakEnergy, peakEnergy8),
                 bestVocal8: peakStart8,
                 phraseSeconds: phraseSeconds,
                 introEnd: introEnd
@@ -599,6 +621,7 @@ nonisolated enum AutoChorusIsland {
         var mean8: Double
         var vocalRise: Double
         var energyAfter: Double
+        var energy8: Double
         var energyRise: Double
         var novelty: Double
         var onsetCount: Int
@@ -617,7 +640,7 @@ nonisolated enum AutoChorusIsland {
         guard island.mean1 >= island.mean8 * 0.68 else { return 0 }
 
         let chorusFloor = max(0.50, peakEnergy * 0.82)
-        let verseLike = island.energyAfter < chorusFloor
+        let verseLike = island.energyAfter < chorusFloor || island.energy8 < max(0.48, peakEnergy * 0.78)
         let afterVerse = island.t >= introEnd + phraseSeconds * 0.75
 
         var score = 0.0
