@@ -1774,6 +1774,71 @@ do {
 }
 
 do {
+    // 61471fa bounce: alignment can land on the catalog tail @50.5 inside the
+    // same 8-bar hold — entrance must walk back to the title opening ~48s.
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let titleOpen = 48.0
+    let chorusTail = 50.5
+    let oopsSignal = popTitleChorusRealCrate59fe1e8(
+        duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+        titleChorusStart: titleOpen, chorusTailStart: chorusTail, prechorusTwoStart: 40.4
+    )
+    let profile = AutoSectionCatalog.profile(track: oops, signal: oopsSignal)
+    let phrase = profile.analysis.phraseBoundaries.count >= 2
+        ? profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0]
+        : profile.analysis.barSeconds * 8
+    let introEnd = profile.analysis.introCandidate?.endSeconds ?? 0
+    let onset = AutoChorusIsland.titleHookOnset(
+        signal: oopsSignal,
+        downbeats: profile.analysis.downbeats,
+        barSeconds: profile.analysis.barSeconds,
+        duration: profile.analysis.durationSeconds,
+        introEnd: introEnd,
+        phraseSeconds: phrase,
+        title: oops.title
+    ) ?? -1
+    check(
+        "61471fa: plateau walkback lands title OPEN ~48s, not catalog tail @50.5",
+        onset >= 47.8 && onset <= 48.8 && abs(onset - chorusTail) > 1.5,
+        String(format: "onset=%.2f tail=%.1f open=%.1f", onset, chorusTail, titleOpen)
+    )
+
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let hitMe = 59.5
+    let verseBaby = 41.9
+    let bomtSignal = popBOMTTitleChorusFeatures(
+        duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+        hitMeStart: hitMe, prechorusStarts: [20.6, 47.1]
+    )
+    let bomtProfile = AutoSectionCatalog.profile(track: bomt, signal: bomtSignal)
+    let bomtPhrase = bomtProfile.analysis.phraseBoundaries.count >= 2
+        ? bomtProfile.analysis.phraseBoundaries[1] - bomtProfile.analysis.phraseBoundaries[0]
+        : bomtProfile.analysis.barSeconds * 8
+    let bomtIntro = bomtProfile.analysis.introCandidate?.endSeconds ?? 0
+    let bomtOnset = AutoChorusIsland.titleHookOnset(
+        signal: bomtSignal,
+        downbeats: bomtProfile.analysis.downbeats,
+        barSeconds: bomtProfile.analysis.barSeconds,
+        duration: bomtProfile.analysis.durationSeconds,
+        introEnd: bomtIntro,
+        phraseSeconds: bomtPhrase,
+        title: bomt.title
+    ) ?? -1
+    check(
+        "61471fa: verse baby @41.9 is not the title chorus — hit-me ~59.5 wins",
+        abs(bomtOnset - hitMe) < bomtProfile.analysis.barSeconds * 0.55
+            && abs(bomtOnset - verseBaby) > 4.0,
+        String(format: "onset=%.2f hit=%.1f verse=%.1f dump=%@",
+               bomtOnset, hitMe, verseBaby, AutoChorusIsland.titleTokensDump(bomt.title))
+    )
+    check(
+        "61471fa: BOMT dump keeps title tokens in distinctive (not empty)",
+        !AutoChorusIsland.titleTokensDump(bomt.title).contains("distinctive=[]"),
+        AutoChorusIsland.titleTokensDump(bomt.title)
+    )
+}
+
+do {
     // Real crate 9ddf228: stem must land ~48.0–48.8s (Oops word), not baby @45.5 / not tail @50.5s.
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)

@@ -585,6 +585,7 @@ nonisolated enum AutoChorusIsland {
                     vocalRise: s.vocalRise,
                     energyAfter: s.energyAfter,
                     energy8: s.energy8,
+                    energyLastBar: s.energyLastBar,
                     energyRise: s.energyRise,
                     novelty: s.novelty,
                     onsetCount: s.onsetCount,
@@ -598,9 +599,9 @@ nonisolated enum AutoChorusIsland {
             )
         }
 
-        let island: Double
+        let islandAnchor: Double
         if tokens.all.isEmpty {
-            island = chorusLike.min(by: { $0.t < $1.t })!.t
+            islandAnchor = chorusLike.min(by: { $0.t < $1.t })!.t
         } else {
             let bestAlign = starts.map(\.alignment).max() ?? 0
             let cutoff = max(0.08, bestAlign * 0.72)
@@ -608,16 +609,30 @@ nonisolated enum AutoChorusIsland {
                 .filter { $0.alignment >= cutoff }
                 .sorted { $0.t < $1.t }
             if let first = aligned.first {
-                island = first.t
+                islandAnchor = first.t
             } else if let best = starts.max(by: { $0.alignment < $1.alignment }), best.alignment > 0 {
-                island = best.t
+                islandAnchor = best.t
             } else {
-                // Title tokens exist but nothing scored — still take the
-                // earliest chorus-energy plateau, not the first verse island.
                 let chorusEnergy = starts.filter { $0.energyAfter >= max(0.50, peakEnergy * 0.82) }
-                island = (chorusEnergy.isEmpty ? starts : chorusEnergy).min(by: { $0.t < $1.t })!.t
+                islandAnchor = (chorusEnergy.isEmpty ? starts : chorusEnergy).min(by: { $0.t < $1.t })!.t
             }
         }
+
+        let anchorRow = chorusLike.min(by: { abs($0.t - islandAnchor) < abs($1.t - islandAnchor) })!
+        // Catalog / energy peak inside the hold is not the entrance — walk
+        // back to the first downbeat of this 8-bar high-vocal run.
+        let island = earliestPlateauEntrance(
+            from: islandAnchor,
+            anchorMean8: anchorRow.mean8,
+            anchorEnergy8: anchorRow.energy8,
+            vocal: vocal,
+            energy: signal.energyCurve,
+            hop: hop,
+            barSeconds: barSeconds,
+            downbeats: downbeats,
+            lo: lo,
+            grid: grid
+        )
 
         // Opening word = FIRST stem onset at the island downbeat, not the
         // last attack in 0.9s (`peaks.max` by t skips the title word).
@@ -632,6 +647,44 @@ nonisolated enum AutoChorusIsland {
         )
     }
 
+    /// First downbeat of an 8-bar high-vocal plateau — not the energy/catalog
+    /// peak later in the same chorus (“I did it again” @50.5 vs “Oops” @48).
+    private static func earliestPlateauEntrance(
+        from anchor: Double,
+        anchorMean8: Double,
+        anchorEnergy8: Double,
+        vocal: [Double],
+        energy: [Double],
+        hop: Double,
+        barSeconds: Double,
+        downbeats: [Double],
+        lo: Double,
+        grid: [Double]
+    ) -> Double {
+        let vocalHold = max(0.28, anchorMean8 * 0.80)
+        let energyHold = max(0.48, anchorEnergy8 * 0.78)
+        var candidates = downbeats.filter { $0 >= lo - 0.02 && $0 <= anchor + 0.02 }
+        candidates += grid.filter { $0 >= anchor - barSeconds * 7.5 && $0 <= anchor + 0.02 }
+        candidates = Array(Set(candidates.map { ($0 * 100).rounded() / 100 })).sorted()
+
+        // Walk anchor backward: first downbeat that still satisfies the hold.
+        for t in candidates.filter({ $0 <= anchor + 0.02 }).sorted(by: >) {
+            let m8 = mean(vocal, hop: hop, from: t, to: t + barSeconds * 8)
+            let m1 = mean(vocal, hop: hop, from: t, to: t + barSeconds)
+            let e8 = mean(energy, hop: hop, from: t, to: t + barSeconds * 8)
+            guard m8 >= vocalHold && m1 >= 0.24 && e8 >= energyHold else { continue }
+            return t
+        }
+        return anchor
+    }
+
+    /// Lift from prechorus into chorus — not a verse bar that stays flat.
+    private static func hasPrechorusDip(_ island: IslandProxy) -> Bool {
+        island.energyAfter >= island.energyLastBar + 0.05
+            || island.vocalRise >= 0.06
+            || island.novelty >= 0.30
+    }
+
     /// Opening-bar score from title tokens + local attack/lift. Generic verse
     /// fillers do not win unless they co-occur as a distinctive phrase.
     private struct IslandProxy {
@@ -641,6 +694,7 @@ nonisolated enum AutoChorusIsland {
         var vocalRise: Double
         var energyAfter: Double
         var energy8: Double
+        var energyLastBar: Double
         var energyRise: Double
         var novelty: Double
         var onsetCount: Int
@@ -669,16 +723,20 @@ nonisolated enum AutoChorusIsland {
         score += min(0.22, island.firstOnsetStrength * 0.30)
         if afterVerse { score += 0.04 }
 
-        // Title tokens (never emptied) need a CHORUS plateau, not the first
-        // time a filler word is sung. Peak energy is among plateau starts.
+        // Title tokens (never emptied) need a CHORUS plateau after prechorus,
+        // not the first time a filler word is sung in a verse.
         if verseLike { return 0 }
 
         if tokens.hasLexiconRare {
+            guard island.t >= introEnd + phraseSeconds * 1.12 else { return 0 }
+            guard hasPrechorusDip(island) || island.novelty >= 0.28 else { return 0 }
             guard island.energyAfter >= max(0.55, peakEnergy * 0.82) else { return 0 }
             score += island.novelty * 0.12
         }
 
         if tokens.hasDistinctivePhrase && !tokens.hasLexiconRare {
+            guard island.t >= introEnd + phraseSeconds * 1.72 else { return 0 }
+            guard hasPrechorusDip(island) else { return 0 }
             guard island.mean8 >= max(0.32, bestVocal8 * 0.82) else { return 0 }
             guard island.energyAfter >= max(0.55, peakEnergy * 0.86) else { return 0 }
             if island.onsetCount >= 2 { score += 0.08 }
@@ -686,9 +744,15 @@ nonisolated enum AutoChorusIsland {
         }
 
         // Hook phrase not in the title (pivotLexicon extras like “hit”):
-        // prefer a strong opening attack on the chorus plateau.
+        // chorus hold after prechorus, with a real opening attack.
         if !tokens.extras.isEmpty {
-            score += min(0.16, island.firstOnsetStrength * 0.35)
+            guard hasPrechorusDip(island) else { return 0 }
+            if tokens.extras.contains("hit") {
+                guard island.firstOnsetStrength >= 0.08 else { return 0 }
+                score += min(0.30, island.firstOnsetStrength * 0.50)
+            } else {
+                score += min(0.16, island.firstOnsetStrength * 0.35)
+            }
         }
 
         if tokens.genericOnly {
