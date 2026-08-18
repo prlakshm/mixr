@@ -1425,14 +1425,37 @@ enum AutoRemixPlanner {
             }
         }
 
+        // Whisper lyrics.json is the source of truth: place at the lyric snap
+        // (at-or-before). Do not substitute a later catalog chorus (50.38 → 50.5).
+        if let measured,
+           profile.analysis.signal?.lyricTitleHookStart != nil,
+           !overlapsUsed(measured.startSeconds, bars: wantBars)
+        {
+            return AutoCandidateSection(
+                songID: profile.songID,
+                label: .chorus,
+                startSeconds: measured.startSeconds,
+                barCount: wantBars,
+                barSeconds: bar,
+                hook: 0.9,
+                energy: energy,
+                vocal: 0.7,
+                clarity: 0.7,
+                rhythm: profile.analysis.drumStrength,
+                uniqueness: 0.7,
+                transitionUse: 0.55,
+                confidence: profile.analysis.analysisConfidence
+            )
+        }
+
         let pool = profile.candidates.filter {
             $0.label == .chorus && $0.barCount >= wantBars && !overlapsUsed($0.startSeconds, bars: $0.barCount)
         }
 
         if let measured {
             let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 0.45 }
-            let atOrAfter = near.filter { $0.startSeconds >= measured.startSeconds - bar * 0.15 }
-            if let best = atOrAfter.min(by: {
+            let atOrBefore = near.filter { $0.startSeconds <= measured.startSeconds + 0.02 }
+            if let best = atOrBefore.min(by: {
                 abs($0.startSeconds - measured.startSeconds) < abs($1.startSeconds - measured.startSeconds)
             }) {
                 return best
@@ -2304,7 +2327,7 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@] | %@ | %@",
+                                format: "bed complete hook @%.2fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@] | %@ | %@",
                                 chorus.startSeconds,
                                 slot.entry.rawValue,
                                 dump,
@@ -2819,7 +2842,7 @@ enum AutoRemixPlanner {
                         kind: .selectedAnchor,
                         songTitle: profile.title,
                         detail: String(
-                            format: "title-hook clip src=%.1fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@",
+                            format: "title-hook clip src=%.2fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@",
                             ps.section.startSeconds,
                             ps.timelineStart,
                             entry.rawValue,

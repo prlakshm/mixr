@@ -3453,6 +3453,35 @@ do {
         String(format: "onset=%.2f lyric=%.2f energy=48.0", overrideOnset, sidecarOverride)
     )
 
+    // 9843f9b: lyric just before a catalog downbeat must not snap AFTER
+    // (50.38 → 50.5 cuts the title word). At or before only.
+    let lateLyric = 50.38
+    let catalogPeak = 50.5
+    let lateSnap = AutoChorusIsland.snapLyricWordOnset(
+        lateLyric, downbeats: oopsProfile.analysis.downbeats, barSeconds: oopsBar
+    )
+    check(
+        "9843f9b: snap is at or before lyric, never the next downbeat",
+        lateSnap <= lateLyric + 0.02 && abs(lateSnap - catalogPeak) > 0.08,
+        String(format: "snap=%.2f lyric=%.2f catalog=%.1f", lateSnap, lateLyric, catalogPeak)
+    )
+    var lateSignal = oopsSignal
+    lateSignal.lyricTitleHookStart = lateLyric
+    let lateOnset = AutoChorusIsland.titleHookOnset(
+        signal: lateSignal,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsBar,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        phraseSeconds: oopsPhrase,
+        title: oops.title
+    ) ?? -1
+    check(
+        "9843f9b: titleHookOnset keeps lyric onset (does not snap to catalog 50.5)",
+        lateOnset <= lateLyric + 0.02 && abs(lateOnset - catalogPeak) > 0.08,
+        String(format: "onset=%.2f lyric=%.2f catalog=%.1f", lateOnset, lateLyric, catalogPeak)
+    )
+
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let stemRoot = FileManager.default.temporaryDirectory
         .appendingPathComponent("mixr-lyrics-sidecar-\(UUID().uuidString)", isDirectory: true)
@@ -3541,6 +3570,90 @@ do {
         }
     } catch {
         check("lyrics sidecar fixture write", false, "\(error)")
+    }
+}
+
+do {
+    // 9843f9b bounce: lyric=50.38 must place the bed clip there (or earlier
+    // downbeat), not catalog 50.5. Drop 1 lyric=60.26 must stay the BOMT hook.
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let bedLyric = 50.38
+    let catalogPeak = 50.5
+    let dropLyric = 60.26
+    let stemRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-lyrics-9843f9b-\(UUID().uuidString)", isDirectory: true)
+    let oopsLyrics = stemRoot
+        .appendingPathComponent("Oops I Did It Again", isDirectory: true)
+        .appendingPathComponent("lyrics.json")
+    let bomtLyrics = stemRoot
+        .appendingPathComponent("Baby One More Time", isDirectory: true)
+        .appendingPathComponent("lyrics.json")
+    do {
+        try writeLyricsJSON(
+            to: oopsLyrics, title: oops.title, titleHookStart: bedLyric,
+            words: [(bedLyric, "oops"), (50.6, "I"), (50.9, "did"), (51.2, "it"), (51.5, "again")]
+        )
+        try writeLyricsJSON(
+            to: bomtLyrics, title: bomt.title, titleHookStart: dropLyric,
+            words: [(40.0, "baby"), (dropLyric, "hit"), (60.5, "me"), (60.7, "baby"),
+                    (61.0, "one"), (61.2, "more"), (61.4, "time")]
+        )
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[oops.id] = AutoStemSet(lyrics: oopsLyrics)
+        tuning.explicitStemsBySongID[bomt.id] = AutoStemSet(lyrics: bomtLyrics)
+        let signals: [UUID: SongSignalFeatures] = [
+            oops.id: popTitleChorusRealCrate59fe1e8(
+                duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+                titleChorusStart: 48.0, chorusTailStart: catalogPeak, prechorusTwoStart: 40.4
+            ),
+            bomt.id: popBOMTTitleChorusFeatures(
+                duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+                hitMeStart: 59.5, prechorusStarts: [20.6, 47.1]
+            ),
+        ]
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [bomt, oops],
+            tuning: tuning,
+            seed: 20260818,
+            signals: signals
+        ) {
+        case .success(_, let plan, _):
+            let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+            let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+            let guestSrc = plan.placements
+                .filter {
+                    $0.songID == bomt.id && $0.role == .dominant
+                        && abs($0.timelineStart - drop1Start) < 0.15
+                }
+                .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+                .sourceStart ?? -1
+            let bedDump = plan.decisions.first {
+                $0.kind == .selectedAnchor && ($0.detail ?? "").contains("bed complete hook")
+            }?.detail ?? ""
+            let guestDump = plan.decisions.first {
+                $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
+            }?.detail ?? ""
+            check(
+                "9843f9b: bed placed start is lyric or earlier downbeat, not catalog 50.5",
+                hookSrc <= bedLyric + 0.02 && abs(hookSrc - catalogPeak) > 0.08,
+                String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
+            )
+            check(
+                "9843f9b: dump chosen is not catalog 50.5",
+                !bedDump.contains("chosen=50.5") && (bedDump.contains("lyric=50.38") || bedDump.contains("lyric=50.4")),
+                bedDump
+            )
+            check(
+                "9843f9b: Drop 1 still lyric hook ~60s (not verse, not after lyric)",
+                guestSrc <= dropLyric + 0.02 && abs(guestSrc - dropLyric) < plan.barSeconds * 0.55 && abs(guestSrc - 40.0) > 4.0,
+                String(format: "src=%.2f lyric=%.2f %@", guestSrc, dropLyric, guestDump)
+            )
+        case .failure(let message):
+            check("9843f9b lyrics bed snap planner", false, message)
+        }
+    } catch {
+        check("9843f9b lyrics fixture write", false, "\(error)")
     }
 }
 

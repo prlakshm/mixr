@@ -131,8 +131,8 @@ nonisolated enum AutoChorusIsland {
             .sorted { $0.startSeconds < $1.startSeconds }
             .map { String(format: "%.1f(h%.2f)", $0.startSeconds, $0.hook) }
             .joined(separator: ",")
-        let measuredStr = measured.map { String(format: "%.1f", $0.startSeconds) } ?? "nil"
-        let chosenStr = chosenStart.map { String(format: "%.1f", $0) } ?? "nil"
+        let measuredStr = measured.map { String(format: "%.2f", $0.startSeconds) } ?? "nil"
+        let chosenStr = chosenStart.map { String(format: "%.2f", $0) } ?? "nil"
         let stem = profile.stems.hasVocals ? "stem=vocals" : "stem=none"
         let lyric = profile.analysis.signal?.lyricTitleHookStart
             .map { String(format: "lyric=%.2f", $0) } ?? "lyric=none"
@@ -489,20 +489,17 @@ nonisolated enum AutoChorusIsland {
         return snapLyricWordOnset(t, downbeats: downbeats, barSeconds: barSeconds)
     }
 
+    /// Lyric word onset → hard-cut. Snap to a downbeat **at or before** `t`,
+    /// never after (a later downbeat cuts the title word: 50.38 → 50.5).
+    /// If the previous downbeat is a full bar back, keep `t`.
     static func snapLyricWordOnset(
         _ t: Double,
         downbeats: [Double],
         barSeconds: Double
     ) -> Double {
         guard barSeconds > 0.05 else { return t }
-        let inBar = downbeats.filter { db in
-            db <= t + 0.08 && t - db < barSeconds * 0.85
-        }
-        if let db = inBar.max() {
-            return db
-        }
-        let after = downbeats.filter { $0 >= t - 0.05 }.sorted()
-        if let db = after.first, db <= t + barSeconds * 0.35 {
+        let before = downbeats.filter { $0 <= t + 0.02 }
+        if let db = before.max(), t - db <= barSeconds * 0.45 {
             return db
         }
         return t
