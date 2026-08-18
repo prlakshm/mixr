@@ -120,7 +120,8 @@ nonisolated enum AutoMashability {
         bed: AutoSongProfile,
         wantBars: Int = 16,
         targetBPM: Double,
-        tuning: AutoTuning
+        tuning: AutoTuning,
+        titleEntranceOnly: Bool = false
     ) -> AutoMashabilityIsland? {
         let bars = max(8, min(16, wantBars))
         let hookPhrases = guest.candidates.filter {
@@ -130,7 +131,7 @@ nonisolated enum AutoMashability {
         // Guest Drop 1 must source a hook island (BOMT “hit me baby”), not a
         // verse groove (“My loneliness is killing me”). Keep groove fallback
         // only when no chorus/teaser exists (cameo paths elsewhere).
-        let guestPhrases = hookPhrases.isEmpty
+        var guestPhrases = hookPhrases.isEmpty
             ? guest.candidates.filter {
                 $0.label == .groove && $0.barCount >= min(8, bars)
             }
@@ -144,6 +145,26 @@ nonisolated enum AutoMashability {
         let bedBeat = bed.analysis.barSeconds / 4.0
         let guestBeat = guest.analysis.barSeconds / 4.0
         let windowSec = Double(bars) * (240.0 / max(targetBPM, 40))
+
+        let guestPhrase = phraseSeconds(for: guest)
+        let guestTitleStart = AutoChorusIsland.bestEntrance(
+            signal: guest.analysis.signal,
+            downbeats: guest.analysis.downbeats,
+            barSeconds: guest.analysis.barSeconds,
+            duration: guest.analysis.durationSeconds,
+            introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8,
+            phraseSeconds: guestPhrase
+        )?.startSeconds
+
+        if titleEntranceOnly, let guestTitleStart {
+            let titleWindow = guest.analysis.barSeconds * 10
+            let nearTitle = guestPhrases.filter {
+                abs($0.startSeconds - guestTitleStart) <= titleWindow
+            }
+            if !nearTitle.isEmpty {
+                guestPhrases = nearTitle
+            }
+        }
 
         // Harmonic under bed transposition (AutoMashUpper: chroma × key shift).
         let harmonic = AutoKey.bestCorrection(
@@ -160,14 +181,6 @@ nonisolated enum AutoMashability {
         )
         let rhythmicBase: Double = (guestFit.gridAligned && bedFit.gridAligned) ? 1.0
             : (guestFit.gridAligned || bedFit.gridAligned) ? 0.55 : 0.25
-
-        let guestTitleStart = AutoChorusIsland.bestEntrance(
-            signal: guest.analysis.signal,
-            downbeats: guest.analysis.downbeats,
-            barSeconds: guest.analysis.barSeconds,
-            duration: guest.analysis.durationSeconds,
-            introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8
-        )?.startSeconds
 
         var best: AutoMashabilityIsland?
 
@@ -225,6 +238,14 @@ nonisolated enum AutoMashability {
             }
         }
         return best
+    }
+
+    private static func phraseSeconds(for profile: AutoSongProfile) -> Double {
+        let bar = profile.analysis.barSeconds
+        if profile.analysis.phraseBoundaries.count >= 2 {
+            return max(bar * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+        }
+        return bar * 8
     }
 
     private static func sectionBass(_ profile: AutoSongProfile, from: Double, to: Double) -> Double {

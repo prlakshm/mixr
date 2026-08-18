@@ -1398,12 +1398,16 @@ enum AutoRemixPlanner {
         let wantBars = max(8, bars)
         let bar = profile.analysis.barSeconds
         let introEnd = profile.analysis.introCandidate?.endSeconds ?? bar * 8
+        let phrase = profile.analysis.phraseBoundaries.count >= 2
+            ? max(bar * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+            : bar * 8
         let measured = AutoChorusIsland.bestEntrance(
             signal: profile.analysis.signal,
             downbeats: profile.analysis.downbeats,
             barSeconds: bar,
             duration: profile.analysis.durationSeconds,
-            introEnd: introEnd
+            introEnd: introEnd,
+            phraseSeconds: phrase
         )
 
         func overlapsUsed(_ start: Double, bars: Int) -> Bool {
@@ -1420,7 +1424,9 @@ enum AutoRemixPlanner {
 
         if let measured {
             let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 2.0 }
-            if let best = near.max(by: { $0.hook < $1.hook }) {
+            let atOrAfter = near.filter { $0.startSeconds >= measured.startSeconds - bar * 0.25 }
+            let pickPool = atOrAfter.isEmpty ? near : atOrAfter
+            if let best = pickPool.max(by: { $0.hook < $1.hook }) {
                 return best
             }
             if !overlapsUsed(measured.startSeconds, bars: wantBars) {
@@ -2251,7 +2257,8 @@ enum AutoRemixPlanner {
                    bed: bedProfile,
                    wantBars: max(8, slot.bars),
                    targetBPM: targetBPM,
-                   tuning: tuning
+                   tuning: tuning,
+                   titleEntranceOnly: profile.songID == mashupVocalID && !slot.isReturn
                ),
                let base = section {
                 section = AutoCandidateSection(

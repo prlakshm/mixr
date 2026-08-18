@@ -8,9 +8,9 @@ import Foundation
 // a chorus island to `.first`. Measured energy *rise* at a downbeat is
 // what actually starts “Oops I did it again” / “hit me baby one more time”.
 //
-// Pick the **first** qualifying lift after the intro — not the loudest
-// later section (Oops verse 2 ~78s outscored the ~46s title chorus on
-// real crate when entrances were score-sorted).
+// Real crate: prechorus @40.4s can qualify before title @46s on time sort.
+// Cluster nearby lifts and take the **peak** in the first cluster (title
+// chorus), not the earliest downbeat in that lift window.
 
 nonisolated enum AutoChorusIsland {
 
@@ -35,19 +35,20 @@ nonisolated enum AutoChorusIsland {
         return varSum / Double(signal.energyCurve.count) >= 0.004
     }
 
-    /// Chorus *entrances* (downbeat-snapped) in the first ~40% of the song,
-    /// time-ordered — earliest qualifying title lift first. Empty when the
-    /// signal is too flat to prefer one island over another.
+    /// Chorus *entrances* (downbeat-snapped) in the first ~40% of the song.
+    /// Returns cluster peaks in time order — first peak is the title chorus.
     static func entrances(
         signal: SongSignalFeatures,
         downbeats: [Double],
         barSeconds: Double,
         duration: Double,
-        introEnd: Double
+        introEnd: Double,
+        phraseSeconds: Double? = nil
     ) -> [Entrance] {
         guard hasUsableEnergyShape(signal), barSeconds > 0.05, duration > barSeconds * 16 else {
             return []
         }
+        let phrase = max(barSeconds * 4, phraseSeconds ?? barSeconds * 8)
         let lo = max(barSeconds * 8, min(introEnd, barSeconds * 16) * 0.35)
         let hi = min(duration * 0.42, duration - barSeconds * 8)
         guard hi > lo + barSeconds else { return [] }
@@ -70,8 +71,6 @@ nonisolated enum AutoChorusIsland {
                 to: t + barSeconds * 4
             )
             let novelty = mean(signal.noveltyCurve, hop: signal.hopSeconds, from: t - 0.3, to: t + 0.6)
-            // Title chorus: lift into a loud, sung 8-bar. Prechorus already
-            // sitting at medium energy scores a near-zero rise.
             let score = max(0, rise) * 0.52 + after * 0.22 + vocal * 0.18 + novelty * 0.08
             sampled.append(
                 Entrance(startSeconds: t, score: score, rise: rise, energyAfter: after, vocalAfter: vocal)
@@ -86,26 +85,17 @@ nonisolated enum AutoChorusIsland {
             .filter { qualifiesAsTitleEntrance($0, titleEnergyFloor: titleEnergyFloor) }
             .sorted { $0.startSeconds < $1.startSeconds }
 
-        // Unique islands ≥ 6 bars apart (time order — first title lift wins).
-        var unique: [Entrance] = []
-        for e in qualifying {
-            if unique.contains(where: { abs($0.startSeconds - e.startSeconds) < barSeconds * 6 }) {
-                continue
-            }
-            unique.append(e)
-            if unique.count >= 4 { break }
-        }
-        return unique
+        return clusterPeaks(qualifying, phraseSeconds: phrase, barSeconds: barSeconds)
     }
 
-    /// First title-chorus lift after the intro/prechorus — not the loudest
-    /// later verse (real Oops crate: ~46s, not verse 2 ~78s).
+    /// First title-chorus peak after the intro — real Oops ~46s, not prechorus ~40.4s.
     static func bestEntrance(
         signal: SongSignalFeatures?,
         downbeats: [Double],
         barSeconds: Double,
         duration: Double,
-        introEnd: Double
+        introEnd: Double,
+        phraseSeconds: Double? = nil
     ) -> Entrance? {
         guard let signal else { return nil }
         return entrances(
@@ -113,7 +103,8 @@ nonisolated enum AutoChorusIsland {
             downbeats: downbeats,
             barSeconds: barSeconds,
             duration: duration,
-            introEnd: introEnd
+            introEnd: introEnd,
+            phraseSeconds: phraseSeconds
         ).first
     }
 
@@ -132,7 +123,8 @@ nonisolated enum AutoChorusIsland {
             downbeats: downbeats,
             barSeconds: barSeconds,
             duration: duration,
-            introEnd: introEnd
+            introEnd: introEnd,
+            phraseSeconds: phraseSeconds
         )
         guard let first = hits.first else { return nil }
         let c1Start = first.startSeconds
@@ -152,10 +144,46 @@ nonisolated enum AutoChorusIsland {
         return (chorus1, chorus2)
     }
 
+    /// Group qualifying lifts within one phrase; keep the loudest peak per group.
+    private static func clusterPeaks(
+        _ qualifying: [Entrance],
+        phraseSeconds: Double,
+        barSeconds: Double
+    ) -> [Entrance] {
+        guard !qualifying.isEmpty else { return [] }
+        var clusters: [[Entrance]] = []
+        var current = [qualifying[0]]
+        for e in qualifying.dropFirst() {
+            if e.startSeconds - (current.last?.startSeconds ?? 0) <= phraseSeconds * 0.85 {
+                current.append(e)
+            } else {
+                clusters.append(current)
+                current = [e]
+            }
+        }
+        clusters.append(current)
+
+        let peaks = clusters.map { cluster -> Entrance in
+            cluster.max(by: { a, b in
+                if abs(a.energyAfter - b.energyAfter) > 0.015 { return a.energyAfter < b.energyAfter }
+                if abs(a.rise - b.rise) > 0.02 { return a.rise < b.rise }
+                return a.startSeconds < b.startSeconds
+            })!
+        }
+
+        var unique: [Entrance] = []
+        for e in peaks {
+            if unique.contains(where: { abs($0.startSeconds - e.startSeconds) < barSeconds * 6 }) {
+                continue
+            }
+            unique.append(e)
+            if unique.count >= 4 { break }
+        }
+        return unique
+    }
+
     private static func qualifiesAsTitleEntrance(_ e: Entrance, titleEnergyFloor: Double) -> Bool {
         let liftOK = e.rise >= 0.06 || e.score >= 0.45
-        // Reject repeated medium prechorus (~0.52 on shaped stubs) — title
-        // chorus sits near the measured peak (~0.94).
         return liftOK && e.energyAfter >= titleEnergyFloor
     }
 
