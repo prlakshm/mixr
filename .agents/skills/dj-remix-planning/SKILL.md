@@ -235,11 +235,10 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
   Title/groove lock wins over stem kick-energy and vocal-density skew — in duo **and**
   N-song crates when both Britney tracks are present.
 - First complete **bed** hook before the pivot must source the bed's **title
-  chorus** (measured **first-cluster peak** energy-rise into the loud sung
-  8-bar), not the earliest downbeat in a prechorus→title lift (Oops ~40.4s
-  “I'm not that innocent” before ~46s “Oops I did it again”) and not the
-  loudest later verse (~78s). Guest Drop 1 uses the same first-cluster peak
-  window (BOMT “hit me baby” ~43s), not loneliness verse or 28% prechorus.
+  chorus** (measured **first-title window**: capped before verse 2, local
+  energy floor, title-token vocal boost). Not prechorus @40.4s, not verse 2
+  @65.7s / @78s. Guest Drop 1 uses the same first-title window (BOMT “hit me”
+  ~43s), not loneliness verse.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
   When stretch gate fails, **cameoChop** guests still own Drop 1 as phrase-aligned
   islands at native tempo — do not demote them to post-drop groove slots only.

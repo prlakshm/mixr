@@ -824,6 +824,45 @@ func popTitleChorusRealCrateQualifyingPrechorus(
     return feat
 }
 
+/// Real crate bounce of 591bef3: verse-2 lift @65.7s is hotter than title
+/// @46s — global energy floor excluded title; cluster picked 65.7s.
+func popTitleChorus591bef3Regression(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStart: Double = 46.0,
+    prechorusTwoStart: Double = 40.4,
+    verseTwoLiftStart: Double = 65.7,
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorusRealCrateQualifyingPrechorus(
+        duration: duration,
+        bpm: bpm,
+        drum: drum,
+        bass: bass,
+        vocal: vocal,
+        titleChorusStarts: [titleChorusStart, 120.0],
+        prechorusStarts: [20.2, prechorusTwoStart],
+        prechorusTwoStart: prechorusTwoStart,
+        confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if t >= verseTwoLiftStart && t < verseTwoLiftStart + bar * 8 {
+            feat.energyCurve[i] = 0.98
+            feat.vocalPresenceCurve[i] = min(1, vocal * 1.20)
+        }
+        if abs(t - verseTwoLiftStart) < hop * 2 {
+            feat.noveltyCurve[i] = 0.95
+        }
+    }
+    return feat
+}
+
 func chorusCandidateDump(_ profile: AutoSongProfile) -> String {
     let choruses = profile.candidates
         .filter { $0.label == .chorus }
@@ -1142,6 +1181,122 @@ do {
         )
     case .failure(let message):
         check("03370e8 qualifying-prechorus Britney mashup", false, message)
+    }
+}
+
+do {
+    // Real crate bounce of 591bef3: global peak @65.7s excluded title @46s;
+    // score landed bed hook @65.7s (verse 2). Window cap + title tokens fix.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let oopsTitle = 46.0
+    let bomtTitle = 43.0
+    let oopsPreTwo = 40.4
+    let verseTwoLift = 65.7
+    let bomtLateVerse = 95.0
+    var bomtSignal = popTitleChorus591bef3Regression(
+        duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+        titleChorusStart: bomtTitle, prechorusTwoStart: 41.3, verseTwoLiftStart: 70.0
+    )
+    let bomtHop = bomtSignal.hopSeconds
+    let bomtBar = 240.0 / 93.0
+    for i in 0..<bomtSignal.energyCurve.count {
+        let t = Double(i) * bomtHop
+        if t >= bomtLateVerse && t < bomtLateVerse + bomtBar * 8 {
+            bomtSignal.energyCurve[i] = 0.97
+            bomtSignal.vocalPresenceCurve[i] = min(1, 0.55 * 1.18)
+        }
+    }
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: bomtSignal,
+        oops.id: popTitleChorus591bef3Regression(
+            duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+            titleChorusStart: oopsTitle, prechorusTwoStart: oopsPreTwo,
+            verseTwoLiftStart: verseTwoLift
+        ),
+    ]
+    let oopsSignal = signals[oops.id]!
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: oopsSignal)
+    let bomtProfile = AutoSectionCatalog.profile(track: bomt, signal: signals[bomt.id]!)
+    let oopsAnalysis = oopsProfile.analysis.chorusOrDropCandidates
+        .map { String(format: "%.1fs", $0.startSeconds) }
+        .joined(separator: ",")
+    let bomtAnalysis = bomtProfile.analysis.chorusOrDropCandidates
+        .map { String(format: "%.1fs", $0.startSeconds) }
+        .joined(separator: ",")
+    let phrase = oopsProfile.analysis.phraseBoundaries.count >= 2
+        ? oopsProfile.analysis.phraseBoundaries[1] - oopsProfile.analysis.phraseBoundaries[0]
+        : oopsProfile.analysis.barSeconds * 8
+    let entrance = AutoChorusIsland.firstTitleEntrance(
+        signal: oopsSignal,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsProfile.analysis.barSeconds,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0,
+        phraseSeconds: phrase,
+        title: oops.title
+    )
+    check(
+        "591bef3 crate: firstTitleEntrance is NOT verse-2 lift @65.7s",
+        abs((entrance?.startSeconds ?? -1) - verseTwoLift) > 5,
+        String(format: "entrance=%.1f lift=%.1f analysis=[%@]", entrance?.startSeconds ?? -1, verseTwoLift, oopsAnalysis)
+    )
+    check(
+        "591bef3 crate: firstTitleEntrance is NOT prechorus @40.4s",
+        abs((entrance?.startSeconds ?? -1) - oopsPreTwo) > 3,
+        String(format: "entrance=%.1f pre=%.1f", entrance?.startSeconds ?? -1, oopsPreTwo)
+    )
+    check(
+        "591bef3 crate: firstTitleEntrance is title chorus ~46s",
+        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.6,
+        String(format: "entrance=%.1f want=%.1f catalog=%@", entrance?.startSeconds ?? -1, oopsTitle, chorusCandidateDump(oopsProfile))
+    )
+
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+        check(
+            "591bef3 crate: bed hook is NOT @65.7s verse-2 lift",
+            !AutoRemixDiagnostics.firstDeckAHookIsMidSongVerseLift(
+                plan: plan, titleChorusStart: oopsTitle, midVerseStart: verseTwoLift
+            ),
+            String(format: "hook=%.1f lift=%.1f analysis=[%@]", hookSrc, verseTwoLift, oopsAnalysis)
+        )
+        check(
+            "591bef3 crate: bed hook is NOT @40.4s prechorus snap",
+            !AutoRemixDiagnostics.firstDeckAHookIsPrechorusSnap(
+                plan: plan, titleChorusStart: oopsTitle, prechorusStart: oopsPreTwo
+            ),
+            String(format: "hook=%.1f pre=%.1f", hookSrc, oopsPreTwo)
+        )
+        check(
+            "591bef3 crate: bed hook is title chorus ~46s (uncut Oops line)",
+            abs(hookSrc - oopsTitle) < plan.barSeconds * 1.6,
+            String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
+        )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let guestSrc = plan.placements
+            .filter {
+                $0.songID == bomt.id && $0.role == .dominant
+                    && abs($0.timelineStart - drop1Start) < 0.15
+            }
+            .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+            .sourceStart ?? -1
+        check(
+            "591bef3 crate: BOMT Drop 1 is NOT loneliness verse",
+            !AutoRemixDiagnostics.guestDrop1IsLateVerseGroove(
+                plan: plan, guestSongID: bomt.id,
+                titleChorusStart: bomtTitle, lateVerseStart: bomtLateVerse
+            ),
+            String(format: "guest=%.1f analysis=[%@]", guestSrc, bomtAnalysis)
+        )
+        check(
+            "591bef3 crate: BOMT Drop 1 is title chorus ~43s (hit me)",
+            abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
+            String(format: "guest=%.1f want=%.1f catalog=%@", guestSrc, bomtTitle, chorusCandidateDump(bomtProfile))
+        )
+    case .failure(let message):
+        check("591bef3 regression Britney mashup", false, message)
     }
 }
 

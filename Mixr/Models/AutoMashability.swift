@@ -153,7 +153,8 @@ nonisolated enum AutoMashability {
             barSeconds: guest.analysis.barSeconds,
             duration: guest.analysis.durationSeconds,
             introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8,
-            phraseSeconds: guestPhrase
+            phraseSeconds: guestPhrase,
+            title: guest.title
         )?.startSeconds
 
         if titleEntranceOnly, let guestTitleStart {

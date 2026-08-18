@@ -473,6 +473,32 @@ nonisolated enum AutoRemixDiagnostics {
         return onVerseTwo && !onTitle
     }
 
+    /// True when bed hook lands on mid-song verse 2 (~65.7s on real Oops crate).
+    static func firstDeckAHookIsMidSongVerseLift(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        midVerseStart: Double = 65.7,
+        toleranceSeconds: Double = 5.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onMid = abs(hook.sourceStart - midVerseStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onMid && !onTitle
+    }
+
+    /// True when bed hook is the 28% prechorus snap (~40.4s on Oops).
+    static func firstDeckAHookIsPrechorusSnap(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        prechorusStart: Double = 40.4,
+        toleranceSeconds: Double = 3.5
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onPre = abs(hook.sourceStart - prechorusStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onPre && !onTitle
+    }
+
     /// True when guest Drop 1 sources a late verse groove (BOMT loneliness
     /// verse ~95s) instead of the first title chorus (~43s).
     static func guestDrop1IsLateVerseGroove(

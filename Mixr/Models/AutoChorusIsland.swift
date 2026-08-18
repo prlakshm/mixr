@@ -3,14 +3,13 @@ import Foundation
 // MARK: - Title-chorus entrance
 //
 // Heuristic `chorusOrDropCandidates.first` is a duration-fraction snap
-// (often ~28% → the phrase *before* the title chorus). Prechorus that
-// happens twice (Oops “I'm not that innocent” ~20s and ~40s) looks like
-// a chorus island to `.first`. Measured energy *rise* at a downbeat is
-// what actually starts “Oops I did it again” / “hit me baby one more time”.
+// (often ~28% → the phrase *before* the title chorus). Real crate paths:
+//   • time-first → prechorus @40.4s (03370e8; cuts “Oops”)
+//   • global energy floor from verse 2 @65.7s → skips title @46s (591bef3)
 //
-// Real crate: prechorus @40.4s can qualify before title @46s on time sort.
-// Cluster nearby lifts and take the **peak** in the first cluster (title
-// chorus), not the earliest downbeat in that lift window.
+// First title chorus: cap the search window before verse 2, compute the
+// energy floor from that window only, boost vocal/title-token onset, and
+// within a lift cluster prefer the **later** peak (title after prechorus).
 
 nonisolated enum AutoChorusIsland {
 
@@ -35,15 +34,64 @@ nonisolated enum AutoChorusIsland {
         return varSum / Double(signal.energyCurve.count) >= 0.004
     }
 
-    /// Chorus *entrances* (downbeat-snapped) in the first ~40% of the song.
-    /// Returns cluster peaks in time order — first peak is the title chorus.
+    /// First **title** chorus entrance (~46s Oops / ~43s BOMT) — not prechorus,
+    /// not verse 2 (~65s). Uses a capped window + title-token vocal boost.
+    static func firstTitleEntrance(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double,
+        duration: Double,
+        introEnd: Double,
+        phraseSeconds: Double? = nil,
+        title: String? = nil
+    ) -> Entrance? {
+        guard hasUsableEnergyShape(signal), barSeconds > 0.05, duration > barSeconds * 16 else {
+            return nil
+        }
+        let phrase = max(barSeconds * 4, phraseSeconds ?? barSeconds * 8)
+        let lo = max(barSeconds * 8, min(introEnd, barSeconds * 16) * 0.35)
+        let globalHi = min(duration * 0.42, duration - barSeconds * 8)
+        let hi = firstTitleWindowHi(
+            introEnd: introEnd,
+            phraseSeconds: phrase,
+            barSeconds: barSeconds,
+            duration: duration,
+            globalHi: globalHi
+        )
+        guard hi > lo + barSeconds else { return nil }
+
+        let sampled = sampleGrid(
+            signal: signal,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            lo: lo,
+            hi: hi,
+            introEnd: introEnd,
+            phraseSeconds: phrase,
+            title: title
+        )
+        guard !sampled.isEmpty else { return nil }
+
+        // Floor from THIS window only — never let verse-2 energy @65s exclude ~46s.
+        let peakEnergy = sampled.map(\.energyAfter).max() ?? 0
+        let titleEnergyFloor = max(0.55, peakEnergy * 0.68)
+
+        let qualifying = sampled
+            .filter { qualifiesAsTitleEntrance($0, titleEnergyFloor: titleEnergyFloor) }
+            .sorted { $0.startSeconds < $1.startSeconds }
+
+        return clusterPeaks(qualifying, phraseSeconds: phrase, barSeconds: barSeconds).first
+    }
+
+    /// All chorus entrance peaks (full early-song window) — for repeat chorus / refine c2.
     static func entrances(
         signal: SongSignalFeatures,
         downbeats: [Double],
         barSeconds: Double,
         duration: Double,
         introEnd: Double,
-        phraseSeconds: Double? = nil
+        phraseSeconds: Double? = nil,
+        title: String? = nil
     ) -> [Entrance] {
         guard hasUsableEnergyShape(signal), barSeconds > 0.05, duration > barSeconds * 16 else {
             return []
@@ -53,33 +101,20 @@ nonisolated enum AutoChorusIsland {
         let hi = min(duration * 0.42, duration - barSeconds * 8)
         guard hi > lo + barSeconds else { return [] }
 
-        let beats = downbeats.filter { $0 >= lo - 0.02 && $0 <= hi + 0.02 }
-        let grid = beats.isEmpty
-            ? stride(from: lo, through: hi, by: barSeconds).map { $0 }
-            : beats
-
-        var sampled: [Entrance] = []
-        for t in grid {
-            let riseWin = 4.0
-            let after = mean(signal.energyCurve, hop: signal.hopSeconds, from: t, to: t + riseWin)
-            let before = mean(signal.energyCurve, hop: signal.hopSeconds, from: t - riseWin, to: t)
-            let rise = after - before
-            let vocal = mean(
-                signal.vocalPresenceCurve.isEmpty ? signal.energyCurve : signal.vocalPresenceCurve,
-                hop: signal.hopSeconds,
-                from: t,
-                to: t + barSeconds * 4
-            )
-            let novelty = mean(signal.noveltyCurve, hop: signal.hopSeconds, from: t - 0.3, to: t + 0.6)
-            let score = max(0, rise) * 0.52 + after * 0.22 + vocal * 0.18 + novelty * 0.08
-            sampled.append(
-                Entrance(startSeconds: t, score: score, rise: rise, energyAfter: after, vocalAfter: vocal)
-            )
-        }
+        let sampled = sampleGrid(
+            signal: signal,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            lo: lo,
+            hi: hi,
+            introEnd: introEnd,
+            phraseSeconds: phrase,
+            title: title
+        )
         guard !sampled.isEmpty else { return [] }
 
         let peakEnergy = sampled.map(\.energyAfter).max() ?? 0
-        let titleEnergyFloor = max(0.58, peakEnergy * 0.72)
+        let titleEnergyFloor = max(0.55, peakEnergy * 0.68)
 
         let qualifying = sampled
             .filter { qualifiesAsTitleEntrance($0, titleEnergyFloor: titleEnergyFloor) }
@@ -88,24 +123,25 @@ nonisolated enum AutoChorusIsland {
         return clusterPeaks(qualifying, phraseSeconds: phrase, barSeconds: barSeconds)
     }
 
-    /// First title-chorus peak after the intro — real Oops ~46s, not prechorus ~40.4s.
     static func bestEntrance(
         signal: SongSignalFeatures?,
         downbeats: [Double],
         barSeconds: Double,
         duration: Double,
         introEnd: Double,
-        phraseSeconds: Double? = nil
+        phraseSeconds: Double? = nil,
+        title: String? = nil
     ) -> Entrance? {
         guard let signal else { return nil }
-        return entrances(
+        return firstTitleEntrance(
             signal: signal,
             downbeats: downbeats,
             barSeconds: barSeconds,
             duration: duration,
             introEnd: introEnd,
-            phraseSeconds: phraseSeconds
-        ).first
+            phraseSeconds: phraseSeconds,
+            title: title
+        )
     }
 
     /// Chorus sections rebuilt from measured entrances (first + a later repeat).
@@ -116,17 +152,29 @@ nonisolated enum AutoChorusIsland {
         phraseSeconds: Double,
         duration: Double,
         introEnd: Double,
-        outroStart: Double
+        outroStart: Double,
+        title: String? = nil
     ) -> (SongSection, SongSection)? {
+        guard let first = firstTitleEntrance(
+            signal: signal,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            duration: duration,
+            introEnd: introEnd,
+            phraseSeconds: phraseSeconds,
+            title: title
+        ) else {
+            return nil
+        }
         let hits = entrances(
             signal: signal,
             downbeats: downbeats,
             barSeconds: barSeconds,
             duration: duration,
             introEnd: introEnd,
-            phraseSeconds: phraseSeconds
+            phraseSeconds: phraseSeconds,
+            title: title
         )
-        guard let first = hits.first else { return nil }
         let c1Start = first.startSeconds
         let c1End = min(outroStart, c1Start + phraseSeconds)
         let chorus1 = SongSection(kind: .chorus, startSeconds: c1Start, endSeconds: c1End)
@@ -144,7 +192,90 @@ nonisolated enum AutoChorusIsland {
         return (chorus1, chorus2)
     }
 
-    /// Group qualifying lifts within one phrase; keep the loudest peak per group.
+    // MARK: - Internals
+
+    /// Upper bound for the **first** title chorus — before verse 2 (~65s on Oops).
+    private static func firstTitleWindowHi(
+        introEnd: Double,
+        phraseSeconds: Double,
+        barSeconds: Double,
+        duration: Double,
+        globalHi: Double
+    ) -> Double {
+        let afterIntro = introEnd + phraseSeconds * 1.85
+        let barLimited = introEnd + barSeconds * 14
+        let fraction = duration * 0.28
+        return min(globalHi, afterIntro, barLimited, fraction)
+    }
+
+    private static func sampleGrid(
+        signal: SongSignalFeatures,
+        downbeats: [Double],
+        barSeconds: Double,
+        lo: Double,
+        hi: Double,
+        introEnd: Double,
+        phraseSeconds: Double,
+        title: String?
+    ) -> [Entrance] {
+        let beats = downbeats.filter { $0 >= lo - 0.02 && $0 <= hi + 0.02 }
+        let grid = beats.isEmpty
+            ? stride(from: lo, through: hi, by: barSeconds).map { $0 }
+            : beats
+
+        var sampled: [Entrance] = []
+        for t in grid {
+            let riseWin = 4.0
+            let vocalCurve = signal.vocalPresenceCurve.isEmpty ? signal.energyCurve : signal.vocalPresenceCurve
+            let after = mean(signal.energyCurve, hop: signal.hopSeconds, from: t, to: t + riseWin)
+            let before = mean(signal.energyCurve, hop: signal.hopSeconds, from: t - riseWin, to: t)
+            let rise = after - before
+            let vocal = mean(vocalCurve, hop: signal.hopSeconds, from: t, to: t + barSeconds * 4)
+            let vocalBefore = mean(vocalCurve, hop: signal.hopSeconds, from: t - riseWin, to: t)
+            let vocalRise = vocal - vocalBefore
+            let novelty = mean(signal.noveltyCurve, hop: signal.hopSeconds, from: t - 0.3, to: t + 0.6)
+            let titleBoost = titleChorusBoost(
+                title: title,
+                t: t,
+                introEnd: introEnd,
+                phraseSeconds: phraseSeconds,
+                vocal: vocal,
+                vocalRise: vocalRise,
+                novelty: novelty
+            )
+            let score = max(0, rise) * 0.44 + after * 0.18 + vocal * 0.22 + max(0, vocalRise) * 0.10
+                + novelty * 0.06 + titleBoost
+            sampled.append(
+                Entrance(startSeconds: t, score: score, rise: rise, energyAfter: after, vocalAfter: vocal)
+            )
+        }
+        return sampled
+    }
+
+    /// Title-line onset proxy from metadata tokens + vocal lift (no Python / ASR).
+    private static func titleChorusBoost(
+        title: String?,
+        t: Double,
+        introEnd: Double,
+        phraseSeconds: Double,
+        vocal: Double,
+        vocalRise: Double,
+        novelty: Double
+    ) -> Double {
+        guard let title, !title.isEmpty else { return 0 }
+        let tokens = Set(AutoPivotWord.tokens(in: title))
+        guard !tokens.isEmpty else { return 0 }
+        let afterIntro = t - introEnd
+        guard afterIntro >= phraseSeconds * 1.22 && afterIntro <= phraseSeconds * 1.58 else {
+            return 0
+        }
+        var boost = max(0, vocal - 0.46) * 0.18 + max(0, vocalRise) * 0.16 + novelty * 0.05
+        let lexiconHits = tokens.filter { AutoPivotWord.pivotLexicon.contains($0) }.count
+        boost += min(0.14, Double(lexiconHits) * 0.045)
+        return boost
+    }
+
+    /// Group qualifying lifts within one phrase; peak = best score, tie → later (title after prechorus).
     private static func clusterPeaks(
         _ qualifying: [Entrance],
         phraseSeconds: Double,
@@ -164,11 +295,8 @@ nonisolated enum AutoChorusIsland {
         clusters.append(current)
 
         let peaks = clusters.map { cluster -> Entrance in
-            cluster.max(by: { a, b in
-                if abs(a.energyAfter - b.energyAfter) > 0.015 { return a.energyAfter < b.energyAfter }
-                if abs(a.rise - b.rise) > 0.02 { return a.rise < b.rise }
-                return a.startSeconds < b.startSeconds
-            })!
+            // Title chorus is the tail of a prechorus→chorus lift — not the first downbeat.
+            cluster.max(by: { a, b in a.startSeconds < b.startSeconds })!
         }
 
         var unique: [Entrance] = []
@@ -183,7 +311,7 @@ nonisolated enum AutoChorusIsland {
     }
 
     private static func qualifiesAsTitleEntrance(_ e: Entrance, titleEnergyFloor: Double) -> Bool {
-        let liftOK = e.rise >= 0.06 || e.score >= 0.45
+        let liftOK = e.rise >= 0.05 || e.score >= 0.42
         return liftOK && e.energyAfter >= titleEnergyFloor
     }
 

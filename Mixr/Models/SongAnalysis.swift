@@ -232,7 +232,8 @@ enum SongAnalyzer {
                phraseSeconds: phrase,
                duration: duration,
                introEnd: intro.endSeconds,
-               outroStart: outro.startSeconds
+               outroStart: outro.startSeconds,
+               title: track.title
            ) {
             chorus1 = refined.0
             chorus2 = refined.1

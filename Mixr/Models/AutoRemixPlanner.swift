@@ -1407,7 +1407,8 @@ enum AutoRemixPlanner {
             barSeconds: bar,
             duration: profile.analysis.durationSeconds,
             introEnd: introEnd,
-            phraseSeconds: phrase
+            phraseSeconds: phrase,
+            title: profile.title
         )
 
         func overlapsUsed(_ start: Double, bars: Int) -> Bool {
@@ -2217,7 +2218,7 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs (first title-chorus energy rise, not prechorus .first)",
+                                format: "bed complete hook @%.1fs (first title-chorus window, not prechorus/verse-2)",
                                 chorus.startSeconds
                             )
                         )
