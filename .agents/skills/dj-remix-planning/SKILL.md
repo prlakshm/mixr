@@ -238,7 +238,11 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
   chorus** (measured **first-title window**: capped before verse 2, local
   energy floor, title-token vocal boost). Pick the **first downbeat** of the
   title lift (~46s), not prechorus @40.4s, chorus tail @50.5s, or verse 2
-  @65.7s / @78s. Guest Drop 1 uses the same first-title window (BOMT “hit me”
+  @65.7s / @78s. When a Demucs **vocals** sidecar is present, title-chorus
+  detection prefers **stem vocal onset** in the title window over full-mix
+  energy that peaks on the chorus tail (“got lost in the game / oh baby”).
+  Bounce score dumps `chorusOrDrop`, measured entrance, catalog pool, and
+  raw qualifying downbeats. Guest Drop 1 uses the same first-title window (BOMT “hit me”
   ~43s), not loneliness verse.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
   When stretch gate fails, **cameoChop** guests still own Drop 1 as phrase-aligned
