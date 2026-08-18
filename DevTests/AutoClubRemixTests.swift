@@ -908,7 +908,7 @@ func popTitleChorusRealCrate59fe1e8(
     drum: Double,
     bass: Double,
     vocal: Double,
-    titleChorusStart: Double = 46.0,
+    titleChorusStart: Double = 45.5,
     chorusTailStart: Double = 50.5,
     prechorusTwoStart: Double = 40.4,
     confidence: Double = 1.0
@@ -933,8 +933,8 @@ func popTitleChorusRealCrate59fe1e8(
         if t >= titleChorusStart && t < titleChorusStart + bar * 8 {
             feat.stemVocalPresenceCurve[i] = min(1, 0.92 + 0.06 * sin((t - titleChorusStart) * 0.4))
         }
-        // Attack peak slightly before the body downbeat @45.5s (real crate).
-        if abs(t - (titleChorusStart - 0.3)) < hop * 1.5 {
+        // Attack peak ~0.5s before body downbeat @45.5s (real crate “Oops”).
+        if abs(t - (titleChorusStart - 0.50)) < hop * 1.5 {
             feat.stemVocalPresenceCurve[i] = 0.98
         }
     }
@@ -1490,11 +1490,11 @@ do {
 }
 
 do {
-    // Real crate bounce of 59fe1e8: full-mix still peaks @50.5s (tail) but
-    // vocal stem title onset @46s must move the bed hook island.
+    // Real crate: stem must land ~44.5–45.5s (not prechorus @43.0, not tail @50.5s).
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
-    let oopsTitle = 46.0
+    let oopsTitle = 45.5
+    let prechorusLeadIn = 43.0
     let bomtTitle = 43.0
     let chorusTail = 50.5
     let oopsPreTwo = 40.4
@@ -1530,18 +1530,19 @@ do {
         String(format: "entrance=%.1f tail=%.1f", entrance?.startSeconds ?? -1, chorusTail)
     )
     check(
-        "59fe1e8 crate: stem title onset includes Oops attack (not 0.5s after)",
-        (entrance?.startSeconds ?? 999) <= oopsTitle + oopsProfile.analysis.barSeconds * 0.35,
-        String(format: "entrance=%.1f title=%.1f", entrance?.startSeconds ?? -1, oopsTitle)
+        "59fe1e8 crate: stem title onset is NOT prechorus lead-in @43.0s",
+        abs((entrance?.startSeconds ?? -1) - prechorusLeadIn) > 1.0,
+        String(format: "entrance=%.1f leadIn=%.1f", entrance?.startSeconds ?? -1, prechorusLeadIn)
     )
     check(
-        "59fe1e8 crate: stem title onset is title downbeat ~43–46s",
-        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 2.2,
+        "59fe1e8 crate: stem title onset is title line ~44.5–45.5s (uncut Oops)",
+        (entrance?.startSeconds ?? -1) >= 44.0
+            && abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 0.65,
         String(format: "entrance=%.1f want=%.1f catalog=%@", entrance?.startSeconds ?? -1, oopsTitle, chorusCandidateDump(oopsProfile))
     )
     check(
-        "59fe1e8 crate: refineChoruses chorus1 is ~46s not 50.5s",
-        abs((oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.6,
+        "59fe1e8 crate: refineChoruses chorus1 is ~45.5s not 50.5s",
+        abs((oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 0.65,
         chorusCandidateDump(oopsProfile)
     )
 
@@ -1559,9 +1560,10 @@ do {
             String(format: "hook=%.1f tail=%.1f decision=%@", hookSrc, chorusTail, bedDecision)
         )
         check(
-            "59fe1e8 crate: bed hook is title island ~43–48s (uncut Oops)",
-            abs(hookSrc - oopsTitle) < plan.barSeconds * 2.2
-                && abs(hookSrc - oopsPreTwo) > plan.barSeconds * 0.85
+            "59fe1e8 crate: bed hook is title line ~44.5–45.5s (not @43.0 / not @50.5)",
+            hookSrc >= 44.0
+                && abs(hookSrc - oopsTitle) < plan.barSeconds * 0.65
+                && abs(hookSrc - prechorusLeadIn) > 1.0
                 && abs(hookSrc - chorusTail) > 3,
             String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
         )
@@ -1625,8 +1627,9 @@ do {
             title: oops.title
         )
         check(
-            "59fe1e8 crate: vocal stem sidecar onset ~43–48s (not tail @50.5s)",
-            abs((stemEntrance?.startSeconds ?? -1) - oopsTitle) < mergedProfile.analysis.barSeconds * 2.2
+            "59fe1e8 crate: vocal stem sidecar onset ~44.5–45.5s (not @43.0)",
+            (stemEntrance?.startSeconds ?? -1) >= 44.0
+                && abs((stemEntrance?.startSeconds ?? -1) - oopsTitle) < mergedProfile.analysis.barSeconds * 0.65
                 && abs((stemEntrance?.startSeconds ?? -1) - chorusTail) > 3,
             String(format: "stemEntrance=%.1f want=%.1f tail=%.1f hasStem=%@",
                    stemEntrance?.startSeconds ?? -1, oopsTitle, chorusTail,
@@ -2084,7 +2087,7 @@ do {
                 check(
                     "Britney: first complete Oops hook is title chorus island (not verse-1 intro)",
                     hook.map {
-                        $0.sourceStart >= 40 && $0.sourceStart <= 48
+                        $0.sourceStart >= 44.0 && $0.sourceStart <= 46.5
                             && $0.timelineDuration >= plan.barSeconds * 15.5
                     } ?? false,
                     String(format: "hookSrc=%.2f hookDur=%.2f firstBedSrc=%.2f",
@@ -2116,8 +2119,8 @@ do {
             let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             check(
-                "Britney: first complete hook is title chorus ~43–48s, not prechorus ~20/~40",
-                hookSrc >= 40 && hookSrc <= 48
+                "Britney: first complete hook is title line ~44.5–45.5s, not prechorus ~20/~40",
+                hookSrc >= 44.0 && hookSrc <= 46.5
                     && abs(hookSrc - 20.2) > 4
                     && abs(hookSrc - 40.4) > 3,
                 String(format: "src=%.1f %@", hookSrc, chorusCandidateDump(oopsProfile))

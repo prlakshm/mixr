@@ -472,12 +472,12 @@ nonisolated enum AutoChorusIsland {
         let pool = inTitleWindow.isEmpty ? peaks : inTitleWindow
         guard let first = pool.min(by: { $0.t < $1.t }) else { return nil }
 
-        // “Oops” attacks ~0.5s before the chorus body downbeat — lead the snap.
-        let attack = max(lo, first.t - 0.40)
-        let snapped = snapDownbeatContaining(
-            attack,
+        let snapped = snapDownbeatTitleLine(
+            peak: first.t,
             downbeats: downbeats,
             barSeconds: barSeconds,
+            introEnd: introEnd,
+            phraseSeconds: phraseSeconds,
             lo: lo,
             hi: hi
         )
@@ -512,8 +512,41 @@ nonisolated enum AutoChorusIsland {
         return t
     }
 
-    /// Downbeat of the bar that **contains** the stem attack — so “Oops” at
-    /// ~45.2s lands on ~43.0s, not the next body downbeat @45.5s.
+    /// Snap stem title onset to the downbeat that uncuts “Oops” (~44.5–45.5s on
+    /// real Oops) — not prechorus @43.0 (e75d4fc) and not body-late @50.5s.
+    private static func snapDownbeatTitleLine(
+        peak: Double,
+        downbeats: [Double],
+        barSeconds: Double,
+        introEnd: Double,
+        phraseSeconds: Double,
+        lo: Double,
+        hi: Double
+    ) -> Double {
+        let titleBody = introEnd + phraseSeconds * 1.22
+        let candidates = downbeats
+            .filter { $0 >= max(lo, titleBody - barSeconds * 0.15) && $0 <= hi + barSeconds }
+            .sorted()
+        guard !candidates.isEmpty else {
+            return snapDownbeat(max(peak - 0.15, titleBody), downbeats: downbeats, barSeconds: barSeconds)
+        }
+
+        // Peak in the opening of the bar (title on the downbeat).
+        if let inBar = candidates.first(where: { peak >= $0 - 0.05 && peak <= $0 + barSeconds * 0.38 }) {
+            return inBar
+        }
+        // Peak leads the body downbeat by ≤650ms (“Oops” ~0.5s before @45.5s).
+        if let led = candidates.first(where: { peak >= $0 - 0.65 && peak < $0 - 0.02 }) {
+            return led
+        }
+        // Otherwise first title-body downbeat near the peak.
+        if let after = candidates.filter({ $0 >= titleBody && $0 <= peak + barSeconds * 0.45 }).min() {
+            return after
+        }
+        return candidates.min(by: { abs($0 - peak) < abs($1 - peak) })!
+    }
+
+    /// Downbeat of the bar that **contains** t (legacy / full-mix helpers).
     private static func snapDownbeatContaining(
         _ t: Double,
         downbeats: [Double],
