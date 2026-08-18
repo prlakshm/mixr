@@ -933,7 +933,8 @@ func popTitleChorusRealCrate59fe1e8(
         if t >= titleChorusStart && t < titleChorusStart + bar * 8 {
             feat.stemVocalPresenceCurve[i] = min(1, 0.92 + 0.06 * sin((t - titleChorusStart) * 0.4))
         }
-        if abs(t - titleChorusStart) < hop * 1.5 {
+        // Attack peak slightly before the body downbeat @45.5s (real crate).
+        if abs(t - (titleChorusStart - 0.3)) < hop * 1.5 {
             feat.stemVocalPresenceCurve[i] = 0.98
         }
     }
@@ -1529,8 +1530,13 @@ do {
         String(format: "entrance=%.1f tail=%.1f", entrance?.startSeconds ?? -1, chorusTail)
     )
     check(
-        "59fe1e8 crate: stem title onset is title downbeat ~46s",
-        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.6,
+        "59fe1e8 crate: stem title onset includes Oops attack (not 0.5s after)",
+        (entrance?.startSeconds ?? 999) <= oopsTitle + oopsProfile.analysis.barSeconds * 0.35,
+        String(format: "entrance=%.1f title=%.1f", entrance?.startSeconds ?? -1, oopsTitle)
+    )
+    check(
+        "59fe1e8 crate: stem title onset is title downbeat ~43–46s",
+        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 2.2,
         String(format: "entrance=%.1f want=%.1f catalog=%@", entrance?.startSeconds ?? -1, oopsTitle, chorusCandidateDump(oopsProfile))
     )
     check(
@@ -1553,9 +1559,9 @@ do {
             String(format: "hook=%.1f tail=%.1f decision=%@", hookSrc, chorusTail, bedDecision)
         )
         check(
-            "59fe1e8 crate: bed hook is title downbeat ~46s (uncut Oops)",
-            abs(hookSrc - oopsTitle) < plan.barSeconds * 1.6
-                && abs(hookSrc - oopsPreTwo) > 3
+            "59fe1e8 crate: bed hook is title island ~43–48s (uncut Oops)",
+            abs(hookSrc - oopsTitle) < plan.barSeconds * 2.2
+                && abs(hookSrc - oopsPreTwo) > plan.barSeconds * 0.85
                 && abs(hookSrc - chorusTail) > 3,
             String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
         )
@@ -1619,8 +1625,8 @@ do {
             title: oops.title
         )
         check(
-            "59fe1e8 crate: vocal stem sidecar onset ~46s (not tail @50.5s)",
-            abs((stemEntrance?.startSeconds ?? -1) - oopsTitle) < mergedProfile.analysis.barSeconds * 2.0
+            "59fe1e8 crate: vocal stem sidecar onset ~43–48s (not tail @50.5s)",
+            abs((stemEntrance?.startSeconds ?? -1) - oopsTitle) < mergedProfile.analysis.barSeconds * 2.2
                 && abs((stemEntrance?.startSeconds ?? -1) - chorusTail) > 3,
             String(format: "stemEntrance=%.1f want=%.1f tail=%.1f hasStem=%@",
                    stemEntrance?.startSeconds ?? -1, oopsTitle, chorusTail,
@@ -2044,14 +2050,14 @@ do {
               "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
 
         // Two-deck + Xirex pivot: Oops plays complete first; no early title chops.
-        // Real Drop 1 is after one complete Oops hook + 2-bar baby loop (~bar 18),
+        // Real Drop 1 is after 16-bar Oops + 2-bar baby loop (~bar 24),
         // never a fake drop on the bed chorus and never a quiet fade-in.
         let pulseDrops = plan.pulseRegions.filter { $0.role == .drop }.sorted { $0.timelineStart < $1.timelineStart }
         if let pulseDrop1 = pulseDrops.first {
             let dropBar = pulseDrop1.timelineStart / plan.barSeconds
             check(
-                "Britney: pulse Drop 1 after complete Oops + pivot (~bar 18), not bar 16 fake / not late bar 28",
-                dropBar >= 16.5 && dropBar <= 24.5,
+                "Britney: pulse Drop 1 after complete Oops + pivot (~bar 24), not bar 16 fake / not late bar 28",
+                dropBar >= 22.5 && dropBar <= 26.5,
                 String(format: "bar=%.1f t=%.2f", dropBar, pulseDrop1.timelineStart)
             )
         } else {
@@ -2073,21 +2079,21 @@ do {
             let bedDoms = plan.placements
                 .filter { $0.songID == bedID && $0.role == .dominant }
                 .sorted { $0.timelineStart < $1.timelineStart }
-            if let firstBed = bedDoms.first {
+            if let firstBed = bedDoms.first(where: { $0.timelineStart < drop1Start - 0.05 }) ?? bedDoms.first {
+                let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
                 check(
-                    "Britney: first Oops title/intro uncut (source near start)",
-                    firstBed.sourceStart <= plan.barSeconds * 2 + 0.05,
-                    String(format: "sourceStart=%.2f", firstBed.sourceStart)
-                )
-                check(
-                    "Britney: first Oops placement is a complete phrase (≥8 bars)",
-                    firstBed.timelineDuration >= plan.barSeconds * 7.5,
-                    String(format: "dur=%.2f", firstBed.timelineDuration)
+                    "Britney: first complete Oops hook is title chorus island (not verse-1 intro)",
+                    hook.map {
+                        $0.sourceStart >= 40 && $0.sourceStart <= 48
+                            && $0.timelineDuration >= plan.barSeconds * 15.5
+                    } ?? false,
+                    String(format: "hookSrc=%.2f hookDur=%.2f firstBedSrc=%.2f",
+                           hook?.sourceStart ?? -1, hook?.timelineDuration ?? -1, firstBed.sourceStart)
                 )
                 let bedBeforeDrop = bedDoms.filter { $0.timelineStart < drop1Start - 0.05 }
                 check(
                     "Britney: Oops opening title/chorus finishes before pivot (important lines uncut)",
-                    bedBeforeDrop.contains { $0.timelineDuration >= plan.barSeconds * 7.5 },
+                    bedBeforeDrop.contains { $0.timelineDuration >= plan.barSeconds * 15.5 },
                     "bedPhrasesBeforeDrop=\(bedBeforeDrop.count)"
                 )
             } else {
@@ -2110,10 +2116,10 @@ do {
             let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             check(
-                "Britney: first complete hook is title chorus ~46s, not prechorus ~20/~40",
-                abs(hookSrc - 46.0) < plan.barSeconds * 1.6
+                "Britney: first complete hook is title chorus ~43–48s, not prechorus ~20/~40",
+                hookSrc >= 40 && hookSrc <= 48
                     && abs(hookSrc - 20.2) > 4
-                    && abs(hookSrc - 40.4) > 4,
+                    && abs(hookSrc - 40.4) > 3,
                 String(format: "src=%.1f %@", hookSrc, chorusCandidateDump(oopsProfile))
             )
             check(
@@ -2929,7 +2935,45 @@ do {
 }
 
 do {
-    // One-kick: loud drums stem overrides thin analysis (no Club Kick pulse).
+    // Thin stupid song + loud Demucs drums stem must still writesKick=true.
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-stupid-stem-\(UUID().uuidString)", isDirectory: true)
+    let drumsURL = dir.appendingPathComponent("drums.wav")
+    do {
+        try AutoStemKickEnergy.writeFixtureWAV(to: drumsURL, frames: 8_000, amplitude: 0.95)
+        let song = makeSong(title: "stupid song", bpm: 128, key: "C")
+        let feat = crateFeatures(duration: 180, bpm: 128, drum: 0.19, bass: 0.46, vocal: 0.51, confidence: 0.10)
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[song.id] = AutoStemSet(drums: drumsURL)
+        let prof = AutoSectionCatalog.profile(track: song, tuning: tuning, signal: feat)
+        check(
+            "stupid song + drums stem: pulseDrumStrength stays thin",
+            prof.pulseDrumStrength < AutoClubPulse.slammingDrumThreshold,
+            String(format: "pulseDrum=%.3f full=%.3f stem=%.3f",
+                   prof.pulseDrumStrength, prof.analysis.drumStrength, prof.stemDrumStrength ?? -1)
+        )
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [song],
+            tuning: tuning,
+            seed: 11,
+            signals: [song.id: feat]
+        ) {
+        case .success(_, let plan, _):
+            check(
+                "stupid song + drums stem: writesKick=true (meter regression)",
+                plan.pulsePolicy?.writesKick == true,
+                plan.pulsePolicy?.detail ?? "nil"
+            )
+        case .failure(let message):
+            check("stupid song + drums stem pulse policy", false, message)
+        }
+    } catch {
+        check("stupid song drums stem fixture", false, "\(error)")
+    }
+}
+
+do {
+    // One-kick: loud drums stem on a **slamming** full mix still skips pulse.
     let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("mixr-stem-kick-\(UUID().uuidString)", isDirectory: true)
     let drumsURL = dir.appendingPathComponent("drums.wav")
@@ -2940,7 +2984,7 @@ do {
               String(format: "energy=%.3f", measured))
 
         let song = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m")
-        let feat = crateFeatures(duration: 200, bpm: 95, drum: 0.19, bass: 0.20, vocal: 0.55, confidence: 1.00)
+        let feat = crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00)
         var tuning = AutoTuning.standard
         tuning.explicitStemsBySongID[song.id] = AutoStemSet(drums: drumsURL)
         switch AutoRemixRunner.runEntireProject(
@@ -2950,7 +2994,7 @@ do {
             signals: [song.id: feat]
         ) {
         case .success(_, let plan, _):
-            check("Slamming drums stem skips Club Kick pulse", plan.pulsePolicy?.writesKick == false,
+            check("Slamming full-mix + drums stem skips Club Kick pulse", plan.pulsePolicy?.writesKick == false,
                   plan.pulsePolicy?.detail ?? "")
         case .failure(let message):
             check("Slamming drums stem pulse policy", false, message)

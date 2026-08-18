@@ -1952,8 +1952,8 @@ enum AutoRemixPlanner {
 
     /// Two-wave club shape for N-song mashups. Indices into `ordered`
     /// (0 = bed). Min stay 8 bars; hooks prefer 16. No 4-bar ping-pong.
-    /// Xirex: bed intro → complete bed chorus → 2-bar pivot → guest Drop 1
-    /// (~bar 18). Groove cameos move after Drop 1 so the join stays early.
+    /// Xirex: bed intro → complete bed chorus (16 bars) → 2-bar pivot → guest Drop 1
+    /// (~bar 24). Groove cameos move after Drop 1 so the join stays early.
     private static func nSongClubMashupSlots(
         drop1Idx: Int?,
         drop2Idx: Int,
@@ -1963,10 +1963,14 @@ enum AutoRemixPlanner {
         outroCameoIdx: Int?
     ) -> [Slot] {
         var slots: [Slot] = [
-            Slot(songIdx: 0, role: .intro, bars: 8, entry: .none, energy: 0.45, shrinkPriority: 2),
+            Slot(songIdx: 0, role: .intro, bars: 6, entry: .none, energy: 0.45, shrinkPriority: 2),
         ]
-        // Complete Deck A chorus/hook BEFORE the pivot loop (never chop the title).
-        slots.append(Slot(songIdx: 0, role: .chorus, bars: 8, entry: .cleanCrossfade, energy: 0.88))
+        // Complete Deck A title chorus BEFORE pivot — 16 bars so “Oops” title
+        // sits inside the last-8-of-A mix window (bars 17–24).
+        slots.append(Slot(
+            songIdx: 0, role: .chorus, bars: 16, entry: .cleanCrossfade, energy: 0.88,
+            shrinkPriority: 0
+        ))
         // 2-bar pivot window — replaced with 1-beat wallpaper grains at emit time.
         slots.append(Slot(songIdx: 0, role: .build, bars: 2, entry: .flangerBuild, energy: 0.72, shrinkPriority: 1))
 
@@ -2387,8 +2391,8 @@ enum AutoRemixPlanner {
             while bars > identityFloor, Double(bars) * barSec > availableSeconds {
                 bars -= minBars
             }
-            // Mashups: skip rather than emit a sub-8-bar island.
-            if mode == .mashup, bars < 8 {
+            // Mashups: skip rather than emit a sub-8-bar island (intro tease may be 6 bars).
+            if mode == .mashup, bars < 8, slot.role != .intro {
                 warnings.append(
                     "\(profile.title) lacked 8 bars for \(slot.role.rawValue); skipped to avoid a 4-bar switch."
                 )

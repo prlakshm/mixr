@@ -66,16 +66,26 @@ struct AutoSongProfile: Sendable {
     /// Offline Demucs sidecars when present (empty → full mix).
     var stems: AutoStemSet = .empty
     /// Kick/drum energy measured from the drums stem (nil if unread).
-    /// Pulse uses `max(analysis.drumStrength, stemDrumStrength)` so a quiet
-    /// Demucs file cannot invent a second kick on a kit the full mix already
-    /// measured as slamming. Bed/hook roles keep full-mix `drumStrength`.
+    /// Bed/hook scoring keeps full-mix `drumStrength`. Pulse reads
+    /// `pulseDrumStrength` — thin full-mix is never overridden by a loud stem.
     var stemDrumStrength: Double? = nil
 
     var lowConfidence: Bool { analysis.analysisConfidence < AutoTuning.standard.lowConfidenceThreshold }
 
-    /// One-kick pulse input: never weaker than the full-mix drum reading.
+    /// One-kick pulse input. Full-mix drum strength owns the decision when the
+    /// source is thin — a loud Demucs drums.wav must not skip pulse on sparse
+    /// pop (stupid song). Stem only raises the reading when full-mix is already
+    /// mid/strong (Britney-class beds stay no-pulse).
     var pulseDrumStrength: Double {
-        max(analysis.drumStrength, stemDrumStrength ?? 0)
+        let full = analysis.drumStrength
+        let stem = stemDrumStrength ?? 0
+        if full < AutoClubPulse.thinDrumThreshold {
+            return full
+        }
+        if full >= AutoClubPulse.slammingDrumThreshold {
+            return max(full, stem)
+        }
+        return max(full, stem * 0.35)
     }
 
     /// Best unused candidate for a label, by SectionValue. `used` ranges

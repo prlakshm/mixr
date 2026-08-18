@@ -472,7 +472,15 @@ nonisolated enum AutoChorusIsland {
         let pool = inTitleWindow.isEmpty ? peaks : inTitleWindow
         guard let first = pool.min(by: { $0.t < $1.t }) else { return nil }
 
-        let snapped = snapDownbeat(first.t, downbeats: downbeats, barSeconds: barSeconds)
+        // “Oops” attacks ~0.5s before the chorus body downbeat — lead the snap.
+        let attack = max(lo, first.t - 0.40)
+        let snapped = snapDownbeatContaining(
+            attack,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            lo: lo,
+            hi: hi
+        )
         let vocalAfter = mean(stem, hop: signal.hopSeconds, from: snapped, to: snapped + barSeconds * 4)
         let vocalBefore = mean(stem, hop: signal.hopSeconds, from: snapped - 4, to: snapped)
         let titleBoost = titleChorusBoost(
@@ -500,6 +508,32 @@ nonisolated enum AutoChorusIsland {
         }
         if barSeconds > 0 {
             return (t / barSeconds).rounded() * barSeconds
+        }
+        return t
+    }
+
+    /// Downbeat of the bar that **contains** the stem attack — so “Oops” at
+    /// ~45.2s lands on ~43.0s, not the next body downbeat @45.5s.
+    private static func snapDownbeatContaining(
+        _ t: Double,
+        downbeats: [Double],
+        barSeconds: Double,
+        lo: Double,
+        hi: Double
+    ) -> Double {
+        let sorted = downbeats.filter { $0 >= lo - barSeconds && $0 <= hi + barSeconds }.sorted()
+        if !sorted.isEmpty {
+            if let barStart = sorted.last(where: { $0 <= t + 0.04 }) {
+                let barEnd = sorted.first(where: { $0 > barStart + 0.01 })
+                    ?? (barStart + barSeconds)
+                if t < barEnd - 0.02 {
+                    return barStart
+                }
+            }
+        }
+        if barSeconds > 0 {
+            let grid = floor(t / barSeconds) * barSeconds
+            return max(lo, grid)
         }
         return t
     }
