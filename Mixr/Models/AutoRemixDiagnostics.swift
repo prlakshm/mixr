@@ -459,6 +459,42 @@ nonisolated enum AutoRemixDiagnostics {
         return onPrechorus && !onTitle
     }
 
+    /// True when the first Deck A hook sources a late verse (Oops verse 2 ~78s)
+    /// instead of the first title chorus (~46s).
+    static func firstDeckAHookIsLateVerseTwo(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        verseTwoStart: Double,
+        toleranceSeconds: Double = 6.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onVerseTwo = abs(hook.sourceStart - verseTwoStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onVerseTwo && !onTitle
+    }
+
+    /// True when guest Drop 1 sources a late verse groove (BOMT loneliness
+    /// verse ~95s) instead of the first title chorus (~43s).
+    static func guestDrop1IsLateVerseGroove(
+        plan: AutoRemixPlan,
+        guestSongID: UUID,
+        titleChorusStart: Double,
+        lateVerseStart: Double,
+        toleranceSeconds: Double = 8.0
+    ) -> Bool {
+        guard let dropStart = firstDropStart(plan: plan) else { return false }
+        guard let guest = plan.placements
+            .filter({
+                $0.songID == guestSongID && $0.role == .dominant
+                    && abs($0.timelineStart - dropStart) < 0.15
+            })
+            .min(by: { abs($0.timelineStart - dropStart) < abs($1.timelineStart - dropStart) })
+        else { return false }
+        let onLate = abs(guest.sourceStart - lateVerseStart) < toleranceSeconds
+        let onTitle = abs(guest.sourceStart - titleChorusStart) < toleranceSeconds
+        return onLate && !onTitle
+    }
+
     /// True when the first Deck A hook starts before the bed's first chorus
     /// anchor — i.e. verse / pre-chorus apology, not a complete hook line.
     static func firstDeckAHookSourcesBeforeChorus(

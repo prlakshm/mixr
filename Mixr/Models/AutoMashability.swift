@@ -123,10 +123,18 @@ nonisolated enum AutoMashability {
         tuning: AutoTuning
     ) -> AutoMashabilityIsland? {
         let bars = max(8, min(16, wantBars))
-        let guestPhrases = guest.candidates.filter {
-            ($0.label == .chorus || $0.label == .teaser || $0.label == .groove)
+        let hookPhrases = guest.candidates.filter {
+            ($0.label == .chorus || $0.label == .teaser)
                 && $0.barCount >= min(8, bars)
         }
+        // Guest Drop 1 must source a hook island (BOMT “hit me baby”), not a
+        // verse groove (“My loneliness is killing me”). Keep groove fallback
+        // only when no chorus/teaser exists (cameo paths elsewhere).
+        let guestPhrases = hookPhrases.isEmpty
+            ? guest.candidates.filter {
+                $0.label == .groove && $0.barCount >= min(8, bars)
+            }
+            : hookPhrases
         let bedPhrases = bed.candidates.filter {
             ($0.label == .groove || $0.label == .chorus || $0.label == .build)
                 && $0.barCount >= 4

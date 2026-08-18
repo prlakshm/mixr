@@ -710,6 +710,79 @@ func popTitleChorusFeatures(
     return feat
 }
 
+/// Crate-shaped pop where a **later** verse (Oops ~78s) is louder than the
+/// first title chorus — real bounce of 6337435 picked verse 2 on score sort.
+func popTitleChorusWithLouderVerseTwo(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStarts: [Double],
+    prechorusStarts: [Double],
+    verseTwoStart: Double = 78.0,
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorusFeatures(
+        duration: duration,
+        bpm: bpm,
+        drum: drum,
+        bass: bass,
+        vocal: vocal,
+        titleChorusStarts: titleChorusStarts,
+        prechorusStarts: prechorusStarts,
+        confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if t >= verseTwoStart && t < verseTwoStart + bar * 8 {
+            feat.energyCurve[i] = 0.99
+            feat.vocalPresenceCurve[i] = min(1, vocal * 1.22)
+        }
+        if abs(t - verseTwoStart) < hop * 2 {
+            feat.noveltyCurve[i] = 0.98
+        }
+    }
+    return feat
+}
+
+/// BOMT-shaped pop where the loneliness verse groove (~95s) is hot enough
+/// to beat the title chorus when guest islands include `.groove`.
+func popTitleChorusWithLouderLateVerse(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStarts: [Double],
+    prechorusStarts: [Double],
+    lateVerseStart: Double = 95.0,
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorusFeatures(
+        duration: duration,
+        bpm: bpm,
+        drum: drum,
+        bass: bass,
+        vocal: vocal,
+        titleChorusStarts: titleChorusStarts,
+        prechorusStarts: prechorusStarts,
+        confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        if t >= lateVerseStart && t < lateVerseStart + bar * 8 {
+            feat.energyCurve[i] = 0.97
+            feat.vocalPresenceCurve[i] = min(1, vocal * 1.18)
+        }
+    }
+    return feat
+}
+
 func chorusCandidateDump(_ profile: AutoSongProfile) -> String {
     let choruses = profile.candidates
         .filter { $0.label == .chorus }
@@ -819,6 +892,111 @@ do {
         )
     case .failure(let message):
         check("Shaped Oops title-chorus mashup", false, message)
+    }
+}
+
+do {
+    // Real crate bounce of 6337435: score-sorted entrances picked Oops verse 2
+    // @78.3s (Whisper: “You see my problem is this…”) over first title chorus
+    // @46s; wallpaper heard “did it” ×8; BOMT Drop 1 landed on loneliness verse.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let oopsTitle = 46.0
+    let bomtTitle = 43.0
+    let oopsVerseTwo = 78.3
+    let bomtLateVerse = 95.0
+    let oopsPre: [Double] = [20.2, 40.4]
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: popTitleChorusWithLouderLateVerse(
+            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+            titleChorusStarts: [bomtTitle, 118.0],
+            prechorusStarts: [20.6, 41.3],
+            lateVerseStart: bomtLateVerse
+        ),
+        oops.id: popTitleChorusWithLouderVerseTwo(
+            duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+            titleChorusStarts: [oopsTitle, 120.0],
+            prechorusStarts: oopsPre,
+            verseTwoStart: oopsVerseTwo
+        ),
+    ]
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
+    let bomtProfile = AutoSectionCatalog.profile(track: bomt, signal: signals[bomt.id])
+    let oopsChorusList = oopsProfile.analysis.chorusOrDropCandidates
+        .map { String(format: "%.1fs", $0.startSeconds) }
+        .joined(separator: ",")
+    let bomtChorusList = bomtProfile.analysis.chorusOrDropCandidates
+        .map { String(format: "%.1fs", $0.startSeconds) }
+        .joined(separator: ",")
+    let entrance = AutoChorusIsland.bestEntrance(
+        signal: signals[oops.id],
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsProfile.analysis.barSeconds,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0
+    )
+    check(
+        "Real-crate shape: Oops entrance is NOT verse 2 @78s (score-sort bug)",
+        abs((entrance?.startSeconds ?? -1) - oopsVerseTwo) > 6,
+        String(format: "entrance=%.1f verse2=%.1f analysis=[%@]", entrance?.startSeconds ?? -1, oopsVerseTwo, oopsChorusList)
+    )
+    check(
+        "Real-crate shape: Oops entrance is first title chorus ~46s",
+        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.5,
+        String(format: "entrance=%.1f want=%.1f %@", entrance?.startSeconds ?? -1, oopsTitle, chorusCandidateDump(oopsProfile))
+    )
+
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+        let hookSrc = hook?.sourceStart ?? -1
+        check(
+            "Real-crate shape: bed hook is NOT Oops verse 2 @78s",
+            !AutoRemixDiagnostics.firstDeckAHookIsLateVerseTwo(
+                plan: plan,
+                titleChorusStart: oopsTitle,
+                verseTwoStart: oopsVerseTwo
+            ),
+            String(format: "hook=%.1f verse2=%.1f analysis=[%@]", hookSrc, oopsVerseTwo, oopsChorusList)
+        )
+        check(
+            "Real-crate shape: bed hook is first Oops title chorus ~46s",
+            abs(hookSrc - oopsTitle) < plan.barSeconds * 1.6,
+            String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
+        )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let guestDrop = plan.placements
+            .filter {
+                $0.songID == bomt.id && $0.role == .dominant
+                    && abs($0.timelineStart - drop1Start) < 0.15
+            }
+            .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }
+        let guestSrc = guestDrop?.sourceStart ?? -1
+        check(
+            "Real-crate shape: BOMT Drop 1 is NOT loneliness verse ~95s",
+            !AutoRemixDiagnostics.guestDrop1IsLateVerseGroove(
+                plan: plan,
+                guestSongID: bomt.id,
+                titleChorusStart: bomtTitle,
+                lateVerseStart: bomtLateVerse
+            ),
+            String(format: "guestSrc=%.1f lateVerse=%.1f analysis=[%@]", guestSrc, bomtLateVerse, bomtChorusList)
+        )
+        check(
+            "Real-crate shape: BOMT Drop 1 is title chorus ~43s (hit me)",
+            abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
+            String(format: "guestSrc=%.1f want=%.1f %@ analysis=[%@]", guestSrc, bomtTitle, chorusCandidateDump(bomtProfile), bomtChorusList)
+        )
+        check(
+            "Real-crate shape: pivotWallpaperLoop still recorded",
+            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        )
+        check(
+            "Real-crate shape: roles stay Oops bed / BOMT Drop 1",
+            plan.mashupBedSongID == oops.id && plan.mashupVocalSongID == bomt.id
+        )
+    case .failure(let message):
+        check("Real-crate shape Britney mashup", false, message)
     }
 }
 

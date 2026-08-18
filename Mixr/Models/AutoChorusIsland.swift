@@ -7,6 +7,10 @@ import Foundation
 // happens twice (Oops “I'm not that innocent” ~20s and ~40s) looks like
 // a chorus island to `.first`. Measured energy *rise* at a downbeat is
 // what actually starts “Oops I did it again” / “hit me baby one more time”.
+//
+// Pick the **first** qualifying lift after the intro — not the loudest
+// later section (Oops verse 2 ~78s outscored the ~46s title chorus on
+// real crate when entrances were score-sorted).
 
 nonisolated enum AutoChorusIsland {
 
@@ -31,9 +35,9 @@ nonisolated enum AutoChorusIsland {
         return varSum / Double(signal.energyCurve.count) >= 0.004
     }
 
-    /// Ranked chorus *entrances* (downbeat-snapped) in the first ~40% of
-    /// the song — where the first title hook lives. Empty when the signal
-    /// is too flat to prefer one island over another.
+    /// Chorus *entrances* (downbeat-snapped) in the first ~40% of the song,
+    /// time-ordered — earliest qualifying title lift first. Empty when the
+    /// signal is too flat to prefer one island over another.
     static func entrances(
         signal: SongSignalFeatures,
         downbeats: [Double],
@@ -53,7 +57,7 @@ nonisolated enum AutoChorusIsland {
             ? stride(from: lo, through: hi, by: barSeconds).map { $0 }
             : beats
 
-        var ranked: [Entrance] = []
+        var sampled: [Entrance] = []
         for t in grid {
             let riseWin = 4.0
             let after = mean(signal.energyCurve, hop: signal.hopSeconds, from: t, to: t + riseWin)
@@ -69,14 +73,22 @@ nonisolated enum AutoChorusIsland {
             // Title chorus: lift into a loud, sung 8-bar. Prechorus already
             // sitting at medium energy scores a near-zero rise.
             let score = max(0, rise) * 0.52 + after * 0.22 + vocal * 0.18 + novelty * 0.08
-            ranked.append(
+            sampled.append(
                 Entrance(startSeconds: t, score: score, rise: rise, energyAfter: after, vocalAfter: vocal)
             )
         }
-        ranked.sort { $0.score > $1.score }
-        // Unique islands ≥ 6 bars apart (don't keep every downbeat of one chorus).
+        guard !sampled.isEmpty else { return [] }
+
+        let peakEnergy = sampled.map(\.energyAfter).max() ?? 0
+        let titleEnergyFloor = max(0.58, peakEnergy * 0.72)
+
+        let qualifying = sampled
+            .filter { qualifiesAsTitleEntrance($0, titleEnergyFloor: titleEnergyFloor) }
+            .sorted { $0.startSeconds < $1.startSeconds }
+
+        // Unique islands ≥ 6 bars apart (time order — first title lift wins).
         var unique: [Entrance] = []
-        for e in ranked {
+        for e in qualifying {
             if unique.contains(where: { abs($0.startSeconds - e.startSeconds) < barSeconds * 6 }) {
                 continue
             }
@@ -86,6 +98,8 @@ nonisolated enum AutoChorusIsland {
         return unique
     }
 
+    /// First title-chorus lift after the intro/prechorus — not the loudest
+    /// later verse (real Oops crate: ~46s, not verse 2 ~78s).
     static func bestEntrance(
         signal: SongSignalFeatures?,
         downbeats: [Double],
@@ -120,9 +134,7 @@ nonisolated enum AutoChorusIsland {
             duration: duration,
             introEnd: introEnd
         )
-        guard let first = hits.first, first.rise >= 0.06 || first.score >= 0.45 else {
-            return nil
-        }
+        guard let first = hits.first else { return nil }
         let c1Start = first.startSeconds
         let c1End = min(outroStart, c1Start + phraseSeconds)
         let chorus1 = SongSection(kind: .chorus, startSeconds: c1Start, endSeconds: c1End)
@@ -138,6 +150,13 @@ nonisolated enum AutoChorusIsland {
         let c2End = min(outroStart, c2Start + phraseSeconds)
         let chorus2 = SongSection(kind: .chorus, startSeconds: c2Start, endSeconds: max(c2Start + barSeconds * 4, c2End))
         return (chorus1, chorus2)
+    }
+
+    private static func qualifiesAsTitleEntrance(_ e: Entrance, titleEnergyFloor: Double) -> Bool {
+        let liftOK = e.rise >= 0.06 || e.score >= 0.45
+        // Reject repeated medium prechorus (~0.52 on shaped stubs) — title
+        // chorus sits near the measured peak (~0.94).
+        return liftOK && e.energyAfter >= titleEnergyFloor
     }
 
     static func mean(_ curve: [Double], hop: Double, from: Double, to: Double) -> Double {
