@@ -665,6 +665,163 @@ func crateFeatures(
     )
 }
 
+/// Crate-shaped pop: repeated medium prechorus then a loud title chorus.
+/// Oops: prechorus ~20s and ~40s, title chorus ~46s. BOMT: “hit me” ~43s.
+func popTitleChorusFeatures(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStarts: [Double],
+    prechorusStarts: [Double],
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = crateFeatures(
+        duration: duration, bpm: bpm, drum: drum, bass: bass, vocal: vocal, confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let hops = feat.energyCurve.count
+    let bar = 240.0 / max(bpm, 40)
+    for i in 0..<hops {
+        let t = Double(i) * hop
+        var energy = 0.38
+        var voc = vocal * 0.45
+        var novelty = 0.12
+        for p in prechorusStarts {
+            if t >= p && t < p + bar * 8 {
+                energy = 0.52
+                voc = vocal * 0.75
+            }
+        }
+        for c in titleChorusStarts {
+            if t >= c && t < c + bar * 8 {
+                energy = 0.94
+                voc = min(1, vocal * 1.15)
+            }
+            if abs(t - c) < hop * 2 {
+                novelty = 0.92
+            }
+        }
+        feat.energyCurve[i] = energy
+        feat.vocalPresenceCurve[i] = voc
+        feat.noveltyCurve[i] = novelty
+    }
+    return feat
+}
+
+func chorusCandidateDump(_ profile: AutoSongProfile) -> String {
+    let choruses = profile.candidates
+        .filter { $0.label == .chorus }
+        .sorted { $0.startSeconds < $1.startSeconds }
+    let analysis = profile.analysis.chorusOrDropCandidates
+        .map { String(format: "sec@%.1f", $0.startSeconds) }
+        .joined(separator: ",")
+    let cat = choruses
+        .map { String(format: "%@@%.1fh=%.2f", $0.label.rawValue, $0.startSeconds, $0.hook) }
+        .joined(separator: " ")
+    return "analysis=[\(analysis)] catalog=[\(cat)]"
+}
+
+do {
+    // Crate bounce of a83a66b still sourced Oops prechorus @40.4s because
+    // chorusOrDropCandidates.first is a 28% duration snap, not the title line.
+    // Shaped energy: prechorus twice (~20s, ~40s), title chorus ~46s.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let oopsTitle = 46.0
+    let bomtTitle = 43.0
+    let oopsPre: [Double] = [20.2, 40.4]
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: popTitleChorusFeatures(
+            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+            titleChorusStarts: [bomtTitle, 118.0],
+            prechorusStarts: [20.6, 41.3]
+        ),
+        oops.id: popTitleChorusFeatures(
+            duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+            titleChorusStarts: [oopsTitle, 120.0],
+            prechorusStarts: oopsPre
+        ),
+    ]
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
+    let bomtProfile = AutoSectionCatalog.profile(track: bomt, signal: signals[bomt.id])
+    let oopsChorusList = oopsProfile.analysis.chorusOrDropCandidates
+        .map { String(format: "%.1fs", $0.startSeconds) }
+        .joined(separator: ",")
+    let oopsCatalog = oopsProfile.candidates.filter { $0.label == .chorus }
+        .map { String(format: "%.1fs/h=%.2f", $0.startSeconds, $0.hook) }
+        .joined(separator: " ")
+    let entrance = AutoChorusIsland.bestEntrance(
+        signal: signals[oops.id],
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsProfile.analysis.barSeconds,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: oopsProfile.analysis.introCandidate?.endSeconds ?? 0
+    )
+    check(
+        "Oops analysis: title-chorus entrance is not the 40.4s prechorus snap",
+        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.5,
+        String(
+            format: "entrance=%.1f rise=%.2f analysis=[%@] catalog=[%@] %@",
+            entrance?.startSeconds ?? -1,
+            entrance?.rise ?? -1,
+            oopsChorusList,
+            oopsCatalog,
+            chorusCandidateDump(oopsProfile)
+        )
+    )
+
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+        let hookSrc = hook?.sourceStart ?? -1
+        check(
+            "Shaped Oops: first bed hook is NOT prechorus ~20s or ~40s (previous 40.4s gate was the bug)",
+            AutoRemixDiagnostics.firstDeckAHookIsEarlyPrechorus(
+                plan: plan,
+                prechorusStarts: oopsPre,
+                titleChorusStart: oopsTitle
+            ) == false
+                && abs(hookSrc - 20.2) > 4
+                && abs(hookSrc - 40.4) > 4,
+            String(format: "hook=%.1f %@", hookSrc, chorusCandidateDump(oopsProfile))
+        )
+        check(
+            "Shaped Oops: first bed hook starts on title chorus ~46s",
+            abs(hookSrc - oopsTitle) < plan.barSeconds * 1.6,
+            String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
+        )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let guestDrop = plan.placements
+            .filter {
+                $0.songID == bomt.id && $0.role == .dominant
+                    && abs($0.timelineStart - drop1Start) < 0.15
+            }
+            .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }
+        check(
+            "Shaped BOMT Drop 1 island is title chorus ~43s (hit me), not a 28% prechorus snap",
+            abs((guestDrop?.sourceStart ?? -1) - bomtTitle) < plan.barSeconds * 2.5,
+            String(
+                format: "guestSrc=%.1f want=%.1f %@",
+                guestDrop?.sourceStart ?? -1,
+                bomtTitle,
+                chorusCandidateDump(bomtProfile)
+            )
+        )
+        check(
+            "Shaped Oops: pivotWallpaperLoop still recorded",
+            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        )
+        check(
+            "Shaped Oops: roles stay Oops bed / BOMT Drop 1",
+            plan.mashupBedSongID == oops.id && plan.mashupVocalSongID == bomt.id
+        )
+    case .failure(let message):
+        check("Shaped Oops title-chorus mashup", false, message)
+    }
+}
+
 do {
     // Real AutoRemixPlanner via runEntireProject — not a hand-built plan.
     // Crate bounce of 1afcbc0 still listed allowedPredropVoid next to
@@ -704,23 +861,6 @@ do {
             "Planner BOMT+Oops: club drops stay hard cuts (no equal-power fade-in)",
             !AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: plan),
             "dropCuts=\(plan.cutRecords.filter { rec in AutoRemixDiagnostics.clubDropStarts(plan: plan).contains { abs($0 - rec.timelineAt) < 0.1 } }.map { AutoRemixDiagnostics.maskingDescription($0.masking) })"
-        )
-        let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
-        let chorusAnchor = oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? 0
-        check(
-            "Planner BOMT+Oops: first bed hook sources chorus island (not verse tail)",
-            !AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
-                plan: plan,
-                chorusAnchorSeconds: chorusAnchor
-            ),
-            "anchor=\(String(format: "%.1f", chorusAnchor)) hook=\(AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan).map { String(format: "%.1f", $0.sourceStart) } ?? "nil")"
-        )
-        check(
-            "Planner BOMT+Oops: bed complete hook decision recorded",
-            plan.decisions.contains {
-                $0.kind == .selectedAnchor
-                    && ($0.detail ?? "").localizedCaseInsensitiveContains("bed complete hook")
-            }
         )
         let dropStarts = AutoRemixDiagnostics.clubDropStarts(plan: plan)
         if dropStarts.count >= 2 {
@@ -1054,8 +1194,16 @@ do {
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let signals: [UUID: SongSignalFeatures] = [
-        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00),
-        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55, confidence: 1.00),
+        bomt.id: popTitleChorusFeatures(
+            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+            titleChorusStarts: [43.0, 118.0],
+            prechorusStarts: [20.6, 41.3]
+        ),
+        oops.id: popTitleChorusFeatures(
+            duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+            titleChorusStarts: [46.0, 120.0],
+            prechorusStarts: [20.2, 40.4]
+        ),
     ]
     switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
     case .success(let applied, let plan, _):
@@ -1151,14 +1299,13 @@ do {
                 }()
             )
             let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
-            let chorusAnchor = oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? 0
+            let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             check(
-                "Britney: first complete hook sources chorus island (not pre-chorus verse)",
-                !AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
-                    plan: plan,
-                    chorusAnchorSeconds: chorusAnchor
-                ),
-                "anchor=\(String(format: "%.1f", chorusAnchor)) src=\(AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan).map { String(format: "%.1f", $0.sourceStart) } ?? "nil")"
+                "Britney: first complete hook is title chorus ~46s, not prechorus ~20/~40",
+                abs(hookSrc - 46.0) < plan.barSeconds * 1.6
+                    && abs(hookSrc - 20.2) > 4
+                    && abs(hookSrc - 40.4) > 4,
+                String(format: "src=%.1f %@", hookSrc, chorusCandidateDump(oopsProfile))
             )
             check(
                 "Britney mashup is clubby (Diplo/Guetta/Snake), not Calvin preservation",
@@ -2332,6 +2479,14 @@ do {
         !AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
             plan: verseHook,
             chorusAnchorSeconds: bar * 8
+        )
+    )
+    check(
+        "Prechorus detector flags a 40.4s first hook (the a83a66b bug)",
+        AutoRemixDiagnostics.firstDeckAHookIsEarlyPrechorus(
+            plan: verseHook,
+            prechorusStarts: [bar * 8],
+            titleChorusStart: bar * 16
         )
     )
 

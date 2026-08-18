@@ -26,6 +26,7 @@ SOURCES=(
   "$ROOT/Mixr/Models/MixrTrack.swift"
   "$ROOT/Mixr/Models/SongAnalysis.swift"
   "$ROOT/Mixr/Models/SongSignalAnalysis.swift"
+  "$ROOT/Mixr/Models/AutoChorusIsland.swift"
   "$ROOT/Mixr/Models/SoundEffects.swift"
   "$ROOT/Mixr/Models/AutoClubTempo.swift"
   "$ROOT/Mixr/Models/AutoClubPulse.swift"

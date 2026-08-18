@@ -234,9 +234,13 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 - **Oops × BOMT:** Oops = bed, BOMT = Drop 1 vocal, Oops chorus may return as Drop 2 flip.
   Title/groove lock wins over stem kick-energy and vocal-density skew — in duo **and**
   N-song crates when both Britney tracks are present.
-- First complete **bed** hook before the pivot must source the bed's first **chorus
-  island** (≥8 bars at the measured chorus anchor) — never continue linearly from
-  the 8-bar intro into verse / pre-chorus apology.
+- First complete **bed** hook before the pivot must source the bed's **title
+  chorus** (measured energy-rise entrance into the loud sung 8-bar), not
+  `chorusOrDropCandidates.first` (a ~28% duration snap that often lands on a
+  repeated prechorus — Oops ~20s and ~40s “I'm not that innocent”). Official
+  Oops title line is the later lift (“Oops I did it again” … “oh baby baby”).
+  Guest Drop 1 should similarly use the guest's title-chorus entrance
+  (BOMT “hit me baby one more time”), not a 28% prechorus island.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
   When stretch gate fails, **cameoChop** guests still own Drop 1 as phrase-aligned
   islands at native tempo — do not demote them to post-drop groove slots only.

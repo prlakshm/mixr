@@ -153,6 +153,14 @@ nonisolated enum AutoMashability {
         let rhythmicBase: Double = (guestFit.gridAligned && bedFit.gridAligned) ? 1.0
             : (guestFit.gridAligned || bedFit.gridAligned) ? 0.55 : 0.25
 
+        let guestTitleStart = AutoChorusIsland.bestEntrance(
+            signal: guest.analysis.signal,
+            downbeats: guest.analysis.downbeats,
+            barSeconds: guest.analysis.barSeconds,
+            duration: guest.analysis.durationSeconds,
+            introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8
+        )?.startSeconds
+
         var best: AutoMashabilityIsland?
 
         for g in guestPhrases {
@@ -182,10 +190,17 @@ nonisolated enum AutoMashability {
                     let rhythmic = rhythmicBase * (0.55 + 0.45 * (1.0 - abs(energyCorr - 0.25)))
 
                     let hookBoost = g.label == .chorus ? 0.08 : 0
+                    let titleBoost: Double
+                    if let guestTitleStart, abs(gStart - guestTitleStart) <= guest.analysis.barSeconds * 2 {
+                        titleBoost = 0.16
+                    } else {
+                        titleBoost = 0
+                    }
                     let score = harmonic.score * 0.40
                         + rhythmic * 0.35
                         + spectral * 0.25
                         + hookBoost
+                        + titleBoost
 
                     if best == nil || score > (best?.score ?? 0) + 0.001 {
                         best = AutoMashabilityIsland(

@@ -445,6 +445,20 @@ nonisolated enum AutoRemixDiagnostics {
         return preDrop.first
     }
 
+    /// True when the first Deck A hook starts on a repeated prechorus /
+    /// intro-glued 28% snap (~20s or ~40s on Oops) instead of the title chorus.
+    static func firstDeckAHookIsEarlyPrechorus(
+        plan: AutoRemixPlan,
+        prechorusStarts: [Double],
+        titleChorusStart: Double,
+        toleranceSeconds: Double = 4.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onPrechorus = prechorusStarts.contains { abs(hook.sourceStart - $0) < toleranceSeconds }
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onPrechorus && !onTitle
+    }
+
     /// True when the first Deck A hook starts before the bed's first chorus
     /// anchor — i.e. verse / pre-chorus apology, not a complete hook line.
     static func firstDeckAHookSourcesBeforeChorus(

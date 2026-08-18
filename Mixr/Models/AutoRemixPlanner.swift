@@ -1384,9 +1384,10 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// First complete Deck A hook for a mashup: jump to the bed's first
-    /// chorus island (≥8 bars). Never continue linearly from the 8-bar intro
-    /// into verse / pre-chorus apology before the real hook.
+    /// First complete Deck A hook for a mashup: jump to the bed's **title**
+    /// chorus island (measured energy-rise entrance). Never continue from
+    /// the intro into verse, and never lock to `chorusOrDropCandidates.first`
+    /// when that snap is a repeated prechorus (~40s on Oops).
     private static func bedFirstCompleteChorusSection(
         profile: AutoSongProfile,
         used: [(Double, Double)],
@@ -1395,41 +1396,48 @@ enum AutoRemixPlanner {
         tuning: AutoTuning
     ) -> AutoCandidateSection? {
         let wantBars = max(8, bars)
-        let anchor = profile.analysis.chorusOrDropCandidates.first?.startSeconds
-            ?? profile.analysis.hookMoments.first
-            ?? 0
         let bar = profile.analysis.barSeconds
+        let introEnd = profile.analysis.introCandidate?.endSeconds ?? bar * 8
+        let measured = AutoChorusIsland.bestEntrance(
+            signal: profile.analysis.signal,
+            downbeats: profile.analysis.downbeats,
+            barSeconds: bar,
+            duration: profile.analysis.durationSeconds,
+            introEnd: introEnd
+        )
 
-        func overlapsUsed(_ c: AutoCandidateSection) -> Bool {
-            used.contains { range in
-                let overlap = min(c.endSeconds, range.1) - max(c.startSeconds, range.0)
-                return overlap > c.durationSeconds * 0.5
+        func overlapsUsed(_ start: Double, bars: Int) -> Bool {
+            let end = start + Double(bars) * bar
+            return used.contains { range in
+                let overlap = min(end, range.1) - max(start, range.0)
+                return overlap > Double(bars) * bar * 0.5
             }
         }
 
         let pool = profile.candidates.filter {
-            $0.label == .chorus && $0.barCount >= wantBars
+            $0.label == .chorus && $0.barCount >= wantBars && !overlapsUsed($0.startSeconds, bars: $0.barCount)
         }
-        let nearAnchor = pool.filter { abs($0.startSeconds - anchor) <= bar * 2.5 }
-        let candidates = (nearAnchor.isEmpty ? pool : nearAnchor).filter { !overlapsUsed($0) }
-        if let best = candidates.max(by: { $0.value(tuning) < $1.value(tuning) }) {
-            return best
+
+        if let measured {
+            let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 2.0 }
+            if let best = near.max(by: { $0.hook < $1.hook }) {
+                return best
+            }
+            if !overlapsUsed(measured.startSeconds, bars: wantBars) {
+                return completePhraseSection(
+                    profile: profile,
+                    from: measured.startSeconds,
+                    bars: wantBars,
+                    energy: energy
+                )
+            }
         }
-        let anchorEnd = anchor + Double(wantBars) * bar
-        let anchorOverlaps = used.contains { range in
-            let overlap = min(anchorEnd, range.1) - max(anchor, range.0)
-            return overlap > Double(wantBars) * bar * 0.5
-        }
-        if anchor + Double(wantBars) * bar <= profile.analysis.durationSeconds - 0.15,
-           !anchorOverlaps {
-            return completePhraseSection(
-                profile: profile,
-                from: anchor,
-                bars: wantBars,
-                energy: energy
-            )
-        }
-        return nil
+
+        // No usable energy shape: pick the highest-hook chorus that is not
+        // glued to the intro tail (that glue is the 28% prechorus snap).
+        let unglued = pool.filter { $0.startSeconds > introEnd + bar * 1.5 }
+        let ranked = (unglued.isEmpty ? pool : unglued).sorted { $0.hook > $1.hook }
+        return ranked.first
     }
 
     /// Best cameo-chop guest to own Drop 1 when full-hook stretch fails.
@@ -2203,7 +2211,7 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs (chorus island, not verse tail)",
+                                format: "bed complete hook @%.1fs (title-chorus energy rise, not prechorus .first)",
                                 chorus.startSeconds
                             )
                         )

@@ -171,13 +171,30 @@ enum AutoSectionCatalog {
 
         // ── Choruses / drops: the payoff material ──
         for (i, chorus) in analysis.chorusOrDropCandidates.enumerated() {
-            let hookScore = 0.92 - Double(i) * 0.06
+            let localEnergy = analysis.meanEnergy(from: chorus.startSeconds, to: chorus.endSeconds)
+            let localVocal = analysis.meanVocalDensity(from: chorus.startSeconds, to: chorus.endSeconds)
+            let rise: Double
+            if let signal = analysis.signal, AutoChorusIsland.hasUsableEnergyShape(signal) {
+                let after = AutoChorusIsland.mean(
+                    signal.energyCurve, hop: signal.hopSeconds,
+                    from: chorus.startSeconds, to: chorus.startSeconds + 4
+                )
+                let before = AutoChorusIsland.mean(
+                    signal.energyCurve, hop: signal.hopSeconds,
+                    from: chorus.startSeconds - 4, to: chorus.startSeconds
+                )
+                rise = max(0, after - before)
+            } else {
+                rise = 0
+            }
+            // Measured lift outranks catalog order (`.first` used to win at 0.92).
+            let hookScore = min(1, 0.48 + localEnergy * 0.22 + localVocal * 0.12 + rise * 0.28 - Double(i) * 0.02)
             add(.chorus, start: chorus.startSeconds, bars: 8, hook: hookScore, uniqueness: 0.85, transitionUse: 0.55)
             if chorus.durationSeconds >= bar * 15 {
                 add(.chorus, start: chorus.startSeconds, bars: 16, hook: hookScore, uniqueness: 0.8, transitionUse: 0.45)
             }
             // Teaser: the first 4 bars of the hook — instant recognizability.
-            add(.teaser, start: chorus.startSeconds, bars: 4, hook: min(1, hookScore + 0.06), uniqueness: 0.7, transitionUse: 0.9)
+            add(.teaser, start: chorus.startSeconds, bars: 4, hook: min(1, hookScore + 0.04), uniqueness: 0.7, transitionUse: 0.9)
         }
 
         // ── Pre-chorus builds ──
