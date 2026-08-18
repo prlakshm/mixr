@@ -8,7 +8,7 @@ For one-song Auto Remix, rebuild the track as a streaming-length club mix in the
 
 Preservation of identity means: the familiar hook lands on drop 1; arrangement, pulse, and energy do the transformation. SFX alone do not count as transformation.
 
-**Mix-window / join grammar (locked):** `.agents/skills/dj-remix-planning/SKILL.md` (Xirex pivot wallpaper, hook-replace, hard cut, diet SFX, Drop 1 ~bar 16–24). That skill wins over this file on those topics. Tempo pockets, one-kick pulse, gain/DSP, analysis, testing, and this completion standard remain here.
+**Mix-window / join grammar (locked):** `.agents/skills/dj-remix-planning/SKILL.md` (Xirex pivot wallpaper, hook-replace, hard cut, festival mix-window SFX, Drop 1 ~bar 16–24). That skill wins over this file on those topics. Tempo pockets, one-kick pulse, gain/DSP, analysis, testing, and this completion standard remain here.
 
 For mashups (2…5 songs), assign **one club bed** and rotate vocal hooks across the club islands (**hook-replace** on Drop 1: guest vocal in, bed vocal out). Never stack two full mixes with two kicks/subs.
 
@@ -22,7 +22,7 @@ Apply structural aggressiveness from measured analysis confidence:
 
 Never cut merely to increase variety, handoffs, effect count, or SFX density. When uncertain about a cut, keep the audio continuous and club-ify with energy, clip FX, and layered SFX.
 
-Club hype density (one-song Auto Remix / mashup): energy lives on the **drop**, not on verses. The **pivot join** is diet (1-beat last-word loop + ≤1 impact slam) — see `dj-remix-planning`. Extra one-shots may dress later builds / Drop 2. Still one kick and one bass. Flavor instincts bias toward Diplo / Guetta / Snake festival hype over Calvin sparse radio edits. Skip verse filler so Drop 1 hits ~bar **16–24** after one complete Deck A hook + pivot (not a bar-28 runway).
+Club hype density (one-song Auto Remix / mashup): energy lives on the **drop / mix window**, not on verses. Maximalist flavors stack festival SFX there (riser + snare roll + tape-stop take-out + impact slam) — see `dj-remix-planning`. Verses stay one record. Still one kick and one bass. Flavor instincts bias toward Diplo / Guetta / Snake festival hype over Calvin sparse radio edits. Skip verse filler so Drop 1 hits ~bar **16–24** after one complete Deck A hook + pivot (not a bar-28 runway).
 
 Mashup algorithms (reimplemented in Swift — no Demucs/PyTorch/Mixxx **runtime**): AutoMashUpper local phrase mashability (harmonic/rhythmic/spectral + beat-offset islands); AutoMashup 2025 stem *role proxies* from vocal/bass/drum curves (directional bed≠vocal); Mixxx AutoDJ phrase matching (outro∩intro overlap, delay long intros, tape-stop on far-BPM **non-pivot** joins). Optional offline Demucs **sidecars** (vocals/drums/bass/other) may already exist; if present, pivot grains prefer the vocal stem and kick ownership may read drums. Do not add a Demucs runtime.
 

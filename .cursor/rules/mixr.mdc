@@ -9,7 +9,7 @@ You are building Mixr, a SwiftUI iPhone DJ / Auto Remix app.
 
 ## Source of truth
 
-- **Audio / Auto Remix behavior:** root `AGENTS.md` for pulse, tempo, gain, tests. Mix-window / join grammar is locked in the `dj-remix-planning` skill (wins on Xirex pivot, hook-replace, hard cut, diet SFX).
+- **Audio / Auto Remix behavior:** root `AGENTS.md` for pulse, tempo, gain, tests. Mix-window / join grammar is locked in the `dj-remix-planning` skill (wins on Xirex pivot, hook-replace, hard cut, festival mix-window SFX).
 - **UI craft:** this file for visual tokens and layout. Do not invent a new visual language.
 - **Stack gates:** SwiftUI / AVFoundation / Instruments for app code. Do not apply web Motion, Tailwind, or React EDT patterns to Swift files.
 

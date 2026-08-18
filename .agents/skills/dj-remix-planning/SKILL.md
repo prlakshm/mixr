@@ -22,12 +22,15 @@ Auto is a **festival club rewrite** (Diplo / Guetta / Snake energy) — not a
 polite preservation edit and not a shuffled highlight reel. Hype lives **on
 the drop**. Verses stay one record. Pivot join is short and loud (default
 **8× / 2 bars**, clip volume up, HPF/blur — not a volume duck). No quiet hole
-just to switch songs (overlap or hard cut at full clip volume). Diet SFX on
-the join (loop + ≤1 impact). Drop 1 after **one complete A hook**.
+just to switch songs (overlap or hard cut at full clip volume). Festival SFX
+on the mix window / drop (riser + snare + tape-stop + impact). Drop 1 after
+**one complete A hook**.
 
 Preservation constrains **identity** (familiar hook on drop 1; important
 lines uncut). It is not a ban on arrangement. SFX alone do not count as
-transformation.
+transformation. Maximalist flavors put festival SFX density **on the mix
+window / drop** (riser + snare roll + tape-stop take-out + impact). Verses
+stay one record.
 
 ## Important lines uncut (product lock)
 
@@ -60,12 +63,13 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
    is too long.
 3. **Over those 1–2 bars:** high-pass / Sound Color (blur) the loop so kick
    and lows leave. Thin, tinny vocal stutter. Builds tension. Kick out on this
-   window (`buildOut`). **Volume stays loud** (near full clip volume). Blur
-   thins; it does not duck. A quiet wallpaper hole is a failed join.
+   window (`buildOut`). **Volume stays loud** (at least as loud as the bed
+   verse). Blur thins; it does not duck. A quiet wallpaper hole is a failed join.
 4. **Hard cut** (no echo, no crossfade, **no fade-in**, no volume ramp from
    silence, no gentle EQ bloom) into Deck B’s hook that **starts on the same
    word** (“baby, baby, one more time” / “hit me baby one more time”) at
-   **full clip volume**, full-frequency kick. Then the rest of B’s chorus rides.
+   **full clip volume** (at least as loud as the bed verse), full-frequency
+   kick. Then the rest of B’s chorus rides.
    A renderer anti-click microfade is fine; an audible quiet join is a fail.
 5. **Phrase math:** 2 bars of loop, incoming vocal on the downbeat of bar 3
    of the mix window. First drop lands **~bar 16–24** after intro + one
@@ -75,9 +79,12 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
 6. **Hook-replace:** guest vocal IN, bed vocal OUT (HPF/blur the bed under
    the drop). One melody, **one kick**. Call-and-response is optional ≤8 bars,
    not the default.
-7. **Diet SFX on the join:** pivot loop + ≤1 impact slam on the incoming
-   downbeat. No riser wallpaper, no tape+crash+snare pile on the same cut.
-   Verses stay one record.
+7. **Festival SFX on the mix window / drop** (maximalist flavors: Diplo /
+   Guetta / Snake): coordinated stack from the existing SFX menu — riser +
+   snare roll into the downbeat, tape-stop take-out, then impact slam.
+   Extra SFX rows if hits collide. Playback and export must mix every SFX
+   row. Sparse flavors (Calvin) stay impact-only. Verses stay one record —
+   no riser wallpaper in grooves.
 8. **No 1-beat void on this join.** Pivot Drop 1 is loop + hard cut at full
    clip volume. A pre-drop void next to the wallpaper is the old quiet hole.
    Do not emit `allowedPredropVoid` on the same plan as `pivotWallpaperLoop`
@@ -104,8 +111,8 @@ write it in the planner/applier. Do not only ride track faders or blur.
 Typical:
 
 - completed Deck A hook / verses: ~full
-- pivot grains: **loud** (not ducked); HPF/blur does the thin, volume stays up
-- incoming Drop 1 vocal: **full** (hard cut; no fade-in / equal-power bloom)
+- pivot grains: **at least as loud as the bed verse** (not ducked); HPF/blur does the thin, volume stays up
+- incoming Drop 1 vocal / bed kick: **at least as loud as the bed verse** (hard cut; no fade-in / equal-power bloom)
 - bed under hook: audible (don’t mute) with HPF/blur carving the bed vocal
 - never fade both sides toward silence at a pivot join
 
@@ -146,8 +153,8 @@ and not an equal-power fade-in on the same-song hook return. Do not emit
 
 - **Deck A** = current phrase (bed or solo source). **Deck B** = next hook.
 - **Mix window** = completed A hook tail + 1–2 bar pivot loop + first bars of
-  the drop. Extra layers (pivot grains, HPF sweep, ≤1 slam) are legal ONLY
-  there. Verses/grooves stay one deck.
+  the drop. Extra layers (pivot grains, HPF sweep, festival SFX stack) are
+  legal ONLY there. Verses/grooves stay one deck.
 - **Verses / grooves** = the source, maybe light HPF. No wallpaper chops, no
   riser spam, no guest vocal, no echo throws.
 - **Semantic joins**: wait until a phrase finishes. Important lines uncut.
@@ -202,7 +209,7 @@ Phrase-grid only — drops land on downbeats, never mid-bar.
 
 Do not pad a long groove runway after the first hook just to hit bar 28.
 
-Recipe flavors (instincts, not sound-alikes): Calvin sparse (rare — clear piano ballads only), Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK, **Diplo / Major Lazer / Jack Ü** maximalist festival hype. Default toward Diplo/Guetta/Snake — not a polite Calvin radio edit. Maximalist on the **drop**, diet on the **pivot join**.
+Recipe flavors (instincts, not sound-alikes): Calvin sparse (rare — clear piano ballads only), Guetta vocal+electronic drop, Avicii 4-bar loop + airy drop 2, Marshmello hummable chops, DJ Snake chant / aggressive low end / half-time OK, **Diplo / Major Lazer / Jack Ü** maximalist festival hype. Default toward Diplo/Guetta/Snake — not a polite Calvin radio edit. Maximalist on the **mix window / drop**; verses stay the record.
 
 ## Club pulse
 
@@ -308,9 +315,11 @@ Propose phrase-aligned opportunities when measured:
 
 ### Pulse / SFX
 - thin-song club kick / bass weight (first-class SFX menu items; one at a time)
-- **Pivot join diet:** loop grains + ≤1 impact. That is the mix-window stack.
-- Extra one-shots (riser, snare build, crash, tape stop, …) may dress **later**
-  builds / Drop 2 — not the Xirex cut, not verses
+- **Mix-window stack (maximalist):** riser + snare roll + tape-stop take-out +
+  impact slam on Drop 1. Extra SFX rows when hits collide. Sparse flavors:
+  impact only.
+- Extra one-shots (crash, reverse cymbal, …) may dress **later** builds /
+  Drop 2 — not verses
 - cymbal punctuation ≤ 2 total; no mid-drop wallpaper; no verse wallpaper
 - clip FX in the mix window: pivot HPF/blur; not echo-throw spam
 
@@ -370,7 +379,7 @@ Choose from measured texture + seed (hype-biased):
 - maximalist festival / global-bass (Diplo-class) — default for pop-over-club and dancehall midtempo
 
 Avoid stacking two dense midrange leads on the drop. Hype is density of FX/SFX
-layers **on the drop** — still one kick and one bass — and diet on the pivot join.
+layers **on the mix window / drop** — still one kick and one bass — not on verses.
 
 ## Decision audit
 
@@ -390,7 +399,7 @@ Before declaring success, report:
 - mix-window RMS before incoming (must not drop into a hole; dead air / fade-to-silence is a fail)
 - pivot grain count (4–8× / 1–2 bars) and pivot clip volume (loud, not ducked)
 - mix-window placement volumes (every song clip has an explicit volume)
-- mix-window SFX (loop + ≤1 slam; list any extras — extras on the pivot join are a fail)
+- mix-window SFX (maximalist: riser+snare+tape+impact on the join; verses stay empty)
 - all opportunities considered
 - why each selected opportunity was chosen
 - why rejected opportunities were rejected

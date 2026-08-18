@@ -2808,23 +2808,23 @@ do {
                 )
             }
 
-            // Diet SFX on the pivot join: loop grains + ≤1 slam (impact). No riser pile.
+            // Festival SFX on the pivot join: riser + snare roll + tape-stop take-out + impact.
             let mixLo = drop1Start - plan.barSeconds * 2.5
             let mixHi = drop1Start + plan.beatSeconds
             let joinSFX = plan.sfxEvents.filter {
                 $0.timelineStart >= mixLo - 0.05 && $0.timelineStart <= mixHi + 0.05
                     && !SoundEffectLibrary.isPulseLayer($0.assetID)
             }
-            let joinSlams = joinSFX.filter { $0.assetID == "impact" }
-            let joinPile = joinSFX.filter {
-                $0.assetID == "riser" || $0.assetID == "snareBuild"
-                    || $0.assetID == "tapeStop" || $0.assetID == "crash"
-                    || $0.assetID == "reverseCymbal"
-            }
+            let joinIDs = Set(joinSFX.map(\.assetID))
             check(
-                "Britney: mix-window SFX is pivot loop + ≤1 slam (no riser/tape/crash pile)",
-                joinSlams.count <= 1 && joinPile.isEmpty,
-                "slams=\(joinSlams.count) pile=\(joinPile.map(\.assetID))"
+                "Britney: mix-window SFX is festival stack (riser+snare+tape+impact)",
+                joinIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"]),
+                "ids=\(joinIDs.sorted())"
+            )
+            check(
+                "Britney: mix-window has more than 2–4 sparse hits",
+                joinSFX.count >= 4,
+                "count=\(joinSFX.count) ids=\(joinSFX.map(\.assetID))"
             )
 
             check(
@@ -2901,9 +2901,36 @@ do {
                     )
                 }
             }
+
+            let verseVol = plan.placements.filter {
+                $0.role == .dominant
+                    && $0.songID == bedID
+                    && $0.stemKind == nil
+                    && $0.timelineDuration > plan.beatSeconds * 2
+                    && $0.timelineStart < drop1Start - plan.barSeconds
+            }.map(\.volume).max() ?? 0
+            let joinVols = grains.map(\.volume) + dropLeads.map(\.volume)
+            check(
+                "Britney: pivot and Drop 1 clips are at least as loud as the bed verse",
+                !joinVols.isEmpty && verseVol > 0 && joinVols.allSatisfy { $0 + 0.001 >= verseVol },
+                String(format: "verse=%.2f join=%@", verseVol, joinVols.map { String(format: "%.2f", $0) }.joined(separator: ","))
+            )
+
+            let appliedSFX = applied.filter(\.isSFXTrack)
+            let appliedIDs = Set(appliedSFX.flatMap(\.clips).compactMap(\.soundEffectID))
+            check(
+                "Britney: applied SFX rows mix the festival stack (not dropped on one lane)",
+                appliedIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"]),
+                "rows=\(appliedSFX.count) ids=\(appliedIDs.sorted())"
+            )
+            check(
+                "Britney: colliding mix-window SFX spill onto extra rows",
+                appliedSFX.count >= 2,
+                "sfxRows=\(appliedSFX.count)"
+            )
         }
 
-        // Pivot Drop 1: impact slam only (no riser wallpaper required).
+        // Pivot Drop 1: festival stack still includes the impact slam on the downbeat.
         let impacts = plan.sfxEvents.filter { $0.assetID == "impact" }
         check("Mashup emits impact slam on a drop", !impacts.isEmpty)
         if let drop1 = dropLeads.map(\.timelineStart).min() {
@@ -3052,17 +3079,13 @@ do {
             } ?? false
         )
         check(
-            "Club remix Drop 1 mix window is diet (impact slam, no riser/snare pile)",
+            "Club remix Drop 1 mix window is festival density (riser+snare+tape+impact)",
             drops.first.map { d0 in
                 let lo = d0.timelineStart - plan.barSeconds * 4.5
                 let hi = d0.timelineStart + plan.beatSeconds
                 let join = musical.filter { $0.timelineStart >= lo - 0.05 && $0.timelineStart <= hi + 0.05 }
-                let pile = join.filter {
-                    $0.assetID == "riser" || $0.assetID == "snareBuild"
-                        || $0.assetID == "tapeStop" || $0.assetID == "crash"
-                }
-                let slams = join.filter { $0.assetID == "impact" }
-                return pile.isEmpty && slams.count <= 1
+                let ids = Set(join.map(\.assetID))
+                return ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"])
             } ?? false
         )
         let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }

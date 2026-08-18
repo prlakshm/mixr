@@ -633,7 +633,7 @@ enum AutoRemixPlanner {
                 segCursor += segDur
             }
 
-            // Coordinated club SFX — diet on the Xirex pivot join.
+            // Coordinated club SFX — festival stack on Drop 1 mix window only.
             let segEnd = segCursor
             if slot.role == .build, slot.bars >= 8 {
                 let buildEnd = segEnd
@@ -666,23 +666,28 @@ enum AutoRemixPlanner {
             if slot.role == .chorus, slot.entry == .hardHypeCut {
                 let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
                     ?? cursor
-                // Pivot Drop 1: one impact slam only. No riser/tape/crash pile.
-                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat"))
-                if dropIndex > 0 {
+                if dropIndex == 0 {
+                    appendFestivalMixWindowStack(
+                        dropAt: dropAt,
+                        barSec: bar,
+                        flavor: flavor,
+                        sfx: &sfx,
+                        decisions: &decisions
+                    )
+                } else {
+                    sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat"))
                     let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
                     if cymbalCount < 2 {
                         sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: dropAt, purpose: "crash punctuation on drop"))
                     }
-                }
-                decisions.append(
-                    AutoDecision(
-                        kind: .addedRiserIntoDrop,
-                        songTitle: profile.title,
-                        detail: dropIndex == 0
-                            ? "pivot hard-cut slam (impact only)"
-                            : "drop 2 flip (impact)"
+                    decisions.append(
+                        AutoDecision(
+                            kind: .addedRiserIntoDrop,
+                            songTitle: profile.title,
+                            detail: "drop 2 flip (impact)"
+                        )
                     )
-                )
+                }
                 // Xirex pivot wallpaper before Drop 1 only.
                 if dropIndex == 0,
                    let phrase = placements.last(where: {
@@ -773,6 +778,11 @@ enum AutoRemixPlanner {
         )
 
         let totalDuration = placements.map(\.timelineEnd).max() ?? cursor
+        boostJoinClipVolumes(
+            placements: &placements,
+            pulseRegions: pulseRegions,
+            beatSec: beat
+        )
         return AutoRemixPlan(
             mode: .remix,
             targetBPM: targetBPM,
@@ -1012,11 +1022,20 @@ enum AutoRemixPlanner {
                 }
             }
             if role == .drop {
-                // Pivot Drop 1: impact slam only. Drop 2 may keep light crash.
-                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "impact on drop"))
-                if dropIndex > 0, cymbalPunctuation < 2 {
-                    sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "crash punctuation on drop"))
-                    cymbalPunctuation += 1
+                if dropIndex == 0 {
+                    appendFestivalMixWindowStack(
+                        dropAt: t0,
+                        barSec: bar,
+                        flavor: flavor,
+                        sfx: &sfx,
+                        decisions: &decisions
+                    )
+                } else {
+                    sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "impact on drop"))
+                    if cymbalPunctuation < 2 {
+                        sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "crash punctuation on drop"))
+                        cymbalPunctuation += 1
+                    }
                 }
                 if dropIndex == 0,
                    let phrase = placements.last(where: {
@@ -1080,6 +1099,11 @@ enum AutoRemixPlanner {
             confidence: profile.analysis.analysisConfidence
         )
 
+        boostJoinClipVolumes(
+            placements: &placements,
+            pulseRegions: pulseRegions,
+            beatSec: beat
+        )
         return AutoRemixPlan(
             mode: .remix,
             targetBPM: targetBPM,
@@ -3072,37 +3096,36 @@ enum AutoRemixPlanner {
                 }
             }
 
-            // Coordinated SFX — Drop 1 after pivot is diet (impact slam only).
+            // Coordinated SFX — Drop 1 mix window is a festival stack when
+            // the flavor is maximalist; verses stay one record.
             let isDropReveal = ps.slot.role == .chorus && entry == .hardHypeCut
 
             if i > 0, (allowMajorSFX || isDropReveal) {
                 switch entry {
                 case .hardHypeCut where isDropReveal || mode == .remix || ps.slot.isFinalPeak:
                     let isDrop1 = isDropReveal && !ps.slot.isFinalPeak
-                    let pivotJoin = isDrop1 && decisions.contains { $0.kind == .pivotWallpaperLoop }
-                        || isDrop1 && placements.contains {
-                            $0.role == .supporting
-                                && abs($0.timelineDuration - beatSec) < beatSec * 0.4
-                                && $0.timelineStart >= boundary - tuning.pivotLookbackSeconds(barSec: barSec)
-                                && $0.timelineStart < boundary - 0.02
-                        }
-                    // Pivot join: one slam. Plain Drop 2 / non-pivot: impact (+ optional crash).
-                    addSFX("impact", at: boundary, purpose: "impact on the drop downbeat")
-                    if !pivotJoin, !isDrop1 {
+                    if isDrop1 {
+                        appendFestivalMixWindowStack(
+                            dropAt: boundary,
+                            barSec: barSec,
+                            flavor: mashupFlavor,
+                            sfx: &sfx,
+                            decisions: &decisions
+                        )
+                    } else {
+                        addSFX("impact", at: boundary, purpose: "impact on the drop downbeat")
                         let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
                         if cymbalCount < 2 {
                             addSFX("crash", at: boundary, purpose: "crash punctuation on drop")
                         }
-                    }
-                    decisions.append(
-                        AutoDecision(
-                            kind: .addedRiserIntoDrop,
-                            songTitle: nil,
-                            detail: pivotJoin
-                                ? "pivot hard-cut slam (impact only)"
-                                : (ps.slot.isFinalPeak ? "drop 2 flip impact" : "drop slam")
+                        decisions.append(
+                            AutoDecision(
+                                kind: .addedRiserIntoDrop,
+                                songTitle: nil,
+                                detail: ps.slot.isFinalPeak ? "drop 2 flip impact" : "drop slam"
+                            )
                         )
-                    )
+                    }
                     lastMajorSFXTime = boundary
                 case .reverseEntrance where mode == .remix || ps.slot.energy >= 0.88:
                     addSFX("impact", at: boundary, purpose: "impact on the new entrance")
@@ -3242,6 +3265,11 @@ enum AutoRemixPlanner {
             pulseRegions: &pulseRegions
         )
 
+        boostJoinClipVolumes(
+            placements: &placements,
+            pulseRegions: pulseRegions,
+            beatSec: beatSec
+        )
         return AutoRemixPlan(
             mode: mode,
             targetBPM: targetBPM,
@@ -3645,9 +3673,9 @@ enum AutoRemixPlanner {
                     for kind in bed.stems.instrumentalKinds {
                         let vol: Double
                         switch kind {
-                        case .drums: vol = 0.92
-                        case .bass: vol = 0.88
-                        default: vol = 0.74
+                        case .drums: vol = AutoGainPolicy.incomingDropVolume
+                        case .bass: vol = AutoGainPolicy.incomingDropVolume
+                        default: vol = max(0.90, AutoGainPolicy.preservationSongVolume)
                         }
                         placements.append(
                             AutoClipPlacement(
@@ -3709,11 +3737,7 @@ enum AutoRemixPlanner {
                             tempoRatio: bedFit.ratio,
                             // Bed deck stays present under the hook (DJ layering).
                             volume: max(0.78, tuning.supportVolume + 0.30),
-                            fadeIn: ClipTransition(
-                                type: .crossfade,
-                                duration: 2,
-                                curve: AutoTransitionEnvelope.equalPowerCurveName
-                            ),
+                            fadeIn: .hardCut,
                             fadeOut: ClipTransition(
                                 type: .crossfade,
                                 duration: 2,
@@ -3835,6 +3859,105 @@ enum AutoRemixPlanner {
                     detail: "call-response from vocals.wav"
                 )
             )
+        }
+    }
+
+    /// Festival mix-window stack on Drop 1: take-out then slam.
+    /// Maximalist flavors get riser + snare roll + tape stop + impact from
+    /// the existing SFX menu. Sparse flavors stay impact-only. Events end
+    /// on the drop downbeat so the validator keeps the builds.
+    private static func appendFestivalMixWindowStack(
+        dropAt: Double,
+        barSec: Double,
+        flavor: AutoClubFlavor,
+        sfx: inout [AutoSFXEvent],
+        decisions: inout [AutoDecision]
+    ) {
+        let windowStart = max(0, dropAt - max(2 * barSec, 4.0))
+
+        func alreadyHas(_ id: String, near t: Double, slack: Double = 0.12) -> Bool {
+            sfx.contains { $0.assetID == id && abs($0.timelineStart - t) < slack }
+        }
+        func placeEnding(_ id: String, atEnd end: Double, purpose: String) {
+            guard let def = SoundEffectLibrary.definition(for: id) else { return }
+            let start = max(windowStart, end - def.durationSeconds)
+            guard start >= -0.01 else { return }
+            if alreadyHas(id, near: start, slack: 0.15) { return }
+            sfx.append(AutoSFXEvent(assetID: id, timelineStart: start, purpose: purpose))
+        }
+
+        if flavor.bias.maximalistStacks {
+            placeEnding("riser", atEnd: dropAt, purpose: "riser into the drop")
+            placeEnding("snareBuild", atEnd: dropAt, purpose: "snare roll into the drop")
+            placeEnding("tapeStop", atEnd: dropAt, purpose: "tape-stop take-out")
+            if !alreadyHas("impact", near: dropAt) {
+                sfx.append(
+                    AutoSFXEvent(
+                        assetID: "impact",
+                        timelineStart: dropAt,
+                        purpose: "impact slam on drop downbeat"
+                    )
+                )
+            }
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: "festival mix-window stack (riser+snare+tape+impact)"
+                )
+            )
+        } else if !alreadyHas("impact", near: dropAt) {
+            sfx.append(
+                AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat")
+            )
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: "pivot hard-cut slam (impact only)"
+                )
+            )
+        }
+    }
+
+    /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least
+    /// as loud as the bed verse. No fade-in on the join.
+    private static func boostJoinClipVolumes(
+        placements: inout [AutoClipPlacement],
+        pulseRegions: [AutoClubPulse.Region],
+        beatSec: Double
+    ) {
+        let dropStarts = pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
+        func nearDrop(_ t: Double) -> Bool {
+            dropStarts.contains { abs($0 - t) < 0.12 }
+        }
+        func isPivotGrain(_ p: AutoClipPlacement) -> Bool {
+            p.role == .supporting && abs(p.timelineDuration - beatSec) < beatSec * 0.4
+        }
+
+        let verseVol = placements
+            .filter { p in
+                p.role == .dominant
+                    && p.stemKind == nil
+                    && !nearDrop(p.timelineStart)
+                    && p.timelineDuration > beatSec * 2
+            }
+            .map(\.volume)
+            .max() ?? AutoGainPolicy.preservationSongVolume
+        let floor = max(
+            verseVol,
+            AutoGainPolicy.incomingDropVolume,
+            AutoGainPolicy.pivotGrainVolume
+        )
+
+        for i in placements.indices {
+            let p = placements[i]
+            let pivot = isPivotGrain(p)
+            let dropLead = p.role == .dominant && nearDrop(p.timelineStart)
+            let bedUnderDrop = p.role == .supporting && nearDrop(p.timelineStart) && !pivot
+            guard pivot || dropLead || bedUnderDrop else { continue }
+            placements[i].volume = max(placements[i].volume, floor)
+            placements[i].fadeIn = .hardCut
         }
     }
 

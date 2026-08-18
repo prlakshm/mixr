@@ -779,6 +779,46 @@ do {
             switchGrammarOK,
             grammarDetail
         )
+
+        if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+            let verseStart = plan.placements
+                .filter { $0.role == .dominant && $0.timelineDuration > plan.barSeconds * 4 }
+                .map(\.timelineStart)
+                .min() ?? 0
+            let verseDB = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: verseStart + 0.5, to: verseStart + 4.5
+            )
+            let mixDB = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: drop1 - plan.barSeconds * 2, to: drop1 + 0.5
+            )
+            let dropDB = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: drop1 + 0.05, to: drop1 + 8.0
+            )
+            check(
+                "Auto mashup mix-window RMS is within 1.5 dB of verse (or louder)",
+                mixDB + 1.5 >= verseDB,
+                String(format: "verse=%.2f mix=%.2f delta=%.2f", verseDB, mixDB, verseDB - mixDB)
+            )
+            check(
+                "Auto mashup Drop 1 RMS is within 1.5 dB of verse (or louder)",
+                dropDB + 1.5 >= verseDB,
+                String(format: "verse=%.2f drop=%.2f delta=%.2f", verseDB, dropDB, verseDB - dropDB)
+            )
+            let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+            let lo = drop1 - plan.barSeconds * 2.5
+            let hi = drop1 + plan.beatSeconds
+            let joinIDs = Set(musical.filter {
+                $0.timelineStart >= lo - 0.05 && $0.timelineStart <= hi + 0.05
+            }.map(\.assetID))
+            check(
+                "Auto mashup mix-window SFX is festival stack (riser+snare+tape+impact)",
+                joinIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"]),
+                "ids=\(joinIDs.sorted())"
+            )
+        }
     case .failure(let message):
         check("Britney mashup energy-through-join render", false, message)
     }
