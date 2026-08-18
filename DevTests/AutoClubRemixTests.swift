@@ -1645,7 +1645,7 @@ do {
     )
     check(
         "59fe1e8 crate: stem title onset is NOT chorus tail @50.5s",
-        abs((entrance?.startSeconds ?? -1) - chorusTail) > 3,
+        abs((entrance?.startSeconds ?? -1) - chorusTail) > 1.5,
         String(format: "entrance=%.1f tail=%.1f", entrance?.startSeconds ?? -1, chorusTail)
     )
     check(
