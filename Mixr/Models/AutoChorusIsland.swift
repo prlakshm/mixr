@@ -496,7 +496,7 @@ nonisolated enum AutoChorusIsland {
             let energy8 = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds * 8)
             var energyDip = 1.0
             var u = t + barSeconds
-            while u <= t + barSeconds * 3.5 {
+            while u <= t + barSeconds * 5.5 {
                 energyDip = min(energyDip, mean(signal.energyCurve, hop: hop, from: u, to: u + barSeconds))
                 u += barSeconds * 0.5
             }
