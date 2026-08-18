@@ -383,7 +383,7 @@ nonisolated enum AutoChorusIsland {
             return 0
         }
         var boost = max(0, vocal - 0.46) * 0.18 + max(0, vocalRise) * 0.16 + novelty * 0.05
-        if hook.hasRare {
+        if hook.hasLexiconRare {
             boost += min(0.16, Double(hook.distinctive.count) * 0.06)
         } else if hook.hasDistinctivePhrase {
             boost += 0.08
@@ -513,17 +513,31 @@ nonisolated enum AutoChorusIsland {
         }
         let best8 = scored.map(\.mean8).max() ?? 0
         guard best8 >= 0.28 else { return nil }
-        let peakEnergy = scored.map(\.energyAfter).max() ?? 0
 
-        // Chorus-length vocal — not 88% of the *max* mean (that walks to
-        // denser chorus body). Opening bar may be sparser than later bars.
         let vocalFloor = max(0.32, best8 * 0.62)
-        var chorusLike = scored.filter { $0.mean8 >= vocalFloor && $0.mean1 >= 0.28 }
+        let chorusLike = scored.filter { $0.mean8 >= vocalFloor && $0.mean1 >= 0.28 }
         guard !chorusLike.isEmpty else { return nil }
 
-        for i in chorusLike.indices {
-            let s = chorusLike[i]
-            chorusLike[i].alignment = distinctiveOpeningAlignment(
+        // Chorus island = 8-bar high-vocal hold AFTER a dip. Later bars of
+        // the same hold (“you think I'm in love”) are not new islands.
+        func vocalBefore(_ s: Island) -> Double { s.mean1 - s.vocalRise }
+        func isPlateauStart(_ s: Island) -> Bool {
+            let before = vocalBefore(s)
+            let alreadyInHold = before >= s.mean8 * 0.86
+                && s.vocalRise < 0.08
+                && s.energyRise < 0.08
+            if alreadyInHold { return false }
+            return before < s.mean8 * 0.92 || s.energyRise >= 0.05 || s.vocalRise >= 0.05
+        }
+
+        var starts = chorusLike.filter(isPlateauStart)
+        if starts.isEmpty { starts = chorusLike }
+        let peakEnergy = starts.map(\.energyAfter).max() ?? (chorusLike.map(\.energyAfter).max() ?? 0)
+        let peakStart8 = starts.map(\.mean8).max() ?? best8
+
+        for i in starts.indices {
+            let s = starts[i]
+            starts[i].alignment = distinctiveOpeningAlignment(
                 IslandProxy(
                     t: s.t,
                     mean1: s.mean1,
@@ -537,7 +551,7 @@ nonisolated enum AutoChorusIsland {
                 ),
                 tokens: tokens,
                 peakEnergy: peakEnergy,
-                bestVocal8: best8,
+                bestVocal8: peakStart8,
                 phraseSeconds: phraseSeconds,
                 introEnd: introEnd
             )
@@ -545,20 +559,22 @@ nonisolated enum AutoChorusIsland {
 
         let island: Double
         if tokens.all.isEmpty {
-            // No title cue: first 8-bar high-vocal island (legacy).
             island = chorusLike.min(by: { $0.t < $1.t })!.t
         } else {
-            let bestAlign = chorusLike.map(\.alignment).max() ?? 0
-            let cutoff = max(0.10, bestAlign * 0.75)
-            let aligned = chorusLike
+            let bestAlign = starts.map(\.alignment).max() ?? 0
+            let cutoff = max(0.08, bestAlign * 0.72)
+            let aligned = starts
                 .filter { $0.alignment >= cutoff }
                 .sorted { $0.t < $1.t }
             if let first = aligned.first {
                 island = first.t
-            } else if let best = chorusLike.max(by: { $0.alignment < $1.alignment }), best.alignment > 0 {
+            } else if let best = starts.max(by: { $0.alignment < $1.alignment }), best.alignment > 0 {
                 island = best.t
             } else {
-                return nil
+                // Title tokens exist but nothing scored — still take the
+                // earliest chorus-energy plateau, not the first verse island.
+                let chorusEnergy = starts.filter { $0.energyAfter >= max(0.50, peakEnergy * 0.82) }
+                island = (chorusEnergy.isEmpty ? starts : chorusEnergy).min(by: { $0.t < $1.t })!.t
             }
         }
 
@@ -598,50 +614,46 @@ nonisolated enum AutoChorusIsland {
         introEnd: Double
     ) -> Double {
         // Prechorus that swallows the chorus: opening bar colder than the 8-bar.
-        guard island.mean1 >= island.mean8 * 0.70 else { return 0 }
+        guard island.mean1 >= island.mean8 * 0.68 else { return 0 }
 
-        let chorusFloor = max(0.55, peakEnergy * 0.78)
+        let chorusFloor = max(0.50, peakEnergy * 0.82)
         let verseLike = island.energyAfter < chorusFloor
-        let continuation = island.vocalRise < 0.05 && island.energyRise < 0.06 && island.novelty < 0.35
         let afterVerse = island.t >= introEnd + phraseSeconds * 0.75
 
         var score = 0.0
         score += max(0, island.energyRise) * 0.40
         score += max(0, island.vocalRise) * 0.22
-        score += island.novelty * 0.35
-        score += min(0.20, island.firstOnsetStrength * 0.25)
+        score += island.novelty * 0.20
+        score += min(0.22, island.firstOnsetStrength * 0.30)
         if afterVerse { score += 0.04 }
 
-        if tokens.hasRare {
-            // Rare title word = novel attack on a chorus-energy downbeat.
-            if continuation { return 0 }
-            guard island.energyAfter >= max(0.60, peakEnergy * 0.90) else { return 0 }
-            guard island.novelty >= 0.28 else { return 0 }
-            score += island.novelty * 0.25
+        // Title tokens (never emptied) need a CHORUS plateau, not the first
+        // time a filler word is sung. Peak energy is among plateau starts.
+        if verseLike { return 0 }
+
+        if tokens.hasLexiconRare {
+            guard island.energyAfter >= max(0.55, peakEnergy * 0.82) else { return 0 }
+            score += island.novelty * 0.12
         }
 
-        if tokens.hasDistinctivePhrase && !tokens.hasRare {
-            // “baby one more time” is an 8-bar chorus-energy title line with
-            // a real opening attack — not verse “baby” and not a prechorus
-            // or mashability spike that swallows the later hook.
-            if verseLike { return 0 }
-            guard island.mean8 >= max(0.32, bestVocal8 * 0.88) else { return 0 }
-            guard island.energyAfter >= max(0.60, peakEnergy * 0.90) else { return 0 }
-            guard island.firstOnsetStrength >= 0.08 else { return 0 }
+        if tokens.hasDistinctivePhrase && !tokens.hasLexiconRare {
+            guard island.mean8 >= max(0.32, bestVocal8 * 0.82) else { return 0 }
+            guard island.energyAfter >= max(0.55, peakEnergy * 0.86) else { return 0 }
             if island.onsetCount >= 2 { score += 0.08 }
-            score += min(0.14, Double(tokens.all.count) * 0.035)
-        } else if tokens.hasDistinctivePhrase {
-            if verseLike { return 0 }
-            if island.onsetCount >= 2 { score += 0.08 }
+            score += min(0.14, Double(tokens.distinctive.count) * 0.035)
+        }
+
+        // Hook phrase not in the title (pivotLexicon extras like “hit”):
+        // prefer a strong opening attack on the chorus plateau.
+        if !tokens.extras.isEmpty {
+            score += min(0.16, island.firstOnsetStrength * 0.35)
         }
 
         if tokens.genericOnly {
-            if verseLike || !afterVerse { return 0 }
+            if !afterVerse { return 0 }
             score *= 0.45
         }
 
-        if verseLike { score *= 0.25 }
-        if continuation { score *= 0.20 }
         return score
     }
 

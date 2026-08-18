@@ -34,30 +34,56 @@ nonisolated enum AutoPivotWord {
 
     /// Title/hook tokens actually used to place the first chorus island.
     struct TitleHookTokens: Sendable {
+        /// Title tokens (never discarded).
         var all: [String]
+        /// Working distinctive set: lexicon hits, or the title tokens
+        /// themselves when downweight would leave `[]`.
         var distinctive: [String]
         var generic: [String]
+        /// Hook-lexicon words not in the title (e.g. “hit” on a song titled
+        /// “Baby One More Time”). Extras, never instead of the title.
+        var extras: [String]
+        /// True when the title itself contains a rare lexicon word.
+        var hasLexiconRare: Bool
 
         var hasRare: Bool { !distinctive.isEmpty }
         /// Generic fillers co-occur as a phrase, or with a rare token.
         var hasDistinctivePhrase: Bool {
-            hasRare || all.count >= 3
+            hasLexiconRare || all.count >= 3
         }
-        var genericOnly: Bool { distinctive.isEmpty && all.count < 3 && !generic.isEmpty }
+        var genericOnly: Bool { !hasLexiconRare && all.count < 3 && !generic.isEmpty }
 
         var dump: String {
             let d = distinctive.joined(separator: ",")
             let a = all.joined(separator: ",")
-            return "tokens=[\(a)] distinctive=[\(d)]"
+            let e = extras.joined(separator: ",")
+            return "tokens=[\(a)] distinctive=[\(d)] extras=[\(e)]"
         }
     }
 
     /// Split title tokens into distinctive vs generic verse fillers.
+    /// If every title token is a verse filler, the title tokens ARE the set.
     static func hookTokens(in title: String) -> TitleHookTokens {
         let all = tokens(in: title)
-        let distinctive = all.filter { distinctiveLexicon.contains($0) }
         let generic = all.filter { genericFillers.contains($0) }
-        return TitleHookTokens(all: all, distinctive: distinctive, generic: generic)
+        let lexiconHits = all.filter { distinctiveLexicon.contains($0) }
+        let distinctive: [String]
+        if lexiconHits.isEmpty && !all.isEmpty {
+            distinctive = all
+        } else {
+            distinctive = lexiconHits
+        }
+        let extras = distinctiveLexicon
+            .subtracting(Set(all))
+            .intersection(pivotLexicon)
+            .sorted()
+        return TitleHookTokens(
+            all: all,
+            distinctive: distinctive,
+            generic: generic,
+            extras: extras,
+            hasLexiconRare: !lexiconHits.isEmpty
+        )
     }
 
     /// Tokenize a song title into candidate pivot words.

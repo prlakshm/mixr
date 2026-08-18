@@ -965,6 +965,17 @@ func popTitleChorusRealCrate59fe1e8(
         if abs(t - chorusBodyStart) < hop * 1.5 {
             feat.stemVocalPresenceCurve[i] = 1.0
         }
+        // 6a75fb6: later bar of the SAME chorus (~58.1 “you think I'm in love”)
+        // has denser vocal + novelty — must not outscore the island opening.
+        let laterChorusLine = 58.1
+        if t >= laterChorusLine && t < laterChorusLine + bar * 4 {
+            feat.stemVocalPresenceCurve[i] = max(feat.stemVocalPresenceCurve[i], 0.99)
+        }
+        if abs(t - laterChorusLine) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = 1.0
+            feat.noveltyCurve[i] = max(feat.noveltyCurve[i], 0.96)
+        }
+    }
     }
     return feat
 }
@@ -1641,15 +1652,22 @@ do {
     let oopsTok = AutoPivotWord.hookTokens(in: "Oops I Did It Again")
     check(
         "71773f0: Oops title uses distinctive oops/again, not generic baby",
-        oopsTok.hasRare && oopsTok.distinctive.contains("oops") && oopsTok.distinctive.contains("again")
-            && !oopsTok.all.contains("baby"),
+        oopsTok.hasLexiconRare && oopsTok.distinctive.contains("oops") && oopsTok.distinctive.contains("again")
+            && !oopsTok.all.contains("baby") && !oopsTok.distinctive.isEmpty,
         oopsTok.dump
     )
     let bomtTok = AutoPivotWord.hookTokens(in: "Baby One More Time")
     check(
-        "71773f0: BOMT generic fillers co-occur as a distinctive phrase",
-        !bomtTok.hasRare && bomtTok.hasDistinctivePhrase
-            && bomtTok.generic.contains("baby") && bomtTok.generic.contains("time"),
+        "6a75fb6: BOMT downweight does not empty distinctive — title tokens ARE the set",
+        !bomtTok.distinctive.isEmpty
+            && bomtTok.distinctive.contains("baby")
+            && bomtTok.hasDistinctivePhrase
+            && !bomtTok.dump.contains("distinctive=[]"),
+        bomtTok.dump
+    )
+    check(
+        "6a75fb6: BOMT extras include hook lexicon (hit), never instead of title",
+        bomtTok.extras.contains("hit") && bomtTok.all.contains("baby") && !bomtTok.all.contains("hit"),
         bomtTok.dump
     )
     let babyOnly = AutoPivotWord.hookTokens(in: "Baby")
@@ -1667,6 +1685,7 @@ do {
     let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
     let oopsTitle = 48.0
     let chorusBody = 55.6
+    let laterChorusLine = 58.1
     let lastPeakDecoy = oopsTitle + 0.72
     let oopsSignal = popTitleChorusRealCrate59fe1e8(
         duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
@@ -1694,6 +1713,11 @@ do {
         "71773f0: title-hook onset STARTS on Oops (~48s), not chorus body @55.6",
         withTitle >= 47.8 && withTitle <= 48.8 && abs(withTitle - chorusBody) > 2.0,
         String(format: "onset=%.2f body=%.1f tokens=%@", withTitle, chorusBody, AutoChorusIsland.titleTokensDump(oops.title))
+    )
+    check(
+        "6a75fb6: title-hook onset is the chorus OPENING, not later line @58.1",
+        abs(withTitle - laterChorusLine) > 4.0 && withTitle < laterChorusLine - 2.0,
+        String(format: "onset=%.2f later=%.1f", withTitle, laterChorusLine)
     )
     check(
         "71773f0: opening word is FIRST stem onset, not last peak @48.7",
@@ -1847,13 +1871,19 @@ do {
             String(format: "hook=%.1f body=55.6 %@", hookSrc, bedDecision)
         )
         check(
+            "6a75fb6 crate: bed hook is NOT later chorus line @58.1",
+            abs(hookSrc - 58.1) > 4.0,
+            String(format: "hook=%.1f later=58.1 %@", hookSrc, bedDecision)
+        )
+        check(
             "59fe1e8 crate: dump placed start is ~48s",
             bedDecision.contains("bed complete hook") && hookSrc >= 47.8 && hookSrc <= 48.8,
             bedDecision
         )
         check(
             "59fe1e8 crate: dump includes title tokens considered",
-            bedDecision.contains("tokens=[") && bedDecision.contains("oops"),
+            bedDecision.contains("tokens=[") && bedDecision.contains("oops")
+                && bedDecision.contains("distinctive=[") && !bedDecision.contains("distinctive=[]"),
             bedDecision
         )
         let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
@@ -2045,7 +2075,9 @@ do {
             "398d7de crate: dump includes placed vs mashability",
             dump.contains("Drop 1 guest placed") && dump.contains("mashability=")
                 && dump.contains("tokens=[")
-                && dump.contains("baby"),
+                && dump.contains("baby")
+                && dump.contains("distinctive=[")
+                && !dump.contains("distinctive=[]"),
             dump
         )
         check(
