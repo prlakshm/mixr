@@ -149,10 +149,11 @@ nonisolated enum AutoPivotWord {
         }
 
         if let token = pivotToken?.lowercased(), !lyricWords.isEmpty {
+            let lastBars = max(phraseLo, phraseHi - beatSec * 16)
             let hits = lyricWords.filter { w in
                 let word = w.word.lowercased().filter { $0.isLetter }
                 return (word == token || word.contains(token))
-                    && w.t >= phraseLo && w.t < phraseHi
+                    && w.t >= lastBars && w.t < phraseHi
             }
             if let last = hits.max(by: { $0.t < $1.t }) {
                 return clampGrain(last.t - grainDur * 0.15)

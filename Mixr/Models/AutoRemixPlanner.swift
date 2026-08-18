@@ -785,6 +785,15 @@ enum AutoRemixPlanner {
             pulseRegions: &pulseRegions
         )
 
+        ensureFestivalDrop1Stack(
+            pulseRegions: pulseRegions,
+            barSec: bar,
+            beatSec: beat,
+            flavor: flavor,
+            sfx: &sfx,
+            decisions: &decisions
+        )
+
         let totalDuration = placements.map(\.timelineEnd).max() ?? cursor
         boostJoinClipVolumes(
             placements: &placements,
@@ -1113,6 +1122,15 @@ enum AutoRemixPlanner {
             vocalDensity: profile.analysis.meanVocalDensity(from: usableStart, to: usableEnd),
             compatibilityRole: .dominant,
             confidence: profile.analysis.analysisConfidence
+        )
+
+        ensureFestivalDrop1Stack(
+            pulseRegions: pulseRegions,
+            barSec: bar,
+            beatSec: beat,
+            flavor: flavor,
+            sfx: &sfx,
+            decisions: &decisions
         )
 
         boostJoinClipVolumes(
@@ -3305,6 +3323,15 @@ enum AutoRemixPlanner {
             pulseRegions: &pulseRegions
         )
 
+        ensureFestivalDrop1Stack(
+            pulseRegions: pulseRegions,
+            barSec: barSec,
+            beatSec: beatSec,
+            flavor: mashupFlavor,
+            sfx: &sfx,
+            decisions: &decisions
+        )
+
         boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
@@ -3976,14 +4003,46 @@ enum AutoRemixPlanner {
         placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
         placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
         placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
-        decisions.append(
-            AutoDecision(
-                kind: .addedRiserIntoDrop,
-                songTitle: nil,
-                detail: "festival take-out + drop ride (riser/snare/tape then air/clap/impact)"
+        if !decisions.contains(where: {
+            $0.kind == .addedRiserIntoDrop && ($0.detail ?? "").contains("festival")
+        }) {
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+                )
             )
-        )
+        }
         _ = flavor
+    }
+
+    /// Drop 1 mix window must emit the festival stack even if the slot
+    /// loop skipped it (entry wasn't hardHypeCut, first-slot, etc.).
+    private static func ensureFestivalDrop1Stack(
+        pulseRegions: [AutoClubPulse.Region],
+        barSec: Double,
+        beatSec: Double,
+        flavor: AutoClubFlavor,
+        sfx: inout [AutoSFXEvent],
+        decisions: inout [AutoDecision]
+    ) {
+        guard let drop = pulseRegions
+            .filter({ $0.role == .drop })
+            .min(by: { $0.timelineStart < $1.timelineStart })
+        else { return }
+        appendFestivalMixWindowStack(
+            dropAt: drop.timelineStart,
+            dropEnd: drop.timelineEnd,
+            barSec: barSec,
+            beatSec: beatSec,
+            flavor: flavor,
+            protectedRanges: lyricOnsetProtectedRanges(
+                pulseRegions: pulseRegions, dropAt: drop.timelineStart
+            ),
+            sfx: &sfx,
+            decisions: &decisions
+        )
     }
 
     /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least

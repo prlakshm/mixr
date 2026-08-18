@@ -120,7 +120,7 @@ struct AutoDecision: Sendable, Equatable {
         case .replacedComplexOverlapWithHardCut:
             return "Replaced a complex overlap with a hard cut\(detail.map { " before \($0)" } ?? "")."
         case .addedRiserIntoDrop:
-            return "Used a \(detail ?? "riser") into the drop."
+            return "addedRiserIntoDrop — \(detail ?? "festival take-out + drop-ride") into the drop."
         case .removedInvalidSFX:
             return "Removed an invalid SFX event\(detail.map { " (\($0))" } ?? "")."
         case .repairedTimelineGap:

@@ -41,9 +41,10 @@ Never cut the best / most identifiable lines. Opening titles and hook lines
   has played once — never the first syllable of the title and never a silent
   tail rest.
 - Incoming hook starts on the **downbeat of a real line**, not mid-word.
-  Bed title-hook copies start on the **previous downbeat before**
-  `titleHookStart` so the title token is fully inside the clip. Drop 1 guest
-  stays one beat before the lyric. Hard cut, no fade-in.
+  Bed title-hook copies start **one beat before** `titleHookStart` (nearest
+  downbeat within ~1 beat — never a full bar / earlier catalog peak) so the
+  title token lands in the first ~1–2s. Drop 1 guest uses the same one-beat
+  pad. Hard cut, no fade-in.
 - If phrase confidence cannot support a last-word grain, **skip the loop**
   rather than slicing the title. Keep playing through the window so the join
   does not go quiet.
@@ -133,8 +134,8 @@ Typical:
   rows, grid-snapped, with HPF sweep / duck the bed kick on that window.
   Pivot **clip volume stays loud** — HPF/blur does the thin.
 - Incoming hook-replace on the next downbeat, same-word attack, **full clip
-  volume** (no fade-in). Bed title-hook copies start on the previous
-  downbeat before the lyric word so ASR hears the title token.
+  volume** (no fade-in). Bed title-hook copies start one beat before the
+  lyric word so ASR hears the title token in the first 1–2s.
 - Pivot grain is the last **identifiable** pivot token / vocal beat of the
   completed line — not a silent tail rest.
 - Wallpaper chops are **this mix-window loop**, not verse decoration and not

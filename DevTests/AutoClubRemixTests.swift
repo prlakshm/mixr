@@ -3506,9 +3506,10 @@ do {
     ) ?? -1
     let oopsBar = oopsProfile.analysis.barSeconds
     check(
-        "lyrics sidecar: titleHookOnset snaps before Oops word, not catalog tail",
-        oopsOnset < oopsHook - oopsBar / 4 * 0.9
-            && oopsHook - oopsOnset <= oopsBar * 1.05
+        "lyrics sidecar: titleHookOnset is one beat before Oops, not a bar early",
+        abs(oopsOnset - (oopsHook - oopsBar / 4)) < oopsBar * 0.35
+            && oopsOnset < oopsHook - 0.05
+            && oopsHook - oopsOnset < oopsBar / 4 * 1.5
             && abs(oopsOnset - 50.5) > 1.5,
         String(format: "onset=%.2f hook=%.2f tail=50.5 bar=%.2f", oopsOnset, oopsHook, oopsBar)
     )
@@ -3534,9 +3535,9 @@ do {
         title: oops.title
     ) ?? -1
     check(
-        "lyrics sidecar wins over energy island (hook start is the JSON field, not vocal peak)",
-        overrideOnset < sidecarOverride - oopsBar / 4 * 0.9
-            && sidecarOverride - overrideOnset <= oopsBar * 1.05
+        "lyrics sidecar wins over energy island (hook start is one beat before JSON field)",
+        abs(overrideOnset - (sidecarOverride - oopsBar / 4)) < oopsBar * 0.35
+            && overrideOnset < sidecarOverride - 0.05
             && abs(overrideOnset - 48.0) > 2.0,
         String(format: "onset=%.2f lyric=%.2f energy=48.0", overrideOnset, sidecarOverride)
     )
@@ -3566,11 +3567,12 @@ do {
     ) ?? -1
     let beat = oopsBar / 4
     check(
-        "title-hook clip starts on the previous downbeat before the lyric (Oops not on the cut)",
-        lateOnset < lateLyric - beat * 1.15
-            && lateLyric - lateOnset <= oopsBar * 1.05
+        "title-hook clip starts one beat before the lyric (not a full bar / catalog 48)",
+        abs(lateOnset - (lateLyric - beat)) < oopsBar * 0.35
+            && lateOnset < lateLyric - 0.05
+            && lateLyric - lateOnset < beat * 1.5
             && abs(lateOnset - catalogPeak) > 0.08
-            && abs(lateOnset - (lateLyric - beat)) > 0.12,
+            && abs(lateOnset - 48.0) > 0.5,
         String(format: "onset=%.2f lyric=%.2f beat=%.2f catalog=%.1f", lateOnset, lateLyric, beat, catalogPeak)
     )
     let oneBeatGuest = AutoChorusIsland.titleHookClipStart(
@@ -3607,6 +3609,21 @@ do {
         "pivot grain is the last pivot token, not the empty phrase tail",
         abs(pivotGrain - 16.55) < grainBeat * 0.75 && abs(pivotGrain - 17.5) > 0.2,
         String(format: "grain=%.2f token=16.55 tail=17.50", pivotGrain)
+    )
+    let earlyBaby = AutoPivotWord.lastBeatGrainSource(
+        phraseSourceStart: 48.0,
+        phraseSourceEnd: 68.4,
+        beatSec: 0.64,
+        tempoRatio: 1,
+        pivotToken: "baby",
+        lyricWords: [(48.4, "baby"), (49.0, "baby"), (64.8, "baby"), (67.9, "oh")],
+        vocalPresence: [],
+        hopSeconds: 0.1
+    )
+    check(
+        "pivot grain uses the last-phrase pivot token, not the opening baby",
+        abs(earlyBaby - 64.8) < 0.8 && abs(earlyBaby - 48.4) > 2.0,
+        String(format: "grain=%.2f want≈64.8", earlyBaby)
     )
 
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
@@ -3671,8 +3688,8 @@ do {
             }?.detail ?? ""
             check(
                 "lyrics sidecar: planner bed hook is titleHookStart (not energy tail)",
-                hookSrc < oopsHook - plan.barSeconds / 4 * 0.9
-                    && oopsHook - hookSrc <= plan.barSeconds * 1.05
+                abs(hookSrc - (oopsHook - plan.barSeconds / 4)) < plan.barSeconds * 0.35
+                    && hookSrc < oopsHook - 0.05
                     && abs(hookSrc - 50.5) > 1.5,
                 String(format: "src=%.2f want=%.2f %@", hookSrc, oopsHook, bedDump)
             )
@@ -3764,10 +3781,12 @@ do {
                 $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
             }?.detail ?? ""
             check(
-                "599dec4: bed placed start is the previous downbeat before lyric (Oops fully inside)",
-                hookSrc < bedLyric - plan.barSeconds / 4 * 1.15
-                    && bedLyric - hookSrc <= plan.barSeconds * 1.05
-                    && abs(hookSrc - catalogPeak) > 0.08,
+                "599dec4: bed placed start is one beat before lyric, not a full bar / catalog 48",
+                abs(hookSrc - (bedLyric - plan.barSeconds / 4)) < plan.barSeconds * 0.35
+                    && hookSrc < bedLyric - 0.05
+                    && bedLyric - hookSrc < plan.barSeconds / 4 * 1.5
+                    && abs(hookSrc - catalogPeak) > 0.08
+                    && abs(hookSrc - 48.0) > 0.5,
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
             )
             let takeOutIDs = Set(plan.sfxEvents.filter {
@@ -3776,8 +3795,12 @@ do {
             check(
                 "mashup dump records festival take-out + drop ride on Drop 1",
                 plan.decisions.contains { $0.kind == .addedRiserIntoDrop }
-                    && takeOutIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
-                "ids=\(takeOutIDs.sorted()) decisions=\(plan.decisions.filter { $0.kind == .addedRiserIntoDrop }.compactMap(\.detail))"
+                    && takeOutIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"])
+                    && plan.decisions.contains {
+                        let s = $0.userFacingSentence.lowercased()
+                        return s.contains("festival") && (s.contains("drop-ride") || s.contains("drop ride"))
+                    },
+                "ids=\(takeOutIDs.sorted()) sentences=\(plan.decisions.filter { $0.kind == .addedRiserIntoDrop }.map(\.userFacingSentence))"
             )
             check(
                 "599dec4: dump placed startSeconds < lyric",
