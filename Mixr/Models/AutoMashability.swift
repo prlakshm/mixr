@@ -241,41 +241,33 @@ nonisolated enum AutoMashability {
         return best
     }
 
-    /// Drop 1 vocal: lock BOMT guest start to “hit me” title chorus (~59.5–60.5s
-    /// on vocals.wav). Mashability may still choose a bed offset; it must not
-    /// slide the guest into verse @39s, confess @47s, or island @47.1s.
+    /// Drop 1 vocal: same title-hook entrance as the bed chorus (isolated-vocal
+    /// title/hook onset after the prechorus). Mashability may still choose a
+    /// bed offset; it must not slide the guest into verse or prechorus.
     static func drop1GuestStart(
         guest: AutoSongProfile,
         island: AutoMashabilityIsland?
     ) -> Double {
         let phrase = phraseSeconds(for: guest)
-        if AutoMashupRoleLock.isBOMTTitle(guest.title),
-           let signal = guest.analysis.signal {
-            if let hit = AutoChorusIsland.bomtDrop1HitMeStart(
-                signal: signal,
-                downbeats: guest.analysis.downbeats,
-                barSeconds: guest.analysis.barSeconds
-            ) {
-                return hit
-            }
-            let drops = guest.analysis.chorusOrDropCandidates.sorted { $0.startSeconds < $1.startSeconds }
-            if drops.count >= 2, drops[1].startSeconds >= 75 {
-                return drops[1].startSeconds
-            }
+        let introEnd = guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8
+        if let signal = guest.analysis.signal,
+           let hit = AutoChorusIsland.titleHookOnset(
+               signal: signal,
+               downbeats: guest.analysis.downbeats,
+               barSeconds: guest.analysis.barSeconds,
+               duration: guest.analysis.durationSeconds,
+               introEnd: introEnd,
+               phraseSeconds: phrase,
+               title: guest.title
+           ) {
+            return hit
         }
-        if !AutoMashupRoleLock.isBOMTTitle(guest.title) {
-            let titleStart = AutoChorusIsland.bestEntrance(
-                signal: guest.analysis.signal,
-                downbeats: guest.analysis.downbeats,
-                barSeconds: guest.analysis.barSeconds,
-                duration: guest.analysis.durationSeconds,
-                introEnd: guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8,
-                phraseSeconds: phrase,
-                title: guest.title
-            )?.startSeconds
-            if let titleStart {
-                return titleStart
-            }
+        let afterPrechorus = introEnd + phrase * 0.85
+        let laterChorus = guest.analysis.chorusOrDropCandidates
+            .filter { $0.startSeconds >= afterPrechorus }
+            .sorted { $0.startSeconds < $1.startSeconds }
+        if let first = laterChorus.first {
+            return first.startSeconds
         }
         if let island {
             return island.guestStart

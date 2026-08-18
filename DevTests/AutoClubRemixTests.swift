@@ -1702,12 +1702,35 @@ do {
             bedDecision.contains("bed complete hook") && hookSrc >= 47.8 && hookSrc <= 48.8,
             bedDecision
         )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let titleHookClips = plan.placements.filter {
+            $0.songID == oops.id && $0.role == .dominant
+                && abs($0.sourceStart - hookSrc) < 0.2
+                && $0.timelineDuration >= plan.barSeconds * 7.5
+                && $0.timelineStart < drop1Start - 0.05
+        }
+        check(
+            "59fe1e8 crate: title-hook chorus slots hard-cut (no fade-in)",
+            !titleHookClips.isEmpty
+                && titleHookClips.allSatisfy { $0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02 },
+            titleHookClips.map {
+                String(format: "src=%.1f t=%.1f fade=%@ dur=%.2f", $0.sourceStart, $0.timelineStart, $0.fadeIn.type.rawValue, $0.fadeIn.duration)
+            }.joined(separator: " | ")
+        )
+        check(
+            "59fe1e8 crate: dump includes title-hook src+entry+fade",
+            plan.decisions.contains {
+                ($0.detail ?? "").contains("title-hook clip")
+                    && ($0.detail ?? "").contains("entry=")
+                    && ($0.detail ?? "").contains("fadeIn=")
+            },
+            plan.decisions.filter { ($0.detail ?? "").contains("title-hook") }.compactMap(\.detail).joined(separator: " || ")
+        )
         check(
             "59fe1e8 crate: decision line includes raw candidate dump",
             bedDecision.contains("raw=[") && bedDecision.contains("chorusOrDrop="),
             bedDecision
         )
-        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
         let guestSrc = plan.placements
             .filter {
                 $0.songID == bomt.id && $0.role == .dominant
@@ -2229,6 +2252,15 @@ do {
                     prev.sourceStart + prev.timelineDuration * prev.tempoRatio
                 )) < 0.05
             if sourceContinuous { continue }
+            // Title-hook hard cut — fade-in would eat the opening word.
+            let titleHookJump = prev.songID == next.songID
+                && next.sourceStart > prev.sourceEnd + plan.barSeconds * 0.25
+                && next.timelineDuration >= plan.barSeconds * 7.5
+                && prev.timelineStart <= plan.barSeconds * 10
+            let titleHold = prev.songID == next.songID
+                && next.sourceStart < prev.sourceEnd - 0.05
+                && abs(next.sourceStart - prev.sourceStart) < plan.barSeconds * 0.75
+            if titleHookJump || titleHold { continue }
             let overlap = prev.timelineEnd - next.timelineStart
             let declared = next.overlapsPreviousSeconds
             check(

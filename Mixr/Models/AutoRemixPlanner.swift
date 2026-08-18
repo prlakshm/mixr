@@ -268,7 +268,7 @@ enum AutoRemixPlanner {
         // runway after the hook is already done.
         let shape: [(role: AutoCandidateSection.Label, bars: Int, energy: Double, pulse: AutoClubPulse.RegionRole, entry: AutoTransitionRecipe)] = [
             (.intro, 8, 0.45, .introTease, .none),
-            (.chorus, 8, 0.88, .groove, .cleanCrossfade),    // first complete hook (still the record)
+            (.chorus, 8, 0.88, .groove, .none),                 // title hook (hard cut, no fade-in)
             (.build, 2, 0.70, .buildOut, .flangerBuild),      // pivot wallpaper window
             (.chorus, 16, 1.0, .drop, .hardHypeCut),          // Drop 1
             (.breakdown, 8, 0.42, .breakdown, .atmosphericHandoff),
@@ -1973,7 +1973,7 @@ enum AutoRemixPlanner {
         // the same island (16 timeline bars). Do not linearly walk 16 source
         // bars from the title downbeat into verse 2 (“you see my problem is this”).
         slots.append(Slot(
-            songIdx: 0, role: .chorus, bars: 8, entry: .cleanCrossfade, energy: 0.88,
+            songIdx: 0, role: .chorus, bars: 8, entry: .none, energy: 0.88,
             shrinkPriority: 0
         ))
         slots.append(Slot(
@@ -2302,8 +2302,9 @@ enum AutoRemixPlanner {
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs (first title-chorus downbeat, not prechorus/tail/verse-2) | %@ | raw=[%@]",
+                                format: "bed complete hook @%.1fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@]",
                                 chorus.startSeconds,
+                                slot.entry.rawValue,
                                 dump,
                                 rawList
                             )
@@ -2747,6 +2748,16 @@ enum AutoRemixPlanner {
             if entry == .cleanCrossfade, headSeconds == 0 {
                 bodyFadeIn = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
             }
+            // Title-hook chorus (first complete A hook + 8+8 hold): hard cut.
+            // A crossfade on this slot eats the identifiable opening word.
+            let isTitleHookSlot = mode == .mashup
+                && ps.slot.role == .chorus
+                && entry != .hardHypeCut
+                && !ps.slot.isFinalPeak
+                && (ps.slot.holdTitleChorus || (ps.slot.songIdx == 0 && !ps.slot.isReturn))
+            if isTitleHookSlot, headSeconds == 0 {
+                bodyFadeIn = .none
+            }
             // Xirex: hard cut into the hook-replace drop (no crossfade, no fade-in).
             if entry == .hardHypeCut, headSeconds == 0 {
                 bodyFadeIn = .none
@@ -2794,6 +2805,23 @@ enum AutoRemixPlanner {
             }
             if !emittedPitchMoment {
                 segments.append((bodyStart, bodyDuration, bodyFX, baseVolume, bodyFadeIn, bodyFadeOut))
+            }
+
+            if isTitleHookSlot {
+                decisions.append(
+                    AutoDecision(
+                        kind: .selectedAnchor,
+                        songTitle: profile.title,
+                        detail: String(
+                            format: "title-hook clip src=%.1fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f",
+                            ps.section.startSeconds,
+                            ps.timelineStart,
+                            entry.rawValue,
+                            bodyFadeIn.type.rawValue,
+                            bodyFadeIn.duration
+                        )
+                    )
+                )
             }
 
             if tailSeconds > 0 {
@@ -3346,6 +3374,39 @@ enum AutoRemixPlanner {
                         reason: .hookReturn,
                         confidence: 0.75,
                         expectedEnergyDeltaDB: 2.0,
+                        masking: .alignedHardCut
+                    )
+                )
+                continue
+            }
+
+            // Same-song jump into a title-hook island: hard cut. A crossfade
+            // on this join eats the identifiable opening word on every song.
+            let titleHookJump = prev.songID == next.songID
+                && next.sourceStart > prev.sourceEnd + barSec * 0.25
+                && next.timelineDuration >= barSec * 7.5
+                && prev.timelineStart <= barSec * 10
+                && !AutoRemixDiagnostics.incomingIsClubDrop(
+                    pulseRegions: pulseRegions,
+                    timelineStart: next.timelineStart
+                )
+            if titleHookJump {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .none
+                placements[nextIdx].fadeIn = .none
+                cutRecords.append(
+                    AutoCutRecord(
+                        timelineAt: next.timelineStart,
+                        sourceFrom: prev.sourceEnd,
+                        sourceTo: next.sourceStart,
+                        reason: .hookReturn,
+                        confidence: 0.8,
+                        expectedEnergyDeltaDB: 3.0,
                         masking: .alignedHardCut
                     )
                 )

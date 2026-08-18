@@ -622,6 +622,28 @@ nonisolated enum AutoRemixValidator {
                 continue
             }
 
+            // Title-hook island (intro/verse → first complete chorus, or 8+8 hold):
+            // hard cut. Equal-power fade-in eats the opening title word.
+            let titleHookJoin = prev.songID == next.songID
+                && next.timelineDuration >= plan.barSeconds * 7.5
+                && (
+                    (next.sourceStart > prev.sourceEnd + plan.barSeconds * 0.25
+                        && prev.timelineStart <= plan.barSeconds * 10)
+                    || (next.sourceStart < prev.sourceEnd - 0.05
+                        && abs(next.sourceStart - prev.sourceStart) < plan.barSeconds * 0.75)
+                )
+            if titleHookJoin {
+                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        plan.placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                plan.placements[prevIdx].fadeOut = .none
+                plan.placements[nextIdx].fadeIn = .none
+                continue
+            }
+
             // Continuous source (energy-curve / no-cut path) — never invent an overlap cut.
             let prevSourceEnd = prev.sourceStart + prev.timelineDuration * prev.tempoRatio
             if next.continuesPrevious || abs(next.sourceStart - prevSourceEnd) < 0.05 {
