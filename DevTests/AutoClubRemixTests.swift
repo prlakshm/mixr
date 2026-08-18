@@ -951,6 +951,7 @@ func popTitleChorusRealCrate59fe1e8(
     // denser than the title opening — max vocal-mean must not walk there.
     // A later peak in the opening 0.9s is “I did it again”, not the title word.
     let chorusBodyStart = 55.6
+    let laterChorusLine = 58.1
     for i in 0..<feat.energyCurve.count {
         let t = Double(i) * hop
         if t >= titleChorusStart + 0.20 && t < titleChorusStart + bar * 0.55 {
@@ -975,7 +976,6 @@ func popTitleChorusRealCrate59fe1e8(
             feat.stemVocalPresenceCurve[i] = 1.0
             feat.noveltyCurve[i] = max(feat.noveltyCurve[i], 0.96)
         }
-    }
     }
     return feat
 }
