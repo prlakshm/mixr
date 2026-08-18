@@ -184,7 +184,7 @@ nonisolated enum AutoRemixApplier {
             playbackSpeed: p.tempoRatio,
             transitionIn: p.fadeIn,
             transitionOut: p.fadeOut,
-            volume: min(1, max(0, p.volume)),
+            volume: min(AutoGainPolicy.maxClipVolume, max(0, p.volume)),
             effects: AutoSupportedEffects.sanitize(p.effects),
             soundEffectID: nil,
             sourceOffsetSeconds: max(0, p.sourceStart)

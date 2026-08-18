@@ -55,6 +55,9 @@ struct SongSignalFeatures: Sendable {
     var stemVocalPresenceCurve: [Double] = []
     /// Whisper `lyrics.json` title/hook phrase onset (seconds). Nil → energy fallback.
     var lyricTitleHookStart: Double? = nil
+    /// Isolated vocal-stem short-time RMS (dBFS) when a Demucs sidecar was merged.
+    /// Used to makeup Drop 1 clip volume so a quiet stem matches the bed verse.
+    var stemVocalRMSCurveDB: [Double] = []
     /// Spectral-novelty proxy per hop (band-energy change), normalized.
     var noveltyCurve: [Double]
 
@@ -73,6 +76,18 @@ struct SongSignalFeatures: Sendable {
         guard hi >= lo else { return -120 }
         var power = 0.0
         for i in lo...hi { power += pow(10, rmsCurveDB[i] / 10) }
+        return 10 * log10(max(power / Double(hi - lo + 1), 1e-12))
+    }
+
+    /// Mean vocal-stem RMS over a source range, dBFS. Falls back to −120
+    /// when no stem curve was merged.
+    nonisolated func meanStemVocalRMSDB(from start: Double, to end: Double) -> Double {
+        guard hopSeconds > 0, !stemVocalRMSCurveDB.isEmpty else { return -120 }
+        let lo = max(0, Int(start / hopSeconds))
+        let hi = min(stemVocalRMSCurveDB.count - 1, Int(end / hopSeconds))
+        guard hi >= lo else { return -120 }
+        var power = 0.0
+        for i in lo...hi { power += pow(10, stemVocalRMSCurveDB[i] / 10) }
         return 10 * log10(max(power / Double(hi - lo + 1), 1e-12))
     }
 }

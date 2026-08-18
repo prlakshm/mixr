@@ -667,10 +667,17 @@ enum AutoRemixPlanner {
                 let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
                     ?? cursor
                 if dropIndex == 0 {
+                    let dropDur = placements.last(where: { $0.slotIndex == slotIdx })?.timelineDuration
+                        ?? 16 * bar
                     appendFestivalMixWindowStack(
                         dropAt: dropAt,
+                        dropEnd: dropAt + dropDur,
                         barSec: bar,
+                        beatSec: beat,
                         flavor: flavor,
+                        protectedRanges: lyricOnsetProtectedRanges(
+                            pulseRegions: pulseRegions, dropAt: dropAt
+                        ),
                         sfx: &sfx,
                         decisions: &decisions
                     )
@@ -781,7 +788,9 @@ enum AutoRemixPlanner {
         boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
-            beatSec: beat
+            beatSec: beat,
+            barSec: bar,
+            profiles: [profile.songID: profile]
         )
         return AutoRemixPlan(
             mode: .remix,
@@ -1025,8 +1034,13 @@ enum AutoRemixPlanner {
                 if dropIndex == 0 {
                     appendFestivalMixWindowStack(
                         dropAt: t0,
+                        dropEnd: t1,
                         barSec: bar,
+                        beatSec: beat,
                         flavor: flavor,
+                        protectedRanges: lyricOnsetProtectedRanges(
+                            pulseRegions: pulseRegions, dropAt: t0
+                        ),
                         sfx: &sfx,
                         decisions: &decisions
                     )
@@ -1102,7 +1116,9 @@ enum AutoRemixPlanner {
         boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
-            beatSec: beat
+            beatSec: beat,
+            barSec: bar,
+            profiles: [profile.songID: profile]
         )
         return AutoRemixPlan(
             mode: .remix,
@@ -3107,8 +3123,13 @@ enum AutoRemixPlanner {
                     if isDrop1 {
                         appendFestivalMixWindowStack(
                             dropAt: boundary,
+                            dropEnd: boundary + ps.timelineDuration,
                             barSec: barSec,
+                            beatSec: beatSec,
                             flavor: mashupFlavor,
+                            protectedRanges: lyricOnsetProtectedRanges(
+                                pulseRegions: pulseRegions, dropAt: boundary
+                            ),
                             sfx: &sfx,
                             decisions: &decisions
                         )
@@ -3268,7 +3289,9 @@ enum AutoRemixPlanner {
         boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
-            beatSec: beatSec
+            beatSec: beatSec,
+            barSec: barSec,
+            profiles: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0) })
         )
         return AutoRemixPlan(
             mode: mode,
@@ -3862,70 +3885,107 @@ enum AutoRemixPlanner {
         }
     }
 
-    /// Festival mix-window stack on Drop 1: take-out then slam.
-    /// Maximalist flavors get riser + snare roll + tape stop + impact from
-    /// the existing SFX menu. Sparse flavors stay impact-only. Events end
-    /// on the drop downbeat so the validator keeps the builds.
+    /// First 4s of groove/intro phrases before Drop 1 — identifiable title
+    /// lines. SFX must not cover these onsets.
+    private static func lyricOnsetProtectedRanges(
+        pulseRegions: [AutoClubPulse.Region],
+        dropAt: Double,
+        protectSeconds: Double = 4.0
+    ) -> [(Double, Double)] {
+        pulseRegions.compactMap { r in
+            guard r.role == .groove || r.role == .introTease else { return nil }
+            guard r.timelineStart < dropAt - 0.25 else { return nil }
+            return (r.timelineStart, min(r.timelineEnd, r.timelineStart + protectSeconds))
+        }
+    }
+
+    /// Festival mix-window + drop ride.
+    /// Take-out (riser/snare/tape) ends on the last pivot beat — not on the
+    /// guest's first syllable. Extra impacts / air sweep / clap fill ride
+    /// the drop bars after that attack. Sparse flavors stay impact-only,
+    /// still off the downbeat so the song is not ducked.
     private static func appendFestivalMixWindowStack(
         dropAt: Double,
+        dropEnd: Double,
         barSec: Double,
+        beatSec: Double,
         flavor: AutoClubFlavor,
+        protectedRanges: [(Double, Double)],
         sfx: inout [AutoSFXEvent],
         decisions: inout [AutoDecision]
     ) {
-        let windowStart = max(0, dropAt - max(2 * barSec, 4.0))
+        let takeOutEnd = max(0, dropAt - beatSec)
+        let attackLo = dropAt
+        let attackHi = dropAt + beatSec
+        let windowStart = max(0, takeOutEnd - max(2 * barSec, 4.0))
 
         func alreadyHas(_ id: String, near t: Double, slack: Double = 0.12) -> Bool {
             sfx.contains { $0.assetID == id && abs($0.timelineStart - t) < slack }
+        }
+        func overlapsProtected(start: Double, duration: Double) -> Bool {
+            let end = start + duration
+            if start < attackHi - 0.01 && end > attackLo + 0.01 { return true }
+            for (lo, hi) in protectedRanges {
+                if start < hi && end > lo { return true }
+            }
+            return false
         }
         func placeEnding(_ id: String, atEnd end: Double, purpose: String) {
             guard let def = SoundEffectLibrary.definition(for: id) else { return }
             let start = max(windowStart, end - def.durationSeconds)
             guard start >= -0.01 else { return }
+            if overlapsProtected(start: start, duration: def.durationSeconds) { return }
             if alreadyHas(id, near: start, slack: 0.15) { return }
             sfx.append(AutoSFXEvent(assetID: id, timelineStart: start, purpose: purpose))
         }
+        func placeAt(_ id: String, t: Double, purpose: String) {
+            guard let def = SoundEffectLibrary.definition(for: id) else { return }
+            guard t >= dropAt + beatSec - 0.02, t < dropEnd - 0.08 else { return }
+            if overlapsProtected(start: t, duration: def.durationSeconds) { return }
+            if alreadyHas(id, near: t, slack: 0.12) { return }
+            sfx.append(AutoSFXEvent(assetID: id, timelineStart: t, purpose: purpose))
+        }
 
         if flavor.bias.maximalistStacks {
-            placeEnding("riser", atEnd: dropAt, purpose: "riser into the drop")
-            placeEnding("snareBuild", atEnd: dropAt, purpose: "snare roll into the drop")
-            placeEnding("tapeStop", atEnd: dropAt, purpose: "tape-stop take-out")
-            if !alreadyHas("impact", near: dropAt) {
-                sfx.append(
-                    AutoSFXEvent(
-                        assetID: "impact",
-                        timelineStart: dropAt,
-                        purpose: "impact slam on drop downbeat"
-                    )
-                )
-            }
+            placeEnding("riser", atEnd: takeOutEnd, purpose: "riser take-out before the drop")
+            placeEnding("snareBuild", atEnd: takeOutEnd, purpose: "snare-roll take-out before the drop")
+            placeEnding("tapeStop", atEnd: takeOutEnd, purpose: "tape-stop take-out")
+            // Ride the drop after the first syllable — extra rows on collision.
+            placeAt("airSweep", t: dropAt + beatSec, purpose: "air sweep after drop attack")
+            placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
+            placeAt("clapFill", t: dropAt + 2 * barSec, purpose: "clap fill in the drop")
+            placeAt("impact", t: dropAt + 4 * barSec, purpose: "impact ride mid drop")
+            placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
+            placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
+            placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
             decisions.append(
                 AutoDecision(
                     kind: .addedRiserIntoDrop,
                     songTitle: nil,
-                    detail: "festival mix-window stack (riser+snare+tape+impact)"
+                    detail: "festival take-out + drop ride (riser/snare/tape then air/clap/impact)"
                 )
             )
-        } else if !alreadyHas("impact", near: dropAt) {
-            sfx.append(
-                AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat")
-            )
+        } else if !alreadyHas("impact", near: dropAt + barSec) {
+            placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
             decisions.append(
                 AutoDecision(
                     kind: .addedRiserIntoDrop,
                     songTitle: nil,
-                    detail: "pivot hard-cut slam (impact only)"
+                    detail: "pivot hard-cut slam (impact after attack)"
                 )
             )
         }
     }
 
     /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least
-    /// as loud as the bed verse. No fade-in on the join.
+    /// as loud as the bed verse. Vocal stems get RMS makeup (clip volume may
+    /// exceed 1.0). No fade-in on the join.
     private static func boostJoinClipVolumes(
         placements: inout [AutoClipPlacement],
         pulseRegions: [AutoClubPulse.Region],
-        beatSec: Double
+        beatSec: Double,
+        barSec: Double,
+        profiles: [UUID: AutoSongProfile]
     ) {
         let dropStarts = pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
         func nearDrop(_ t: Double) -> Bool {
@@ -3950,15 +4010,63 @@ enum AutoRemixPlanner {
             AutoGainPolicy.pivotGrainVolume
         )
 
+        var referenceRMS = -120.0
+        for p in placements where p.role == .dominant && p.stemKind == nil
+            && !nearDrop(p.timelineStart) && p.timelineDuration > beatSec * 8 {
+            if let signal = profiles[p.songID]?.analysis.signal {
+                let rms = signal.meanRMSDB(from: p.sourceStart, to: p.sourceStart + 4)
+                if rms > referenceRMS { referenceRMS = rms }
+            }
+        }
+
         for i in placements.indices {
             let p = placements[i]
             let pivot = isPivotGrain(p)
             let dropLead = p.role == .dominant && nearDrop(p.timelineStart)
             let bedUnderDrop = p.role == .supporting && nearDrop(p.timelineStart) && !pivot
             guard pivot || dropLead || bedUnderDrop else { continue }
-            placements[i].volume = max(placements[i].volume, floor)
+            var vol = max(p.volume, floor)
+            if dropLead, p.stemKind == .vocals {
+                vol = max(vol, vocalStemMakeup(placement: p, referenceRMS: referenceRMS, profiles: profiles, barSec: barSec))
+            }
+            placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
             placements[i].fadeIn = .hardCut
         }
+    }
+
+    /// Makeup so a quieter vocal stem matches bed-verse RMS.
+    private static func vocalStemMakeup(
+        placement p: AutoClipPlacement,
+        referenceRMS: Double,
+        profiles: [UUID: AutoSongProfile],
+        barSec: Double
+    ) -> Double {
+        let window = max(0.5, min(barSec, 2.6))
+        let srcEnd = p.sourceStart + window
+        if let signal = profiles[p.songID]?.analysis.signal {
+            let stemRMS = signal.meanStemVocalRMSDB(from: p.sourceStart, to: srcEnd)
+            if referenceRMS > -80, stemRMS > -80, stemRMS < referenceRMS - 0.4 {
+                let delta = min(8.0, referenceRMS - stemRMS)
+                return pow(10.0, delta / 20.0)
+            }
+            if !signal.stemVocalPresenceCurve.isEmpty, !signal.energyCurve.isEmpty {
+                func mean(_ curve: [Double]) -> Double {
+                    let hop = max(signal.hopSeconds, 0.05)
+                    let lo = max(0, Int(p.sourceStart / hop))
+                    let hi = min(curve.count - 1, Int(srcEnd / hop))
+                    guard hi >= lo else { return 0 }
+                    var s = 0.0
+                    for i in lo...hi { s += curve[i] }
+                    return s / Double(hi - lo + 1)
+                }
+                let stemE = mean(signal.stemVocalPresenceCurve)
+                let mixE = mean(signal.energyCurve)
+                if stemE > 0.04, mixE > stemE * 1.05 {
+                    return min(AutoGainPolicy.maxClipVolume, mixE / stemE)
+                }
+            }
+        }
+        return AutoGainPolicy.vocalStemMakeupDefault
     }
 
     private static func countHandoffs(_ placed: [PlacedSlot]) -> Int {

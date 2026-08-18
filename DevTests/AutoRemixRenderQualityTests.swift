@@ -808,15 +808,31 @@ do {
                 String(format: "verse=%.2f drop=%.2f delta=%.2f", verseDB, dropDB, verseDB - dropDB)
             )
             let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
-            let lo = drop1 - plan.barSeconds * 2.5
-            let hi = drop1 + plan.beatSeconds
-            let joinIDs = Set(musical.filter {
-                $0.timelineStart >= lo - 0.05 && $0.timelineStart <= hi + 0.05
+            let takeIDs = Set(musical.filter {
+                $0.timelineEnd <= drop1 + 0.05 && $0.timelineEnd >= drop1 - plan.beatSeconds * 1.6
             }.map(\.assetID))
             check(
-                "Auto mashup mix-window SFX is festival stack (riser+snare+tape+impact)",
-                joinIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"]),
-                "ids=\(joinIDs.sorted())"
+                "Auto mashup take-out is riser+snare+tape ending before Drop 1",
+                takeIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop"]),
+                "ids=\(takeIDs.sorted())"
+            )
+            let rideIDs = Set(musical.filter {
+                $0.timelineStart >= drop1 + plan.beatSeconds - 0.05
+                    && $0.timelineStart < drop1 + plan.barSeconds * 8.5
+            }.map(\.assetID))
+            check(
+                "Auto mashup mix-window SFX rides the drop (air/clap/impact)",
+                rideIDs.isSuperset(of: ["airSweep", "clapFill", "impact"]),
+                "ids=\(rideIDs.sorted())"
+            )
+            let firstBar = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: drop1 + 0.05, to: drop1 + plan.barSeconds
+            )
+            check(
+                "Auto mashup Drop 1 first-bar RMS is within 1.5 dB of verse (or louder)",
+                firstBar + 1.5 >= verseDB,
+                String(format: "verse=%.2f bar1=%.2f delta=%.2f", verseDB, firstBar, verseDB - firstBar)
             )
         }
     case .failure(let message):

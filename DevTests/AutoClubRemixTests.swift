@@ -2808,23 +2808,55 @@ do {
                 )
             }
 
-            // Festival SFX on the pivot join: riser + snare roll + tape-stop take-out + impact.
+            // Take-out ends on the last pivot beat; Drop 1 attack stays clear.
             let mixLo = drop1Start - plan.barSeconds * 2.5
             let mixHi = drop1Start + plan.beatSeconds
             let joinSFX = plan.sfxEvents.filter {
                 $0.timelineStart >= mixLo - 0.05 && $0.timelineStart <= mixHi + 0.05
                     && !SoundEffectLibrary.isPulseLayer($0.assetID)
             }
-            let joinIDs = Set(joinSFX.map(\.assetID))
+            let takeOutIDs = Set(joinSFX.filter {
+                $0.timelineEnd <= drop1Start + 0.05 && $0.timelineEnd >= drop1Start - plan.beatSeconds * 1.6
+            }.map(\.assetID))
             check(
-                "Britney: mix-window SFX is festival stack (riser+snare+tape+impact)",
-                joinIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"]),
-                "ids=\(joinIDs.sorted())"
+                "Britney: mix-window take-out is riser+snare+tape ending before Drop 1",
+                takeOutIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop"]),
+                "ids=\(takeOutIDs.sorted()) endTimes=\(joinSFX.map { String(format: "%@=%.2f", $0.assetID, $0.timelineEnd) })"
             )
+            let attackCover = plan.sfxEvents.filter { ev in
+                !SoundEffectLibrary.isPulseLayer(ev.assetID)
+                    && ev.timelineStart < drop1Start + plan.beatSeconds - 0.02
+                    && ev.timelineEnd > drop1Start + 0.02
+            }
             check(
-                "Britney: mix-window has more than 2–4 sparse hits",
-                joinSFX.count >= 4,
-                "count=\(joinSFX.count) ids=\(joinSFX.map(\.assetID))"
+                "Britney: SFX do not overlap Drop 1 first syllable",
+                attackCover.isEmpty,
+                "cover=\(attackCover.map { "\($0.assetID)@\(String(format: "%.2f", $0.timelineStart))" })"
+            )
+            let dropRide = plan.sfxEvents.filter { ev in
+                !SoundEffectLibrary.isPulseLayer(ev.assetID)
+                    && ev.timelineStart >= drop1Start + plan.beatSeconds - 0.05
+                    && ev.timelineStart < drop1Start + plan.barSeconds * 8.5
+            }
+            let rideIDs = Set(dropRide.map(\.assetID))
+            check(
+                "Britney: SFX ride the drop (air/clap/extra impact, not join-only)",
+                rideIDs.isSuperset(of: ["airSweep", "clapFill", "impact"]) && dropRide.count >= 4,
+                "count=\(dropRide.count) ids=\(rideIDs.sorted())"
+            )
+            let titleOnsets = plan.pulseRegions.filter {
+                ($0.role == .groove || $0.role == .introTease) && $0.timelineStart < drop1Start - 0.25
+            }.map(\.timelineStart)
+            let buriedTitle = plan.sfxEvents.filter { ev in
+                !SoundEffectLibrary.isPulseLayer(ev.assetID)
+                    && titleOnsets.contains { t in
+                        ev.timelineStart < t + 4 && ev.timelineEnd > t
+                    }
+            }
+            check(
+                "Britney: SFX do not cover title-hook onsets",
+                buriedTitle.isEmpty,
+                "buried=\(buriedTitle.map(\.assetID)) onsets=\(titleOnsets.map { String(format: "%.1f", $0) })"
             )
 
             check(
@@ -2926,7 +2958,7 @@ do {
             let appliedIDs = Set(appliedSFX.flatMap(\.clips).compactMap(\.soundEffectID))
             check(
                 "Britney: applied SFX rows mix the festival stack (not dropped on one lane)",
-                appliedIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"]),
+                appliedIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
                 "rows=\(appliedSFX.count) ids=\(appliedIDs.sorted())"
             )
             check(
@@ -2936,12 +2968,19 @@ do {
             )
         }
 
-        // Pivot Drop 1: festival stack still includes the impact slam on the downbeat.
+        // Take-out is off the downbeat so Drop 1 attack is not ducked.
         let impacts = plan.sfxEvents.filter { $0.assetID == "impact" }
         check("Mashup emits impact slam on a drop", !impacts.isEmpty)
         if let drop1 = dropLeads.map(\.timelineStart).min() {
-            let onDrop1 = impacts.contains { abs($0.timelineStart - drop1) < 0.35 }
-            check("Mashup impact lands on Drop 1 downbeat", onDrop1)
+            let onAttack = impacts.contains {
+                $0.timelineStart >= drop1 - 0.05 && $0.timelineStart < drop1 + plan.beatSeconds
+            }
+            check("Mashup impact is not on Drop 1 first syllable", !onAttack)
+            let riding = impacts.contains {
+                $0.timelineStart >= drop1 + plan.beatSeconds - 0.05
+                    && $0.timelineStart <= drop1 + plan.barSeconds * 8.5
+            }
+            check("Mashup impact rides Drop 1 after the attack", riding)
         }
     case .failure(let message):
         check("Bed under hook mashup", false, message)
@@ -3079,19 +3118,35 @@ do {
             "wallpaper=\(wallpaper.map(\.assetID)) @ \(wallpaper.map { String(format: "%.1f", $0.timelineStart) })"
         )
         check(
-            "Club remix has impact on Drop 1",
+            "Club remix has impact riding Drop 1 (not on the first syllable)",
             drops.first.map { d0 in
-                musical.contains { $0.assetID == "impact" && abs($0.timelineStart - d0.timelineStart) < 0.35 }
+                musical.contains {
+                    $0.assetID == "impact"
+                        && $0.timelineStart >= d0.timelineStart + plan.beatSeconds - 0.05
+                        && $0.timelineStart <= d0.timelineStart + plan.barSeconds * 8.5
+                }
             } ?? false
         )
         check(
-            "Club remix Drop 1 mix window is festival density (riser+snare+tape+impact)",
+            "Club remix Drop 1 take-out is riser+snare+tape ending before the attack",
             drops.first.map { d0 in
-                let lo = d0.timelineStart - plan.barSeconds * 4.5
-                let hi = d0.timelineStart + plan.beatSeconds
-                let join = musical.filter { $0.timelineStart >= lo - 0.05 && $0.timelineStart <= hi + 0.05 }
-                let ids = Set(join.map(\.assetID))
-                return ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "impact"])
+                let take = musical.filter {
+                    $0.timelineEnd <= d0.timelineStart + 0.05
+                        && $0.timelineEnd >= d0.timelineStart - plan.beatSeconds * 1.6
+                }
+                let ids = Set(take.map(\.assetID))
+                return ids.isSuperset(of: ["riser", "snareBuild", "tapeStop"])
+            } ?? false
+        )
+        check(
+            "Club remix Drop 1 mix window rides the drop (air/clap/impact)",
+            drops.first.map { d0 in
+                let ride = musical.filter {
+                    $0.timelineStart >= d0.timelineStart + plan.beatSeconds - 0.05
+                        && $0.timelineStart < d0.timelineStart + plan.barSeconds * 8.5
+                }
+                let ids = Set(ride.map(\.assetID))
+                return ids.isSuperset(of: ["airSweep", "clapFill", "impact"]) && ride.count >= 4
             } ?? false
         )
         let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
@@ -3795,6 +3850,11 @@ do {
             "n=\(guestDrop.count) kinds=\(guestKinds)"
         )
         check("Incoming vocal hard-cut (no fade-in)", guestDrop.allSatisfy { $0.fadeIn.type == .none })
+        check(
+            "Hook-replace Drop 1 vocal stem gets RMS makeup (clip volume may exceed 1.0)",
+            guestDrop.allSatisfy { $0.volume > 1.01 && $0.volume <= AutoGainPolicy.maxClipVolume },
+            "vols=\(guestDrop.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
+        )
         var bedKinds = Set<AutoStemKind>()
         for p in plan.placements where p.songID == bedID && p.role == .supporting {
             guard p.timelineStart < drop0.timelineStart + plan.barSeconds else { continue }

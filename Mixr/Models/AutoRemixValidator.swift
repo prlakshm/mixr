@@ -247,35 +247,34 @@ nonisolated enum AutoRemixValidator {
             !gap.reason.localizedCaseInsensitiveContains("void")
         }
 
-        // ── 5. Every riser/build SFX must lead to a payoff ──
-        let payoffStarts = plan.placements.filter { $0.role == .dominant }.map(\.timelineStart)
+        // ── 5. Build SFX must resolve into a drop take-out or ride the drop.
+        // Title-hook / groove dominant starts are NOT payoffs — a riser
+        // aimed at 15.3s would bury the opening title line.
+        let dropRegions = plan.pulseRegions.filter { $0.role == .drop }
+        let dropStarts = dropRegions.map(\.timelineStart)
         let beforeSFX = plan.sfxEvents.count
         plan.sfxEvents.removeAll { event in
             guard ["riser", "snareBuild", "reverseCymbal", "airSweep"].contains(event.assetID) else {
                 return false
             }
-            let lands: Bool
-            switch event.assetID {
-            case "riser", "snareBuild":
-                // Builds must resolve into a downbeat payoff — start-near-intro
-                // is not enough (would keep orphan risers at t=0).
-                lands = payoffStarts.contains { abs($0 - event.timelineEnd) < 0.45 }
-            default:
-                // Atmosphere may start on a section entrance or end on a downbeat.
-                lands = payoffStarts.contains { abs($0 - event.timelineEnd) < 0.45 }
-                    || payoffStarts.contains { abs($0 - event.timelineStart) < 0.55 }
+            let riding = dropRegions.contains { drop in
+                event.timelineStart >= drop.timelineStart + plan.beatSeconds - 0.05
+                    && event.timelineStart < drop.timelineEnd - 0.05
             }
-            if !lands {
-                decisions.append(
-                    AutoDecision(
-                        kind: .removedInvalidSFX,
-                        songTitle: nil,
-                        detail: "\(event.assetID) without payoff"
-                    )
+            if riding { return false }
+            let takeOut = dropStarts.contains {
+                abs(($0 - plan.beatSeconds) - event.timelineEnd) < 0.55
+                    || abs($0 - event.timelineEnd) < 0.45
+            }
+            if takeOut { return false }
+            decisions.append(
+                AutoDecision(
+                    kind: .removedInvalidSFX,
+                    songTitle: nil,
+                    detail: "\(event.assetID) without payoff"
                 )
-                return true
-            }
-            return false
+            )
+            return true
         }
         if plan.sfxEvents.count < beforeSFX {
             warnings.append("Removed build SFX that had no clear payoff.")

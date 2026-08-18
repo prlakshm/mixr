@@ -320,6 +320,7 @@ enum AutoStemVocalCurve {
             overallConfidence: stem.overallConfidence
         )
         merged.stemVocalPresenceCurve = stem.energyCurve
+        merged.stemVocalRMSCurveDB = stem.rmsCurveDB
         if merged.hopSeconds <= 0 {
             merged.hopSeconds = stem.hopSeconds
         }

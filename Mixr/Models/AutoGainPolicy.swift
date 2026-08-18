@@ -106,6 +106,15 @@ nonisolated enum AutoGainPolicy {
     /// Incoming Drop 1 / hook-replace attack — full clip volume, no fade-in.
     static let incomingDropVolume = 1.0
 
+    /// Isolated vocal stems are quieter than a full mix. Auto may write
+    /// clip volume above 1.0 as makeup so Drop 1 first-bar RMS matches
+    /// the bed verse. Playback/export multiply this through; do not clamp
+    /// to unity in the applier.
+    static let maxClipVolume = 2.5
+
+    /// Fallback makeup when a vocal stem has no RMS curve (~+4 dB).
+    static let vocalStemMakeupDefault = 1.58
+
     /// Placement volume for an energy-storied club / mashup slot.
     /// Enough contrast for build-out subtraction vs drop payoff without
     /// creating unexplained join jumps > 4 dB in offline PCM.
