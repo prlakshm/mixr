@@ -476,8 +476,8 @@ nonisolated enum AutoChorusIsland {
         )
     }
 
-    /// Whisper word onset → hard-cut downbeat of the bar the word sits in.
-    /// Never the following bar (that cuts the title word). Never fade-in.
+    /// Whisper word onset → title-hook clip start: **one beat before** the
+    /// word so a hard cut + stretch cannot eat the first phoneme. Never after.
     static func snapLyricTitleHook(
         signal: SongSignalFeatures,
         downbeats: [Double],
@@ -486,7 +486,21 @@ nonisolated enum AutoChorusIsland {
         guard let t = signal.lyricTitleHookStart, t >= 0, barSeconds > 0.05 else {
             return nil
         }
-        return snapLyricWordOnset(t, downbeats: downbeats, barSeconds: barSeconds)
+        return titleHookClipStart(lyric: t, downbeats: downbeats, barSeconds: barSeconds)
+    }
+
+    /// Title-hook clip start = lyric onset minus one beat (or previous
+    /// downbeat if it sits in that pad). The sung title token is inside the
+    /// clip, not at t=0. Never after the word.
+    static func titleHookClipStart(
+        lyric: Double,
+        downbeats: [Double],
+        barSeconds: Double
+    ) -> Double {
+        let beat = barSeconds / 4
+        let padded = max(0, lyric - beat)
+        let snapped = snapLyricWordOnset(padded, downbeats: downbeats, barSeconds: barSeconds)
+        return min(snapped, padded)
     }
 
     /// Lyric word onset → hard-cut. Snap to a downbeat **at or before** `t`,

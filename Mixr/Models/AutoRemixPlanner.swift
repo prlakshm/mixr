@@ -1425,8 +1425,9 @@ enum AutoRemixPlanner {
             }
         }
 
-        // Whisper lyrics.json is the source of truth: place at the lyric snap
-        // (at-or-before). Do not substitute a later catalog chorus (50.38 → 50.5).
+        // Whisper lyrics.json is the source of truth: place one beat before
+        // the lyric word (hard cut + stretch must not eat the first phoneme).
+        // Do not substitute a later catalog chorus.
         if let measured,
            profile.analysis.signal?.lyricTitleHookStart != nil,
            !overlapsUsed(measured.startSeconds, bars: wantBars)

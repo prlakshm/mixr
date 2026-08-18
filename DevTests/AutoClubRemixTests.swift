@@ -3476,10 +3476,13 @@ do {
         phraseSeconds: oopsPhrase,
         title: oops.title
     ) ?? -1
+    let beat = oopsBar / 4
     check(
-        "9843f9b: titleHookOnset keeps lyric onset (does not snap to catalog 50.5)",
-        lateOnset <= lateLyric + 0.02 && abs(lateOnset - catalogPeak) > 0.08,
-        String(format: "onset=%.2f lyric=%.2f catalog=%.1f", lateOnset, lateLyric, catalogPeak)
+        "599dec4: title-hook start is one beat before lyric (word inside clip, not at t=0)",
+        lateOnset < lateLyric - 0.05
+            && abs(lateOnset - (lateLyric - beat)) < oopsBar * 0.35
+            && abs(lateOnset - catalogPeak) > 0.08,
+        String(format: "onset=%.2f lyric=%.2f beat=%.2f catalog=%.1f", lateOnset, lateLyric, beat, catalogPeak)
     )
 
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
@@ -3635,17 +3638,21 @@ do {
                 $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
             }?.detail ?? ""
             check(
-                "9843f9b: bed placed start is lyric or earlier downbeat, not catalog 50.5",
-                hookSrc <= bedLyric + 0.02 && abs(hookSrc - catalogPeak) > 0.08,
+                "599dec4: bed placed start is one beat before lyric, not equal, not catalog 50.5",
+                hookSrc < bedLyric - 0.05
+                    && abs(hookSrc - (bedLyric - plan.barSeconds / 4)) < plan.barSeconds * 0.35
+                    && abs(hookSrc - catalogPeak) > 0.08,
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
             )
             check(
-                "9843f9b: dump chosen is not catalog 50.5",
-                !bedDump.contains("chosen=50.5") && (bedDump.contains("lyric=50.38") || bedDump.contains("lyric=50.4")),
+                "599dec4: dump placed startSeconds < lyric",
+                hookSrc < bedLyric - 0.05
+                    && (bedDump.contains("lyric=50.38") || bedDump.contains("lyric=50.4"))
+                    && !bedDump.contains("chosen=50.38"),
                 bedDump
             )
             check(
-                "9843f9b: Drop 1 still lyric hook ~60s (not verse, not after lyric)",
+                "599dec4: Drop 1 still lyric hook ~60s (not verse, not after lyric)",
                 guestSrc <= dropLyric + 0.02 && abs(guestSrc - dropLyric) < plan.barSeconds * 0.55 && abs(guestSrc - 40.0) > 4.0,
                 String(format: "src=%.2f lyric=%.2f %@", guestSrc, dropLyric, guestDump)
             )
