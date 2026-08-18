@@ -422,11 +422,14 @@ if let plan = confidentPlan, let song = confidentSong {
 
     // Click gate at Auto-introduced joins. Fixture beat-clicks inside
     // continuous source are not remix defects. Impacts, crashes, tape
-    // stops, and pre-drop voids are allowed to punch (hype = subtraction
-    // then a downbeat).
+    // stops, festival drop-ride sweeps, and pre-drop voids are allowed
+    // to punch (hype = subtraction then a downbeat).
     var worstClick = 0.0
     var worstClickAt = 0.0
-    let punchSFX: Set<String> = ["impact", "bassDrop", "crash", "tapeStop", "clapFill"]
+    let punchSFX: Set<String> = [
+        "impact", "bassDrop", "crash", "tapeStop", "clapFill",
+        "airSweep", "riser", "snareBuild",
+    ]
     let inspectTimes: [Double] = plan.placements
         .filter { !$0.continuesPrevious && $0.timelineStart > 0.05 }
         .map(\.timelineStart)

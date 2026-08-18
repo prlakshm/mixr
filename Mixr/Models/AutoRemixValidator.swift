@@ -253,20 +253,20 @@ nonisolated enum AutoRemixValidator {
         let dropRegions = plan.pulseRegions.filter { $0.role == .drop }
         let dropStarts = dropRegions.map(\.timelineStart)
         let beforeSFX = plan.sfxEvents.count
-        plan.sfxEvents.removeAll { event in
+        let keptSFX = plan.sfxEvents.filter { event in
             guard ["riser", "snareBuild", "reverseCymbal", "airSweep"].contains(event.assetID) else {
-                return false
+                return true
             }
             let riding = dropRegions.contains { drop in
-                event.timelineStart >= drop.timelineStart + plan.beatSeconds - 0.05
+                event.timelineStart >= drop.timelineStart + beatSec - 0.05
                     && event.timelineStart < drop.timelineEnd - 0.05
             }
-            if riding { return false }
+            if riding { return true }
             let takeOut = dropStarts.contains {
-                abs(($0 - plan.beatSeconds) - event.timelineEnd) < 0.55
+                abs(($0 - beatSec) - event.timelineEnd) < 0.55
                     || abs($0 - event.timelineEnd) < 0.45
             }
-            if takeOut { return false }
+            if takeOut { return true }
             decisions.append(
                 AutoDecision(
                     kind: .removedInvalidSFX,
@@ -274,8 +274,9 @@ nonisolated enum AutoRemixValidator {
                     detail: "\(event.assetID) without payoff"
                 )
             )
-            return true
+            return false
         }
+        plan.sfxEvents = keptSFX
         if plan.sfxEvents.count < beforeSFX {
             warnings.append("Removed build SFX that had no clear payoff.")
         }
