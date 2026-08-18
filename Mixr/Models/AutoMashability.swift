@@ -258,7 +258,8 @@ nonisolated enum AutoMashability {
                duration: guest.analysis.durationSeconds,
                introEnd: introEnd,
                phraseSeconds: phrase,
-               title: guest.title
+               title: guest.title,
+               leadIn: .oneBeat
            ) {
             return hit
         }

@@ -129,14 +129,60 @@ nonisolated enum AutoPivotWord {
 
     /// Source second of the last 1-beat grain of a completed phrase.
     /// `phraseSourceStart`…`phraseSourceEnd` must already have played once.
+    /// Prefers the last pivot-token / vocal-energy beat so the loop is
+    /// intelligible (not an empty tail rest).
     static func lastBeatGrainSource(
         phraseSourceStart: Double,
         phraseSourceEnd: Double,
         beatSec: Double,
-        tempoRatio: Double
+        tempoRatio: Double,
+        pivotToken: String? = nil,
+        lyricWords: [(t: Double, word: String)] = [],
+        vocalPresence: [Double] = [],
+        hopSeconds: Double = 0.1
     ) -> Double {
-        let grainSource = beatSec * max(tempoRatio, 0.0001)
-        let end = max(phraseSourceStart + grainSource, phraseSourceEnd)
-        return max(phraseSourceStart, end - grainSource)
+        let grainDur = beatSec * max(tempoRatio, 0.0001)
+        let phraseLo = phraseSourceStart
+        let phraseHi = max(phraseSourceStart + grainDur, phraseSourceEnd)
+        func clampGrain(_ t: Double) -> Double {
+            min(max(t, phraseLo), max(phraseLo, phraseHi - grainDur))
+        }
+
+        if let token = pivotToken?.lowercased(), !lyricWords.isEmpty {
+            let hits = lyricWords.filter { w in
+                let word = w.word.lowercased().filter { $0.isLetter }
+                return (word == token || word.contains(token))
+                    && w.t >= phraseLo && w.t < phraseHi
+            }
+            if let last = hits.max(by: { $0.t < $1.t }) {
+                return clampGrain(last.t - grainDur * 0.15)
+            }
+        }
+
+        if !vocalPresence.isEmpty, hopSeconds > 0.001 {
+            let searchLo = max(phraseLo, phraseHi - beatSec * 8)
+            var bestT = phraseHi - grainDur
+            var bestV = -1.0
+            var t = searchLo
+            while t + grainDur <= phraseHi + 0.001 {
+                let lo = max(0, Int(t / hopSeconds))
+                let hi = min(vocalPresence.count - 1, Int((t + grainDur) / hopSeconds))
+                if hi >= lo {
+                    var s = 0.0
+                    for i in lo...hi { s += vocalPresence[i] }
+                    let v = s / Double(hi - lo + 1)
+                    if v > bestV {
+                        bestV = v
+                        bestT = t
+                    }
+                }
+                t += beatSec
+            }
+            if bestV >= 0.18 {
+                return clampGrain(bestT)
+            }
+        }
+
+        return max(phraseLo, phraseHi - grainDur)
     }
 }

@@ -709,6 +709,7 @@ enum AutoRemixPlanner {
                         beatSec: beat,
                         tuning: tuning,
                         grainStem: profile.stems.hasVocals ? .vocals : nil,
+                        signal: profile.analysis.signal,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
@@ -1064,6 +1065,7 @@ enum AutoRemixPlanner {
                         beatSec: beat,
                         tuning: tuning,
                         grainStem: profile.stems.hasVocals ? .vocals : nil,
+                        signal: profile.analysis.signal,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
@@ -1194,6 +1196,7 @@ enum AutoRemixPlanner {
         beatSec: Double,
         tuning: AutoTuning,
         grainStem: AutoStemKind? = nil,
+        signal: SongSignalFeatures? = nil,
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
         intentionalGaps: inout [AutoIntentionalGap],
@@ -1231,11 +1234,24 @@ enum AutoRemixPlanner {
             )
             return
         }
+        let pivot = AutoPivotWord.preferredPivot(
+            deckATitle: deckATitle ?? "",
+            deckBTitle: deckBTitle ?? deckATitle ?? ""
+        )
+        let vocalCurve = {
+            guard let signal else { return [Double]() }
+            if !signal.stemVocalPresenceCurve.isEmpty { return signal.stemVocalPresenceCurve }
+            return signal.vocalPresenceCurve
+        }()
         let grainSource = AutoPivotWord.lastBeatGrainSource(
             phraseSourceStart: completedPhrase.sourceStart,
             phraseSourceEnd: phraseEnd,
             beatSec: beatSec,
-            tempoRatio: completedPhrase.tempoRatio
+            tempoRatio: completedPhrase.tempoRatio,
+            pivotToken: pivot,
+            lyricWords: signal?.lyricWords ?? [],
+            vocalPresence: vocalCurve,
+            hopSeconds: signal?.hopSeconds ?? 0.1
         )
 
         // Trim Deck A dominants out of the loop window (wallpaper owns it).
@@ -1259,11 +1275,6 @@ enum AutoRemixPlanner {
         }
         pulseRegions.append(
             AutoClubPulse.Region(role: .buildOut, timelineStart: loopStart, timelineEnd: dropTimelineStart)
-        )
-
-        let pivot = AutoPivotWord.preferredPivot(
-            deckATitle: deckATitle ?? "",
-            deckBTitle: deckBTitle ?? deckATitle ?? ""
         )
 
         for i in 0..<repeats {
@@ -2150,13 +2161,17 @@ enum AutoRemixPlanner {
         let vocalDensity = ordered.map {
             $0.analysis.meanVocalDensity(from: 0, to: $0.analysis.durationSeconds)
         }.max() ?? 0.5
-        let mashupFlavor = AutoClubFlavor.choose(
+        var mashupFlavor = AutoClubFlavor.choose(
             drumStrength: pulseSource.analysis.drumStrength,
             bassDensity: pulseSource.analysis.bassDensity,
             vocalDensity: vocalDensity,
             bpm: targetBPM,
             seed: seed ^ 0xD1_F10
         )
+        // Mashup is a festival rewrite. Calvin is solo piano-ballad only.
+        if mode == .mashup, mashupFlavor == .calvin {
+            mashupFlavor = .diplo
+        }
         decisions.append(
             AutoDecision(kind: .choseClubFlavor, songTitle: pulseSource.title, detail: mashupFlavor.rawValue)
         )
@@ -2828,6 +2843,9 @@ enum AutoRemixPlanner {
             if isTitleHookSlot, headSeconds == 0 {
                 bodyFadeIn = .hardCut
             }
+            let hookVolume = isTitleHookSlot
+                ? max(baseVolume, AutoGainPolicy.incomingDropVolume)
+                : baseVolume
             // Xirex: hard cut into the hook-replace drop (no crossfade, no fade-in).
             if entry == .hardHypeCut, headSeconds == 0 {
                 bodyFadeIn = .hardCut
@@ -2860,9 +2878,9 @@ enum AutoRemixPlanner {
                     pitchFX.reverbPreset = .smallRoom
                     pitchFX = AutoSupportedEffects.sanitize(pitchFX)
 
-                    segments.append((bodyStart, cleanA, bodyFX, baseVolume, bodyFadeIn, .none))
-                    segments.append((bodyStart + cleanA, partBars, pitchFX, baseVolume, .none, .none))
-                    segments.append((bodyStart + cleanA + partBars, partBars, bodyFX, baseVolume, .none, bodyFadeOut))
+                    segments.append((bodyStart, cleanA, bodyFX, hookVolume, bodyFadeIn, .none))
+                    segments.append((bodyStart + cleanA, partBars, pitchFX, hookVolume, .none, .none))
+                    segments.append((bodyStart + cleanA + partBars, partBars, bodyFX, hookVolume, .none, bodyFadeOut))
                     emittedPitchMoment = true
                     decisions.append(
                         AutoDecision(
@@ -2874,7 +2892,7 @@ enum AutoRemixPlanner {
                 }
             }
             if !emittedPitchMoment {
-                segments.append((bodyStart, bodyDuration, bodyFX, baseVolume, bodyFadeIn, bodyFadeOut))
+                segments.append((bodyStart, bodyDuration, bodyFX, hookVolume, bodyFadeIn, bodyFadeOut))
             }
 
             if isTitleHookSlot {
@@ -2975,6 +2993,7 @@ enum AutoRemixPlanner {
                         beatSec: beatSec,
                         tuning: tuning,
                         grainStem: (bedStems?.hasVocals ?? false) ? .vocals : nil,
+                        signal: ordered.first(where: { $0.songID == bedID })?.analysis.signal,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
@@ -3902,8 +3921,8 @@ enum AutoRemixPlanner {
     /// Festival mix-window + drop ride.
     /// Take-out (riser/snare/tape) ends on the last pivot beat — not on the
     /// guest's first syllable. Extra impacts / air sweep / clap fill ride
-    /// the drop bars after that attack. Sparse flavors stay impact-only,
-    /// still off the downbeat so the song is not ducked.
+    /// the drop bars after that attack. Drop 1 always gets this stack
+    /// (mashup is a festival rewrite; Calvin is solo-ballad only).
     private static func appendFestivalMixWindowStack(
         dropAt: Double,
         dropEnd: Double,
@@ -3946,35 +3965,25 @@ enum AutoRemixPlanner {
             sfx.append(AutoSFXEvent(assetID: id, timelineStart: t, purpose: purpose))
         }
 
-        if flavor.bias.maximalistStacks {
-            placeEnding("riser", atEnd: takeOutEnd, purpose: "riser take-out before the drop")
-            placeEnding("snareBuild", atEnd: takeOutEnd, purpose: "snare-roll take-out before the drop")
-            placeEnding("tapeStop", atEnd: takeOutEnd, purpose: "tape-stop take-out")
-            // Ride the drop after the first syllable — extra rows on collision.
-            placeAt("airSweep", t: dropAt + beatSec, purpose: "air sweep after drop attack")
-            placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
-            placeAt("clapFill", t: dropAt + 2 * barSec, purpose: "clap fill in the drop")
-            placeAt("impact", t: dropAt + 4 * barSec, purpose: "impact ride mid drop")
-            placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
-            placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
-            placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
-            decisions.append(
-                AutoDecision(
-                    kind: .addedRiserIntoDrop,
-                    songTitle: nil,
-                    detail: "festival take-out + drop ride (riser/snare/tape then air/clap/impact)"
-                )
+        placeEnding("riser", atEnd: takeOutEnd, purpose: "riser take-out before the drop")
+        placeEnding("snareBuild", atEnd: takeOutEnd, purpose: "snare-roll take-out before the drop")
+        placeEnding("tapeStop", atEnd: takeOutEnd, purpose: "tape-stop take-out")
+        // Ride the drop after the first syllable — extra rows on collision.
+        placeAt("airSweep", t: dropAt + beatSec, purpose: "air sweep after drop attack")
+        placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
+        placeAt("clapFill", t: dropAt + 2 * barSec, purpose: "clap fill in the drop")
+        placeAt("impact", t: dropAt + 4 * barSec, purpose: "impact ride mid drop")
+        placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
+        placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
+        placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
+        decisions.append(
+            AutoDecision(
+                kind: .addedRiserIntoDrop,
+                songTitle: nil,
+                detail: "festival take-out + drop ride (riser/snare/tape then air/clap/impact)"
             )
-        } else if !alreadyHas("impact", near: dropAt + barSec) {
-            placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
-            decisions.append(
-                AutoDecision(
-                    kind: .addedRiserIntoDrop,
-                    songTitle: nil,
-                    detail: "pivot hard-cut slam (impact after attack)"
-                )
-            )
-        }
+        )
+        _ = flavor
     }
 
     /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least
@@ -4024,7 +4033,11 @@ enum AutoRemixPlanner {
             let pivot = isPivotGrain(p)
             let dropLead = p.role == .dominant && nearDrop(p.timelineStart)
             let bedUnderDrop = p.role == .supporting && nearDrop(p.timelineStart) && !pivot
-            guard pivot || dropLead || bedUnderDrop else { continue }
+            let titleHookCopy = p.role == .dominant && p.stemKind == nil
+                && !nearDrop(p.timelineStart)
+                && p.timelineDuration > beatSec * 8
+                && p.timelineStart < (dropStarts.min() ?? .infinity) - barSec
+            guard pivot || dropLead || bedUnderDrop || titleHookCopy else { continue }
             var vol = max(p.volume, floor)
             if dropLead, p.stemKind == .vocals {
                 vol = max(vol, vocalStemMakeup(placement: p, referenceRMS: referenceRMS, profiles: profiles, barSec: barSec))

@@ -458,10 +458,11 @@ nonisolated enum AutoChorusIsland {
         duration: Double,
         introEnd: Double,
         phraseSeconds: Double,
-        title: String?
+        title: String?,
+        leadIn: TitleHookLeadIn = .previousDownbeat
     ) -> Double? {
         if let lyric = snapLyricTitleHook(
-            signal: signal, downbeats: downbeats, barSeconds: barSeconds
+            signal: signal, downbeats: downbeats, barSeconds: barSeconds, leadIn: leadIn
         ) {
             return lyric
         }
@@ -476,31 +477,54 @@ nonisolated enum AutoChorusIsland {
         )
     }
 
-    /// Whisper word onset → title-hook clip start: **one beat before** the
-    /// word so a hard cut + stretch cannot eat the first phoneme. Never after.
+    /// Whisper word onset → title-hook clip start. Bed copies use the
+    /// previous downbeat so the title token is fully inside the clip.
+    /// Drop 1 guest stays one beat before the lyric (Hit me lock).
+    enum TitleHookLeadIn: Sendable {
+        /// Lyric minus one beat, snapped at-or-before (never after).
+        case oneBeat
+        /// Previous downbeat at least ~1 beat before the word (≤ 1 bar).
+        case previousDownbeat
+    }
+
     static func snapLyricTitleHook(
         signal: SongSignalFeatures,
         downbeats: [Double],
-        barSeconds: Double
+        barSeconds: Double,
+        leadIn: TitleHookLeadIn = .previousDownbeat
     ) -> Double? {
         guard let t = signal.lyricTitleHookStart, t >= 0, barSeconds > 0.05 else {
             return nil
         }
-        return titleHookClipStart(lyric: t, downbeats: downbeats, barSeconds: barSeconds)
+        return titleHookClipStart(lyric: t, downbeats: downbeats, barSeconds: barSeconds, leadIn: leadIn)
     }
 
-    /// Title-hook clip start = lyric onset minus one beat (or previous
-    /// downbeat if it sits in that pad). The sung title token is inside the
-    /// clip, not at t=0. Never after the word.
+    /// Title-hook clip start. The sung title token is inside the clip, not
+    /// on the cut. Never after the word.
     static func titleHookClipStart(
         lyric: Double,
         downbeats: [Double],
-        barSeconds: Double
+        barSeconds: Double,
+        leadIn: TitleHookLeadIn = .previousDownbeat
     ) -> Double {
         let beat = barSeconds / 4
-        let padded = max(0, lyric - beat)
-        let snapped = snapLyricWordOnset(padded, downbeats: downbeats, barSeconds: barSeconds)
-        return min(snapped, padded)
+        switch leadIn {
+        case .oneBeat:
+            let padded = max(0, lyric - beat)
+            let snapped = snapLyricWordOnset(padded, downbeats: downbeats, barSeconds: barSeconds)
+            return min(snapped, padded)
+        case .previousDownbeat:
+            let minLead = beat * 0.9
+            let maxLead = barSeconds * 1.05
+            let candidates = downbeats.filter { db in
+                let lead = lyric - db
+                return lead >= minLead && lead <= maxLead
+            }
+            if let db = candidates.max() {
+                return max(0, db)
+            }
+            return max(0, lyric - 2 * beat)
+        }
     }
 
     /// Lyric word onset → hard-cut. Snap to a downbeat **at or before** `t`,

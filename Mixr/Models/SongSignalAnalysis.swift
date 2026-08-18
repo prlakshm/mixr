@@ -55,6 +55,9 @@ struct SongSignalFeatures: Sendable {
     var stemVocalPresenceCurve: [Double] = []
     /// Whisper `lyrics.json` title/hook phrase onset (seconds). Nil → energy fallback.
     var lyricTitleHookStart: Double? = nil
+    /// Whisper word onsets from `lyrics.json` (read-only sidecar). Used to
+    /// place an intelligible pivot grain. Do not rewrite the JSON file.
+    var lyricWords: [(t: Double, word: String)] = []
     /// Isolated vocal-stem short-time RMS (dBFS) when a Demucs sidecar was merged.
     /// Used to makeup Drop 1 clip volume so a quiet stem matches the bed verse.
     var stemVocalRMSCurveDB: [Double] = []

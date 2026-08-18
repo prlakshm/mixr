@@ -215,6 +215,7 @@ struct AutoLyricSidecar: Sendable, Equatable {
         }
         guard var merged = base else { return nil }
         merged.lyricTitleHookStart = start
+        merged.lyricWords = sidecar.words
         return merged
     }
 

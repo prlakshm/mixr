@@ -37,9 +37,13 @@ stay one record.
 Never cut the best / most identifiable lines. Opening titles and hook lines
 **finish**. Do not chop the first “Oops”. Do not chop the first “baby”.
 
-- Pivot grain is the **LAST word of a completed line**, after it has played
-  once — never the first syllable of the title.
+- Pivot grain is the **LAST identifiable word** of a completed line, after it
+  has played once — never the first syllable of the title and never a silent
+  tail rest.
 - Incoming hook starts on the **downbeat of a real line**, not mid-word.
+  Bed title-hook copies start on the **previous downbeat before**
+  `titleHookStart` so the title token is fully inside the clip. Drop 1 guest
+  stays one beat before the lyric. Hard cut, no fade-in.
 - If phrase confidence cannot support a last-word grain, **skip the loop**
   rather than slicing the title. Keep playing through the window so the join
   does not go quiet.
@@ -124,12 +128,15 @@ Typical:
 - **Pivot grain** = last 1-beat of a **completed** chorus/hook line of Deck A,
   preferably a short word that also starts Deck B’s hook (title/hook token
   overlap, e.g. “baby”). Without lyrics, use title/hook tokens
-  (`AutoPivotWord`); grain is still the last 1-beat of the completed phrase.
+  (`AutoPivotWord`); grain is the last identifiable vocal beat of that phrase.
 - Loop that grain 4–8× (1–2 bars; default **8× = 2 bars**) on extra vocal/SFX
   rows, grid-snapped, with HPF sweep / duck the bed kick on that window.
   Pivot **clip volume stays loud** — HPF/blur does the thin.
 - Incoming hook-replace on the next downbeat, same-word attack, **full clip
-  volume** (no fade-in).
+  volume** (no fade-in). Bed title-hook copies start on the previous
+  downbeat before the lyric word so ASR hears the title token.
+- Pivot grain is the last **identifiable** pivot token / vocal beat of the
+  completed line — not a silent tail rest.
 - Wallpaper chops are **this mix-window loop**, not verse decoration and not
   1/8 spam on the drop.
 - **Pulse Drop 1** = that hard cut after the loop — never a fake drop on the
@@ -319,9 +326,10 @@ Propose phrase-aligned opportunities when measured:
 ### Pulse / SFX
 - thin-song club kick / bass weight (first-class SFX menu items; one at a time)
 - **Mix-window stack (maximalist):** riser + snare + tape-stop take-out end
-  on the **last pivot beat** (not the guest downbeat, not title-hook onsets).
+  on the last pivot beat (not the guest downbeat, not title-hook onsets).
   Then extra impacts / air sweep / clap fill ride the **drop bars** on extra
-  SFX rows. Sparse flavors: impact after the attack only.
+  SFX rows. Drop 1 mix windows keep this stack even when flavor would have
+  been sparse; verses stay one record. Sparse Drop 2 stays impact-only.
 - Extra one-shots (crash, reverse cymbal, …) may dress **later** builds /
   Drop 2 — not verses
 - cymbal punctuation ≤ 2 total; no mid-drop wallpaper; no verse wallpaper

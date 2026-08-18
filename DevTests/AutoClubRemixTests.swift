@@ -3506,8 +3506,10 @@ do {
     ) ?? -1
     let oopsBar = oopsProfile.analysis.barSeconds
     check(
-        "lyrics sidecar: titleHookOnset snaps to Oops word, not catalog tail",
-        abs(oopsOnset - oopsHook) < oopsBar * 0.45 && abs(oopsOnset - 50.5) > 1.5,
+        "lyrics sidecar: titleHookOnset snaps before Oops word, not catalog tail",
+        oopsOnset < oopsHook - oopsBar / 4 * 0.9
+            && oopsHook - oopsOnset <= oopsBar * 1.05
+            && abs(oopsOnset - 50.5) > 1.5,
         String(format: "onset=%.2f hook=%.2f tail=50.5 bar=%.2f", oopsOnset, oopsHook, oopsBar)
     )
     let snapped = AutoChorusIsland.snapLyricWordOnset(
@@ -3533,7 +3535,9 @@ do {
     ) ?? -1
     check(
         "lyrics sidecar wins over energy island (hook start is the JSON field, not vocal peak)",
-        abs(overrideOnset - sidecarOverride) < oopsBar * 0.45 && abs(overrideOnset - 48.0) > 2.0,
+        overrideOnset < sidecarOverride - oopsBar / 4 * 0.9
+            && sidecarOverride - overrideOnset <= oopsBar * 1.05
+            && abs(overrideOnset - 48.0) > 2.0,
         String(format: "onset=%.2f lyric=%.2f energy=48.0", overrideOnset, sidecarOverride)
     )
 
@@ -3562,11 +3566,47 @@ do {
     ) ?? -1
     let beat = oopsBar / 4
     check(
-        "599dec4: title-hook start is one beat before lyric (word inside clip, not at t=0)",
-        lateOnset < lateLyric - 0.05
-            && abs(lateOnset - (lateLyric - beat)) < oopsBar * 0.35
-            && abs(lateOnset - catalogPeak) > 0.08,
+        "title-hook clip starts on the previous downbeat before the lyric (Oops not on the cut)",
+        lateOnset < lateLyric - beat * 1.15
+            && lateLyric - lateOnset <= oopsBar * 1.05
+            && abs(lateOnset - catalogPeak) > 0.08
+            && abs(lateOnset - (lateLyric - beat)) > 0.12,
         String(format: "onset=%.2f lyric=%.2f beat=%.2f catalog=%.1f", lateOnset, lateLyric, beat, catalogPeak)
+    )
+    let oneBeatGuest = AutoChorusIsland.titleHookClipStart(
+        lyric: lateLyric, downbeats: oopsProfile.analysis.downbeats, barSeconds: oopsBar,
+        leadIn: .oneBeat
+    )
+    check(
+        "Drop 1 guest lead-in stays one beat before the lyric (Hit me lock)",
+        abs(oneBeatGuest - (lateLyric - beat)) < oopsBar * 0.35
+            && oneBeatGuest <= lateLyric - 0.05,
+        String(format: "guest=%.2f lyric=%.2f beat=%.2f", oneBeatGuest, lateLyric, beat)
+    )
+
+    // Pivot grain must be an identifiable word, not the empty last beat of the phrase.
+    let grainBeat = 0.5
+    let phraseStart = 10.0
+    let phraseEnd = 18.0
+    var vocalCurve = [Double](repeating: 0.04, count: 200)
+    for i in 0..<vocalCurve.count {
+        let t = Double(i) * 0.1
+        if t >= 16.4 && t < 16.95 { vocalCurve[i] = 0.95 }
+    }
+    let pivotGrain = AutoPivotWord.lastBeatGrainSource(
+        phraseSourceStart: phraseStart,
+        phraseSourceEnd: phraseEnd,
+        beatSec: grainBeat,
+        tempoRatio: 1,
+        pivotToken: "baby",
+        lyricWords: [(16.55, "baby"), (17.62, "oh")],
+        vocalPresence: vocalCurve,
+        hopSeconds: 0.1
+    )
+    check(
+        "pivot grain is the last pivot token, not the empty phrase tail",
+        abs(pivotGrain - 16.55) < grainBeat * 0.75 && abs(pivotGrain - 17.5) > 0.2,
+        String(format: "grain=%.2f token=16.55 tail=17.50", pivotGrain)
     )
 
     let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
@@ -3631,7 +3671,9 @@ do {
             }?.detail ?? ""
             check(
                 "lyrics sidecar: planner bed hook is titleHookStart (not energy tail)",
-                abs(hookSrc - oopsHook) < plan.barSeconds * 0.45 && abs(hookSrc - 50.5) > 1.5,
+                hookSrc < oopsHook - plan.barSeconds / 4 * 0.9
+                    && oopsHook - hookSrc <= plan.barSeconds * 1.05
+                    && abs(hookSrc - 50.5) > 1.5,
                 String(format: "src=%.2f want=%.2f %@", hookSrc, oopsHook, bedDump)
             )
             check(
@@ -3722,11 +3764,20 @@ do {
                 $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
             }?.detail ?? ""
             check(
-                "599dec4: bed placed start is one beat before lyric, not equal, not catalog 50.5",
-                hookSrc < bedLyric - 0.05
-                    && abs(hookSrc - (bedLyric - plan.barSeconds / 4)) < plan.barSeconds * 0.35
+                "599dec4: bed placed start is the previous downbeat before lyric (Oops fully inside)",
+                hookSrc < bedLyric - plan.barSeconds / 4 * 1.15
+                    && bedLyric - hookSrc <= plan.barSeconds * 1.05
                     && abs(hookSrc - catalogPeak) > 0.08,
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
+            )
+            let takeOutIDs = Set(plan.sfxEvents.filter {
+                !SoundEffectLibrary.isPulseLayer($0.assetID)
+            }.map(\.assetID))
+            check(
+                "mashup dump records festival take-out + drop ride on Drop 1",
+                plan.decisions.contains { $0.kind == .addedRiserIntoDrop }
+                    && takeOutIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
+                "ids=\(takeOutIDs.sorted()) decisions=\(plan.decisions.filter { $0.kind == .addedRiserIntoDrop }.compactMap(\.detail))"
             )
             check(
                 "599dec4: dump placed startSeconds < lyric",
@@ -3875,6 +3926,38 @@ do {
         check("Applier exposes vocal-stem tracks for mashup", vocalTracks.count >= 1)
     case .failure(let message):
         check("Mashup with stem sidecars", false, message)
+    }
+}
+
+do {
+    // Real crate can read as sparse (Calvin). Drop 1 mix window still gets
+    // the festival stack — verses stay a record, flavor is not a polite edit.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: crateFeatures(duration: 200, bpm: 93, drum: 0.22, bass: 0.20, vocal: 0.82, confidence: 1.00),
+        oops.id: crateFeatures(duration: 200, bpm: 95, drum: 0.24, bass: 0.22, vocal: 0.80, confidence: 1.00),
+    ]
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260818, signals: signals) {
+    case .success(_, let plan, _):
+        let flavor = AutoClubFlavor.choose(
+            drumStrength: 0.24, bassDensity: 0.22, vocalDensity: 0.82, bpm: 95, seed: 1
+        )
+        check("sparse pop texture would have been Calvin without mashup override", flavor == .calvin)
+        check(
+            "mashup Drop 1 is still a festival rewrite (not Calvin radio)",
+            plan.clubFlavor != .calvin,
+            "flavor=\(plan.clubFlavor?.rawValue ?? "nil")"
+        )
+        let ids = Set(plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.map(\.assetID))
+        check(
+            "sparse-texture mashup still dumps festival take-out + drop ride",
+            plan.decisions.contains { $0.kind == .addedRiserIntoDrop }
+                && ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
+            "ids=\(ids.sorted()) flavor=\(plan.clubFlavor?.rawValue ?? "nil")"
+        )
+    case .failure(let message):
+        check("sparse-texture mashup festival stack", false, message)
     }
 }
 

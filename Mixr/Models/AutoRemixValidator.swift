@@ -266,6 +266,9 @@ nonisolated enum AutoRemixValidator {
                 abs(($0 - beatSec) - event.timelineEnd) < 0.55
                     || abs($0 - event.timelineEnd) < 0.45
             }
+                || plan.pulseRegions.contains { r in
+                    r.role == .buildOut && abs(r.timelineEnd - event.timelineEnd) < 0.55
+                }
             if takeOut { return true }
             decisions.append(
                 AutoDecision(
