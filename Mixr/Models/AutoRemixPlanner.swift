@@ -1384,6 +1384,72 @@ enum AutoRemixPlanner {
         )
     }
 
+    /// First complete Deck A hook for a mashup: jump to the bed's first
+    /// chorus island (≥8 bars). Never continue linearly from the 8-bar intro
+    /// into verse / pre-chorus apology before the real hook.
+    private static func bedFirstCompleteChorusSection(
+        profile: AutoSongProfile,
+        used: [(Double, Double)],
+        bars: Int,
+        energy: Double,
+        tuning: AutoTuning
+    ) -> AutoCandidateSection? {
+        let wantBars = max(8, bars)
+        let anchor = profile.analysis.chorusOrDropCandidates.first?.startSeconds
+            ?? profile.analysis.hookMoments.first
+            ?? 0
+        let bar = profile.analysis.barSeconds
+
+        func overlapsUsed(_ c: AutoCandidateSection) -> Bool {
+            used.contains { range in
+                let overlap = min(c.endSeconds, range.1) - max(c.startSeconds, range.0)
+                return overlap > c.durationSeconds * 0.5
+            }
+        }
+
+        let pool = profile.candidates.filter {
+            $0.label == .chorus && $0.barCount >= wantBars
+        }
+        let nearAnchor = pool.filter { abs($0.startSeconds - anchor) <= bar * 2.5 }
+        let candidates = (nearAnchor.isEmpty ? pool : nearAnchor).filter { !overlapsUsed($0) }
+        if let best = candidates.max(by: { $0.value(tuning) < $1.value(tuning) }) {
+            return best
+        }
+        let anchorEnd = anchor + Double(wantBars) * bar
+        let anchorOverlaps = used.contains { range in
+            let overlap = min(anchorEnd, range.1) - max(anchor, range.0)
+            return overlap > Double(wantBars) * bar * 0.5
+        }
+        if anchor + Double(wantBars) * bar <= profile.analysis.durationSeconds - 0.15,
+           !anchorOverlaps {
+            return completePhraseSection(
+                profile: profile,
+                from: anchor,
+                bars: wantBars,
+                energy: energy
+            )
+        }
+        return nil
+    }
+
+    /// Best cameo-chop guest to own Drop 1 when full-hook stretch fails.
+    private static func bestCameoDrop1Guest(
+        cameos: [AutoSongProfile],
+        bed: AutoSongProfile,
+        targetBPM: Double,
+        tuning: AutoTuning
+    ) -> AutoSongProfile? {
+        cameos.max { a, b in
+            let ia = AutoMashability.bestIsland(
+                guest: a, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+            )?.score ?? AutoStemRoleProxy.hookScore(for: a)
+            let ib = AutoMashability.bestIsland(
+                guest: b, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+            )?.score ?? AutoStemRoleProxy.hookScore(for: b)
+            return ia < ib
+        }
+    }
+
     /// Fallback candidate when the catalog has no matching label.
     private static func fallbackSection(
         profile: AutoSongProfile,
@@ -1555,7 +1621,27 @@ enum AutoRemixPlanner {
         }
 
         // Drop 1 = strongest full hook; Drop 2 = next (or bed chorus flip on duo).
-        let drop1 = fullHooks.first
+        // Stretch-failed guests (cameoChop) still own Drop 1 as phrase islands
+        // at native tempo — never demote them to post-drop groove slots only.
+        var drop1: AutoSongProfile?
+        if let first = fullHooks.first {
+            drop1 = first
+        } else if let cameo = bestCameoDrop1Guest(
+            cameos: cameos,
+            bed: bed,
+            targetBPM: targetBPM,
+            tuning: tuning
+        ) {
+            drop1 = cameo
+            cameos.removeAll { $0.songID == cameo.songID }
+            preDecisions.append(
+                AutoDecision(
+                    kind: .usedCameoOnly,
+                    songTitle: cameo.title,
+                    detail: "phrase-chop Drop 1 at native tempo (stretch gate failed)"
+                )
+            )
+        }
         let drop2Candidate = fullHooks.dropFirst().first
         // Surplus full hooks become cameos (rotate islands, don't stack).
         if fullHooks.count > 2 {
@@ -1741,13 +1827,13 @@ enum AutoRemixPlanner {
         guard !pool.isEmpty else { return nil }
         if pool.count == 1 { return pool[0] }
 
+        // Locked gold-standard pair in any N-song crate: Oops = bed when BOMT is present.
+        if let locked = AutoMashupRoleLock.britneyBed(in: pool) {
+            return locked
+        }
+
         if pool.count == 2 {
             let a = pool[0], b = pool[1]
-            // Locked gold-standard pair: Oops = bed, BOMT = Drop 1 vocal.
-            // Stem kick energy / vocal-density skew must not invert this.
-            if let locked = AutoMashupRoleLock.britneyBed(in: pool) {
-                return locked
-            }
             let pa = AutoClubTempo.classify(a.analysis.bpm)
             let pb = AutoClubTempo.classify(b.analysis.bpm)
             if let pa, let pb, pa == pb {
@@ -2101,24 +2187,47 @@ enum AutoRemixPlanner {
                 }
             }
 
-            // First complete A hook: never keep a title teaser. Continue from
-            // the last used source (intro end) as an 8-bar line. If that will
-            // not fit, skip rather than slice the opening “Oops”.
+            // First complete A hook: jump to the bed's first chorus island.
+            // Never continue linearly from the intro into verse apology.
             if isFirstCompleteAHook {
-                let lastUsedEnd = used.map(\.1).max()
-                let bad = section.map { $0.barCount < 8 || $0.label == .teaser } ?? true
-                let rewind = section.flatMap { s in lastUsedEnd.map { s.startSeconds < $0 - 0.05 } } ?? false
-                if section == nil || bad || rewind {
-                    let from = lastUsedEnd ?? max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
-                    if let complete = completePhraseSection(
-                        profile: profile,
-                        from: from,
-                        bars: max(8, slot.bars),
-                        energy: slot.energy
-                    ) {
-                        section = complete
-                    } else if bad {
-                        section = nil
+                if let chorus = bedFirstCompleteChorusSection(
+                    profile: profile,
+                    used: used,
+                    bars: slot.bars,
+                    energy: slot.energy,
+                    tuning: tuning
+                ) {
+                    section = chorus
+                    decisions.append(
+                        AutoDecision(
+                            kind: .selectedAnchor,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "bed complete hook @%.1fs (chorus island, not verse tail)",
+                                chorus.startSeconds
+                            )
+                        )
+                    )
+                } else {
+                    let lastUsedEnd = used.map(\.1).max()
+                    let bad = section.map { $0.barCount < 8 || $0.label == .teaser } ?? true
+                    let rewind = section.flatMap { s in lastUsedEnd.map { s.startSeconds < $0 - 0.05 } } ?? false
+                    let beforeChorus = section.map {
+                        let anchor = profile.analysis.chorusOrDropCandidates.first?.startSeconds ?? 0
+                        return $0.startSeconds + barSec * 1.0 < anchor - 0.05
+                    } ?? true
+                    if section == nil || bad || rewind || beforeChorus {
+                        let from = lastUsedEnd ?? max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
+                        if let complete = completePhraseSection(
+                            profile: profile,
+                            from: from,
+                            bars: max(8, slot.bars),
+                            energy: slot.energy
+                        ) {
+                            section = complete
+                        } else if bad {
+                            section = nil
+                        }
                     }
                 }
             }

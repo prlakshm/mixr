@@ -705,6 +705,23 @@ do {
             !AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: plan),
             "dropCuts=\(plan.cutRecords.filter { rec in AutoRemixDiagnostics.clubDropStarts(plan: plan).contains { abs($0 - rec.timelineAt) < 0.1 } }.map { AutoRemixDiagnostics.maskingDescription($0.masking) })"
         )
+        let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
+        let chorusAnchor = oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? 0
+        check(
+            "Planner BOMT+Oops: first bed hook sources chorus island (not verse tail)",
+            !AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
+                plan: plan,
+                chorusAnchorSeconds: chorusAnchor
+            ),
+            "anchor=\(String(format: "%.1f", chorusAnchor)) hook=\(AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan).map { String(format: "%.1f", $0.sourceStart) } ?? "nil")"
+        )
+        check(
+            "Planner BOMT+Oops: bed complete hook decision recorded",
+            plan.decisions.contains {
+                $0.kind == .selectedAnchor
+                    && ($0.detail ?? "").localizedCaseInsensitiveContains("bed complete hook")
+            }
+        )
         let dropStarts = AutoRemixDiagnostics.clubDropStarts(plan: plan)
         if dropStarts.count >= 2 {
             let drop2 = dropStarts[1]
@@ -870,15 +887,23 @@ do {
         check("Paramore+tatu bed is Paramore", plan.mashupBedSongID == paramore.id,
               "bed=\(plan.mashupBedSongID == paramore.id ? "Paramore" : plan.mashupBedSongID == tatu.id ? "tatu" : "?")")
         check("Paramore+tatu tatu is not the bed", plan.mashupBedSongID != tatu.id)
-        let tatuAsFullDrop1 = plan.mashupVocalSongID == tatu.id
-            && !plan.decisions.contains { $0.kind == .usedCameoOnly && $0.songTitle == tatu.title }
-        // tatu may be drop1 hook if gate allows cameo-as-full, or cameo-only — never the bed.
-        check("Paramore+tatu tatu usable as hook/cameo",
-              plan.mashupVocalSongID == tatu.id
-                || plan.decisions.contains { $0.kind == .usedCameoOnly && ($0.songTitle?.contains("Things") == true || $0.songTitle == tatu.title) }
-                || plan.placements.contains { $0.songID == tatu.id },
-              "vocalID=\(plan.mashupVocalSongID?.uuidString ?? "nil") cameo=\(plan.decisions.contains { $0.kind == .usedCameoOnly })")
-        _ = tatuAsFullDrop1
+        check("Paramore+tatu tatu owns Drop 1 vocal", plan.mashupVocalSongID == tatu.id,
+              "vocal=\(plan.mashupVocalSongID == tatu.id ? "tatu" : plan.mashupVocalSongID == paramore.id ? "Paramore" : "?")")
+        check(
+            "Paramore+tatu Drop 1 is phrase-chop (not bed-only both drops)",
+            !plan.decisions.contains {
+                $0.kind == .assignedMashupRoles
+                    && ($0.detail ?? "").localizedCaseInsensitiveContains("bed carries both drops")
+            },
+            plan.decisions.first { $0.kind == .assignedMashupRoles }?.detail ?? ""
+        )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan)
+        let tatuOnDrop1 = drop1Start.map { t in
+            plan.placements.contains {
+                $0.songID == tatu.id && $0.role == .dominant && abs($0.timelineStart - t) < 0.12
+            }
+        } ?? false
+        check("Paramore+tatu tatu dominant on Drop 1 downbeat", tatuOnDrop1)
     case .failure(let message):
         check("Paramore+tatu mashup", false, message)
     }
@@ -910,6 +935,8 @@ do {
         check("All-5 does not park a 144 bed at ~95",
               !(plan.mashupBedSongID == paramore.id && plan.targetBPM < 110),
               "bedBPM=\(plan.targetBPM)")
+        check("All-5 keeps Oops bed when Britney pair in crate", plan.mashupBedSongID == oops.id,
+              "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "other")")
         // Bed's native pocket should match the arrangement target.
         if let bedID = plan.mashupBedSongID {
             let bedTrack = [bomt, oops, stupid, paramore, tatu].first { $0.id == bedID }
@@ -1122,6 +1149,16 @@ do {
                         plan.barSeconds
                     )
                 }()
+            )
+            let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: signals[oops.id])
+            let chorusAnchor = oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? 0
+            check(
+                "Britney: first complete hook sources chorus island (not pre-chorus verse)",
+                !AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
+                    plan: plan,
+                    chorusAnchorSeconds: chorusAnchor
+                ),
+                "anchor=\(String(format: "%.1f", chorusAnchor)) src=\(AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan).map { String(format: "%.1f", $0.sourceStart) } ?? "nil")"
             )
             check(
                 "Britney mashup is clubby (Diplo/Guetta/Snake), not Calvin preservation",
@@ -2268,6 +2305,34 @@ do {
     check(
         "Void detector flags a 1-beat hole on pivot Drop 1 (previous behavior fails)",
         AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: holey)
+    )
+
+    let verseHook = plan(
+        placements: [
+            clip(sourceStart: 0, timelineStart: 0, duration: bar * 8, slot: 0),
+            clip(sourceStart: bar * 8, timelineStart: bar * 8, duration: bar * 8, slot: 1),
+            clip(sourceStart: 80, timelineStart: bar * 18, duration: bar * 16, slot: 2),
+        ],
+        pulses: [
+            AutoClubPulse.Region(role: .introTease, timelineStart: 0, timelineEnd: bar * 8),
+            AutoClubPulse.Region(role: .groove, timelineStart: bar * 8, timelineEnd: bar * 16),
+            AutoClubPulse.Region(role: .drop, timelineStart: bar * 18, timelineEnd: bar * 34),
+        ],
+        duration: bar * 34
+    )
+    check(
+        "Verse-tail detector flags hook starting before chorus anchor",
+        AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
+            plan: verseHook,
+            chorusAnchorSeconds: bar * 16
+        )
+    )
+    check(
+        "Verse-tail detector passes hook at chorus anchor",
+        !AutoRemixDiagnostics.firstDeckAHookSourcesBeforeChorus(
+            plan: verseHook,
+            chorusAnchorSeconds: bar * 8
+        )
     )
 
     var fadedDrop2 = holey

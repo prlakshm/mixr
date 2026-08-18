@@ -445,6 +445,18 @@ nonisolated enum AutoRemixDiagnostics {
         return preDrop.first
     }
 
+    /// True when the first Deck A hook starts before the bed's first chorus
+    /// anchor — i.e. verse / pre-chorus apology, not a complete hook line.
+    static func firstDeckAHookSourcesBeforeChorus(
+        plan: AutoRemixPlan,
+        chorusAnchorSeconds: Double,
+        toleranceBars: Double = 1.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let bar = max(plan.barSeconds, 1e-6)
+        return hook.sourceStart + toleranceBars * bar < chorusAnchorSeconds - 0.05
+    }
+
     /// True when the first Deck A hook is a sub-phrase slice of the opening
     /// title (e.g. a 4-bar teaser of “Oops I did it again”). Complete 8-bar
     /// title/hook lines are not chops.
