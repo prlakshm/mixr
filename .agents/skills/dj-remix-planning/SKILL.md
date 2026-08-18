@@ -232,8 +232,14 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 
 - ONE club bed (drums / pocket / simple harmony); others = vocal-hook candidates.
 - **Oops × BOMT:** Oops = bed, BOMT = Drop 1 vocal, Oops chorus may return as Drop 2 flip.
-  Title/groove lock wins over stem kick-energy and vocal-density skew.
+  Title/groove lock wins over stem kick-energy and vocal-density skew — in duo **and**
+  N-song crates when both Britney tracks are present.
+- First complete **bed** hook before the pivot must source the bed's first **chorus
+  island** (≥8 bars at the measured chorus anchor) — never continue linearly from
+  the 8-bar intro into verse / pre-chorus apology.
 - Drop 1 = strongest full hook (**hook-replace**: guest in, bed vocal carved out).
+  When stretch gate fails, **cameoChop** guests still own Drop 1 as phrase-aligned
+  islands at native tempo — do not demote them to post-drop groove slots only.
 - Drop 2 = a different song’s hook (duo may flip to bed chorus) — not louder stack.
 - Dual vocals are NOT the default. Optional call-and-response ≤ 8 bars, then back to one voice.
 - Still ONE kick and ONE bass — reject dual full-mix kick/sub stacks.
