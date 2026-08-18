@@ -116,8 +116,16 @@ enum AutoSectionCatalog {
         tuning: AutoTuning = .standard,
         signal: SongSignalFeatures? = nil
     ) -> AutoSongProfile {
-        let analysis = SongAnalyzer.analyze(track: track, signal: signal)
         let stems = AutoStemResolver.resolve(track: track, tuning: tuning)
+        let enrichedSignal = stems.vocals.map { vocalsURL in
+            AutoStemVocalCurve.merge(
+                into: signal,
+                vocalsURL: vocalsURL,
+                durationHint: track.durationSeconds,
+                bpmHint: track.bpm.map(Double.init)
+            )
+        } ?? signal
+        let analysis = SongAnalyzer.analyze(track: track, signal: enrichedSignal)
         let stemDrumStrength = AutoStemKickEnergy.drumStrength(from: stems.drums)
         // Do not overwrite analysis.drumStrength — bed/hook scoring and the
         // Britney title/groove lock must keep full-mix curves. Pulse reads

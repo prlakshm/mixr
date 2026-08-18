@@ -50,6 +50,9 @@ struct SongSignalFeatures: Sendable {
     /// Mid-band (~300 Hz–3 kHz) presence per hop, normalized 0…1 —
     /// vocal-presence proxy without a separation model.
     var vocalPresenceCurve: [Double]
+    /// Isolated vocal stem RMS per hop when a Demucs sidecar is present.
+    /// Title-chorus detection prefers this over full-mix vocal proxy.
+    var stemVocalPresenceCurve: [Double] = []
     /// Spectral-novelty proxy per hop (band-energy change), normalized.
     var noveltyCurve: [Double]
 

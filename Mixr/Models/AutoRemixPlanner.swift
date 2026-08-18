@@ -1427,7 +1427,10 @@ enum AutoRemixPlanner {
             let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 2.0 }
             let atOrAfter = near.filter { $0.startSeconds >= measured.startSeconds - bar * 0.25 }
             let pickPool = atOrAfter.isEmpty ? near : atOrAfter
-            if let best = pickPool.max(by: { $0.hook < $1.hook }) {
+            // Closest to measured entrance — not max hook (tail @50.5s beats title @46s).
+            if let best = pickPool.min(by: {
+                abs($0.startSeconds - measured.startSeconds) < abs($1.startSeconds - measured.startSeconds)
+            }) {
                 return best
             }
             if !overlapsUsed(measured.startSeconds, bars: wantBars) {
@@ -2205,6 +2208,19 @@ enum AutoRemixPlanner {
             // First complete A hook: jump to the bed's first chorus island.
             // Never continue linearly from the intro into verse apology.
             if isFirstCompleteAHook {
+                let introEnd = profile.analysis.introCandidate?.endSeconds ?? barSec * 8
+                let phrase = profile.analysis.phraseBoundaries.count >= 2
+                    ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+                    : barSec * 8
+                let measuredEntrance = AutoChorusIsland.bestEntrance(
+                    signal: profile.analysis.signal,
+                    downbeats: profile.analysis.downbeats,
+                    barSeconds: barSec,
+                    duration: profile.analysis.durationSeconds,
+                    introEnd: introEnd,
+                    phraseSeconds: phrase,
+                    title: profile.title
+                )
                 if let chorus = bedFirstCompleteChorusSection(
                     profile: profile,
                     used: used,
@@ -2213,13 +2229,36 @@ enum AutoRemixPlanner {
                     tuning: tuning
                 ) {
                     section = chorus
+                    let rawList: String
+                    if let sig = profile.analysis.signal {
+                        rawList = AutoChorusIsland.titleEntranceCandidates(
+                            signal: sig,
+                            downbeats: profile.analysis.downbeats,
+                            barSeconds: barSec,
+                            duration: profile.analysis.durationSeconds,
+                            introEnd: introEnd,
+                            phraseSeconds: phrase,
+                            title: profile.title
+                        )
+                        .map { String(format: "%.1f", $0.startSeconds) }
+                        .joined(separator: ",")
+                    } else {
+                        rawList = ""
+                    }
+                    let dump = AutoChorusIsland.bedHookDecisionDump(
+                        profile: profile,
+                        measured: measuredEntrance,
+                        chosenStart: chorus.startSeconds
+                    )
                     decisions.append(
                         AutoDecision(
                             kind: .selectedAnchor,
                             songTitle: profile.title,
                             detail: String(
-                                format: "bed complete hook @%.1fs (first title-chorus downbeat, not prechorus/tail/verse-2)",
-                                chorus.startSeconds
+                                format: "bed complete hook @%.1fs (first title-chorus downbeat, not prechorus/tail/verse-2) | %@ | raw=[%@]",
+                                chorus.startSeconds,
+                                dump,
+                                rawList
                             )
                         )
                     )

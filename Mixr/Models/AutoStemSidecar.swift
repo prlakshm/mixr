@@ -140,6 +140,58 @@ enum AutoStemResolver {
     }
 }
 
+// MARK: - Vocal stem curve for title-chorus onset (pure Swift WAV)
+
+enum AutoStemVocalCurve {
+    /// Merge an isolated vocal stem into signal features for title detection.
+    /// Reads up to `maxSeconds` of the sidecar (title choruses often land ~45–50s).
+    static func merge(
+        into base: SongSignalFeatures?,
+        vocalsURL: URL,
+        durationHint: Double?,
+        bpmHint: Double?,
+        maxSeconds: Double = 120
+    ) -> SongSignalFeatures? {
+        guard let (samples, sampleRate) = AutoStemKickEnergy.readPCMWithRate(
+            url: vocalsURL,
+            maxSeconds: maxSeconds
+        ), !samples.isEmpty else {
+            return base
+        }
+        let stem = SongSignalAnalyzer.extract(
+            samples: samples,
+            sampleRate: sampleRate,
+            bpmHint: bpmHint
+        )
+        guard !stem.energyCurve.isEmpty else { return base }
+
+        var merged = base ?? SongSignalFeatures(
+            sampleRate: sampleRate,
+            durationSeconds: durationHint ?? stem.durationSeconds,
+            rmsCurveDB: stem.rmsCurveDB,
+            onsetStrength: stem.onsetStrength,
+            hopSeconds: stem.hopSeconds,
+            downbeatOffsetSeconds: stem.downbeatOffsetSeconds,
+            beatConfidence: stem.beatConfidence,
+            leadingSilenceSeconds: stem.leadingSilenceSeconds,
+            trailingSilenceSeconds: stem.trailingSilenceSeconds,
+            quietRegions: stem.quietRegions,
+            energyCurve: stem.energyCurve,
+            bassEnergyCurve: [],
+            vocalPresenceCurve: stem.vocalPresenceCurve,
+            stemVocalPresenceCurve: stem.energyCurve,
+            noveltyCurve: stem.noveltyCurve,
+            drumConfidence: 0,
+            overallConfidence: stem.overallConfidence
+        )
+        merged.stemVocalPresenceCurve = stem.energyCurve
+        if merged.hopSeconds <= 0 {
+            merged.hopSeconds = stem.hopSeconds
+        }
+        return merged
+    }
+}
+
 // MARK: - Kick energy from a drums stem (pure Swift WAV)
 
 enum AutoStemKickEnergy {
@@ -188,9 +240,39 @@ enum AutoStemKickEnergy {
     }
 
     /// Minimal WAV reader: PCM s16 and IEEE float32, mono or stereo.
-    static func readPCM(url: URL, maxFrames: Int = 44100 * 45) -> [Float]? {
+    static func readPCM(url: URL, maxFrames: Int = 44100 * 120) -> [Float]? {
+        readPCMWithRate(url: url, maxFrames: maxFrames)?.samples
+    }
+
+    /// WAV reader returning sample rate (needed for stem vocal curves).
+    static func readPCMWithRate(
+        url: URL,
+        maxSeconds: Double = 120,
+        maxFrames: Int? = nil
+    ) -> (samples: [Float], sampleRate: Double)? {
         guard let data = try? Data(contentsOf: url), data.count >= 44 else { return nil }
-        return parseWAV(data, maxFrames: maxFrames)
+        let sampleRate = wavSampleRate(data) ?? 44100
+        let frameCap = maxFrames ?? Int(sampleRate * maxSeconds)
+        guard let samples = parseWAV(data, maxFrames: frameCap) else { return nil }
+        return (samples, sampleRate)
+    }
+
+    static func wavSampleRate(_ data: Data) -> Double? {
+        func u32(_ o: Int) -> UInt32 {
+            data.subdata(in: o..<(o + 4)).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
+        }
+        guard data.count >= 28 else { return nil }
+        var offset = 12
+        while offset + 8 <= data.count {
+            let id = String(bytes: data[offset..<(offset + 4)], encoding: .ascii) ?? ""
+            let size = Int(u32(offset + 4))
+            let payload = offset + 8
+            if id == "fmt ", payload + 8 <= data.count {
+                return Double(u32(payload + 4))
+            }
+            offset = payload + size + (size % 2)
+        }
+        return nil
     }
 
     static func parseWAV(_ data: Data, maxFrames: Int) -> [Float]? {
@@ -297,6 +379,49 @@ enum AutoStemKickEnergy {
             stereo.append(Data(bytes: &le, count: 2))
         }
         data.append(stereo)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// Write pre-built stereo PCM s16le (for vocal-onset stem fixtures).
+    static func writeRawPCM(
+        to url: URL,
+        stereoPCM: Data,
+        frames: Int,
+        sampleRate: Int = 44100
+    ) throws {
+        let channels = 2
+        let bytesPerSample = 2
+        let dataBytes = frames * channels * bytesPerSample
+        guard stereoPCM.count >= dataBytes else {
+            throw NSError(domain: "AutoStemKickEnergy", code: 1, userInfo: nil)
+        }
+        var data = Data()
+        func appendU32(_ v: UInt32) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 4))
+        }
+        func appendU16(_ v: UInt16) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 2))
+        }
+        data.append(contentsOf: Array("RIFF".utf8))
+        appendU32(UInt32(36 + dataBytes))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8))
+        appendU32(16)
+        appendU16(1)
+        appendU16(UInt16(channels))
+        appendU32(UInt32(sampleRate))
+        appendU32(UInt32(sampleRate * channels * bytesPerSample))
+        appendU16(UInt16(channels * bytesPerSample))
+        appendU16(16)
+        data.append(contentsOf: Array("data".utf8))
+        appendU32(UInt32(dataBytes))
+        data.append(stereoPCM.prefix(dataBytes))
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true

@@ -900,6 +900,74 @@ func popTitleChorusChorusTail505(
     return feat
 }
 
+/// Real crate bounce of 59fe1e8: full-mix energy peaks on chorus tail @50.5s
+/// but isolated vocal stem has title-line onset @46s (“Oops I did it again”).
+func popTitleChorusRealCrate59fe1e8(
+    duration: Double,
+    bpm: Double,
+    drum: Double,
+    bass: Double,
+    vocal: Double,
+    titleChorusStart: Double = 46.0,
+    chorusTailStart: Double = 50.5,
+    prechorusTwoStart: Double = 40.4,
+    confidence: Double = 1.0
+) -> SongSignalFeatures {
+    var feat = popTitleChorusChorusTail505(
+        duration: duration,
+        bpm: bpm,
+        drum: drum,
+        bass: bass,
+        vocal: vocal,
+        titleChorusStart: titleChorusStart,
+        chorusTailStart: chorusTailStart,
+        prechorusTwoStart: prechorusTwoStart,
+        confidence: confidence
+    )
+    let hop = feat.hopSeconds
+    let bar = 240.0 / max(bpm, 40)
+    feat.stemVocalPresenceCurve = [Double](repeating: 0.04, count: feat.energyCurve.count)
+    for i in 0..<feat.energyCurve.count {
+        let t = Double(i) * hop
+        // Title line on stem only — tail stays quiet on isolated vocal.
+        if t >= titleChorusStart && t < titleChorusStart + bar * 8 {
+            feat.stemVocalPresenceCurve[i] = min(1, 0.92 + 0.06 * sin((t - titleChorusStart) * 0.4))
+        }
+        if abs(t - titleChorusStart) < hop * 1.5 {
+            feat.stemVocalPresenceCurve[i] = 0.98
+        }
+    }
+    return feat
+}
+
+/// Write a vocal stem WAV with silence then a sharp title onset (for stem merge path).
+func writeVocalStemOnsetFixture(
+    to url: URL,
+    onsetSeconds: Double,
+    durationSeconds: Double = 90,
+    sampleRate: Int = 44100
+) throws {
+    let frames = Int(durationSeconds * Double(sampleRate))
+    let onsetFrame = Int(onsetSeconds * Double(sampleRate))
+    let kickFrames = sampleRate / 20
+    var stereo = Data(capacity: frames * 4)
+    for f in 0..<frames {
+        let amp: Float
+        if f >= onsetFrame && f < onsetFrame + kickFrames {
+            amp = 0.95
+        } else if f >= onsetFrame && f < onsetFrame + sampleRate * 8 {
+            amp = 0.55 + 0.15 * sin(Float(f - onsetFrame) * 0.002)
+        } else {
+            amp = 0.002
+        }
+        let pcm = Int16(max(-32767, min(32767, Int(amp * 32767))))
+        var le = UInt16(bitPattern: pcm).littleEndian
+        stereo.append(Data(bytes: &le, count: 2))
+        stereo.append(Data(bytes: &le, count: 2))
+    }
+    try AutoStemKickEnergy.writeRawPCM(to: url, stereoPCM: stereo, frames: frames, sampleRate: sampleRate)
+}
+
 func chorusCandidateDump(_ profile: AutoSongProfile) -> String {
     let choruses = profile.candidates
         .filter { $0.label == .chorus }
@@ -1417,6 +1485,149 @@ do {
         )
     case .failure(let message):
         check("3e7dd8d chorus-tail Britney mashup", false, message)
+    }
+}
+
+do {
+    // Real crate bounce of 59fe1e8: full-mix still peaks @50.5s (tail) but
+    // vocal stem title onset @46s must move the bed hook island.
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", color: .pink)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", color: .blue)
+    let oopsTitle = 46.0
+    let bomtTitle = 43.0
+    let chorusTail = 50.5
+    let oopsPreTwo = 40.4
+    let oopsSignal = popTitleChorusRealCrate59fe1e8(
+        duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+        titleChorusStart: oopsTitle, chorusTailStart: chorusTail, prechorusTwoStart: oopsPreTwo
+    )
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: popTitleChorus591bef3Regression(
+            duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55,
+            titleChorusStart: bomtTitle, prechorusTwoStart: 41.3, verseTwoLiftStart: 78.0
+        ),
+        oops.id: oopsSignal,
+    ]
+    let oopsProfile = AutoSectionCatalog.profile(track: oops, signal: oopsSignal)
+    let phrase = oopsProfile.analysis.phraseBoundaries.count >= 2
+        ? oopsProfile.analysis.phraseBoundaries[1] - oopsProfile.analysis.phraseBoundaries[0]
+        : oopsProfile.analysis.barSeconds * 8
+    let introEnd = oopsProfile.analysis.introCandidate?.endSeconds ?? 0
+
+    let entrance = AutoChorusIsland.firstTitleEntrance(
+        signal: oopsSignal,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsProfile.analysis.barSeconds,
+        duration: oopsProfile.analysis.durationSeconds,
+        introEnd: introEnd,
+        phraseSeconds: phrase,
+        title: oops.title
+    )
+    check(
+        "59fe1e8 crate: stem title onset is NOT chorus tail @50.5s",
+        abs((entrance?.startSeconds ?? -1) - chorusTail) > 3,
+        String(format: "entrance=%.1f tail=%.1f", entrance?.startSeconds ?? -1, chorusTail)
+    )
+    check(
+        "59fe1e8 crate: stem title onset is title downbeat ~46s",
+        abs((entrance?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.6,
+        String(format: "entrance=%.1f want=%.1f catalog=%@", entrance?.startSeconds ?? -1, oopsTitle, chorusCandidateDump(oopsProfile))
+    )
+    check(
+        "59fe1e8 crate: refineChoruses chorus1 is ~46s not 50.5s",
+        abs((oopsProfile.analysis.chorusOrDropCandidates.first?.startSeconds ?? -1) - oopsTitle) < oopsProfile.analysis.barSeconds * 1.6,
+        chorusCandidateDump(oopsProfile)
+    )
+
+    switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
+    case .success(_, let plan, _):
+        let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+        let bedDecision = plan.decisions.first {
+            $0.kind == .selectedAnchor && ($0.detail ?? "").contains("bed complete hook")
+        }?.detail ?? ""
+        check(
+            "59fe1e8 crate: bed hook is NOT chorus tail @50.5s",
+            !AutoRemixDiagnostics.firstDeckAHookIsChorusTail(
+                plan: plan, titleChorusStart: oopsTitle, chorusTailStart: chorusTail
+            ),
+            String(format: "hook=%.1f tail=%.1f decision=%@", hookSrc, chorusTail, bedDecision)
+        )
+        check(
+            "59fe1e8 crate: bed hook is title downbeat ~46s (uncut Oops)",
+            abs(hookSrc - oopsTitle) < plan.barSeconds * 1.6
+                && abs(hookSrc - oopsPreTwo) > 3
+                && abs(hookSrc - chorusTail) > 3,
+            String(format: "hook=%.1f want=%.1f %@", hookSrc, oopsTitle, chorusCandidateDump(oopsProfile))
+        )
+        check(
+            "59fe1e8 crate: decision line includes raw candidate dump",
+            bedDecision.contains("raw=[") && bedDecision.contains("chorusOrDrop="),
+            bedDecision
+        )
+        let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+        let guestSrc = plan.placements
+            .filter {
+                $0.songID == bomt.id && $0.role == .dominant
+                    && abs($0.timelineStart - drop1Start) < 0.15
+            }
+            .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+            .sourceStart ?? -1
+        check(
+            "59fe1e8 crate: BOMT Drop 1 stays title hook (hit me, not confess)",
+            abs(guestSrc - bomtTitle) < plan.barSeconds * 2.5,
+            String(format: "guest=%.1f want=%.1f", guestSrc, bomtTitle)
+        )
+        check(
+            "59fe1e8 crate: pivotWallpaperLoop 8× baby preserved",
+            plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        )
+        check(
+            "59fe1e8 crate: zero allowedPredropVoid",
+            !plan.decisions.contains { $0.kind == .allowedPredropVoid }
+        )
+    case .failure(let message):
+        check("59fe1e8 stem-onset Britney mashup", false, message)
+    }
+
+    // Vocal stem sidecar merge path (run_crate_bounces.sh stemsRoot layout).
+    let stemDir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-59fe1e8-stems", isDirectory: true)
+    let vocalsURL = stemDir
+        .appendingPathComponent("Oops I Did It Again", isDirectory: true)
+        .appendingPathComponent("vocals.wav")
+    do {
+        try writeVocalStemOnsetFixture(to: vocalsURL, onsetSeconds: oopsTitle)
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[oops.id] = AutoStemSet(vocals: vocalsURL)
+        var tailOnlySignal = popTitleChorusChorusTail505(
+            duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
+            titleChorusStart: oopsTitle, chorusTailStart: chorusTail, prechorusTwoStart: oopsPreTwo
+        )
+        tailOnlySignal.stemVocalPresenceCurve = []
+        let mergedProfile = AutoSectionCatalog.profile(
+            track: oops,
+            tuning: tuning,
+            signal: tailOnlySignal
+        )
+        let stemEntrance = AutoChorusIsland.firstTitleEntrance(
+            signal: mergedProfile.analysis.signal!,
+            downbeats: mergedProfile.analysis.downbeats,
+            barSeconds: mergedProfile.analysis.barSeconds,
+            duration: mergedProfile.analysis.durationSeconds,
+            introEnd: mergedProfile.analysis.introCandidate?.endSeconds ?? 0,
+            phraseSeconds: phrase,
+            title: oops.title
+        )
+        check(
+            "59fe1e8 crate: vocal stem sidecar onset ~46s (not tail @50.5s)",
+            abs((stemEntrance?.startSeconds ?? -1) - oopsTitle) < mergedProfile.analysis.barSeconds * 2.0
+                && abs((stemEntrance?.startSeconds ?? -1) - chorusTail) > 3,
+            String(format: "stemEntrance=%.1f want=%.1f tail=%.1f hasStem=%@",
+                   stemEntrance?.startSeconds ?? -1, oopsTitle, chorusTail,
+                   mergedProfile.stems.hasVocals ? "yes" : "no")
+        )
+    } catch {
+        check("59fe1e8 crate: vocal stem fixture write", false, "\(error)")
     }
 }
 
