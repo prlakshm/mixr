@@ -478,7 +478,7 @@ nonisolated enum AutoChorusIsland {
             var vocalRise: Double
             var energyAfter: Double
             var energy8: Double
-            var energyGap: Double
+            var energyDip: Double
             var energyRise: Double
             var novelty: Double
             var onsetCount: Int
@@ -494,7 +494,12 @@ nonisolated enum AutoChorusIsland {
             let vocalBefore = mean(vocal, hop: hop, from: t - barSeconds * 4, to: t)
             let energyAfter = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds)
             let energy8 = mean(signal.energyCurve, hop: hop, from: t, to: t + barSeconds * 8)
-            let energyGap = mean(signal.energyCurve, hop: hop, from: t + barSeconds * 3, to: t + barSeconds * 4.5)
+            var energyDip = 1.0
+            var u = t + barSeconds
+            while u <= t + barSeconds * 3.5 {
+                energyDip = min(energyDip, mean(signal.energyCurve, hop: hop, from: u, to: u + barSeconds))
+                u += barSeconds * 0.5
+            }
             let energyBefore = mean(signal.energyCurve, hop: hop, from: t - barSeconds * 4, to: t)
             let novelty = mean(signal.noveltyCurve, hop: hop, from: t - 0.15, to: t + 0.6)
             let localPeaks = onsetPeaks(
@@ -508,7 +513,7 @@ nonisolated enum AutoChorusIsland {
                     vocalRise: m1 - vocalBefore,
                     energyAfter: energyAfter,
                     energy8: energy8,
-                    energyGap: energyGap,
+                    energyDip: energyDip,
                     energyRise: energyAfter - energyBefore,
                     novelty: novelty,
                     onsetCount: localPeaks.count,
@@ -534,7 +539,7 @@ nonisolated enum AutoChorusIsland {
                 && s.energyRise < 0.08
             if alreadyInHold { return false }
             // 4-bar energy spike with a hole before the real 8-bar chorus.
-            if s.energyGap + 0.04 < s.energyAfter && s.energyGap < s.energyAfter * 0.88 {
+            if s.energyDip + 0.08 < s.energyAfter && s.energyDip < s.energyAfter * 0.88 {
                 return false
             }
             return before < s.mean8 * 0.92 || s.energyRise >= 0.05 || s.vocalRise >= 0.05
