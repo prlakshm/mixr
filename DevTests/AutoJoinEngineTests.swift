@@ -399,21 +399,17 @@ do {
     let introHead = placements.first {
         $0.songID == bedID && $0.stemKind == nil && $0.timelineStart < 1
     }
-    let introTail = placements.first {
-        $0.songID == bedID && $0.stemKind == nil && abs($0.timelineStart - titleStart) < 0.05
+    let introOverlap = placements.contains {
+        $0.songID == bedID
+            && $0.stemKind == nil
+            && min($0.timelineEnd, titleStart + 4) - max($0.timelineStart, titleStart) > 0.05
     }
     check(
         "Join: intro full-mix does not keep playing under the title vocal",
         introHead != nil
             && (introHead?.timelineEnd ?? 99) <= titleStart + 0.02
-            && (introTail == nil
-                || (introTail?.volume ?? 99) <= AutoGainPolicy.titleInstrumentalDuckVolume + 0.001),
-        String(
-            format: "headEnd=%.2f tailVol=%.2f title=%.2f",
-            introHead?.timelineEnd ?? -1,
-            introTail?.volume ?? -1,
-            titleStart
-        )
+            && !introOverlap,
+        String(format: "headEnd=%.2f overlap=%@ title=%.2f", introHead?.timelineEnd ?? -1, introOverlap ? "yes" : "no", titleStart)
     )
 }
 

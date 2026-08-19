@@ -626,6 +626,22 @@ nonisolated enum AutoRemixValidator {
                 continue
             }
 
+            // Isolated title/hook vocal: equal-power fade-in eats the
+            // distinctive token; extending the previous full-mix under it
+            // buries the word in drums.
+            if next.stemKind == .vocals, prev.stemKind != .vocals,
+               next.timelineDuration > beatSec * 8 {
+                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
+                    if trimmed >= 0.05 {
+                        plan.placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                plan.placements[prevIdx].fadeOut = .hardCut
+                plan.placements[nextIdx].fadeIn = .hardCut
+                continue
+            }
+
             // Title-hook island (intro/verse → first complete chorus, or 8+8 hold):
             // hard cut. Equal-power fade-in eats the opening title word.
             let titleHookJoin = prev.songID == next.songID

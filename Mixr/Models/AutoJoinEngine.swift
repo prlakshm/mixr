@@ -544,29 +544,17 @@ nonisolated enum AutoJoinEngine {
                 && $0.timelineStart < (dropStarts.min() ?? .infinity) - barSec * 0.25
                 && $0.timelineDuration > beatSec * 2
         }
-        // Intro / verse full-mix must not keep playing at full volume under
-        // the isolated title vocal. Split at the title start so the opening
-        // stays loud and the overlap is ducked (trimming creates a gap the
-        // validator fills with an equal-power overlap that re-buries the token).
+        // Intro / verse full-mix must not keep playing under the isolated
+        // title vocal. Trim at the title start — do not leave a ducked
+        // full-mix tail (that still has drums + a second vocal).
         if let hookStart = titleVocalWindows.map(\.timelineStart).min() {
-            var tails: [AutoClipPlacement] = []
             for i in placements.indices {
                 let p = placements[i]
                 guard p.role == .dominant, p.stemKind != .vocals else { continue }
                 guard p.timelineStart < hookStart - 0.05, p.timelineEnd > hookStart + 0.05 else { continue }
-                let tailDur = p.timelineEnd - hookStart
-                var tail = p
-                tail.timelineStart = hookStart
-                tail.sourceStart = p.sourceStart + (hookStart - p.timelineStart) * p.tempoRatio
-                tail.timelineDuration = tailDur
-                tail.volume = min(p.volume, AutoGainPolicy.roleStagingVolume(role: .titleBed))
-                tail.continuesPrevious = true
-                tail.fadeIn = .none
-                tails.append(tail)
                 placements[i].timelineDuration = max(0.05, hookStart - p.timelineStart)
-                placements[i].fadeOut = .none
+                placements[i].fadeOut = .hardCut
             }
-            placements.append(contentsOf: tails)
         }
         // Stacked drums+bass+other at planner duck (~0.62 each) bury the
         // isolated title token. Offline mixdown has no blur DSP, so volume
@@ -581,10 +569,25 @@ nonisolated enum AutoJoinEngine {
                 return overlap > beatSec * 0.5
             }
             guard underTitle else { continue }
+            if p.stemKind == nil {
+                placements[i].volume = 0
+                continue
+            }
             placements[i].volume = min(
                 p.volume,
                 AutoGainPolicy.roleStagingVolume(role: .titleBed)
             )
+        }
+        for i in placements.indices {
+            let p = placements[i]
+            let isTitleVocal = titleVocalWindows.contains {
+                $0.songID == p.songID
+                    && $0.stemKind == .vocals
+                    && abs($0.timelineStart - p.timelineStart) < 0.05
+            }
+            if isTitleVocal {
+                placements[i].fadeIn = .hardCut
+            }
         }
         guard let titleHook = (titleVocals.min(by: { $0.timelineStart < $1.timelineStart })
                 ?? titleVocalWindows.min(by: { $0.timelineStart < $1.timelineStart }))

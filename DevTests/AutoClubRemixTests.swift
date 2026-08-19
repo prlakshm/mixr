@@ -3967,7 +3967,16 @@ func assertTitleHookVocalLead(
     label: String,
     tracks: [MixrTrack]? = nil
 ) {
-    let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+    let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan)
+    let hook = plan.placements
+        .filter {
+            $0.songID == bedID
+                && $0.role == .dominant
+                && $0.stemKind == .vocals
+                && $0.timelineStart < (drop1 ?? .infinity) - plan.barSeconds
+        }
+        .min(by: { $0.timelineStart < $1.timelineStart })
+        ?? AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
     check("\(label): title-hook placement exists", hook != nil)
     guard let hook else { return }
     let tokenOffset = lyric - hook.sourceStart
@@ -4007,6 +4016,23 @@ func assertTitleHookVocalLead(
         dump.contains("vocal-stem"),
         dump
     )
+    // Crate Whisper windows parse dump t=. One decimal rounds 11.43 → 11.4
+    // and the extra 30ms of pre-clip audio makes Whisper-small skip a short
+    // title token ("Oops") even though the clip itself leads with it.
+    var dumpT: Double?
+    if let range = dump.range(of: " t=") {
+        let digits = dump[range.upperBound...].prefix(while: { $0.isNumber || $0 == "." })
+        dumpT = Double(digits)
+    }
+    if let dumpT {
+        check(
+            "\(label): title-hook dump t= matches the clip to 10ms (not rounded to 0.1s)",
+            abs(dumpT - hook.timelineStart) < 0.015,
+            String(format: "dumpT=%.3f clip=%.3f dump=%@", dumpT, hook.timelineStart, dump)
+        )
+    } else {
+        check("\(label): title-hook dump includes t=", false, dump)
+    }
     check(
         "\(label): title-hook dump records vocals.wav sidecar",
         plan.decisions.contains {
@@ -4031,6 +4057,27 @@ func assertTitleHookVocalLead(
         "\(label): bed under the title token is ducked instrumental, not a second full-mix vocal",
         !under.isEmpty && ducked && under.allSatisfy { $0.stemKind != nil && $0.stemKind != .vocals },
         "under=\(under.map { "\($0.stemKind?.rawValue ?? "mix")@\($0.volume)" }.joined(separator: ",")) hookVol=\(String(format: "%.2f", hook.volume))"
+    )
+    // Validator equal-power repair must not fade the title vocal in or
+    // re-extend a full-mix intro under the first 4s (Whisper hears drums
+    // / the next line instead of the distinctive token).
+    check(
+        "\(label): title-hook vocal is a hard cut (equal-power fade-in eats the token)",
+        hook.fadeIn.type == .none || hook.fadeIn.duration < 0.25,
+        "fade=\(hook.fadeIn.type.rawValue) dur=\(String(format: "%.2f", hook.fadeIn.duration))"
+    )
+    let titleEnd = min(hook.timelineEnd, hook.timelineStart + 4)
+    let loudUnder = plan.placements.filter { p in
+        p.stemKind != .vocals
+            && p.volume > AutoGainPolicy.titleInstrumentalDuckVolume + 0.05
+            && min(p.timelineEnd, titleEnd) - max(p.timelineStart, hook.timelineStart) > plan.beatSeconds * 0.5
+    }
+    check(
+        "\(label): no loud full-mix/instrumental under the title token's first 4s",
+        loudUnder.isEmpty,
+        loudUnder.map {
+            String(format: "%@@%.2f t=%.1f-%.1f vol=%.2f", $0.stemKind?.rawValue ?? "mix", $0.timelineStart, $0.timelineStart, $0.timelineEnd, $0.volume)
+        }.joined(separator: ",")
     )
     if let tracks {
         let vocalClips = tracks.filter { $0.title.localizedCaseInsensitiveContains("vocals") }.flatMap(\.clips)

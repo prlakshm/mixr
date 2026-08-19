@@ -60,11 +60,19 @@ enum AutoRemixRunner {
         }
 
         let validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
-        guard !validated.placements.isEmpty else {
+        var staged = validated
+        AutoJoinEngine.boostJoinClipVolumes(
+            placements: &staged.placements,
+            pulseRegions: staged.pulseRegions,
+            beatSec: staged.beatSeconds,
+            barSec: staged.barSeconds,
+            profiles: profiles
+        )
+        guard !staged.placements.isEmpty else {
             return .failure(message: "Auto couldn’t produce a valid arrangement. Try songs with clearer structure or longer clips.")
         }
 
-        let applied = AutoRemixApplier.apply(validated, to: tracks)
+        let applied = AutoRemixApplier.apply(staged, to: tracks)
         let summary = AutoRemixPlanner.summary(for: applied.plan, tracks: applied.tracks)
         return .success(tracks: applied.tracks, plan: applied.plan, summary: summary)
     }

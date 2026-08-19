@@ -2646,7 +2646,7 @@ enum AutoRemixPlanner {
                         kind: .selectedAnchor,
                         songTitle: profile.title,
                         detail: String(
-                            format: "title-hook clip src=%.2fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@ %@",
+                            format: "title-hook clip src=%.2fs t=%.2fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@ %@",
                             ps.section.startSeconds,
                             ps.timelineStart,
                             entry.rawValue,
