@@ -1310,9 +1310,14 @@ enum AutoRemixPlanner {
             resolvedStem = grainStem
         }
 
-        // Trim Deck A dominants out of the loop window (wallpaper owns it).
-        for i in placements.indices where placements[i].role == .dominant {
+        // Trim Deck A out of the loop window (wallpaper owns it) — vocal
+        // stem title-hook copies AND ducked instrumental under them, not
+        // only dominants. Otherwise the bed still sings through the pivot.
+        for i in placements.indices {
             let p = placements[i]
+            let isGrain = p.role == .supporting
+                && abs(p.timelineDuration - beatSec) < beatSec * 0.4
+            if isGrain { continue }
             if p.timelineStart < loopStart, p.timelineEnd > loopStart + 0.01 {
                 let newDur = loopStart - p.timelineStart
                 if newDur >= tuning.minSegmentSeconds * 0.5 {
@@ -2959,17 +2964,27 @@ enum AutoRemixPlanner {
                         kind: .selectedAnchor,
                         songTitle: profile.title,
                         detail: String(
-                            format: "title-hook clip src=%.2fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@",
+                            format: "title-hook clip src=%.2fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@ %@",
                             ps.section.startSeconds,
                             ps.timelineStart,
                             entry.rawValue,
                             bodyFadeIn.type.rawValue,
                             bodyFadeIn.duration,
+                            profile.stems.hasVocals ? "vocal-stem" : "full-mix",
                             AutoChorusIsland.titleTokensDump(profile.title),
                             AutoChorusIsland.lyricHookDump(profile.analysis.signal)
                         )
                     )
                 )
+                if profile.stems.hasVocals {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .usedStemSidecar,
+                            songTitle: profile.title,
+                            detail: "title-hook from vocals.wav"
+                        )
+                    )
+                }
             }
 
             if tailSeconds > 0 {
@@ -3007,9 +3022,11 @@ enum AutoRemixPlanner {
             for seg in segments where seg.duration > 0.01 {
                 let hookVocalStem = mode == .mashup
                     && ps.slot.role == .chorus
-                    && entry == .hardHypeCut
-                    && mashupBedID != profile.songID
                     && profile.stems.hasVocals
+                    && (
+                        isTitleHookSlot
+                            || (entry == .hardHypeCut && mashupBedID != profile.songID)
+                    )
                 placements.append(
                     AutoClipPlacement(
                         songID: profile.songID,
@@ -3025,6 +3042,16 @@ enum AutoRemixPlanner {
                         slotIndex: i,
                         stemKind: hookVocalStem ? .vocals : nil
                     )
+                )
+            }
+
+            if isTitleHookSlot, profile.stems.hasVocals {
+                appendTitleHookInstrumentalUnderLead(
+                    lead: ps,
+                    profile: profile,
+                    slotIndex: i,
+                    placements: &placements,
+                    decisions: &decisions
                 )
             }
 
@@ -3716,6 +3743,88 @@ enum AutoRemixPlanner {
         }
     }
 
+    /// Title-hook copies that must land a title token ride the isolated
+    /// vocal so Whisper-small of the first 4s hears the word. Duck the bed
+    /// instrumental underneath — do not keep a full-mix vocal that buries
+    /// "Oops" under drums.
+    private static func appendTitleHookInstrumentalUnderLead(
+        lead: PlacedSlot,
+        profile: AutoSongProfile,
+        slotIndex: Int,
+        placements: inout [AutoClipPlacement],
+        decisions: inout [AutoDecision]
+    ) {
+        let leads = placements.filter {
+            $0.slotIndex == slotIndex
+                && $0.songID == profile.songID
+                && $0.role == .dominant
+                && $0.stemKind == .vocals
+        }
+        guard !leads.isEmpty else { return }
+        var fx = ClipEffectSettings()
+        fx.setLevel(32, for: MixrEffect.blur.rawValue)
+        fx = AutoSupportedEffects.sanitize(fx)
+        let duckVol = min(0.62, AutoGainPolicy.preservationSongVolume * 0.7)
+        if profile.stems.hasInstrumental {
+            for leadClip in leads {
+                for kind in profile.stems.instrumentalKinds {
+                    placements.append(
+                        AutoClipPlacement(
+                            songID: profile.songID,
+                            sourceStart: leadClip.sourceStart,
+                            timelineStart: leadClip.timelineStart,
+                            timelineDuration: leadClip.timelineDuration,
+                            tempoRatio: leadClip.tempoRatio,
+                            volume: duckVol,
+                            fadeIn: leadClip.fadeIn,
+                            fadeOut: leadClip.fadeOut,
+                            effects: fx,
+                            role: .supporting,
+                            slotIndex: slotIndex,
+                            overlapsPreviousSeconds: leadClip.timelineDuration,
+                            stemKind: kind
+                        )
+                    )
+                }
+            }
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: profile.title,
+                    detail: "ducked drums+bass+other under title-hook vocal"
+                )
+            )
+        } else {
+            for leadClip in leads {
+                placements.append(
+                    AutoClipPlacement(
+                        songID: profile.songID,
+                        sourceStart: leadClip.sourceStart,
+                        timelineStart: leadClip.timelineStart,
+                        timelineDuration: leadClip.timelineDuration,
+                        tempoRatio: leadClip.tempoRatio,
+                        volume: duckVol,
+                        fadeIn: leadClip.fadeIn,
+                        fadeOut: leadClip.fadeOut,
+                        effects: fx,
+                        role: .supporting,
+                        slotIndex: slotIndex,
+                        overlapsPreviousSeconds: leadClip.timelineDuration,
+                        stemKind: nil
+                    )
+                )
+            }
+            decisions.append(
+                AutoDecision(
+                    kind: .duckedSupportingVocal,
+                    songTitle: profile.title,
+                    detail: "full-mix bed ducked under title-hook vocal"
+                )
+            )
+        }
+        _ = lead
+    }
+
     /// Bed under the drop (one kick/bass) + optional second vocal overlay.
     /// Vocals may stack; dual full-mix kick/sub stacks are refused.
     private static func appendMashupDropStacks(
@@ -4242,13 +4351,13 @@ enum AutoRemixPlanner {
             let pivot = isPivotGrain(p)
             let dropLead = p.role == .dominant && nearDrop(p.timelineStart)
             let bedUnderDrop = p.role == .supporting && nearDrop(p.timelineStart) && !pivot
-            let titleHookCopy = p.role == .dominant && p.stemKind == nil
+            let titleHookCopy = p.role == .dominant
                 && !nearDrop(p.timelineStart)
                 && p.timelineDuration > beatSec * 8
                 && p.timelineStart < (dropStarts.min() ?? .infinity) - barSec
             guard pivot || dropLead || bedUnderDrop || titleHookCopy else { continue }
             var vol = max(p.volume, floor)
-            if dropLead, p.stemKind == .vocals {
+            if (dropLead || titleHookCopy), p.stemKind == .vocals {
                 vol = max(vol, vocalStemMakeup(placement: p, referenceRMS: referenceRMS, profiles: profiles, barSec: barSec))
             }
             placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)

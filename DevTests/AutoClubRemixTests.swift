@@ -2452,8 +2452,12 @@ do {
             ]
         )
         var tuning = AutoTuning.standard
-        tuning.explicitStemsBySongID[bed.id] = AutoStemSet(lyrics: bedLyrics)
-        tuning.explicitStemsBySongID[guest.id] = AutoStemSet(lyrics: guestLyrics)
+        var bedStems = mockStemSet(in: bedLyrics.deletingLastPathComponent())
+        bedStems.lyrics = bedLyrics
+        var guestStems = mockStemSet(in: guestLyrics.deletingLastPathComponent())
+        guestStems.lyrics = guestLyrics
+        tuning.explicitStemsBySongID[bed.id] = bedStems
+        tuning.explicitStemsBySongID[guest.id] = guestStems
         let signals: [UUID: SongSignalFeatures] = [
             bed.id: crateFeatures(duration: 220, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50),
             guest.id: crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
@@ -2473,6 +2477,15 @@ do {
                 beats: 1,
                 label: "pair B: 1-beat pad when the distinctive token is already inside the first 1–2s"
             )
+            if let bedID = plan.mashupBedSongID {
+                assertTitleHookVocalLead(
+                    plan: plan,
+                    bedID: bedID,
+                    lyric: bedLyric,
+                    label: "pair B",
+                    tracks: tracks
+                )
+            }
             assertMashupFestivalStack(plan, label: "pair B", tracks: tracks)
             if let vocalID = plan.mashupVocalSongID {
                 let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
@@ -3748,6 +3761,77 @@ func assertTitleHookLead(
     )
 }
 
+/// Whisper-small of the first 4s needs the title token on an isolated vocal
+/// (or a ducked bed under that word) — full-mix drums bury "Oops".
+func assertTitleHookVocalLead(
+    plan: AutoRemixPlan,
+    bedID: UUID,
+    lyric: Double,
+    label: String,
+    tracks: [MixrTrack]? = nil
+) {
+    let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+    check("\(label): title-hook placement exists", hook != nil)
+    guard let hook else { return }
+    let tokenOffset = lyric - hook.sourceStart
+    check(
+        "\(label): title token sits inside the first 4s of the title-hook clip",
+        tokenOffset > 0.05 && tokenOffset < 4.0 && hook.sourceStart < lyric - 0.05,
+        String(format: "src=%.2f lyric=%.2f offset=%.2f", hook.sourceStart, lyric, tokenOffset)
+    )
+    check(
+        "\(label): title-hook copy uses the vocal stem so Whisper hears the token",
+        hook.stemKind == .vocals,
+        "stem=\(hook.stemKind?.rawValue ?? "full-mix") src=\(String(format: "%.2f", hook.sourceStart))"
+    )
+    let dump = plan.decisions
+        .filter { ($0.detail ?? "").contains("title-hook clip") }
+        .compactMap(\.detail)
+        .joined(separator: " | ")
+    check(
+        "\(label): title-hook dump names vocal-stem (not full-mix bed)",
+        dump.contains("vocal-stem"),
+        dump
+    )
+    check(
+        "\(label): title-hook dump records vocals.wav sidecar",
+        plan.decisions.contains {
+            $0.kind == .usedStemSidecar
+                && ($0.detail ?? "").localizedCaseInsensitiveContains("title-hook")
+                && ($0.detail ?? "").localizedCaseInsensitiveContains("vocals")
+        },
+        plan.decisions.filter { $0.kind == .usedStemSidecar }.compactMap(\.detail).joined(separator: " | ")
+    )
+    let under = plan.placements.filter {
+        $0.songID == bedID
+            && $0.role == .supporting
+            && $0.stemKind != .vocals
+            && abs($0.timelineStart - hook.timelineStart) < 0.2
+            && $0.timelineDuration > plan.beatSeconds
+    }
+    let ducked = under.contains {
+        $0.volume + 0.02 < hook.volume
+            || $0.effects.level(for: MixrEffect.blur.rawValue) >= 18
+    }
+    check(
+        "\(label): bed under the title token is ducked instrumental, not a second full-mix vocal",
+        !under.isEmpty && ducked && under.allSatisfy { $0.stemKind != nil && $0.stemKind != .vocals },
+        "under=\(under.map { "\($0.stemKind?.rawValue ?? "mix")@\($0.volume)" }.joined(separator: ",")) hookVol=\(String(format: "%.2f", hook.volume))"
+    )
+    if let tracks {
+        let vocalClips = tracks.filter { $0.title.localizedCaseInsensitiveContains("vocals") }.flatMap(\.clips)
+        let hit = vocalClips.contains {
+            abs(MixrTimeline.seconds(fromUnits: $0.start) - hook.timelineStart) < 0.25
+                && abs($0.sourceOffsetSeconds - hook.sourceStart) < 0.25
+        }
+        check(
+            "\(label): applier puts the title-hook copy on the vocal-stem row",
+            hit,
+            "vocalClips=\(vocalClips.count) wantSrc=\(String(format: "%.2f", hook.sourceStart))"
+        )
+    }
+}
+
 do {
     let song = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Songs/Oops I Did It Again.mp3")
     let vocals = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/vocals.wav")
@@ -4124,8 +4208,9 @@ do {
         try writeLyricsJSON(
             to: oopsLyrics, title: oops.title, titleHookStart: bedLyric,
             words: [
-                (bedLyric, "oops"), (50.6, "I"), (50.9, "did"), (51.2, "it"), (51.5, "again"),
-                (bedLyric + 14.4, "innocent")
+                (47.86, "oh"), (49.06, "baby"), (49.90, "it's"), (50.10, "me"),
+                (50.22, "back"), (bedLyric, "oops"), (51.18, "I"), (51.40, "did"),
+                (51.55, "it"), (51.70, "again"), (bedLyric + 14.4, "innocent")
             ]
         )
         let guestJoinWord = dropLyric + 0.44
@@ -4136,8 +4221,12 @@ do {
                     (dropLyric + 0.94, "more"), (dropLyric + 1.14, "time")]
         )
         var tuning = AutoTuning.standard
-        tuning.explicitStemsBySongID[oops.id] = AutoStemSet(lyrics: oopsLyrics)
-        tuning.explicitStemsBySongID[bomt.id] = AutoStemSet(lyrics: bomtLyrics)
+        var oopsStems = mockStemSet(in: oopsLyrics.deletingLastPathComponent())
+        oopsStems.lyrics = oopsLyrics
+        var bomtStems = mockStemSet(in: bomtLyrics.deletingLastPathComponent())
+        bomtStems.lyrics = bomtLyrics
+        tuning.explicitStemsBySongID[oops.id] = oopsStems
+        tuning.explicitStemsBySongID[bomt.id] = bomtStems
         let signals: [UUID: SongSignalFeatures] = [
             oops.id: popTitleChorusRealCrate59fe1e8(
                 duration: 200, bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55,
@@ -4201,6 +4290,15 @@ do {
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
             )
             assertMashupFestivalStack(plan, label: "Oops×BOMT", tracks: tracks)
+            if let bedID = plan.mashupBedSongID {
+                assertTitleHookVocalLead(
+                    plan: plan,
+                    bedID: bedID,
+                    lyric: bedLyric,
+                    label: "Oops×BOMT",
+                    tracks: tracks
+                )
+            }
             if let vocalID = plan.mashupVocalSongID {
                 assertMashupPivotFromIncomingGuest(
                     plan: plan,
@@ -4326,6 +4424,13 @@ do {
             !guestDrop.isEmpty && guestDrop.allSatisfy { $0.stemKind == AutoStemKind.vocals },
             "n=\(guestDrop.count) kinds=\(guestKinds)"
         )
+        if let titleHook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
+            check(
+                "Stem mashup: title-hook copy uses vocal stem (not full-mix bed)",
+                titleHook.stemKind == .vocals,
+                "stem=\(titleHook.stemKind?.rawValue ?? "full-mix")"
+            )
+        }
         check("Incoming vocal hard-cut (no fade-in)", guestDrop.allSatisfy { $0.fadeIn.type == .none })
         check(
             "Hook-replace Drop 1 vocal stem gets RMS makeup (clip volume may exceed 1.0)",

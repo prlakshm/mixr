@@ -39,7 +39,7 @@ Never cut the best / most identifiable lines. Opening titles and hook lines
 
 - Pivot grain is the **incoming join token** — a distinctive hook word of the Drop 1 guest, taken from that vocal stem — never the outgoing chorus tail and never a silent rest. Shared generic fillers (“all”) are not join tokens.
 - Incoming hook starts on the **downbeat of a real line**, not mid-word.
-  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. Never a full bar / earlier catalog peak. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in.
+  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. Never a full bar / earlier catalog peak. When a vocal stem exists, those copies play the **vocal stem** (ducked instrumental under the first word) so Whisper-small of the first 4s hears the token — a full-mix bed buries “Oops” under drums. Do not walk earlier than two beats to chase audibility. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in.
 - If phrase confidence cannot support a last-word grain, **skip the loop**
   rather than slicing the title. Keep playing through the window so the join
   does not go quiet.
