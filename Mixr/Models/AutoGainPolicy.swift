@@ -101,9 +101,12 @@ nonisolated enum AutoGainPolicy {
 
     /// Pivot wallpaper grain volume. HPF/blur takes the kick out; clip
     /// volume stays at least as loud as the verse so the join is not a hole.
+    /// Incoming-join vocal grains use `vocalStemMakeupDefault` so they are
+    /// not quieter than the title-hook vocal copy.
     static let pivotGrainVolume = 1.0
 
     /// Incoming Drop 1 / hook-replace attack — full clip volume, no fade-in.
+    /// Must stay at least as loud as the title-hook vocal copy (RMS makeup).
     static let incomingDropVolume = 1.0
 
     /// Isolated vocal stems are quieter than a full mix. Auto may write

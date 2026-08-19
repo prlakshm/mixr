@@ -843,6 +843,18 @@ do {
                 firstBar + 1.5 >= verseDB,
                 String(format: "verse=%.2f bar1=%.2f delta=%.2f", verseDB, firstBar, verseDB - firstBar)
             )
+            if let title = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan),
+               title.stemKind == .vocals {
+                let titleDB = AutoRemixDiagnostics.meanLoudnessDB(
+                    samples: rendered.mix, sampleRate: SR,
+                    from: title.timelineStart + 0.4, to: title.timelineStart + 4.0
+                )
+                check(
+                    "Auto mashup Drop 1 RMS is at least the title-hook vocal copy",
+                    dropDB + 0.4 >= titleDB,
+                    String(format: "title=%.2f drop=%.2f delta=%.2f", titleDB, dropDB, titleDB - dropDB)
+                )
+            }
         }
     case .failure(let message):
         check("Britney mashup energy-through-join render", false, message)

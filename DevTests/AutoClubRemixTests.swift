@@ -3836,6 +3836,42 @@ func assertMashupPivotFromIncomingGuest(
             String(format: "src=%.2f outgoing=%.2f", g0.sourceStart, outgoingTokenTime)
         )
     }
+    if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+        let loopStart = drop1 - plan.barSeconds * 2
+        let bedID = plan.mashupBedSongID
+        let bedInWallpaper = plan.placements.filter { p in
+            guard p.songID == bedID else { return false }
+            let isGrain = p.role == .supporting
+                && abs(p.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
+            if isGrain { return false }
+            return p.timelineStart < drop1 - 0.02 && p.timelineEnd > loopStart + 0.08
+        }
+        check(
+            "\(label): wallpaper window has no outgoing bed (isolated incoming grains)",
+            bedInWallpaper.isEmpty,
+            bedInWallpaper.map {
+                "\($0.stemKind?.rawValue ?? "mix") t=\(String(format: "%.2f", $0.timelineStart))–\(String(format: "%.2f", $0.timelineEnd)) src=\(String(format: "%.2f", $0.sourceStart))"
+            }.joined(separator: ",")
+        )
+    }
+    if let g0 = grains.first {
+        check(
+            "\(label): pivot dump names grain src= so crate bounce can see the join token",
+            loopDump.contains("src="),
+            loopDump
+        )
+        check(
+            "\(label): pivot grains are loud (RMS makeup), not quieter than the title-hook / verse floor",
+            g0.volume + 0.001 >= AutoGainPolicy.vocalStemMakeupDefault,
+            String(format: "grainVol=%.2f", g0.volume)
+        )
+        let firstBlur = g0.effects.level(for: MixrEffect.blur.rawValue)
+        check(
+            "\(label): first pivot grains stay intelligible (blur starts below a 40 HPF wall)",
+            firstBlur < 40,
+            String(format: "blur=%.0f", firstBlur)
+        )
+    }
 }
 
 func assertTitleHookLead(
@@ -3932,6 +3968,23 @@ func assertTitleHookVocalLead(
             "\(label): applier puts the title-hook copy on the vocal-stem row",
             hit,
             "vocalClips=\(vocalClips.count) wantSrc=\(String(format: "%.2f", hook.sourceStart))"
+        )
+    }
+    if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+        let dropVocals = plan.placements.filter {
+            $0.role == .dominant
+                && $0.stemKind == .vocals
+                && abs($0.timelineStart - drop1) < 0.12
+        }
+        let titleVol = hook.volume
+        check(
+            "\(label): incoming Drop 1 RMS makeup is at least the title-hook vocal copy",
+            !dropVocals.isEmpty && dropVocals.allSatisfy { $0.volume + 0.001 >= titleVol },
+            String(
+                format: "title=%.2f drop=%@",
+                titleVol,
+                dropVocals.map { String(format: "%.2f", $0.volume) }.joined(separator: ",")
+            )
         )
     }
 }

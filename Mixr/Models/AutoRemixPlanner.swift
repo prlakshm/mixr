@@ -1320,22 +1320,26 @@ enum AutoRemixPlanner {
             resolvedStem = grainStem
         }
 
-        // Trim Deck A out of the loop window (wallpaper owns it) — vocal
-        // stem title-hook copies AND ducked instrumental under them, not
-        // only dominants. Otherwise the bed still sings through the pivot.
+        // Trim every non-grain song clip out of [loopStart, drop). A leftover
+        // chorus tail shorter than minSegmentSeconds used to skip this trim
+        // and keep singing the outgoing bed through the wallpaper.
         for i in placements.indices {
             let p = placements[i]
             let isGrain = p.role == .supporting
                 && abs(p.timelineDuration - beatSec) < beatSec * 0.4
             if isGrain { continue }
-            if p.timelineStart < loopStart, p.timelineEnd > loopStart + 0.01 {
+            guard p.timelineEnd > loopStart + 0.01,
+                  p.timelineStart < dropTimelineStart - 0.01 else { continue }
+            if p.timelineStart >= loopStart - 0.01 {
+                placements[i].timelineDuration = 0
+            } else {
                 let newDur = loopStart - p.timelineStart
-                if newDur >= tuning.minSegmentSeconds * 0.5 {
+                if newDur >= 0.05 {
                     placements[i].timelineDuration = newDur
                     placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
+                } else {
+                    placements[i].timelineDuration = 0
                 }
-            } else if p.timelineStart >= loopStart - 0.01, p.timelineStart < dropTimelineStart {
-                placements[i].timelineDuration = 0
             }
         }
         placements.removeAll { $0.timelineDuration < 0.05 }
@@ -1348,10 +1352,20 @@ enum AutoRemixPlanner {
             AutoClubPulse.Region(role: .buildOut, timelineStart: loopStart, timelineEnd: dropTimelineStart)
         )
 
+        let grainVol: Double = {
+            if resolvedStem == .vocals {
+                return max(
+                    AutoGainPolicy.pivotGrainVolume,
+                    AutoGainPolicy.vocalStemMakeupDefault
+                )
+            }
+            return AutoGainPolicy.pivotGrainVolume
+        }()
         for i in 0..<repeats {
             let t0 = loopStart + Double(i) * beatSec
-            // Rising HPF: thin/tinny through the 1–2 bars. Volume stays up.
-            let blur = 40.0 + (30.0 * Double(i) / Double(max(repeats - 1, 1)))
+            // Rising HPF: thin/tinny through the 1–2 bars. Start below a
+            // 40 wall so the first incoming tokens stay intelligible.
+            let blur = 22.0 + (26.0 * Double(i) / Double(max(repeats - 1, 1)))
             var fx = ClipEffectSettings()
             fx.setLevel(blur, for: MixrEffect.blur.rawValue)
             fx = AutoSupportedEffects.sanitize(fx)
@@ -1363,7 +1377,7 @@ enum AutoRemixPlanner {
                     timelineStart: t0,
                     timelineDuration: beatSec,
                     tempoRatio: grainTempo,
-                    volume: AutoGainPolicy.pivotGrainVolume,
+                    volume: grainVol,
                     fadeIn: ClipTransition(type: .none, duration: 0),
                     fadeOut: ClipTransition(type: .none, duration: 0),
                     effects: fx,
@@ -1380,11 +1394,12 @@ enum AutoRemixPlanner {
                 kind: .pivotWallpaperLoop,
                 songTitle: useIncomingJoin ? deckBTitle : deckATitle,
                 detail: String(
-                    format: "%d×1-beat%@%@%@ → hard cut @%.1fs",
+                    format: "%d×1-beat%@%@%@ src=%.2f → hard cut @%.1fs",
                     repeats,
                     pivot.map { " “\($0)”" } ?? "",
                     useIncomingJoin ? " incoming-join" : "",
                     resolvedStem == .vocals ? " vocal-stem" : "",
+                    grainSource,
                     dropTimelineStart
                 )
             )
@@ -3549,12 +3564,24 @@ enum AutoRemixPlanner {
                     placements[nextIdx].volume,
                     AutoGainPolicy.incomingDropVolume
                 )
-                // Trim any dominant that spilled into the loop window.
-                if prev.timelineEnd > next.timelineStart - pivotWindow + 0.1 {
-                    let trimmed = (next.timelineStart - pivotWindow) - prev.timelineStart
-                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
-                        placements[prevIdx].timelineDuration = trimmed
-                        placements[prevIdx].fadeOut = .none
+                let loopStart = next.timelineStart - pivotWindow
+                for i in placements.indices {
+                    let p = placements[i]
+                    let isGrain = p.role == .supporting
+                        && abs(p.timelineDuration - beatSec) < beatSec * 0.4
+                    if isGrain { continue }
+                    guard p.timelineEnd > loopStart + 0.01,
+                          p.timelineStart < next.timelineStart - 0.01 else { continue }
+                    if p.timelineStart >= loopStart - 0.01 {
+                        placements[i].timelineDuration = 0
+                    } else {
+                        let newDur = loopStart - p.timelineStart
+                        if newDur >= 0.05 {
+                            placements[i].timelineDuration = newDur
+                            placements[i].fadeOut = .none
+                        } else {
+                            placements[i].timelineDuration = 0
+                        }
                     }
                 }
                 continue
@@ -3776,6 +3803,7 @@ enum AutoRemixPlanner {
                 }
             }
         }
+        placements.removeAll { $0.timelineDuration < 0.05 }
     }
 
     private static func fadesTowardSilence(_ t: ClipTransition) -> Bool {
@@ -4387,7 +4415,8 @@ enum AutoRemixPlanner {
 
     /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least
     /// as loud as the bed verse. Vocal stems get RMS makeup (clip volume may
-    /// exceed 1.0). No fade-in on the join.
+    /// exceed 1.0). Incoming Drop 1 stays at least as loud as the title-hook
+    /// vocal copy. No fade-in on the join (opening fade-in is reapplied after).
     private static func boostJoinClipVolumes(
         placements: inout [AutoClipPlacement],
         pulseRegions: [AutoClubPulse.Region],
@@ -4401,6 +4430,30 @@ enum AutoRemixPlanner {
         }
         func isPivotGrain(_ p: AutoClipPlacement) -> Bool {
             p.role == .supporting && abs(p.timelineDuration - beatSec) < beatSec * 0.4
+        }
+        func isTitleHookCopy(_ p: AutoClipPlacement) -> Bool {
+            p.role == .dominant
+                && !nearDrop(p.timelineStart)
+                && p.timelineDuration > beatSec * 8
+                && p.timelineStart < (dropStarts.min() ?? .infinity) - barSec
+        }
+        func isDropLead(_ p: AutoClipPlacement) -> Bool {
+            p.role == .dominant && nearDrop(p.timelineStart)
+        }
+        func isBedUnderDrop(_ p: AutoClipPlacement) -> Bool {
+            p.role == .supporting && nearDrop(p.timelineStart) && !isPivotGrain(p)
+        }
+        func measuredRMSDB(_ p: AutoClipPlacement) -> Double? {
+            guard let signal = profiles[p.songID]?.analysis.signal else { return nil }
+            let window = max(0.5, min(barSec, 2.6))
+            let stem = signal.meanStemVocalRMSDB(from: p.sourceStart, to: p.sourceStart + window)
+            if stem > -80 { return stem }
+            let mix = signal.meanRMSDB(from: p.sourceStart, to: p.sourceStart + window)
+            return mix > -80 ? mix : nil
+        }
+        func effectiveDB(_ p: AutoClipPlacement) -> Double? {
+            guard let rms = measuredRMSDB(p) else { return nil }
+            return rms + 20.0 * log10(max(p.volume, 0.001))
         }
 
         let verseVol = placements
@@ -4430,19 +4483,52 @@ enum AutoRemixPlanner {
         for i in placements.indices {
             let p = placements[i]
             let pivot = isPivotGrain(p)
-            let dropLead = p.role == .dominant && nearDrop(p.timelineStart)
-            let bedUnderDrop = p.role == .supporting && nearDrop(p.timelineStart) && !pivot
-            let titleHookCopy = p.role == .dominant
-                && !nearDrop(p.timelineStart)
-                && p.timelineDuration > beatSec * 8
-                && p.timelineStart < (dropStarts.min() ?? .infinity) - barSec
+            let dropLead = isDropLead(p)
+            let bedUnderDrop = isBedUnderDrop(p)
+            let titleHookCopy = isTitleHookCopy(p)
             guard pivot || dropLead || bedUnderDrop || titleHookCopy else { continue }
             var vol = max(p.volume, floor)
-            if (dropLead || titleHookCopy), p.stemKind == .vocals {
+            if p.stemKind == .vocals, dropLead || titleHookCopy || pivot {
                 vol = max(vol, vocalStemMakeup(placement: p, referenceRMS: referenceRMS, profiles: profiles, barSec: barSec))
             }
             placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
-            placements[i].fadeIn = .hardCut
+            if pivot || dropLead || bedUnderDrop {
+                placements[i].fadeIn = .hardCut
+            }
+        }
+
+        // Raise incoming Drop 1 (guest vocals + that song's drop stems) so
+        // mix RMS is at least the title-hook vocal copy. Do not duck the title.
+        let titleVocals = placements.filter { isTitleHookCopy($0) && $0.stemKind == .vocals }
+        guard let titleHook = titleVocals.min(by: { $0.timelineStart < $1.timelineStart })
+                ?? titleVocals.first else { return }
+        let titleVol = titleHook.volume
+        let titleEff = effectiveDB(titleHook)
+        let dropSongID = placements.first(where: { isDropLead($0) })?.songID
+        guard let dropSongID else { return }
+
+        var dropScale = 1.0
+        for i in placements.indices {
+            let p = placements[i]
+            guard isDropLead(p), p.songID == dropSongID, p.stemKind == .vocals else { continue }
+            var vol = max(p.volume, titleVol)
+            if let titleEff, let rms = measuredRMSDB(p) {
+                vol = max(vol, pow(10.0, (titleEff - rms) / 20.0))
+            }
+            vol = min(AutoGainPolicy.maxClipVolume, vol)
+            dropScale = max(dropScale, vol / max(p.volume, 0.001))
+            placements[i].volume = vol
+        }
+        for i in placements.indices {
+            let p = placements[i]
+            guard p.songID == dropSongID else { continue }
+            guard isDropLead(p) || isBedUnderDrop(p) else { continue }
+            if isDropLead(p), p.stemKind == .vocals { continue }
+            var vol = max(p.volume, titleVol)
+            if dropScale > 1.001 {
+                vol = max(vol, p.volume * dropScale)
+            }
+            placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
         }
     }
 

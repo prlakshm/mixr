@@ -107,10 +107,11 @@ write it in the planner/applier. Do not only ride track faders or blur.
 Typical:
 
 - completed Deck A hook / verses: ~full
-- pivot grains: **at least as loud as the bed verse** (not ducked); HPF/blur does the thin, volume stays up
-- incoming Drop 1 vocal / bed kick: **at least as loud as the bed verse**
+- pivot grains: **at least as loud as the bed verse and the title-hook vocal copy** (vocal-stem makeup, not ducked); HPF/blur does the thin, volume stays up. First grains start below a 40 blur wall so the incoming token stays intelligible. Dump includes `src=` of the join token.
+- incoming Drop 1 vocal / that song's drop stems: **at least as loud as the bed verse and the title-hook vocal copy**
   (hard cut; no fade-in). If the clip is a quieter stem, apply RMS makeup
-  (clip volume may exceed 1.0). Volume=1.0 alone is not enough.
+  (clip volume may exceed 1.0). Volume=1.0 alone is not enough. Raise Drop 1; do not duck or remove vocal-stem title copies.
+- Trim **every** non-grain song clip out of the wallpaper window — no leftover-bed floor. A short outgoing chorus tail playing through `[loopStart, drop)` is a failed pivot.
 - bed under hook: audible (don’t mute) with HPF/blur carving the bed vocal
 - never fade both sides toward silence at a pivot join
 
