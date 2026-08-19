@@ -299,6 +299,74 @@ struct AutoSFXEvent: Sendable {
     nonisolated var timelineEnd: Double { timelineStart + duration }
 }
 
+// MARK: - Festival Drop 1 mix window
+
+/// Take-out (riser/snare/tape) ends on the last pivot beat — the Drop 1
+/// downbeat — not a beat early (that hole was ~−24 dB) and not on the
+/// guest's first syllable. Drop-ride (air/clap/impact) starts after that
+/// attack, on extra SFX rows.
+enum AutoFestivalMixWindow {
+    static func events(
+        dropAt: Double,
+        dropEnd: Double,
+        barSec: Double,
+        beatSec: Double,
+        protectedRanges: [(Double, Double)],
+        existing: [AutoSFXEvent] = []
+    ) -> [AutoSFXEvent] {
+        var sfx = existing
+        let takeOutEnd = dropAt
+        let attackLo = dropAt
+        let attackHi = dropAt + beatSec
+        let windowStart = max(0, takeOutEnd - max(2 * barSec, 4.0))
+
+        func alreadyHas(_ id: String, near t: Double, slack: Double = 0.12) -> Bool {
+            sfx.contains { $0.assetID == id && abs($0.timelineStart - t) < slack }
+        }
+        func overlapsProtected(start: Double, duration: Double) -> Bool {
+            let end = start + duration
+            if start < attackHi - 0.01 && end > attackLo + 0.01 { return true }
+            for (lo, hi) in protectedRanges {
+                if start < hi && end > lo { return true }
+            }
+            return false
+        }
+        func placeEnding(_ id: String, atEnd end: Double, purpose: String) {
+            guard let def = SoundEffectLibrary.definition(for: id) else { return }
+            // End exactly on the last pivot beat. Do not slide start forward
+            // (that pushes the tail onto Drop 1's first syllable and the
+            // overlap guard then drops the hit — a silent pre-drop).
+            let start = end - def.durationSeconds
+            guard start >= windowStart - 0.05, start >= -0.01 else { return }
+            if overlapsProtected(start: start, duration: def.durationSeconds) { return }
+            if alreadyHas(id, near: start, slack: 0.15) { return }
+            sfx.append(AutoSFXEvent(assetID: id, timelineStart: start, purpose: purpose))
+        }
+        func placeAt(_ id: String, t: Double, purpose: String) {
+            guard let def = SoundEffectLibrary.definition(for: id) else { return }
+            guard t >= dropAt + beatSec - 0.02, t < dropEnd - 0.08 else { return }
+            if overlapsProtected(start: t, duration: def.durationSeconds) { return }
+            if alreadyHas(id, near: t, slack: 0.12) { return }
+            sfx.append(AutoSFXEvent(assetID: id, timelineStart: t, purpose: purpose))
+        }
+
+        placeEnding("riser", atEnd: takeOutEnd, purpose: "riser take-out before the drop")
+        placeEnding("snareBuild", atEnd: takeOutEnd, purpose: "snare-roll take-out before the drop")
+        placeEnding("tapeStop", atEnd: takeOutEnd, purpose: "tape-stop take-out")
+        placeAt("airSweep", t: dropAt + beatSec, purpose: "air sweep after drop attack")
+        placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
+        placeAt("clapFill", t: dropAt + 2 * barSec, purpose: "clap fill in the drop")
+        placeAt("impact", t: dropAt + 4 * barSec, purpose: "impact ride mid drop")
+        placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
+        placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
+        placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
+        return Array(sfx.dropFirst(existing.count))
+    }
+
+    static let festivalDetail =
+        "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+}
+
 // MARK: - Intentional Silence
 
 /// A deliberate gap the validator must not close (pre-drop pause, etc.).
@@ -363,6 +431,67 @@ struct AutoRemixPlan: Sendable {
     nonisolated var barSeconds: Double { beatSeconds * 4 }
     /// One eighth note at the target tempo.
     nonisolated var eighthNoteSeconds: Double { beatSeconds * 0.5 }
+
+    /// Crate dump_gate greps `plan.decisions.prefix(16)`. Festival / wallpaper
+    /// used to append after every selectedAnchor, so mashup dumps looked
+    /// empty even when Drop 1 had the stack. Hoist them next to Drop 1.
+    mutating func promoteMixWindowDump() {
+        guard mode == .mashup else { return }
+        func isFestival(_ d: AutoDecision) -> Bool {
+            d.kind == .addedRiserIntoDrop
+                && (d.detail ?? "").localizedCaseInsensitiveContains("festival")
+                && (d.detail ?? "").localizedCaseInsensitiveContains("take-out")
+        }
+        func isWallpaper(_ d: AutoDecision) -> Bool {
+            d.kind == .pivotWallpaperLoop
+        }
+        func isDrop1Guest(_ d: AutoDecision) -> Bool {
+            d.kind == .selectedAnchor && (d.detail ?? "").contains("Drop 1 guest placed")
+        }
+        func isFestivalStamp(_ d: AutoDecision) -> Bool {
+            d.kind == .selectedAnchor
+                && (d.detail ?? "").localizedCaseInsensitiveContains("addedRiserIntoDrop")
+                && (d.detail ?? "").localizedCaseInsensitiveContains("festival")
+        }
+
+        var hot: [AutoDecision] = []
+        var drop1: AutoDecision?
+        decisions.removeAll { d in
+            if isFestival(d) || isWallpaper(d) {
+                hot.append(d)
+                return true
+            }
+            if isFestivalStamp(d) { return true }
+            if isDrop1Guest(d), drop1 == nil {
+                drop1 = d
+                return true
+            }
+            return false
+        }
+        var seen = Set<String>()
+        hot = hot.filter { d in
+            let key = "\(d.kind)|\(d.detail ?? "")"
+            if seen.contains(key) { return false }
+            seen.insert(key)
+            return true
+        }
+        if !hot.contains(where: isFestival) {
+            hot.insert(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: AutoFestivalMixWindow.festivalDetail
+                ),
+                at: 0
+            )
+        }
+        let rolesIdx = decisions.firstIndex { $0.kind == .assignedMashupRoles } ?? 0
+        let insertAt = min(rolesIdx + 1, decisions.count)
+        var block: [AutoDecision] = []
+        if let drop1 { block.append(drop1) }
+        block.append(contentsOf: hot)
+        decisions.insert(contentsOf: block, at: insertAt)
+    }
 }
 
 // MARK: - User-Facing Summary

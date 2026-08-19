@@ -263,8 +263,8 @@ nonisolated enum AutoRemixValidator {
             }
             if riding { return true }
             let takeOut = dropStarts.contains {
-                abs(($0 - beatSec) - event.timelineEnd) < max(0.55, beatSec + 0.2)
-                    || abs($0 - event.timelineEnd) < 0.45
+                abs($0 - event.timelineEnd) < max(0.55, beatSec + 0.2)
+                    || abs(($0 - beatSec) - event.timelineEnd) < max(0.55, beatSec + 0.2)
             }
                 || plan.pulseRegions.contains { r in
                     r.role == .buildOut

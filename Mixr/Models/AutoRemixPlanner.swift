@@ -676,7 +676,7 @@ enum AutoRemixPlanner {
                         beatSec: beat,
                         flavor: flavor,
                         protectedRanges: lyricOnsetProtectedRanges(
-                            pulseRegions: pulseRegions, dropAt: dropAt
+                            pulseRegions: pulseRegions, dropAt: dropAt, placements: placements
                         ),
                         sfx: &sfx,
                         decisions: &decisions
@@ -1051,7 +1051,7 @@ enum AutoRemixPlanner {
                         beatSec: beat,
                         flavor: flavor,
                         protectedRanges: lyricOnsetProtectedRanges(
-                            pulseRegions: pulseRegions, dropAt: t0
+                            pulseRegions: pulseRegions, dropAt: t0, placements: placements
                         ),
                         sfx: &sfx,
                         decisions: &decisions
@@ -3033,13 +3033,14 @@ enum AutoRemixPlanner {
             // (hard cut into hook-replace) — never on the bed's own complete chorus.
             if mode == .mashup, ps.slot.role == .chorus {
                 if !ps.slot.isFinalPeak,
-                   entry == .hardHypeCut,
+                   !decisions.contains(where: { $0.kind == .pivotWallpaperLoop }),
+                   (entry == .hardHypeCut || profile.songID == mashupVocalID),
                    let bedID = mashupBedID,
                    let bedTitle = ordered.first(where: { $0.songID == bedID })?.title,
                    let phrase = placements.last(where: {
                        $0.songID == bedID
                            && $0.role == .dominant
-                           && $0.timelineEnd <= ps.timelineStart + 0.05
+                           && $0.timelineStart + 0.05 < ps.timelineStart
                    }) {
                     let bedStems = ordered.first(where: { $0.songID == bedID })?.stems
                     appendPivotWallpaperLoop(
@@ -3210,7 +3211,7 @@ enum AutoRemixPlanner {
                             beatSec: beatSec,
                             flavor: mashupFlavor,
                             protectedRanges: lyricOnsetProtectedRanges(
-                                pulseRegions: pulseRegions, dropAt: boundary
+                                pulseRegions: pulseRegions, dropAt: boundary, placements: placements
                             ),
                             sfx: &sfx,
                             decisions: &decisions
@@ -3359,6 +3360,20 @@ enum AutoRemixPlanner {
             halfTimeDrop: mashupFlavor.bias.halfTimeDrop
         )
 
+        ensureMashupDrop1Wallpaper(
+            mode: mode,
+            mashupBedID: mashupBedID,
+            mashupVocalID: mashupVocalID,
+            ordered: ordered,
+            barSec: barSec,
+            beatSec: beatSec,
+            tuning: tuning,
+            placements: &placements,
+            pulseRegions: &pulseRegions,
+            intentionalGaps: &intentionalGaps,
+            decisions: &decisions
+        )
+
         stripVoidsWhenDrop1HasPivot(
             placements: placements,
             beatSec: beatSec,
@@ -3386,7 +3401,7 @@ enum AutoRemixPlanner {
             barSec: barSec,
             profiles: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0) })
         )
-        return AutoRemixPlan(
+        var plan = AutoRemixPlan(
             mode: mode,
             targetBPM: targetBPM,
             targetDuration: cursorEnd(placed),
@@ -3413,6 +3428,8 @@ enum AutoRemixPlanner {
             randomSeed: seed,
             stemsBySongID: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0.stems) })
         )
+        plan.promoteMixWindowDump()
+        return plan
     }
 
     /// Equal-power overlaps on verse→build joins. Club drops (pivot Drop 1,
@@ -3979,17 +3996,26 @@ enum AutoRemixPlanner {
     }
 
     /// First 4s of groove/intro phrases before Drop 1 — identifiable title
-    /// lines. SFX must not cover these onsets.
+    /// lines. SFX must not cover these onsets. Also protect the first Deck A
+    /// hook's opening so a long take-out cannot bury the title token.
     private static func lyricOnsetProtectedRanges(
         pulseRegions: [AutoClubPulse.Region],
         dropAt: Double,
+        placements: [AutoClipPlacement] = [],
         protectSeconds: Double = 4.0
     ) -> [(Double, Double)] {
-        pulseRegions.compactMap { r in
+        var ranges: [(Double, Double)] = pulseRegions.compactMap { r in
             guard r.role == .groove || r.role == .introTease else { return nil }
             guard r.timelineStart < dropAt - 0.25 else { return nil }
             return (r.timelineStart, min(r.timelineEnd, r.timelineStart + protectSeconds))
         }
+        for p in placements where p.role == .dominant && p.timelineStart + 8 < dropAt {
+            ranges.append((
+                p.timelineStart,
+                p.timelineStart + min(protectSeconds, p.timelineDuration)
+            ))
+        }
+        return ranges
     }
 
     /// Festival mix-window + drop ride.
@@ -4007,49 +4033,15 @@ enum AutoRemixPlanner {
         sfx: inout [AutoSFXEvent],
         decisions: inout [AutoDecision]
     ) {
-        let takeOutEnd = max(0, dropAt - beatSec)
-        let attackLo = dropAt
-        let attackHi = dropAt + beatSec
-        let windowStart = max(0, takeOutEnd - max(2 * barSec, 4.0))
-
-        func alreadyHas(_ id: String, near t: Double, slack: Double = 0.12) -> Bool {
-            sfx.contains { $0.assetID == id && abs($0.timelineStart - t) < slack }
-        }
-        func overlapsProtected(start: Double, duration: Double) -> Bool {
-            let end = start + duration
-            if start < attackHi - 0.01 && end > attackLo + 0.01 { return true }
-            for (lo, hi) in protectedRanges {
-                if start < hi && end > lo { return true }
-            }
-            return false
-        }
-        func placeEnding(_ id: String, atEnd end: Double, purpose: String) {
-            guard let def = SoundEffectLibrary.definition(for: id) else { return }
-            let start = max(windowStart, end - def.durationSeconds)
-            guard start >= -0.01 else { return }
-            if overlapsProtected(start: start, duration: def.durationSeconds) { return }
-            if alreadyHas(id, near: start, slack: 0.15) { return }
-            sfx.append(AutoSFXEvent(assetID: id, timelineStart: start, purpose: purpose))
-        }
-        func placeAt(_ id: String, t: Double, purpose: String) {
-            guard let def = SoundEffectLibrary.definition(for: id) else { return }
-            guard t >= dropAt + beatSec - 0.02, t < dropEnd - 0.08 else { return }
-            if overlapsProtected(start: t, duration: def.durationSeconds) { return }
-            if alreadyHas(id, near: t, slack: 0.12) { return }
-            sfx.append(AutoSFXEvent(assetID: id, timelineStart: t, purpose: purpose))
-        }
-
-        placeEnding("riser", atEnd: takeOutEnd, purpose: "riser take-out before the drop")
-        placeEnding("snareBuild", atEnd: takeOutEnd, purpose: "snare-roll take-out before the drop")
-        placeEnding("tapeStop", atEnd: takeOutEnd, purpose: "tape-stop take-out")
-        // Ride the drop after the first syllable — extra rows on collision.
-        placeAt("airSweep", t: dropAt + beatSec, purpose: "air sweep after drop attack")
-        placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
-        placeAt("clapFill", t: dropAt + 2 * barSec, purpose: "clap fill in the drop")
-        placeAt("impact", t: dropAt + 4 * barSec, purpose: "impact ride mid drop")
-        placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
-        placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
-        placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
+        let added = AutoFestivalMixWindow.events(
+            dropAt: dropAt,
+            dropEnd: dropEnd,
+            barSec: barSec,
+            beatSec: beatSec,
+            protectedRanges: protectedRanges,
+            existing: sfx
+        )
+        sfx.append(contentsOf: added)
         if !decisions.contains(where: {
             $0.kind == .addedRiserIntoDrop && ($0.detail ?? "").contains("festival")
         }) {
@@ -4057,7 +4049,7 @@ enum AutoRemixPlanner {
                 AutoDecision(
                     kind: .addedRiserIntoDrop,
                     songTitle: nil,
-                    detail: "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+                    detail: AutoFestivalMixWindow.festivalDetail
                 )
             )
         }
@@ -4112,7 +4104,7 @@ enum AutoRemixPlanner {
                 beatSec: beatSec,
                 flavor: flavor,
                 protectedRanges: lyricOnsetProtectedRanges(
-                    pulseRegions: pulseRegions, dropAt: dropAt
+                    pulseRegions: pulseRegions, dropAt: dropAt, placements: placements
                 ),
                 sfx: &sfx,
                 decisions: &decisions
@@ -4128,19 +4120,79 @@ enum AutoRemixPlanner {
                 AutoDecision(
                     kind: .addedRiserIntoDrop,
                     songTitle: nil,
-                    detail: "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+                    detail: AutoFestivalMixWindow.festivalDetail
                 )
             )
         }
-        if mode == .mashup {
-            decisions.append(
-                AutoDecision(
-                    kind: .selectedAnchor,
-                    songTitle: nil,
-                    detail: "addedRiserIntoDrop — festival take-out + drop-ride on Drop 1 mix window"
-                )
-            )
+    }
+
+    /// Drop 1 wallpaper even when the last bed phrase doesn't end exactly
+    /// on the drop (5-song crates, reserved pivot slot, non-hardHypeCut).
+    private static func ensureMashupDrop1Wallpaper(
+        mode: AutoRemixMode,
+        mashupBedID: UUID?,
+        mashupVocalID: UUID?,
+        ordered: [AutoSongProfile],
+        barSec: Double,
+        beatSec: Double,
+        tuning: AutoTuning,
+        placements: inout [AutoClipPlacement],
+        pulseRegions: inout [AutoClubPulse.Region],
+        intentionalGaps: inout [AutoIntentionalGap],
+        decisions: inout [AutoDecision]
+    ) {
+        guard mode == .mashup else { return }
+        if decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) { return }
+        let pulseDrop = pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .min()
+        let guestDrop = mashupVocalID.flatMap { vocalID in
+            placements
+                .filter { $0.songID == vocalID && $0.role == .dominant }
+                .map(\.timelineStart)
+                .min()
         }
+        let joinEnd = pulseRegions
+            .filter { $0.role == .buildOut }
+            .map(\.timelineEnd)
+            .min()
+        guard let dropAt = pulseDrop ?? guestDrop ?? joinEnd else { return }
+        let bedID = mashupBedID ?? ordered.first?.songID
+        let phrase = placements.last { p in
+            p.role == .dominant
+                && (bedID == nil || p.songID == bedID)
+                && p.timelineStart + 0.05 < dropAt
+        }
+        guard let phrase else { return }
+        let bed = ordered.first { $0.songID == phrase.songID }
+        let guest = mashupVocalID.flatMap { id in ordered.first { $0.songID == id } }
+            ?? ordered.first { $0.songID != phrase.songID }
+        let dropPlacement = placements.first { p in
+            p.role == .dominant
+                && abs(p.timelineStart - dropAt) < 0.25
+                && (mashupVocalID == nil || p.songID == mashupVocalID)
+        }
+        appendPivotWallpaperLoop(
+            completedPhrase: phrase,
+            dropTimelineStart: dropAt,
+            deckATitle: bed?.title,
+            deckBTitle: guest?.title,
+            barSec: barSec,
+            beatSec: beatSec,
+            tuning: tuning,
+            grainStem: (bed?.stems.hasVocals ?? false) ? .vocals : nil,
+            signal: bed?.analysis.signal,
+            incomingSongID: guest?.songID,
+            incomingHookStart: dropPlacement?.sourceStart,
+            incomingTempoRatio: dropPlacement?.tempoRatio ?? phrase.tempoRatio,
+            incomingSignal: guest?.analysis.signal,
+            incomingGrainStem: (guest?.stems.hasVocals ?? false) ? .vocals : nil,
+            placements: &placements,
+            pulseRegions: &pulseRegions,
+            intentionalGaps: &intentionalGaps,
+            decisions: &decisions
+        )
     }
 
     /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least

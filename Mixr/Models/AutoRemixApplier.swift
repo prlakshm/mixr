@@ -101,7 +101,12 @@ nonisolated enum AutoRemixApplier {
         } else {
             pulseHits = []
         }
-        let allSFX = (plan.sfxEvents + pulseHits).sorted { $0.timelineStart < $1.timelineStart }
+        var allSFX = (plan.sfxEvents + pulseHits).sorted { $0.timelineStart < $1.timelineStart }
+
+        if appliedPlan.mode == .mashup {
+            allSFX.append(contentsOf: mashupFestivalEventsIfMissing(plan: appliedPlan, existing: allSFX))
+            allSFX.sort { $0.timelineStart < $1.timelineStart }
+        }
 
         // Reset every SFX row, then pack exact-time hits across rows.
         for ti in result.indices where result[ti].isSFXTrack {
@@ -157,24 +162,71 @@ nonisolated enum AutoRemixApplier {
                     AutoDecision(
                         kind: .addedRiserIntoDrop,
                         songTitle: nil,
-                        detail: "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+                        detail: AutoFestivalMixWindow.festivalDetail
                     )
                 )
             }
-            if !appliedPlan.decisions.contains(where: {
-                ($0.detail ?? "").localizedCaseInsensitiveContains("addedRiserIntoDrop")
-                    && ($0.detail ?? "").localizedCaseInsensitiveContains("festival")
-            }) {
-                appliedPlan.decisions.append(
-                    AutoDecision(
-                        kind: .selectedAnchor,
-                        songTitle: nil,
-                        detail: "addedRiserIntoDrop — festival take-out + drop-ride on Drop 1 mix window"
-                    )
-                )
-            }
+            appliedPlan.promoteMixWindowDump()
         }
         return Applied(tracks: result, plan: appliedPlan)
+    }
+
+    /// Drop 1 take-out + drop-ride on extra SFX rows when the planner list
+    /// was empty (dump-only) or validator stripped the payoff.
+    private static func mashupFestivalEventsIfMissing(
+        plan: AutoRemixPlan,
+        existing: [AutoSFXEvent]
+    ) -> [AutoSFXEvent] {
+        let musical = existing.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        let ids = Set(musical.map(\.assetID))
+        let hasTakeOut = ids.contains("riser") && ids.contains("snareBuild") && ids.contains("tapeStop")
+        let hasRide = ids.contains("airSweep") && ids.contains("clapFill") && ids.contains("impact")
+        if hasTakeOut && hasRide { return [] }
+
+        let beatSec = plan.beatSeconds
+        let barSec = plan.barSeconds
+        let pulseDrop = plan.pulseRegions
+            .filter { $0.role == .drop }
+            .min(by: { $0.timelineStart < $1.timelineStart })
+        let joinEnd = plan.pulseRegions
+            .filter { $0.role == .buildOut }
+            .map(\.timelineEnd)
+            .min()
+        let grainJoin = plan.placements
+            .filter {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+            }
+            .map(\.timelineEnd)
+            .max()
+        guard let dropAt = pulseDrop?.timelineStart ?? joinEnd ?? grainJoin else { return [] }
+        let dropEnd = pulseDrop?.timelineEnd
+            ?? plan.placements
+                .filter { p in
+                    p.role == .dominant && abs(p.timelineStart - dropAt) < 0.2
+                }
+                .map(\.timelineEnd)
+                .max()
+            ?? (dropAt + 16 * barSec)
+        var protected: [(Double, Double)] = plan.pulseRegions.compactMap { r in
+            guard r.role == .groove || r.role == .introTease else { return nil }
+            guard r.timelineStart < dropAt - 0.25 else { return nil }
+            return (r.timelineStart, min(r.timelineEnd, r.timelineStart + 4))
+        }
+        if let title = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
+            protected.append((
+                title.timelineStart,
+                title.timelineStart + min(4, title.timelineDuration)
+            ))
+        }
+        return AutoFestivalMixWindow.events(
+            dropAt: dropAt,
+            dropEnd: dropEnd,
+            barSec: barSec,
+            beatSec: beatSec,
+            protectedRanges: protected,
+            existing: musical
+        )
     }
 
     /// Removes empty SFX spill lanes; keeps the first (top) SFX row even if empty.

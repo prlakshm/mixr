@@ -128,8 +128,12 @@ Typical:
   lyric so ASR hears the title token in the first 1–2s (never a full bar).
 - Pivot grain is the incoming join token from the guest vocal stem — not the
   outgoing last line and not a silent tail rest.
-- Every mashup writes festival take-out + drop-ride on Drop 1 and dumps
-  `addedRiserIntoDrop` (festival / take-out / drop-ride) in plan.decisions.
+- Every mashup writes festival take-out + drop-ride on Drop 1 (take-out
+  ends on the last pivot beat / Drop 1 downbeat; ride after the first
+  syllable, extra SFX rows) and dumps `addedRiserIntoDrop` (festival /
+  take-out / drop-ride) in `plan.decisions.prefix(16)` next to Drop 1
+  guest / `pivotWallpaperLoop` — crate dump_gate does not see a tail-only
+  append. Apply must place the clips, not only log the decision.
 - Wallpaper chops are **this mix-window loop**, not verse decoration and not
   1/8 spam on the drop.
 - **Pulse Drop 1** = that hard cut after the loop — never a fake drop on the

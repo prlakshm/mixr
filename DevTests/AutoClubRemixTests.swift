@@ -2384,7 +2384,7 @@ do {
         tatu.id: crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
     ]
     switch AutoRemixRunner.runEntireProject(tracks: [paramore, tatu], seed: 33, signals: signals) {
-    case .success(_, let plan, _):
+    case .success(let tracks, let plan, _):
         check("Paramore+tatu target 144", abs(plan.targetBPM - 144) < 0.5, "bpm=\(plan.targetBPM)")
         check("Paramore+tatu bed is Paramore", plan.mashupBedSongID == paramore.id,
               "bed=\(plan.mashupBedSongID == paramore.id ? "Paramore" : plan.mashupBedSongID == tatu.id ? "tatu" : "?")")
@@ -2406,7 +2406,7 @@ do {
             }
         } ?? false
         check("Paramore+tatu tatu dominant on Drop 1 downbeat", tatuOnDrop1)
-        assertMashupFestivalStack(plan, label: "Paramore×tatu")
+        assertMashupFestivalStack(plan, label: "Paramore×tatu", tracks: tracks)
         if let vocalID = plan.mashupVocalSongID {
             assertMashupPivotFromIncomingGuest(
                 plan: plan,
@@ -2464,7 +2464,7 @@ do {
             seed: 33,
             signals: signals
         ) {
-        case .success(_, let plan, _):
+        case .success(let tracks, let plan, _):
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             assertTitleHookLead(
                 onset: hookSrc,
@@ -2473,7 +2473,7 @@ do {
                 beats: 1,
                 label: "pair B: 1-beat pad when the distinctive token is already inside the first 1–2s"
             )
-            assertMashupFestivalStack(plan, label: "pair B")
+            assertMashupFestivalStack(plan, label: "pair B", tracks: tracks)
             if let vocalID = plan.mashupVocalSongID {
                 let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
                 let guestSrc = plan.placements
@@ -2519,7 +2519,7 @@ do {
         seed: 20260815,
         signals: signals
     ) {
-    case .success(_, let plan, _):
+    case .success(let tracks, let plan, _):
         check("All-5 bed is not Paramore parked at midtempo",
               plan.mashupBedSongID != paramore.id || abs(plan.targetBPM - 144) < 1,
               "bed=\(plan.mashupBedSongID == paramore.id ? "Paramore" : "other") bpm=\(plan.targetBPM)")
@@ -2528,7 +2528,7 @@ do {
               "bedBPM=\(plan.targetBPM)")
         check("All-5 keeps Oops bed when Britney pair in crate", plan.mashupBedSongID == oops.id,
               "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "other")")
-        assertMashupFestivalStack(plan, label: "all-5")
+        assertMashupFestivalStack(plan, label: "all-5", tracks: tracks)
         // Bed's native pocket should match the arrangement target.
         if let bedID = plan.mashupBedSongID {
             let bedTrack = [bomt, oops, stupid, paramore, tatu].first { $0.id == bedID }
@@ -2796,7 +2796,7 @@ do {
                 "Britney: pivotWallpaperLoop recorded",
                 plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
             )
-            assertMashupFestivalStack(plan, label: "Britney mashup")
+            assertMashupFestivalStack(plan, label: "Britney mashup", tracks: applied)
             assertMashupPivotFromIncomingGuest(
                 plan: plan,
                 guestID: vocalID,
@@ -3521,7 +3521,13 @@ func mashupDecisionDump(_ plan: AutoRemixPlan) -> String {
 /// dump_gate greps MASHUP `plan.decisions`: kind `addedRiserIntoDrop` whose
 /// **detail** names festival / take-out / drop-ride. A Drop-2-only
 /// `addedRiserIntoDrop` ("drop 2 flip impact") must fail — that was 6519cf6.
-func assertMashupFestivalStack(_ plan: AutoRemixPlan, label: String) {
+/// bounce_crate used to print only `prefix(16)`; festival appended at the
+/// tail never showed. Fail the same way if the line is past the first 16.
+func assertMashupFestivalStack(
+    _ plan: AutoRemixPlan,
+    label: String,
+    tracks: [MixrTrack]? = nil
+) {
     let festival = plan.decisions.filter { $0.kind == .addedRiserIntoDrop }
     let detailHit = festival.contains { d in
         let detail = (d.detail ?? "").lowercased()
@@ -3548,6 +3554,104 @@ func assertMashupFestivalStack(_ plan: AutoRemixPlan, label: String) {
         "\(label): mashup writes festival take-out + drop-ride SFX",
         ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
         "ids=\(ids.sorted())"
+    )
+    assertDumpGatePrefix(plan, label: label)
+    if let tracks {
+        assertFestivalSFXApplied(tracks: tracks, plan: plan, label: label)
+    }
+}
+
+/// Crate dump_gate / bounce_crate `prefix(16)` must see the mix-window
+/// festival line and Drop 1 wallpaper — not only selectedAnchor/roles.
+func assertDumpGatePrefix(_ plan: AutoRemixPlan, label: String) {
+    let prefix = Array(plan.decisions.prefix(16))
+    let blob = prefix.map { d in
+        "\(d.kind) \(d.userFacingSentence) \(d.detail ?? "")"
+    }.joined(separator: "\n").lowercased()
+    let dump = prefix.map { "\($0.kind) \($0.detail ?? "")" }.joined(separator: " | ")
+    check(
+        "\(label): dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride",
+        blob.contains("addedriserintodrop")
+            && blob.contains("festival")
+            && blob.contains("take-out")
+            && (blob.contains("drop-ride") || blob.contains("drop ride")),
+        dump
+    )
+    check(
+        "\(label): dump_gate prefix(16) has pivotWallpaperLoop",
+        prefix.contains { $0.kind == .pivotWallpaperLoop },
+        dump
+    )
+}
+
+/// Take-out ends on the last pivot beat (Drop 1 downbeat), drop-ride starts
+/// after the first syllable, extra SFX rows. Do not cover title token or
+/// Drop 1 first syllable.
+func assertFestivalSFXApplied(tracks: [MixrTrack], plan: AutoRemixPlan, label: String) {
+    let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan)
+    check("\(label): applied mix has a Drop 1 time", drop1 != nil)
+    guard let drop1 else { return }
+    let beat = plan.beatSeconds
+    let sfxClips = tracks.filter(\.isSFXTrack).flatMap(\.clips)
+    let sfxRows = tracks.filter(\.isSFXTrack)
+    func clips(_ id: String) -> [MixrClip] {
+        sfxClips.filter { $0.soundEffectID == id }
+    }
+    func endSeconds(_ c: MixrClip) -> Double {
+        MixrTimeline.seconds(fromUnits: c.start + c.length)
+    }
+    func startSeconds(_ c: MixrClip) -> Double {
+        MixrTimeline.seconds(fromUnits: c.start)
+    }
+    let takeOutIDs = ["riser", "snareBuild", "tapeStop"]
+    let rideIDs = ["airSweep", "clapFill", "impact"]
+    for id in takeOutIDs {
+        let hit = clips(id).contains { abs(endSeconds($0) - drop1) < beat * 0.75 }
+        check(
+            "\(label): applied \(id) take-out ends on the last pivot beat",
+            hit,
+            String(format: "drop=%.2f ends=%@", drop1, clips(id).map { String(format: "%.2f", endSeconds($0)) }.joined(separator: ","))
+        )
+    }
+    for id in rideIDs {
+        let hit = clips(id).contains { startSeconds($0) >= drop1 + beat - 0.08 }
+        check(
+            "\(label): applied \(id) drop-ride starts after Drop 1 first syllable",
+            hit,
+            String(format: "drop=%.2f beat=%.2f starts=%@", drop1, beat, clips(id).map { String(format: "%.2f", startSeconds($0)) }.joined(separator: ","))
+        )
+    }
+    let attackLo = drop1
+    let attackHi = drop1 + beat
+    let coversAttack = sfxClips.contains { c in
+        guard let id = c.soundEffectID, takeOutIDs.contains(id) || rideIDs.contains(id) else { return false }
+        let s = startSeconds(c)
+        let e = endSeconds(c)
+        return s < attackHi - 0.05 && e > attackLo + 0.05
+    }
+    check(
+        "\(label): festival SFX do not cover Drop 1 first syllable",
+        !coversAttack
+    )
+    if let title = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
+        let lo = title.timelineStart
+        let hi = title.timelineStart + min(4.0, title.timelineDuration)
+        let coversTitle = sfxClips.contains { c in
+            guard let id = c.soundEffectID, takeOutIDs.contains(id) || rideIDs.contains(id) else { return false }
+            let s = startSeconds(c)
+            let e = endSeconds(c)
+            return s < hi && e > lo
+        }
+        check(
+            "\(label): festival SFX do not cover the title token",
+            !coversTitle,
+            String(format: "title=%.2f…%.2f", lo, hi)
+        )
+    }
+    check(
+        "\(label): colliding mix-window SFX spill onto extra rows",
+        sfxRows.count >= 2,
+        "sfxRows=\(sfxRows.count)"
     )
 }
 
@@ -4050,7 +4154,7 @@ do {
             seed: 20260818,
             signals: signals
         ) {
-        case .success(_, let plan, _):
+        case .success(let tracks, let plan, _):
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
             let guestSrc = plan.placements
@@ -4096,7 +4200,7 @@ do {
                 abs(hookSrc - 48.0) > 0.5 && abs(hookSrc - catalogPeak) > 0.08,
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
             )
-            assertMashupFestivalStack(plan, label: "Oops×BOMT")
+            assertMashupFestivalStack(plan, label: "Oops×BOMT", tracks: tracks)
             if let vocalID = plan.mashupVocalSongID {
                 assertMashupPivotFromIncomingGuest(
                     plan: plan,
