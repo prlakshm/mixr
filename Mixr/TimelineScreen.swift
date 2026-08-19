@@ -582,6 +582,15 @@ struct TimelineScreen: View {
         .task {
             library.attachPersistence(context: modelContext)
             library.attachUndoManager(envUndoManager)
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-MixrSeedDemoAudio") {
+                try? await Task.sleep(for: .seconds(2.4))
+                if selectedClipID == nil,
+                   let clip = library.tracks.first(where: { !$0.isSFXTrack })?.clips.first {
+                    selectedClipID = clip.id
+                }
+            }
+#endif
         }
         // The window's UndoManager can arrive/change after first render.
         .onChange(of: envUndoManager.map(ObjectIdentifier.init)) { _, _ in
@@ -819,6 +828,8 @@ struct TimelineScreen: View {
         switch state {
         case "sfx":
             showSFXPanel = true
+        case "auto":
+            showAutoDialog = true
         case "delete":
             showDeleteProjectConfirm = true
         default:

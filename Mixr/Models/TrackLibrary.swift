@@ -474,8 +474,37 @@ final class TrackLibrary: ObservableObject {
         Task { @MainActor in
             await Task.yield()
             loadProjects()
+#if DEBUG
+            seedDemoAudioIfRequested()
+#endif
         }
     }
+
+#if DEBUG
+    /// App Store screenshot helper: import WAV/MP3 files from Documents/DemoAudio
+    /// when launched with `-MixrSeedDemoAudio` and the timeline is empty.
+    private func seedDemoAudioIfRequested() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-MixrSeedDemoAudio") else { return }
+        guard tracks.filter({ !$0.isSFXTrack }).isEmpty else { return }
+
+        let demoDirectory = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        )[0].appendingPathComponent("DemoAudio", isDirectory: true)
+
+        let allowed = Set(["wav", "mp3", "m4a", "aiff", "caf"])
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: demoDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        let urls = files
+            .filter { allowed.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard !urls.isEmpty else { return }
+        addTracks(from: urls)
+    }
+#endif
 
     private func fetchRecords() -> [MixrProjectRecord] {
         guard let modelContext else { return [] }
