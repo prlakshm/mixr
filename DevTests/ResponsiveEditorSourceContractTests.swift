@@ -199,8 +199,10 @@ check(
 )
 
 check(
-    "Narrow resizable windows keep the editor instead of showing a rotate gate",
-    !timelineSource.contains("TLRotateOverlay()")
+    "Only iPhone portrait shows the rotate gate; other surfaces keep the editor",
+    timelineSource.contains("TLRotateOverlay()")
+        && timelineSource.contains("userInterfaceIdiom == .phone")
+        && timelineSource.contains("geo.size.height > geo.size.width")
 )
 
 let typographyURL = root.appendingPathComponent("Mixr/DesignSystem/MixrTypography.swift")
