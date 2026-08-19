@@ -394,6 +394,8 @@ struct TimelineScreen: View {
 
     var body: some View {
         GeometryReader { geo in
+            let isPhonePortrait = UIDevice.current.userInterfaceIdiom == .phone
+                && geo.size.height > geo.size.width
             let safeArea = windowSafeArea.resolved
             let contentSize = safeArea.contentSize(in: geo.size)
             let layout = EditorLayoutMetrics(
@@ -555,6 +557,10 @@ struct TimelineScreen: View {
                 .ignoresSafeArea()
 
                 floatingOverlays
+
+                if isPhonePortrait {
+                    TLRotateOverlay()
+                }
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .coordinateSpace(name: "timelineScreen")
