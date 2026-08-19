@@ -1352,20 +1352,17 @@ enum AutoRemixPlanner {
             AutoClubPulse.Region(role: .buildOut, timelineStart: loopStart, timelineEnd: dropTimelineStart)
         )
 
-        let grainVol: Double = {
-            if resolvedStem == .vocals {
-                return max(
-                    AutoGainPolicy.pivotGrainVolume,
-                    AutoGainPolicy.vocalStemMakeupDefault
-                )
-            }
-            return AutoGainPolicy.pivotGrainVolume
-        }()
+        let grainVol = max(
+            AutoGainPolicy.pivotGrainVolume,
+            useIncomingJoin || resolvedStem == .vocals
+                ? AutoGainPolicy.vocalStemMakeupDefault
+                : AutoGainPolicy.pivotGrainVolume
+        )
         for i in 0..<repeats {
             let t0 = loopStart + Double(i) * beatSec
-            // Rising HPF: thin/tinny through the 1–2 bars. Start below a
-            // 40 wall so the first incoming tokens stay intelligible.
-            let blur = 22.0 + (26.0 * Double(i) / Double(max(repeats - 1, 1)))
+            // Rising HPF: thin/tinny through the 1–2 bars. First grain is
+            // below a 40 wall (still ≥36 so the loop reads as HPF'd).
+            let blur = 36.0 + (22.0 * Double(i) / Double(max(repeats - 1, 1)))
             var fx = ClipEffectSettings()
             fx.setLevel(blur, for: MixrEffect.blur.rawValue)
             fx = AutoSupportedEffects.sanitize(fx)
@@ -4488,6 +4485,9 @@ enum AutoRemixPlanner {
             let titleHookCopy = isTitleHookCopy(p)
             guard pivot || dropLead || bedUnderDrop || titleHookCopy else { continue }
             var vol = max(p.volume, floor)
+            if pivot {
+                vol = max(vol, AutoGainPolicy.vocalStemMakeupDefault)
+            }
             if p.stemKind == .vocals, dropLead || titleHookCopy || pivot {
                 vol = max(vol, vocalStemMakeup(placement: p, referenceRMS: referenceRMS, profiles: profiles, barSec: barSec))
             }
