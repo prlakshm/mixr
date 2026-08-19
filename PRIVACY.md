@@ -1,8 +1,8 @@
-# Privacy Policy for Mixr / Clubcut
+# Privacy Policy for Mixr 
 
 Last updated: August 19, 2026
 
-Mixr (App Store name: Clubcut) is a DJ and Auto Remix editor for iPhone. This policy describes what the app does with your data.
+Mixr (App Store name: Mixr DJ) is a DJ and Auto Remix editor for iPhone. This policy describes what the app does with your data.
 
 ## What we collect
 
