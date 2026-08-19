@@ -46,7 +46,8 @@ nonisolated enum AutoChorusIsland {
         duration: Double,
         introEnd: Double,
         phraseSeconds: Double? = nil,
-        title: String? = nil
+        title: String? = nil,
+        tempoRatio: Double = 1
     ) -> Entrance? {
         guard barSeconds > 0.05, duration > barSeconds * 16 else {
             return nil
@@ -60,7 +61,8 @@ nonisolated enum AutoChorusIsland {
             duration: duration,
             introEnd: introEnd,
             phraseSeconds: phrase,
-            title: title
+            title: title,
+            tempoRatio: tempoRatio
         ) {
             return hook
         }
@@ -230,7 +232,8 @@ nonisolated enum AutoChorusIsland {
         duration: Double,
         introEnd: Double,
         phraseSeconds: Double? = nil,
-        title: String? = nil
+        title: String? = nil,
+        tempoRatio: Double = 1
     ) -> Entrance? {
         guard let signal else { return nil }
         return firstTitleEntrance(
@@ -240,7 +243,8 @@ nonisolated enum AutoChorusIsland {
             duration: duration,
             introEnd: introEnd,
             phraseSeconds: phraseSeconds,
-            title: title
+            title: title,
+            tempoRatio: tempoRatio
         )
     }
 
@@ -459,14 +463,16 @@ nonisolated enum AutoChorusIsland {
         introEnd: Double,
         phraseSeconds: Double,
         title: String?,
-        leadIn: TitleHookLeadIn = .enoughForTitleToken
+        leadIn: TitleHookLeadIn = .enoughForTitleToken,
+        tempoRatio: Double = 1
     ) -> Double? {
         if let lyric = snapLyricTitleHook(
             signal: signal,
             downbeats: downbeats,
             barSeconds: barSeconds,
             leadIn: leadIn,
-            title: title
+            title: title,
+            tempoRatio: tempoRatio
         ) {
             return lyric
         }
@@ -548,19 +554,58 @@ nonisolated enum AutoChorusIsland {
         downbeats: [Double],
         barSeconds: Double,
         leadIn: TitleHookLeadIn = .enoughForTitleToken,
-        title: String? = nil
+        title: String? = nil,
+        tempoRatio: Double = 1
     ) -> Double? {
         guard let t = signal.lyricTitleHookStart, t >= 0, barSeconds > 0.05 else {
             return nil
         }
-        return titleHookClipStart(
+        let token = isolatedTitleTokenTime(
             lyric: t,
+            title: title,
+            words: signal.lyricWords,
+            vocalPresence: hookVocalCurve(signal),
+            hop: signal.hopSeconds
+        )
+        return titleHookClipStart(
+            lyric: token,
             downbeats: downbeats,
             barSeconds: barSeconds,
             leadIn: leadIn,
             title: title,
-            lyricWords: signal.lyricWords
+            lyricWords: signal.lyricWords,
+            tempoRatio: tempoRatio
         )
+    }
+
+    /// Lyric sidecar word (or stem-vocal attack) of the distinctive title token.
+    static func isolatedTitleTokenTime(
+        lyric: Double,
+        title: String?,
+        words: [(t: Double, word: String)],
+        vocalPresence: [Double],
+        hop: Double
+    ) -> Double {
+        var t = lyric
+        let distinctive = Set(AutoPivotWord.hookTokens(in: title ?? "").distinctive)
+        func norm(_ s: String) -> String { s.lowercased().filter { $0.isLetter } }
+        if !distinctive.isEmpty, !words.isEmpty {
+            let hits = words.filter { distinctive.contains(norm($0.word)) }
+            if let hit = hits.min(by: { abs($0.t - lyric) < abs($1.t - lyric) }),
+               abs(hit.t - lyric) < 1.25 {
+                t = hit.t
+            }
+        }
+        guard hop > 0.001, vocalPresence.count >= 8 else { return t }
+        let idx = min(vocalPresence.count - 1, max(1, Int((t / hop).rounded())))
+        let here = vocalPresence[idx]
+        let prev = vocalPresence[max(0, idx - 2)]
+        // Isolated-vocal attack: only nudge when the stem actually rises here.
+        if here - prev >= 0.12 {
+            let attack = Double(max(0, idx - 1)) * hop
+            if abs(attack - t) <= 0.12 { return min(t, attack) }
+        }
+        return t
     }
 
     /// Title-hook clip start: N beats before the lyric word, snapped to a beat.
@@ -571,7 +616,8 @@ nonisolated enum AutoChorusIsland {
         barSeconds: Double,
         leadIn: TitleHookLeadIn = .enoughForTitleToken,
         title: String? = nil,
-        lyricWords: [(t: Double, word: String)] = []
+        lyricWords: [(t: Double, word: String)] = [],
+        tempoRatio: Double = 1
     ) -> Double {
         let beat = barSeconds / 4
         let beats: Double
@@ -587,8 +633,19 @@ nonisolated enum AutoChorusIsland {
                 )
             )
         }
-        let padded = max(0, lyric - beats * beat)
-        let earliest = max(0, lyric - min(barSeconds * 0.9, (beats + 0.25) * beat))
+        var sourcePad = beats * beat
+        let ratio = max(tempoRatio, 0.0001)
+        // Club-lift TimePitch smears the first ~1s of mix. Put the title
+        // token in mix-time [1.15, 2.0] so it is the first identifiable
+        // word after settle — never a full bar early, and never 94 BPM.
+        if leadIn == .enoughForTitleToken, ratio > 1.12, beat > 0.05 {
+            let mixLead = sourcePad / ratio
+            if mixLead < 1.15 {
+                sourcePad = min(barSeconds * 0.85, 1.35 * ratio)
+            }
+        }
+        let padded = max(0, lyric - sourcePad)
+        let earliest = max(0, lyric - min(barSeconds * 0.9, sourcePad + 0.25 * beat))
         return snapLeadInToBeat(
             padded: padded,
             lyric: lyric,
@@ -984,7 +1041,8 @@ nonisolated enum AutoChorusIsland {
         duration: Double,
         introEnd: Double,
         phraseSeconds: Double,
-        title: String?
+        title: String?,
+        tempoRatio: Double = 1
     ) -> Entrance? {
         guard let snapped = titleHookOnset(
             signal: signal,
@@ -993,7 +1051,8 @@ nonisolated enum AutoChorusIsland {
             duration: duration,
             introEnd: introEnd,
             phraseSeconds: phraseSeconds,
-            title: title
+            title: title,
+            tempoRatio: tempoRatio
         ) else { return nil }
         let vocal = hookVocalCurve(signal)
         let vocalAfter = mean(vocal, hop: signal.hopSeconds, from: snapped, to: snapped + barSeconds * 4)

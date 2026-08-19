@@ -497,6 +497,7 @@ final class MixrPlaybackEngine: ObservableObject {
                    .filter({ !$0.isSoundEffect && MixrTimeline.seconds(fromUnits: $0.start) >= timelineSeconds })
                    .min(by: { $0.start < $1.start }) {
                 chain.timePitch.rate = Float(max(next.playbackSpeed, 0.03125))
+                chain.timePitch.overlap = abs(next.playbackSpeed - 1.0) > 0.08 ? 32 : 8
                 if abs(next.playbackSpeed - 1.0) >= 0.001 { chain.timePitch.bypass = false }
             }
         }
@@ -682,6 +683,7 @@ final class MixrPlaybackEngine: ObservableObject {
         if abs(t.pitchCents - chain.smoothedPitch) < 0.5 { chain.smoothedPitch = t.pitchCents }
         chain.timePitch.pitch = chain.smoothedPitch
         chain.timePitch.rate = t.playbackRate
+        chain.timePitch.overlap = t.timePitchOverlap
         // Bypassing the phase vocoder changes its latency, so only
         // re-engage the bypass on force applies (start/seek) — engaging
         // it mid-stream would cause an audible timing jump.

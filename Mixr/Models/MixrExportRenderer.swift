@@ -180,6 +180,7 @@ nonisolated enum MixrExportRenderer {
                 .filter({ !$0.isSoundEffect })
                 .min(by: { $0.start < $1.start }) {
                 chain.timePitch.rate = Float(max(first.playbackSpeed, 0.03125))
+                chain.timePitch.overlap = abs(first.playbackSpeed - 1.0) > 0.08 ? 32 : 8
                 if abs(first.playbackSpeed - 1.0) >= 0.001 { chain.timePitch.bypass = false }
             }
         }

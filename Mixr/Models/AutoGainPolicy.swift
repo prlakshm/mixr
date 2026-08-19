@@ -118,6 +118,42 @@ nonisolated enum AutoGainPolicy {
     /// Fallback makeup when a vocal stem has no RMS curve (~+4 dB).
     static let vocalStemMakeupDefault = 1.58
 
+    /// Isolated title-hook vocals at the same clip volume read louder than a
+    /// mixed Drop 1. Extra linear gain (~+2.4 dB) so incoming Drop 1 mix RMS
+    /// stays at least the title copy. Do not duck the title stem.
+    static let dropVsIsolatedTitleBoost = 1.3183
+
+    /// Role-based join staging — clip volume floors by placement role.
+    /// Validated on rendered PCM in golden/render tiers, not clip fields alone.
+    enum JoinRole: Sendable {
+        case titleStem
+        case pivotGrain
+        case dropGuest
+        case bedUnderDrop
+    }
+
+    static func roleStagingVolume(
+        role: JoinRole,
+        measuredStemRMS: Double? = nil,
+        referenceRMS: Double? = nil,
+        useIncomingJoin: Bool = false,
+        stemKind: AutoStemKind? = nil
+    ) -> Double {
+        switch role {
+        case .titleStem:
+            return vocalStemMakeupDefault
+        case .pivotGrain:
+            if useIncomingJoin || stemKind == .vocals {
+                return vocalStemMakeupDefault
+            }
+            return pivotGrainVolume
+        case .dropGuest:
+            return vocalStemMakeupDefault
+        case .bedUnderDrop:
+            return incomingDropVolume
+        }
+    }
+
     /// Placement volume for an energy-storied club / mashup slot.
     /// Enough contrast for build-out subtraction vs drop payoff without
     /// creating unexplained join jumps > 4 dB in offline PCM.

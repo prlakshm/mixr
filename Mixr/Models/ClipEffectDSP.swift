@@ -37,6 +37,9 @@ nonisolated enum ClipEffectDSP {
         var playbackRate: Float
         /// True bypass when Pitch is 0 and the clip plays at normal speed.
         var timePitchBypass: Bool
+        /// AVAudioUnitTimePitch.overlap (3…32). Higher = better quality on
+        /// club-lift rate changes (less smear / chipmunk transients).
+        var timePitchOverlap: Float
 
         // Blur → AVAudioUnitEQ band 0 (low-pass)
         var lowPassFrequency: Float
@@ -74,6 +77,7 @@ nonisolated enum ClipEffectDSP {
         let pitchAmount = settings.pitchAmount
         let blurAmount = settings.level(for: MixrEffect.blur.rawValue) / 100.0
         let rate = Float(max(playbackSpeed, 0.03125))
+        let timePitchOverlap: Float = abs(playbackSpeed - 1.0) > 0.08 ? 32 : 8
 
         // ── PITCH ──
         // pitchInCents = amount * 1200 * (±1). Duration preserved.
@@ -139,6 +143,7 @@ nonisolated enum ClipEffectDSP {
             pitchCents: pitchCents,
             playbackRate: rate,
             timePitchBypass: timePitchBypass,
+            timePitchOverlap: timePitchOverlap,
             lowPassFrequency: lowPassFrequency,
             lowPassBypass: lowPassBypass,
             flangerWet: flangerWet,
@@ -206,6 +211,7 @@ nonisolated enum ClipEffectDSP {
         )
         timePitch.pitch = 0
         timePitch.rate = 1
+        timePitch.overlap = 8
         timePitch.bypass = true
 
         // Single band: Blur low-pass.
@@ -240,6 +246,7 @@ nonisolated enum ClipEffectDSP {
     ) {
         timePitch.pitch = t.pitchCents
         timePitch.rate = t.playbackRate
+        timePitch.overlap = t.timePitchOverlap
         if !t.timePitchBypass { timePitch.bypass = false }
 
         let lowPass = eq.bands[0]

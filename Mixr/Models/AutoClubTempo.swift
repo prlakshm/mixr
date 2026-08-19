@@ -56,8 +56,9 @@ nonisolated enum AutoClubTempo {
     }
 
     /// Playback rate that lands a midtempo source on a house-grid target.
-    /// Pitch-preserving time-stretch (AVAudioUnitTimePitch.rate), not a
-    /// chipmunk. Nil when this is not a midtempo → house club-lift.
+    /// Pitch-preserving time-stretch (AVAudioUnitTimePitch.rate + overlap 32),
+    /// not a chipmunk and not a quiet fall-back to ~94. Nil when this is not
+    /// a midtempo → house club-lift.
     static func clubHouseLiftRatio(songBPM: Double, targetBPM: Double) -> Double? {
         guard classify(songBPM) == .midtempoPop else { return nil }
         let houseish = classify(targetBPM) == .house

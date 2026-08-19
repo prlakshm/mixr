@@ -39,7 +39,7 @@ Never cut the best / most identifiable lines. Opening titles and hook lines
 
 - Pivot grain is the **incoming join token** — a distinctive hook word of the Drop 1 guest, taken from that vocal stem — never the outgoing chorus tail and never a silent rest. Shared generic fillers (“all”) are not join tokens.
 - Incoming hook starts on the **downbeat of a real line**, not mid-word.
-  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. Never a full bar / earlier catalog peak. When a vocal stem exists, those copies play the **vocal stem** (ducked instrumental under the first word) so Whisper-small of the first 4s hears the token — a full-mix bed buries “Oops” under drums. Do not walk earlier than two beats to chase audibility. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in — except the **first clip of the mix**, which may fade in over a long intro (longer than the UI 8-beat pill; the selected pill shows 8 as closest). Subsequent hook-replace joins stay hard-cut at full volume.
+  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s of **mix time** (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. After a midtempo→house club-lift, pad in mix-seconds so the token lands after TimePitch settle (~1.2–2.0s of mix) — a native 2-beat pad at +33% puts the token inside the smear and Whisper hears the *next* line. Never a full bar / earlier catalog peak. When a vocal stem exists, those copies play the **vocal stem** (ducked instrumental under the first word) so Whisper-small of the first 4s hears the token — a full-mix bed buries “Oops” under drums. Snap with lyrics.json `titleHookStart` + title tokens + isolated-vocal onset. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in — except the **first clip of the mix**, which may fade in over a long intro (longer than the UI 8-beat pill; the selected pill shows 8 as closest). Subsequent hook-replace joins stay hard-cut at full volume.
 - If phrase confidence cannot support a last-word grain, **skip the loop**
   rather than slicing the title. Keep playing through the window so the join
   does not go quiet.
@@ -108,9 +108,10 @@ Typical:
 
 - completed Deck A hook / verses: ~full
 - pivot grains: **at least as loud as the bed verse and the title-hook vocal copy** (vocal-stem makeup, not ducked); HPF/blur does the thin, volume stays up. First grains start below a 40 blur wall so the incoming token stays intelligible. Dump includes `src=` of the join token.
-- incoming Drop 1 vocal / that song's drop stems: **at least as loud as the bed verse and the title-hook vocal copy**
+- incoming Drop 1 vocal / that song's drop stems: **at least as loud as the bed verse and louder than an isolated title-hook vocal copy**
   (hard cut; no fade-in). If the clip is a quieter stem, apply RMS makeup
-  (clip volume may exceed 1.0). Volume=1.0 alone is not enough. Raise Drop 1; do not duck or remove vocal-stem title copies.
+  (clip volume may exceed 1.0). Matching clip volume 1:1 is not enough —
+  isolated title vocals read ~2–3 dB hotter in the mix. Raise Drop 1; do not duck or remove vocal-stem title copies.
 - Trim **every** non-grain song clip out of the wallpaper window — no leftover-bed floor. A short outgoing chorus tail playing through `[loopStart, drop)` is a failed pivot.
 - bed under hook: audible (don’t mute) with HPF/blur carving the bed vocal
 - never fade both sides toward silence at a pivot join

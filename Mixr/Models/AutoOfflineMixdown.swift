@@ -6,6 +6,12 @@ import Foundation
 // Pure Swift over [Float] — no AVFoundation — so rendered-PCM quality
 // gates run in the standalone harness on any platform.
 //
+// Stretch parity: live/export use AVAudioUnitTimePitch (overlap-aware when
+// stretch > 8%). This offline renderer uses linear resample only — it models
+// gain envelopes, ducking, and transition math faithfully, but NOT TimePitch
+// smear/settle. Plan-level mixLead gates cover title-token timing; golden
+// bounce sign-off still requires Mac AVFoundation listen.
+//
 // It mirrors the REAL engines' scheduling math (trim/offset/speed,
 // per-clip volume, transition envelopes via AutoTransitionEnvelope, SFX
 // gains and ducking via AutoGainPolicy) without the effect DSP chain

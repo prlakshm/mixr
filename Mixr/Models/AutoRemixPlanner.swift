@@ -700,7 +700,7 @@ enum AutoRemixPlanner {
                    let phrase = placements.last(where: {
                        $0.role == .dominant && $0.slotIndex != slotIdx
                    }) {
-                    appendPivotWallpaperLoop(
+                    AutoJoinEngine.appendPivotWallpaperLoop(
                         completedPhrase: phrase,
                         dropTimelineStart: dropAt,
                         deckATitle: profile.title,
@@ -776,7 +776,7 @@ enum AutoRemixPlanner {
             cutRecords: &cutRecords
         )
 
-        stripVoidsWhenDrop1HasPivot(
+        AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
             placements: placements,
             beatSec: beat,
             barSec: bar,
@@ -797,14 +797,14 @@ enum AutoRemixPlanner {
         )
 
         let totalDuration = placements.map(\.timelineEnd).max() ?? cursor
-        boostJoinClipVolumes(
+        AutoJoinEngine.boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
             beatSec: beat,
             barSec: bar,
             profiles: [profile.songID: profile]
         )
-        applyOpeningFadeIn(
+        AutoJoinEngine.applyOpeningFadeIn(
             placements: &placements,
             beatSec: beat,
             decisions: &decisions
@@ -1072,7 +1072,7 @@ enum AutoRemixPlanner {
                    let phrase = placements.last(where: {
                        $0.role == .dominant && $0.timelineEnd <= t0 + 0.05
                    }) {
-                    appendPivotWallpaperLoop(
+                    AutoJoinEngine.appendPivotWallpaperLoop(
                         completedPhrase: phrase,
                         dropTimelineStart: t0,
                         deckATitle: profile.title,
@@ -1108,7 +1108,7 @@ enum AutoRemixPlanner {
             halfTimeDrop: flavor.bias.halfTimeDrop
         )
 
-        stripVoidsWhenDrop1HasPivot(
+        AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
             placements: placements,
             beatSec: beat,
             barSec: bar,
@@ -1142,14 +1142,14 @@ enum AutoRemixPlanner {
             decisions: &decisions
         )
 
-        boostJoinClipVolumes(
+        AutoJoinEngine.boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
             beatSec: beat,
             barSec: bar,
             profiles: [profile.songID: profile]
         )
-        applyOpeningFadeIn(
+        AutoJoinEngine.applyOpeningFadeIn(
             placements: &placements,
             beatSec: beat,
             decisions: &decisions
@@ -1215,282 +1215,6 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// Xirex pivot wallpaper: after Deck A’s chorus/hook plays COMPLETE,
-    /// loop the last 1-beat grain 4–8× (1–2 bars; default 8× = 2 bars) with
-    /// rising HPF, then hard-cut into Deck B. Not echo throws, not 1/8 spam,
-    /// not intro chops. Volume stays loud — blur thins the kick, it does not duck.
-    /// Mashup grains are the incoming join token from the Drop 1 guest vocal,
-    /// not the outgoing chorus tail.
-    private static func appendPivotWallpaperLoop(
-        completedPhrase: AutoClipPlacement,
-        dropTimelineStart: Double,
-        deckATitle: String?,
-        deckBTitle: String?,
-        barSec: Double,
-        beatSec: Double,
-        tuning: AutoTuning,
-        grainStem: AutoStemKind? = nil,
-        signal: SongSignalFeatures? = nil,
-        incomingSongID: UUID? = nil,
-        incomingHookStart: Double? = nil,
-        incomingTempoRatio: Double? = nil,
-        incomingSignal: SongSignalFeatures? = nil,
-        incomingGrainStem: AutoStemKind? = nil,
-        placements: inout [AutoClipPlacement],
-        pulseRegions: inout [AutoClubPulse.Region],
-        intentionalGaps: inout [AutoIntentionalGap],
-        decisions: inout [AutoDecision]
-    ) {
-        let repeats = tuning.pivotWallpaperBeats
-        let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
-        let loopStart = dropTimelineStart - loopDur
-        guard loopStart >= 0.05 else { return }
-
-        // Pivot join owns this downbeat — never keep a 1-beat void beside
-        // the wallpaper (that hole is the old quiet song-switch).
-        clearPredropVoidOnPivotJoin(
-            dropTimelineStart: dropTimelineStart,
-            intentionalGaps: &intentionalGaps,
-            pulseRegions: &pulseRegions
-        )
-
-        // Grain = last 1 beat of a COMPLETED line (must have already sounded).
-        // If the phrase is a title teaser / sub-8-bar chop, skip the loop
-        // rather than slicing the first “Oops” — keep playing through the
-        // reserved window so the song-switch join does not go quiet.
-        let phraseEnd = min(completedPhrase.sourceEnd, completedPhrase.sourceStart + completedPhrase.timelineDuration * completedPhrase.tempoRatio)
-        let phraseBars = (phraseEnd - completedPhrase.sourceStart)
-            / max(barSec * completedPhrase.tempoRatio, 0.001)
-        guard phraseBars + 0.05 >= AutoRemixDiagnostics.minCompleteHookBars else {
-            fillPivotWindowWithoutLoop(
-                completedPhrase: completedPhrase,
-                loopStart: loopStart,
-                dropTimelineStart: dropTimelineStart,
-                deckATitle: deckATitle,
-                reason: "phrase too short for a last-word grain — skip loop rather than slice the title",
-                placements: &placements,
-                decisions: &decisions
-            )
-            return
-        }
-        let useIncomingJoin = incomingSongID != nil && incomingHookStart != nil
-        let pivot = useIncomingJoin
-            ? AutoPivotWord.joinToken(
-                deckATitle: deckATitle ?? "",
-                deckBTitle: deckBTitle ?? deckATitle ?? ""
-            )
-            : AutoPivotWord.preferredPivot(
-                deckATitle: deckATitle ?? "",
-                deckBTitle: deckBTitle ?? deckATitle ?? ""
-            )
-        let grainSignal = useIncomingJoin ? incomingSignal : signal
-        let vocalCurve = {
-            guard let grainSignal else { return [Double]() }
-            if !grainSignal.stemVocalPresenceCurve.isEmpty { return grainSignal.stemVocalPresenceCurve }
-            return grainSignal.vocalPresenceCurve
-        }()
-        let grainTempo = incomingTempoRatio ?? completedPhrase.tempoRatio
-        let grainSource: Double
-        let grainSongID: UUID
-        let resolvedStem: AutoStemKind?
-        if useIncomingJoin, let incomingSongID, let incomingHookStart {
-            grainSource = AutoPivotWord.joinTokenGrainSource(
-                token: pivot,
-                lyricWords: grainSignal?.lyricWords ?? [],
-                hookStart: incomingHookStart,
-                beatSec: beatSec,
-                tempoRatio: grainTempo,
-                vocalPresence: vocalCurve,
-                hopSeconds: grainSignal?.hopSeconds ?? 0.1
-            )
-            grainSongID = incomingSongID
-            resolvedStem = incomingGrainStem ?? grainStem
-        } else {
-            grainSource = AutoPivotWord.lastBeatGrainSource(
-                phraseSourceStart: completedPhrase.sourceStart,
-                phraseSourceEnd: phraseEnd,
-                beatSec: beatSec,
-                tempoRatio: completedPhrase.tempoRatio,
-                pivotToken: pivot,
-                lyricWords: signal?.lyricWords ?? [],
-                vocalPresence: vocalCurve,
-                hopSeconds: signal?.hopSeconds ?? 0.1
-            )
-            grainSongID = completedPhrase.songID
-            resolvedStem = grainStem
-        }
-
-        // Trim every non-grain song clip out of [loopStart, drop). A leftover
-        // chorus tail shorter than minSegmentSeconds used to skip this trim
-        // and keep singing the outgoing bed through the wallpaper.
-        for i in placements.indices {
-            let p = placements[i]
-            let isGrain = p.role == .supporting
-                && abs(p.timelineDuration - beatSec) < beatSec * 0.4
-            if isGrain { continue }
-            guard p.timelineEnd > loopStart + 0.01,
-                  p.timelineStart < dropTimelineStart - 0.01 else { continue }
-            if p.timelineStart >= loopStart - 0.01 {
-                placements[i].timelineDuration = 0
-            } else {
-                let newDur = loopStart - p.timelineStart
-                if newDur >= 0.05 {
-                    placements[i].timelineDuration = newDur
-                    placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
-                } else {
-                    placements[i].timelineDuration = 0
-                }
-            }
-        }
-        placements.removeAll { $0.timelineDuration < 0.05 }
-
-        // Pulse: kick out through the thinned stutter.
-        pulseRegions.removeAll {
-            $0.timelineEnd > loopStart + 0.01 && $0.timelineStart < dropTimelineStart - 0.01
-        }
-        pulseRegions.append(
-            AutoClubPulse.Region(role: .buildOut, timelineStart: loopStart, timelineEnd: dropTimelineStart)
-        )
-
-        let grainVol = max(
-            AutoGainPolicy.pivotGrainVolume,
-            useIncomingJoin || resolvedStem == .vocals
-                ? AutoGainPolicy.vocalStemMakeupDefault
-                : AutoGainPolicy.pivotGrainVolume
-        )
-        for i in 0..<repeats {
-            let t0 = loopStart + Double(i) * beatSec
-            // Rising HPF: thin/tinny through the 1–2 bars. First grain is
-            // below a 40 wall (still ≥36 so the loop reads as HPF'd).
-            let blur = 36.0 + (22.0 * Double(i) / Double(max(repeats - 1, 1)))
-            var fx = ClipEffectSettings()
-            fx.setLevel(blur, for: MixrEffect.blur.rawValue)
-            fx = AutoSupportedEffects.sanitize(fx)
-
-            placements.append(
-                AutoClipPlacement(
-                    songID: grainSongID,
-                    sourceStart: grainSource,
-                    timelineStart: t0,
-                    timelineDuration: beatSec,
-                    tempoRatio: grainTempo,
-                    volume: grainVol,
-                    fadeIn: ClipTransition(type: .none, duration: 0),
-                    fadeOut: ClipTransition(type: .none, duration: 0),
-                    effects: fx,
-                    role: .supporting,
-                    slotIndex: completedPhrase.slotIndex,
-                    overlapsPreviousSeconds: beatSec,
-                    stemKind: resolvedStem
-                )
-            )
-        }
-
-        decisions.append(
-            AutoDecision(
-                kind: .pivotWallpaperLoop,
-                songTitle: useIncomingJoin ? deckBTitle : deckATitle,
-                detail: String(
-                    format: "%d×1-beat%@%@%@ src=%.2f → hard cut @%.1fs",
-                    repeats,
-                    pivot.map { " “\($0)”" } ?? "",
-                    useIncomingJoin ? " incoming-join" : "",
-                    resolvedStem == .vocals ? " vocal-stem" : "",
-                    grainSource,
-                    dropTimelineStart
-                )
-            )
-        )
-        if resolvedStem == .vocals {
-            decisions.append(
-                AutoDecision(
-                    kind: .usedStemSidecar,
-                    songTitle: useIncomingJoin ? deckBTitle : deckATitle,
-                    detail: "pivot grain from vocals.wav"
-                )
-            )
-        }
-    }
-
-    /// A 1-beat void next to pivot wallpaper is the old quiet hole.
-    /// Strip it from the plan when the join is loop + hard cut.
-    private static func clearPredropVoidOnPivotJoin(
-        dropTimelineStart: Double,
-        intentionalGaps: inout [AutoIntentionalGap],
-        pulseRegions: inout [AutoClubPulse.Region]
-    ) {
-        intentionalGaps.removeAll {
-            $0.reason.localizedCaseInsensitiveContains("void")
-                && abs($0.end - dropTimelineStart) < 0.08
-        }
-        pulseRegions.removeAll {
-            $0.role == .void && abs($0.timelineEnd - dropTimelineStart) < 0.08
-        }
-    }
-
-    /// Crate bounce flags `pivotWallpaperLoop` + `allowedPredropVoid` as a
-    /// quiet Drop 1 hole even when the gap was meant for Drop 2. If Drop 1
-    /// has a pivot join, strip every pre-drop void from the plan.
-    private static func stripVoidsWhenDrop1HasPivot(
-        placements: [AutoClipPlacement],
-        beatSec: Double,
-        barSec: Double,
-        decisions: inout [AutoDecision],
-        intentionalGaps: inout [AutoIntentionalGap],
-        pulseRegions: inout [AutoClubPulse.Region]
-    ) {
-        let drop1 = pulseRegions.filter { $0.role == .drop }.map(\.timelineStart).min()
-        let hasPivotDecision = decisions.contains { $0.kind == .pivotWallpaperLoop }
-        let hasPivotGrains: Bool = {
-            guard let drop1 else { return false }
-            return placements.contains {
-                $0.role == .supporting
-                    && abs($0.timelineDuration - beatSec) < beatSec * 0.35
-                    && $0.timelineStart >= drop1 - barSec * 2.5
-                    && $0.timelineStart < drop1 - 0.02
-            }
-        }()
-        guard hasPivotDecision || hasPivotGrains else { return }
-        intentionalGaps.removeAll { $0.reason.localizedCaseInsensitiveContains("void") }
-        pulseRegions.removeAll { $0.role == .void }
-        decisions.removeAll { $0.kind == .allowedPredropVoid }
-    }
-
-    /// Keep Deck A playing through a reserved pivot window when we skip the
-    /// last-word loop — no quiet hole just to switch songs.
-    private static func fillPivotWindowWithoutLoop(
-        completedPhrase: AutoClipPlacement,
-        loopStart: Double,
-        dropTimelineStart: Double,
-        deckATitle: String?,
-        reason: String,
-        placements: inout [AutoClipPlacement],
-        decisions: inout [AutoDecision]
-    ) {
-        for i in placements.indices where placements[i].role == .dominant
-            && placements[i].songID == completedPhrase.songID
-        {
-            let p = placements[i]
-            let endsAtWindow = abs(p.timelineEnd - loopStart) <= 0.08
-            let straddlesWindow = p.timelineStart < loopStart
-                && p.timelineEnd > loopStart - 0.05
-                && p.timelineEnd < dropTimelineStart - 0.05
-            if endsAtWindow || straddlesWindow {
-                placements[i].timelineDuration = max(
-                    p.timelineDuration,
-                    dropTimelineStart - p.timelineStart
-                )
-                placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
-            }
-        }
-        decisions.append(
-            AutoDecision(
-                kind: .skippedPivotWallpaper,
-                songTitle: deckATitle,
-                detail: reason
-            )
-        )
-    }
 
     /// 8-bar chorus continuation from `from` (snapped to a downbeat). Nil
     /// when the source cannot host a complete line — caller must skip.
@@ -1522,97 +1246,6 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// First complete Deck A hook for a mashup: jump to the bed's **title**
-    /// chorus island (measured energy-rise entrance). Never continue from
-    /// the intro into verse, and never lock to `chorusOrDropCandidates.first`
-    /// when that snap is a repeated prechorus (~40s on Oops).
-    private static func bedFirstCompleteChorusSection(
-        profile: AutoSongProfile,
-        used: [(Double, Double)],
-        bars: Int,
-        energy: Double,
-        tuning: AutoTuning
-    ) -> AutoCandidateSection? {
-        // Title chorus is ~8 bars (Oops). A 16-bar request used to walk source
-        // linearly into verse 2 — callers fill 16 timeline bars via a hold slot.
-        _ = bars
-        let wantBars = 8
-        let bar = profile.analysis.barSeconds
-        let introEnd = profile.analysis.introCandidate?.endSeconds ?? bar * 8
-        let phrase = profile.analysis.phraseBoundaries.count >= 2
-            ? max(bar * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
-            : bar * 8
-        let measured = AutoChorusIsland.bestEntrance(
-            signal: profile.analysis.signal,
-            downbeats: profile.analysis.downbeats,
-            barSeconds: bar,
-            duration: profile.analysis.durationSeconds,
-            introEnd: introEnd,
-            phraseSeconds: phrase,
-            title: profile.title
-        )
-
-        func overlapsUsed(_ start: Double, bars: Int) -> Bool {
-            let end = start + Double(bars) * bar
-            return used.contains { range in
-                let overlap = min(end, range.1) - max(start, range.0)
-                return overlap > Double(bars) * bar * 0.5
-            }
-        }
-
-        // Whisper lyrics.json is the source of truth: pad beats before the
-        // lyric word until the title token sits inside the first ~1–2s
-        // (hard cut + stretch must not eat the first phoneme).
-        // Do not substitute a later catalog chorus.
-        if let measured,
-           profile.analysis.signal?.lyricTitleHookStart != nil,
-           !overlapsUsed(measured.startSeconds, bars: wantBars)
-        {
-            return AutoCandidateSection(
-                songID: profile.songID,
-                label: .chorus,
-                startSeconds: measured.startSeconds,
-                barCount: wantBars,
-                barSeconds: bar,
-                hook: 0.9,
-                energy: energy,
-                vocal: 0.7,
-                clarity: 0.7,
-                rhythm: profile.analysis.drumStrength,
-                uniqueness: 0.7,
-                transitionUse: 0.55,
-                confidence: profile.analysis.analysisConfidence
-            )
-        }
-
-        let pool = profile.candidates.filter {
-            $0.label == .chorus && $0.barCount >= wantBars && !overlapsUsed($0.startSeconds, bars: $0.barCount)
-        }
-
-        if let measured {
-            let near = pool.filter { abs($0.startSeconds - measured.startSeconds) <= bar * 0.45 }
-            let atOrBefore = near.filter { $0.startSeconds <= measured.startSeconds + 0.02 }
-            if let best = atOrBefore.min(by: {
-                abs($0.startSeconds - measured.startSeconds) < abs($1.startSeconds - measured.startSeconds)
-            }) {
-                return best
-            }
-            if !overlapsUsed(measured.startSeconds, bars: wantBars) {
-                return completePhraseSection(
-                    profile: profile,
-                    from: measured.startSeconds,
-                    bars: wantBars,
-                    energy: energy
-                )
-            }
-        }
-
-        // No usable energy shape: pick the highest-hook chorus that is not
-        // glued to the intro tail (that glue is the 28% prechorus snap).
-        let unglued = pool.filter { $0.startSeconds > introEnd + bar * 1.5 }
-        let ranked = (unglued.isEmpty ? pool : unglued).sorted { $0.hook > $1.hook }
-        return ranked.first
-    }
 
     /// Best cameo-chop guest to own Drop 1 when full-hook stretch fails.
     private static func bestCameoDrop1Guest(
@@ -2438,12 +2071,12 @@ enum AutoRemixPlanner {
                     phraseSeconds: phrase,
                     title: profile.title
                 )
-                if let chorus = bedFirstCompleteChorusSection(
+                if let chorus = AutoJoinEngine.bedFirstCompleteChorusSection(
                     profile: profile,
                     used: used,
                     bars: slot.bars,
                     energy: slot.energy,
-                    tuning: tuning
+                    tempoRatio: fit.ratio
                 ) {
                     section = chorus
                     let rawList: String
@@ -3119,7 +2752,7 @@ enum AutoRemixPlanner {
                            && $0.timelineStart + 0.05 < ps.timelineStart
                    }) {
                     let bedStems = ordered.first(where: { $0.songID == bedID })?.stems
-                    appendPivotWallpaperLoop(
+                    AutoJoinEngine.appendPivotWallpaperLoop(
                         completedPhrase: phrase,
                         dropTimelineStart: ps.timelineStart,
                         deckATitle: bedTitle,
@@ -3450,7 +3083,7 @@ enum AutoRemixPlanner {
             decisions: &decisions
         )
 
-        stripVoidsWhenDrop1HasPivot(
+        AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
             placements: placements,
             beatSec: beatSec,
             barSec: barSec,
@@ -3470,14 +3103,14 @@ enum AutoRemixPlanner {
             decisions: &decisions
         )
 
-        boostJoinClipVolumes(
+        AutoJoinEngine.boostJoinClipVolumes(
             placements: &placements,
             pulseRegions: pulseRegions,
             beatSec: beatSec,
             barSec: barSec,
             profiles: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0) })
         )
-        applyOpeningFadeIn(
+        AutoJoinEngine.applyOpeningFadeIn(
             placements: &placements,
             beatSec: beatSec,
             decisions: &decisions
@@ -4349,7 +3982,7 @@ enum AutoRemixPlanner {
                 && abs(p.timelineStart - dropAt) < 0.25
                 && (mashupVocalID == nil || p.songID == mashupVocalID)
         }
-        appendPivotWallpaperLoop(
+        AutoJoinEngine.appendPivotWallpaperLoop(
             completedPhrase: phrase,
             dropTimelineStart: dropAt,
             deckATitle: bed?.title,
@@ -4371,201 +4004,6 @@ enum AutoRemixPlanner {
         )
     }
 
-    /// First clip of a mashup/remix: long fade-in from silence. Later
-    /// hook-replace joins stay hard-cut at full volume. Duration may exceed
-    /// the UI pill max (8 beats); the selected pill shows 8 as closest.
-    private static func applyOpeningFadeIn(
-        placements: inout [AutoClipPlacement],
-        beatSec: Double,
-        decisions: inout [AutoDecision]
-    ) {
-        let beats = AutoClubTempo.openingFadeInBeats
-        let firstStart = placements
-            .filter { $0.role == .dominant }
-            .map(\.timelineStart)
-            .min()
-        guard let firstStart else { return }
-        var faded = 0
-        for i in placements.indices {
-            let p = placements[i]
-            guard abs(p.timelineStart - firstStart) < 0.05 else { continue }
-            guard p.role == .dominant || p.role == .supporting else { continue }
-            if p.role == .supporting, abs(p.timelineDuration - beatSec) < beatSec * 0.4 {
-                continue
-            }
-            placements[i].fadeIn = ClipTransition(
-                type: .crossfade,
-                duration: beats,
-                curve: AutoTransitionEnvelope.equalPowerCurveName
-            )
-            faded += 1
-        }
-        guard faded > 0 else { return }
-        decisions.append(
-            AutoDecision(
-                kind: .selectedAnchor,
-                songTitle: nil,
-                detail: String(format: "opening fade-in %.0f beats (longer than UI 8)", beats)
-            )
-        )
-    }
-
-    /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least
-    /// as loud as the bed verse. Vocal stems get RMS makeup (clip volume may
-    /// exceed 1.0). Incoming Drop 1 stays at least as loud as the title-hook
-    /// vocal copy. No fade-in on the join (opening fade-in is reapplied after).
-    private static func boostJoinClipVolumes(
-        placements: inout [AutoClipPlacement],
-        pulseRegions: [AutoClubPulse.Region],
-        beatSec: Double,
-        barSec: Double,
-        profiles: [UUID: AutoSongProfile]
-    ) {
-        let dropStarts = pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
-        func nearDrop(_ t: Double) -> Bool {
-            dropStarts.contains { abs($0 - t) < 0.12 }
-        }
-        func isPivotGrain(_ p: AutoClipPlacement) -> Bool {
-            p.role == .supporting && abs(p.timelineDuration - beatSec) < beatSec * 0.4
-        }
-        func isTitleHookCopy(_ p: AutoClipPlacement) -> Bool {
-            p.role == .dominant
-                && !nearDrop(p.timelineStart)
-                && p.timelineDuration > beatSec * 8
-                && p.timelineStart < (dropStarts.min() ?? .infinity) - barSec
-        }
-        func isDropLead(_ p: AutoClipPlacement) -> Bool {
-            p.role == .dominant && nearDrop(p.timelineStart)
-        }
-        func isBedUnderDrop(_ p: AutoClipPlacement) -> Bool {
-            p.role == .supporting && nearDrop(p.timelineStart) && !isPivotGrain(p)
-        }
-        func measuredRMSDB(_ p: AutoClipPlacement) -> Double? {
-            guard let signal = profiles[p.songID]?.analysis.signal else { return nil }
-            let window = max(0.5, min(barSec, 2.6))
-            let stem = signal.meanStemVocalRMSDB(from: p.sourceStart, to: p.sourceStart + window)
-            if stem > -80 { return stem }
-            let mix = signal.meanRMSDB(from: p.sourceStart, to: p.sourceStart + window)
-            return mix > -80 ? mix : nil
-        }
-        func effectiveDB(_ p: AutoClipPlacement) -> Double? {
-            guard let rms = measuredRMSDB(p) else { return nil }
-            return rms + 20.0 * log10(max(p.volume, 0.001))
-        }
-
-        let verseVol = placements
-            .filter { p in
-                p.role == .dominant
-                    && p.stemKind == nil
-                    && !nearDrop(p.timelineStart)
-                    && p.timelineDuration > beatSec * 2
-            }
-            .map(\.volume)
-            .max() ?? AutoGainPolicy.preservationSongVolume
-        let floor = max(
-            verseVol,
-            AutoGainPolicy.incomingDropVolume,
-            AutoGainPolicy.pivotGrainVolume
-        )
-
-        var referenceRMS = -120.0
-        for p in placements where p.role == .dominant && p.stemKind == nil
-            && !nearDrop(p.timelineStart) && p.timelineDuration > beatSec * 8 {
-            if let signal = profiles[p.songID]?.analysis.signal {
-                let rms = signal.meanRMSDB(from: p.sourceStart, to: p.sourceStart + 4)
-                if rms > referenceRMS { referenceRMS = rms }
-            }
-        }
-
-        for i in placements.indices {
-            let p = placements[i]
-            let pivot = isPivotGrain(p)
-            let dropLead = isDropLead(p)
-            let bedUnderDrop = isBedUnderDrop(p)
-            let titleHookCopy = isTitleHookCopy(p)
-            guard pivot || dropLead || bedUnderDrop || titleHookCopy else { continue }
-            var vol = max(p.volume, floor)
-            if pivot {
-                vol = max(vol, AutoGainPolicy.vocalStemMakeupDefault)
-            }
-            if p.stemKind == .vocals, dropLead || titleHookCopy || pivot {
-                vol = max(vol, vocalStemMakeup(placement: p, referenceRMS: referenceRMS, profiles: profiles, barSec: barSec))
-            }
-            placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
-            if pivot || dropLead || bedUnderDrop {
-                placements[i].fadeIn = .hardCut
-            }
-        }
-
-        // Raise incoming Drop 1 (guest vocals + that song's drop stems) so
-        // mix RMS is at least the title-hook vocal copy. Do not duck the title.
-        let titleVocals = placements.filter { isTitleHookCopy($0) && $0.stemKind == .vocals }
-        guard let titleHook = titleVocals.min(by: { $0.timelineStart < $1.timelineStart })
-                ?? titleVocals.first else { return }
-        let titleVol = titleHook.volume
-        let titleEff = effectiveDB(titleHook)
-        let dropSongID = placements.first(where: { isDropLead($0) })?.songID
-        guard let dropSongID else { return }
-
-        var dropScale = 1.0
-        for i in placements.indices {
-            let p = placements[i]
-            guard isDropLead(p), p.songID == dropSongID, p.stemKind == .vocals else { continue }
-            var vol = max(p.volume, titleVol)
-            if let titleEff, let rms = measuredRMSDB(p) {
-                vol = max(vol, pow(10.0, (titleEff - rms) / 20.0))
-            }
-            vol = min(AutoGainPolicy.maxClipVolume, vol)
-            dropScale = max(dropScale, vol / max(p.volume, 0.001))
-            placements[i].volume = vol
-        }
-        for i in placements.indices {
-            let p = placements[i]
-            guard p.songID == dropSongID else { continue }
-            guard isDropLead(p) || isBedUnderDrop(p) else { continue }
-            if isDropLead(p), p.stemKind == .vocals { continue }
-            var vol = max(p.volume, titleVol)
-            if dropScale > 1.001 {
-                vol = max(vol, p.volume * dropScale)
-            }
-            placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
-        }
-    }
-
-    /// Makeup so a quieter vocal stem matches bed-verse RMS.
-    private static func vocalStemMakeup(
-        placement p: AutoClipPlacement,
-        referenceRMS: Double,
-        profiles: [UUID: AutoSongProfile],
-        barSec: Double
-    ) -> Double {
-        let window = max(0.5, min(barSec, 2.6))
-        let srcEnd = p.sourceStart + window
-        if let signal = profiles[p.songID]?.analysis.signal {
-            let stemRMS = signal.meanStemVocalRMSDB(from: p.sourceStart, to: srcEnd)
-            if referenceRMS > -80, stemRMS > -80, stemRMS < referenceRMS - 0.4 {
-                let delta = min(8.0, referenceRMS - stemRMS)
-                return pow(10.0, delta / 20.0)
-            }
-            if !signal.stemVocalPresenceCurve.isEmpty, !signal.energyCurve.isEmpty {
-                func mean(_ curve: [Double]) -> Double {
-                    let hop = max(signal.hopSeconds, 0.05)
-                    let lo = max(0, Int(p.sourceStart / hop))
-                    let hi = min(curve.count - 1, Int(srcEnd / hop))
-                    guard hi >= lo else { return 0 }
-                    var s = 0.0
-                    for i in lo...hi { s += curve[i] }
-                    return s / Double(hi - lo + 1)
-                }
-                let stemE = mean(signal.stemVocalPresenceCurve)
-                let mixE = mean(signal.energyCurve)
-                if stemE > 0.04, mixE > stemE * 1.05 {
-                    return min(AutoGainPolicy.maxClipVolume, mixE / stemE)
-                }
-            }
-        }
-        return AutoGainPolicy.vocalStemMakeupDefault
-    }
 
     private static func countHandoffs(_ placed: [PlacedSlot]) -> Int {
         var n = 0

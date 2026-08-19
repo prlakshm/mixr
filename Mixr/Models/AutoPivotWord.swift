@@ -167,14 +167,15 @@ nonisolated enum AutoPivotWord {
         hopSeconds: Double = 0.1
     ) -> Double {
         let grainDur = beatSec * max(tempoRatio, 0.0001)
-        let lo = max(0, hookStart - 2 * beatSec)
-        let hi = hookStart + 16 * beatSec
+        let sourceBeat = grainDur
+        let lo = max(0, hookStart - 2 * sourceBeat)
+        let hi = hookStart + 16 * sourceBeat
         func clamp(_ t: Double) -> Double {
             min(max(t, lo), max(lo, hi - grainDur))
         }
 
         if let token = token?.lowercased(), !lyricWords.isEmpty {
-            let afterAttack = hookStart + 0.4 * beatSec
+            let afterAttack = hookStart + 0.4 * sourceBeat
             let hits = lyricWords.filter { w in
                 let word = w.word.lowercased().filter { $0.isLetter }
                 return (word == token || word.contains(token) || token.contains(word))
@@ -188,7 +189,7 @@ nonisolated enum AutoPivotWord {
         }
 
         if !vocalPresence.isEmpty, hopSeconds > 0.001 {
-            let searchLo = max(lo, hookStart + 0.35 * beatSec)
+            let searchLo = max(lo, hookStart + 0.35 * sourceBeat)
             var bestT = hookStart
             var bestV = -1.0
             var t = searchLo
@@ -204,7 +205,7 @@ nonisolated enum AutoPivotWord {
                         bestT = t
                     }
                 }
-                t += beatSec
+                t += sourceBeat
             }
             if bestV >= 0.18 {
                 return clamp(bestT)

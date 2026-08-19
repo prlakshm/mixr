@@ -128,6 +128,11 @@ do {
             && abs(pair.bedRatio - pair.targetBPM / 95) < 0.02,
         String(format: "vocal=%.3f bed=%.3f target=%.1f", pair.vocalRatio, pair.bedRatio, pair.targetBPM)
     )
+    check(
+        "club-lift does not quietly fall back to a midtempo ballad pocket",
+        pair.ok && pair.targetBPM > 120 && abs(pair.targetBPM - 94) > 10,
+        pair.detail
+    )
 
     let festivalPair = AutoClubTempo.mashupDecision(vocalBPM: 98, bedBPM: 144)
     check("t.A.T.u / Paramore-class refuse illegal vocal stretch",
@@ -3872,6 +3877,38 @@ func assertMashupPivotFromIncomingGuest(
             String(format: "blur=%.0f", firstBlur)
         )
     }
+    if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan), let g0 = grains.first {
+        check(
+            "\(label): pivot grains are the join INTO Drop 1, not chops on the drop",
+            grains.allSatisfy { $0.timelineStart < drop1 - 0.02 && $0.timelineEnd <= drop1 + 0.08 },
+            String(
+                format: "drop=%.2f grain0=%.2f–%.2f last=%.2f",
+                drop1, g0.timelineStart, g0.timelineEnd, grains.last?.timelineEnd ?? -1
+            )
+        )
+        let loopStart = drop1 - plan.barSeconds * 2
+        check(
+            "\(label): wallpaper starts ~2 mix bars before Drop 1 (not empty air, not 4-bar void)",
+            abs(g0.timelineStart - loopStart) < plan.beatSeconds * 0.6,
+            String(format: "grain0=%.2f loopStart=%.2f drop=%.2f", g0.timelineStart, loopStart, drop1)
+        )
+        let bedTail = plan.placements.filter { p in
+            guard p.songID == plan.mashupBedSongID else { return false }
+            let isGrain = p.role == .supporting
+                && abs(p.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
+            return !isGrain && p.timelineEnd <= loopStart + 0.08
+        }.max(by: { $0.timelineEnd < $1.timelineEnd })
+        if let bedTail {
+            check(
+                "\(label): bed plays through until wallpaper (no multi-bar hole before the grains)",
+                g0.timelineStart - bedTail.timelineEnd < plan.beatSeconds * 0.75,
+                String(
+                    format: "bedEnd=%.2f grain0=%.2f gap=%.2f",
+                    bedTail.timelineEnd, g0.timelineStart, g0.timelineStart - bedTail.timelineEnd
+                )
+            )
+        }
+    }
 }
 
 func assertTitleHookLead(
@@ -3879,12 +3916,30 @@ func assertTitleHookLead(
     lyric: Double,
     barSeconds: Double,
     beats: Int,
-    label: String
+    label: String,
+    tempoRatio: Double = 1.0
 ) {
     let beat = barSeconds / 4
     let want = lyric - Double(beats) * beat
     let oneBeat = lyric - beat
     let lead = lyric - onset
+    // Club-lift TimePitch smears the first ~1s of mix. Pad in source seconds
+    // so the title token lands in mix-time [1.15, 2.15] — not native 2-beat.
+    if tempoRatio > 1.12 {
+        let mixLead = lead / tempoRatio
+        check(
+            label,
+            mixLead >= 1.12 && mixLead <= 2.15
+                && onset < lyric - 0.05
+                && lead < barSeconds * 0.9
+                && abs(onset - (lyric - barSeconds)) > 0.5,
+            String(
+                format: "onset=%.2f lyric=%.2f ratio=%.2f mixLead=%.2f beat=%.2f",
+                onset, lyric, tempoRatio, mixLead, beat
+            )
+        )
+        return
+    }
     // dump_gate: 2-beat ≈ 49.1 at lyric 50.38 / 94 BPM. Slack of 1 bar×0.35
     // would still accept 6519cf6's 1-beat 49.75 — reject that explicitly.
     let nearWant = beats >= 2 ? abs(onset - want) < beat * 0.5 : abs(onset - want) < barSeconds * 0.35
@@ -3919,6 +3974,22 @@ func assertTitleHookVocalLead(
         tokenOffset > 0.05 && tokenOffset < 4.0 && hook.sourceStart < lyric - 0.05,
         String(format: "src=%.2f lyric=%.2f offset=%.2f", hook.sourceStart, lyric, tokenOffset)
     )
+    let mixLead = tokenOffset / max(hook.tempoRatio, 0.0001)
+    // Club-lift TimePitch smears the first ~1s of a stretched clip. The
+    // title/hook token must land in mix-time after that settle so Whisper
+    // of the first 4s hears it — not the line after it. Native-tempo beds
+    // keep the 1–2 beat pad (mixLead ≈ source pad).
+    if hook.tempoRatio > 1.12 {
+        check(
+            "\(label): after club-lift, title token is the first identifiable mix word (not the following line)",
+            mixLead >= 1.12 && mixLead <= 2.15
+                && hook.sourceStart < lyric - 0.05,
+            String(
+                format: "src=%.2f lyric=%.2f ratio=%.2f mixLead=%.2f",
+                hook.sourceStart, lyric, hook.tempoRatio, mixLead
+            )
+        )
+    }
     check(
         "\(label): title-hook copy uses the vocal stem so Whisper hears the token",
         hook.stemKind == .vocals,
@@ -3983,6 +4054,19 @@ func assertTitleHookVocalLead(
             String(
                 format: "title=%.2f drop=%@",
                 titleVol,
+                dropVocals.map { String(format: "%.2f", $0.volume) }.joined(separator: ",")
+            )
+        )
+        // Isolated title vocal at the same clip volume reads louder than a
+        // mixed Drop 1. Extra makeup (~2.5 dB) so bounce RMS stays ≥ title.
+        let isolationFloor = titleVol * pow(10.0, 2.4 / 20.0)
+        check(
+            "\(label): incoming Drop 1 is louder than an isolated title-hook copy (mix RMS makeup)",
+            !dropVocals.isEmpty && dropVocals.allSatisfy { $0.volume + 0.001 >= isolationFloor },
+            String(
+                format: "title=%.2f floor=%.2f drop=%@",
+                titleVol,
+                isolationFloor,
                 dropVocals.map { String(format: "%.2f", $0.volume) }.joined(separator: ",")
             )
         )
@@ -4188,6 +4272,43 @@ do {
         label: "title-hook keeps 1 beat when the distinctive token is already inside the first 1–2s"
     )
 
+    // Club-lift: pad in mix-seconds so the title token survives TimePitch
+    // smear. Native 2-beat pad at +35% lands the token at ~0.93s mix — inside
+    // the smear — and Whisper hears the following line instead.
+    let lifted = AutoChorusIsland.titleHookClipStart(
+        lyric: lateLyric,
+        downbeats: oopsProfile.analysis.downbeats,
+        barSeconds: oopsBar,
+        title: oops.title,
+        lyricWords: oopsSignal.lyricWords,
+        tempoRatio: 1.35
+    )
+    let liftedMix = (lateLyric - lifted) / 1.35
+    check(
+        "club-lift title pad puts the token after stretch settle, still inside the first 2s of mix",
+        liftedMix >= 1.12 && liftedMix <= 2.15
+            && lifted < lateLyric - 0.05
+            && lateLyric - lifted < oopsBar * 0.9
+            && abs(lifted - 48.0) > 0.5,
+        String(format: "onset=%.2f lyric=%.2f mixLead=%.2f bar=%.2f", lifted, lateLyric, liftedMix, oopsBar)
+    )
+    let nativePad = AutoChorusIsland.titleHookClipStart(
+        lyric: festivalLyric,
+        downbeats: [36.5, 38.17, 39.84, 41.5],
+        barSeconds: festivalBar,
+        title: "All I Wanted",
+        lyricWords: [
+            (festivalLyric, "all"), (festivalLyric + 0.2, "i"),
+            (festivalLyric + 0.42, "wanted"), (festivalLyric + 0.7, "was")
+        ],
+        tempoRatio: 1.0
+    )
+    check(
+        "native-tempo title pad is unchanged when there is no club-lift",
+        abs(nativePad - laterTokenStart) < 0.02,
+        String(format: "native=%.2f liftedPath=%.2f", laterTokenStart, nativePad)
+    )
+
     check(
         "join token is the incoming distinctive hook word, not a generic shared filler",
         AutoPivotWord.joinToken(deckATitle: "Oops I Did It Again", deckBTitle: "Baby One More Time") == "baby"
@@ -4292,7 +4413,9 @@ do {
             signals: signals
         ) {
         case .success(_, let plan, _):
-            let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+            let hookPlacement = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+            let hookSrc = hookPlacement?.sourceStart ?? -1
+            let hookRatio = hookPlacement?.tempoRatio ?? 1.0
             let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
             let guestSrc = plan.placements
                 .filter {
@@ -4317,7 +4440,8 @@ do {
                 lyric: oopsHook,
                 barSeconds: 240.0 / 95.0,
                 beats: 2,
-                label: "lyrics sidecar: planner bed pads 2 beats for a distinctive attack"
+                label: "lyrics sidecar: planner bed pads 2 beats for a distinctive attack",
+                tempoRatio: hookRatio
             )
             check(
                 "lyrics sidecar: planner Drop 1 is titleHookStart (not verse)",
@@ -4401,7 +4525,9 @@ do {
             signals: signals
         ) {
         case .success(let tracks, let plan, _):
-            let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+            let hookPlacement = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+            let hookSrc = hookPlacement?.sourceStart ?? -1
+            let hookRatio = hookPlacement?.tempoRatio ?? 1.0
             let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
             let guestSrc = plan.placements
                 .filter {
@@ -4429,19 +4555,34 @@ do {
                 lyric: bedLyric,
                 barSeconds: 240.0 / 95.0,
                 beats: 2,
-                label: "599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48"
+                label: "599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48",
+                tempoRatio: hookRatio
             )
-            check(
-                "dump_gate: lyric 50.38 → src ≈ two source beats (49.1), not 1-beat 49.75, not bar 48.01",
-                abs(hookSrc - (bedLyric - 2 * nativeBeat)) < nativeBeat * 0.45
-                    && abs(hookSrc - (bedLyric - nativeBeat)) > nativeBeat * 0.35
-                    && abs(hookSrc - 48.01) > 0.5,
-                String(
-                    format: "src=%.2f lyric=%.2f beat=%.3f two=%.2f one=%.2f mixBeat=%.3f",
-                    hookSrc, bedLyric, nativeBeat,
-                    bedLyric - 2 * nativeBeat, bedLyric - nativeBeat, plan.beatSeconds
+            if hookRatio > 1.12 {
+                let mixLead = (bedLyric - hookSrc) / hookRatio
+                check(
+                    "dump_gate: club-lift mix-time pad puts title token after stretch settle",
+                    mixLead >= 1.12 && mixLead <= 2.15
+                        && hookSrc < bedLyric - 0.05
+                        && abs(hookSrc - 48.01) > 0.5,
+                    String(
+                        format: "src=%.2f lyric=%.2f ratio=%.2f mixLead=%.2f mixBeat=%.3f",
+                        hookSrc, bedLyric, hookRatio, mixLead, plan.beatSeconds
+                    )
                 )
-            )
+            } else {
+                check(
+                    "dump_gate: lyric 50.38 → src ≈ two source beats (49.1), not 1-beat 49.75, not bar 48.01",
+                    abs(hookSrc - (bedLyric - 2 * nativeBeat)) < nativeBeat * 0.45
+                        && abs(hookSrc - (bedLyric - nativeBeat)) > nativeBeat * 0.35
+                        && abs(hookSrc - 48.01) > 0.5,
+                    String(
+                        format: "src=%.2f lyric=%.2f beat=%.3f two=%.2f one=%.2f mixBeat=%.3f",
+                        hookSrc, bedLyric, nativeBeat,
+                        bedLyric - 2 * nativeBeat, bedLyric - nativeBeat, plan.beatSeconds
+                    )
+                )
+            }
             check(
                 "599dec4: 2-beat pad never walks catalog 48",
                 abs(hookSrc - 48.0) > 0.5 && abs(hookSrc - catalogPeak) > 0.08,
