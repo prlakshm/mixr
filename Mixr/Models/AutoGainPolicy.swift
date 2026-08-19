@@ -113,20 +113,29 @@ nonisolated enum AutoGainPolicy {
     /// clip volume above 1.0 as makeup so Drop 1 first-bar RMS matches
     /// the bed verse. Playback/export multiply this through; do not clamp
     /// to unity in the applier.
-    static let maxClipVolume = 2.5
+    static let maxClipVolume = 3.5
 
     /// Fallback makeup when a vocal stem has no RMS curve (~+4 dB).
     static let vocalStemMakeupDefault = 1.58
 
     /// Isolated title-hook vocals at the same clip volume read louder than a
-    /// mixed Drop 1. Extra linear gain (~+2.4 dB) so incoming Drop 1 mix RMS
-    /// stays at least the title copy. Do not duck the title stem.
-    static let dropVsIsolatedTitleBoost = 1.3183
+    /// mixed Drop 1. Extra linear gain (~+6.4 dB) so incoming Drop 1 mix RMS
+    /// stays at least the title copy after the shared ceiling limiter.
+    /// Do not duck the title stem.
+    static let dropVsIsolatedTitleBoost = 2.10
+
+    /// Per-stem volume for drums/bass/other under a title-hook vocal copy.
+    /// Three instrumental stems at ~0.62 sum louder than the isolated vocal
+    /// and Whisper-small of the first 4s hears drums / the next line instead
+    /// of the distinctive token. Keep each stem well below the title vocal.
+    /// Offline mixdown has no blur HPF, so this volume is the duck.
+    static let titleInstrumentalDuckVolume = 0.18
 
     /// Role-based join staging — clip volume floors by placement role.
     /// Validated on rendered PCM in golden/render tiers, not clip fields alone.
     enum JoinRole: Sendable {
         case titleStem
+        case titleBed
         case pivotGrain
         case dropGuest
         case bedUnderDrop
@@ -142,6 +151,8 @@ nonisolated enum AutoGainPolicy {
         switch role {
         case .titleStem:
             return vocalStemMakeupDefault
+        case .titleBed:
+            return titleInstrumentalDuckVolume
         case .pivotGrain:
             if useIncomingJoin || stemKind == .vocals {
                 return vocalStemMakeupDefault

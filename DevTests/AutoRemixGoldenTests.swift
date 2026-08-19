@@ -190,7 +190,7 @@ do {
             )
             check(
                 "Golden Oops×BOMT: title token mixLead after stretch settle",
-                mixLead >= 1.12 && mixLead <= 2.15,
+                mixLead >= 1.60 && mixLead <= 1.80,
                 String(format: "mixLead=%.2f ratio=%.2f", mixLead, hook.tempoRatio)
             )
             guard let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) else {
@@ -262,6 +262,11 @@ do {
                 dropDB > -45,
                 String(format: "drop=%.1f dB", dropDB)
             )
+            check(
+                "Golden Oops×BOMT: Drop 1 8s mix RMS ≥ title-hook 4s",
+                dropDB + 0.05 >= titleDB,
+                String(format: "drop=%.2f title=%.2f", dropDB, titleDB)
+            )
         case .failure(let msg):
             check("Golden Oops×BOMT planner", false, msg)
         }
@@ -298,6 +303,7 @@ do {
         tuning.explicitStemsBySongID[tatu.id] = guestStems
         var bedSignal = makeFeatures(duration: 220, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50)
         bedSignal.lyricTitleHookStart = titleLyric
+        bedSignal.lyricWords = [(titleLyric, "all"), (titleLyric + 0.2, "i"), (titleLyric + 0.42, "wanted")]
         var guestSignal = makeFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64)
         guestSignal.lyricTitleHookStart = 64.0
         switch AutoRemixRunner.runEntireProject(
@@ -312,17 +318,13 @@ do {
             )
             check("Golden Paramore×tatu: tatu owns Drop 1 vocal", plan.mashupVocalSongID == tatu.id)
             if let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
-                let mixLead = AutoJoinEngine.mixTimeTitleLead(
-                    lyric: titleLyric, clipStart: hook.sourceStart, tempoRatio: hook.tempoRatio
-                )
-                // Festival 144: native 1-beat pad (~0.42s mix) is correct.
-                let leadOK = hook.tempoRatio > 1.12
-                    ? mixLead >= 1.12 && mixLead <= 2.15
-                    : mixLead >= 0.35 && mixLead <= 2.15
+                let wanted = titleLyric + 0.42
                 check(
-                    "Golden Paramore×tatu: title token inside first 2s mix",
-                    leadOK,
-                    String(format: "mixLead=%.2f ratio=%.2f", mixLead, hook.tempoRatio)
+                    "Golden Paramore×tatu: title clip starts on distinctive token, not phrase-start filler",
+                    hook.sourceStart > titleLyric + 0.05
+                        && hook.sourceStart < wanted
+                        && (wanted - hook.sourceStart) <= 0.35,
+                    String(format: "src=%.2f all=%.2f wanted=%.2f", hook.sourceStart, titleLyric, wanted)
                 )
             }
             if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {

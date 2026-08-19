@@ -14,6 +14,18 @@ import Foundation
 
 nonisolated enum AutoChorusIsland {
 
+    /// Club-lift TimePitch smears the first ~1.3s of mix. Distinctive title
+    /// token lands in this mix-time window so Whisper-small of the first 4s
+    /// hears it — not the following line.
+    static let clubLiftTitleMixLead = 1.70
+    static let clubLiftTitleMixLeadMin = 1.60
+    static let clubLiftTitleMixLeadMax = 1.80
+    /// Search window after a generic phrase-start filler for the distinctive token.
+    static let distinctiveTokenLineWindow = 2.6
+    /// Pad before a later distinctive token so it is not on sample 0, without
+    /// pulling the filler word back into the first identifiable lyric.
+    static let distinctiveTokenSettle = 0.18
+
     struct Entrance: Sendable {
         var startSeconds: Double
         var score: Double
@@ -587,13 +599,33 @@ nonisolated enum AutoChorusIsland {
         hop: Double
     ) -> Double {
         var t = lyric
-        let distinctive = Set(AutoPivotWord.hookTokens(in: title ?? "").distinctive)
+        let tokens = AutoPivotWord.hookTokens(in: title ?? "")
+        let distinctive = Set(tokens.distinctive)
         func norm(_ s: String) -> String { s.lowercased().filter { $0.isLetter } }
         if !distinctive.isEmpty, !words.isEmpty {
-            let hits = words.filter { distinctive.contains(norm($0.word)) }
-            if let hit = hits.min(by: { abs($0.t - lyric) < abs($1.t - lyric) }),
-               abs(hit.t - lyric) < 1.25 {
-                t = hit.t
+            let atLyric = words.min(by: { abs($0.t - lyric) < abs($1.t - lyric) })
+                .flatMap { abs($0.t - lyric) <= 0.35 ? $0 : nil }
+            let atWord = atLyric.map { norm($0.word) } ?? ""
+            let atIsDistinctive = !atWord.isEmpty && distinctive.contains(atWord)
+            let atIsFiller = !atWord.isEmpty
+                && AutoPivotWord.genericFillers.contains(atWord)
+                && !distinctive.contains(atWord)
+            let titleStartsOnFiller = {
+                guard let first = tokens.all.first else { return false }
+                return tokens.generic.contains(first) && !distinctive.contains(first)
+            }()
+            if atIsDistinctive {
+                t = atLyric!.t
+            } else if atIsFiller || (atLyric == nil && titleStartsOnFiller) {
+                let hi = lyric + distinctiveTokenLineWindow
+                let hits = words.filter {
+                    distinctive.contains(norm($0.word))
+                        && $0.t >= lyric - 0.05
+                        && $0.t <= hi
+                }
+                if let first = hits.min(by: { $0.t < $1.t }) {
+                    t = first.t
+                }
             }
         }
         guard hop > 0.001, vocalPresence.count >= 8 else { return t }
@@ -635,17 +667,26 @@ nonisolated enum AutoChorusIsland {
         }
         var sourcePad = beats * beat
         let ratio = max(tempoRatio, 0.0001)
-        // Club-lift TimePitch smears the first ~1s of mix. Put the title
-        // token in mix-time [1.15, 2.0] so it is the first identifiable
-        // word after settle — never a full bar early, and never 94 BPM.
+        // Club-lift TimePitch smears the first ~1.3s of mix. Put the title
+        // token in mix-time [1.6, 1.8] so Whisper of the first 4s hears it —
+        // never a full bar early, and never 94 BPM.
         if leadIn == .enoughForTitleToken, ratio > 1.12, beat > 0.05 {
             let mixLead = sourcePad / ratio
-            if mixLead < 1.15 {
-                sourcePad = min(barSeconds * 0.85, 1.35 * ratio)
+            if mixLead < clubLiftTitleMixLeadMin || mixLead > clubLiftTitleMixLeadMax {
+                sourcePad = min(barSeconds * 0.92, clubLiftTitleMixLead * ratio)
             }
         }
+        if leadIn == .enoughForTitleToken, !lyricWords.isEmpty {
+            sourcePad = excludeLeadFillers(
+                lyric: lyric,
+                sourcePad: sourcePad,
+                title: title,
+                lyricWords: lyricWords,
+                tempoRatio: ratio
+            )
+        }
         let padded = max(0, lyric - sourcePad)
-        let earliest = max(0, lyric - min(barSeconds * 0.9, sourcePad + 0.25 * beat))
+        let earliest = max(0, lyric - min(barSeconds * 0.92, sourcePad + 0.25 * beat))
         return snapLeadInToBeat(
             padded: padded,
             lyric: lyric,
@@ -653,6 +694,40 @@ nonisolated enum AutoChorusIsland {
             barSeconds: barSeconds,
             earliest: earliest
         )
+    }
+
+    /// When a generic (or other non-distinctive) lyric sits inside the default
+    /// pad, shrink so the distinctive token is the first identifiable word.
+    private static func excludeLeadFillers(
+        lyric: Double,
+        sourcePad: Double,
+        title: String?,
+        lyricWords: [(t: Double, word: String)],
+        tempoRatio: Double
+    ) -> Double {
+        let distinctive = Set(AutoPivotWord.hookTokens(in: title ?? "").distinctive)
+        func norm(_ s: String) -> String { s.lowercased().filter { $0.isLetter } }
+        let padStart = lyric - sourcePad
+        let blockers = lyricWords.filter { w in
+            w.t >= padStart - 0.02
+                && w.t < lyric - 0.12
+                && !distinctive.contains(norm(w.word))
+        }
+        guard let last = blockers.max(by: { $0.t < $1.t }) else { return sourcePad }
+        let after = last.t + 0.30
+        let remaining = lyric - after
+        // Keep a tiny mix-time settle after club-lift without pulling the
+        // previous lyric back into the first identifiable word.
+        let minMix = tempoRatio > 1.12 ? 0.13 : 0.06
+        let minSource = minMix * max(tempoRatio, 1)
+        if remaining >= minSource {
+            return min(sourcePad, remaining)
+        }
+        let available = lyric - (last.t + 0.02)
+        if available >= minSource {
+            return min(sourcePad, minSource)
+        }
+        return min(sourcePad, max(0.06, available))
     }
 
     /// Snap a lead-in to the beat grid. Prefer a beat near `padded`, at or
@@ -666,7 +741,11 @@ nonisolated enum AutoChorusIsland {
         earliest: Double
     ) -> Double {
         let beat = barSeconds / 4
-        let latest = lyric - beat * 0.35
+        let pad = max(0, lyric - padded)
+        let latestGap = min(beat * 0.35, max(0.05, pad * 0.4))
+        // Never snap later than `padded` — that eats a filler-exclusion pad
+        // and lands the previous lyric (or the token) on sample 0.
+        let latest = min(padded, lyric - latestGap)
         var candidates: [Double] = [padded]
         for db in downbeats {
             var t = db

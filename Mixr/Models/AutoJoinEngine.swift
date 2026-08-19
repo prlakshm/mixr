@@ -537,7 +537,31 @@ nonisolated enum AutoJoinEngine {
         }
 
         let titleVocals = placements.filter { isTitleHookCopy($0) && $0.stemKind == .vocals }
-        guard let titleHook = titleVocals.min(by: { $0.timelineStart < $1.timelineStart })
+        let titleVocalWindows = placements.filter {
+            $0.role == .dominant
+                && $0.stemKind == .vocals
+                && !nearDrop($0.timelineStart)
+                && $0.timelineStart < (dropStarts.min() ?? .infinity) - barSec * 0.25
+                && $0.timelineDuration > beatSec * 2
+        }
+        // Stacked drums+bass+other at planner duck (~0.62 each) bury the
+        // isolated title token. Offline mixdown has no blur DSP, so volume
+        // must carry the duck. Cap overlapping supporting stems; never the vocal.
+        for i in placements.indices {
+            let p = placements[i]
+            guard p.role == .supporting, p.stemKind != .vocals, !isPivotGrain(p) else { continue }
+            let underTitle = titleVocalWindows.contains { v in
+                let overlap = min(v.timelineEnd, p.timelineEnd) - max(v.timelineStart, p.timelineStart)
+                return overlap > beatSec * 0.5
+            }
+            guard underTitle else { continue }
+            placements[i].volume = min(
+                p.volume,
+                AutoGainPolicy.roleStagingVolume(role: .titleBed)
+            )
+        }
+        guard let titleHook = (titleVocals.min(by: { $0.timelineStart < $1.timelineStart })
+                ?? titleVocalWindows.min(by: { $0.timelineStart < $1.timelineStart }))
                 ?? titleVocals.first else { return }
         let titleVol = titleHook.volume
         let titleEff = effectiveDB(titleHook)

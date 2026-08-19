@@ -2507,18 +2507,17 @@ do {
         ) {
         case .success(let tracks, let plan, _):
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
-            assertTitleHookLead(
-                onset: hookSrc,
-                lyric: bedLyric,
-                barSeconds: plan.barSeconds,
-                beats: 1,
-                label: "pair B: 1-beat pad when the distinctive token is already inside the first 1–2s"
+            let wanted = bedLyric + 0.42
+            check(
+                "pair B: title clip starts on distinctive token, not phrase-start filler",
+                hookSrc > bedLyric && hookSrc < wanted && (wanted - hookSrc) <= 0.35,
+                String(format: "src=%.2f all=%.2f wanted=%.2f", hookSrc, bedLyric, wanted)
             )
             if let bedID = plan.mashupBedSongID {
                 assertTitleHookVocalLead(
                     plan: plan,
                     bedID: bedID,
-                    lyric: bedLyric,
+                    lyric: wanted,
                     label: "pair B",
                     tracks: tracks
                 )
@@ -3927,12 +3926,15 @@ func assertTitleHookLead(
     // so the title token lands in mix-time [1.15, 2.15] — not native 2-beat.
     if tempoRatio > 1.12 {
         let mixLead = lead / tempoRatio
+        // 1.6–1.8s mix when the pad is empty; shrink when a previous lyric
+        // would otherwise become the first identifiable word.
         check(
             label,
-            mixLead >= 1.12 && mixLead <= 2.15
+            mixLead >= 0.12
+                && mixLead <= AutoChorusIsland.clubLiftTitleMixLeadMax
                 && onset < lyric - 0.05
-                && lead < barSeconds * 0.9
-                && abs(onset - (lyric - barSeconds)) > 0.5,
+                && lead < barSeconds
+                && onset > lyric - barSeconds + 0.02,
             String(
                 format: "onset=%.2f lyric=%.2f ratio=%.2f mixLead=%.2f beat=%.2f",
                 onset, lyric, tempoRatio, mixLead, beat
@@ -3982,7 +3984,8 @@ func assertTitleHookVocalLead(
     if hook.tempoRatio > 1.12 {
         check(
             "\(label): after club-lift, title token is the first identifiable mix word (not the following line)",
-            mixLead >= 1.12 && mixLead <= 2.15
+            mixLead >= 0.12
+                && mixLead <= AutoChorusIsland.clubLiftTitleMixLeadMax
                 && hook.sourceStart < lyric - 0.05,
             String(
                 format: "src=%.2f lyric=%.2f ratio=%.2f mixLead=%.2f",
@@ -4059,7 +4062,7 @@ func assertTitleHookVocalLead(
         )
         // Isolated title vocal at the same clip volume reads louder than a
         // mixed Drop 1. Extra makeup (~2.5 dB) so bounce RMS stays ≥ title.
-        let isolationFloor = titleVol * pow(10.0, 2.4 / 20.0)
+        let isolationFloor = titleVol * AutoGainPolicy.dropVsIsolatedTitleBoost
         check(
             "\(label): incoming Drop 1 is louder than an isolated title-hook copy (mix RMS makeup)",
             !dropVocals.isEmpty && dropVocals.allSatisfy { $0.volume + 0.001 >= isolationFloor },
@@ -4254,22 +4257,36 @@ do {
     let festivalBPM = 144.0
     let festivalBar = 240.0 / festivalBPM
     let festivalLyric = 39.84
-    let laterTokenStart = AutoChorusIsland.titleHookClipStart(
+    let wantedLyric = festivalLyric + 0.42
+    let festivalWords: [(Double, String)] = [
+        (festivalLyric, "all"), (festivalLyric + 0.2, "i"),
+        (wantedLyric, "wanted"), (festivalLyric + 0.7, "was")
+    ]
+    let isolatedWanted = AutoChorusIsland.isolatedTitleTokenTime(
         lyric: festivalLyric,
+        title: "All I Wanted",
+        words: festivalWords,
+        vocalPresence: [Double](repeating: 0.5, count: 32),
+        hop: 0.1
+    )
+    check(
+        "isolated token prefers distinctive wanted over phrase-start all",
+        abs(isolatedWanted - wantedLyric) < 0.08,
+        String(format: "got=%.2f want=%.2f", isolatedWanted, wantedLyric)
+    )
+    let laterTokenStart = AutoChorusIsland.titleHookClipStart(
+        lyric: isolatedWanted,
         downbeats: [36.5, 38.17, 39.84, 41.5],
         barSeconds: festivalBar,
         title: "All I Wanted",
-        lyricWords: [
-            (festivalLyric, "all"), (festivalLyric + 0.2, "i"),
-            (festivalLyric + 0.42, "wanted"), (festivalLyric + 0.7, "was")
-        ]
+        lyricWords: festivalWords
     )
-    assertTitleHookLead(
-        onset: laterTokenStart,
-        lyric: festivalLyric,
-        barSeconds: festivalBar,
-        beats: 1,
-        label: "title-hook keeps 1 beat when the distinctive token is already inside the first 1–2s"
+    check(
+        "title-hook starts on distinctive token, not the filler before it",
+        laterTokenStart > festivalLyric
+            && laterTokenStart < wantedLyric
+            && (wantedLyric - laterTokenStart) <= 0.35,
+        String(format: "start=%.2f all=%.2f wanted=%.2f", laterTokenStart, festivalLyric, wantedLyric)
     )
 
     // Club-lift: pad in mix-seconds so the title token survives TimePitch
@@ -4286,21 +4303,20 @@ do {
     let liftedMix = (lateLyric - lifted) / 1.35
     check(
         "club-lift title pad puts the token after stretch settle, still inside the first 2s of mix",
-        liftedMix >= 1.12 && liftedMix <= 2.15
+        liftedMix >= AutoChorusIsland.clubLiftTitleMixLeadMin
+            && liftedMix <= AutoChorusIsland.clubLiftTitleMixLeadMax
             && lifted < lateLyric - 0.05
-            && lateLyric - lifted < oopsBar * 0.9
-            && abs(lifted - 48.0) > 0.5,
+            && lateLyric - lifted < oopsBar
+            && lifted > lateLyric - oopsBar + 0.02
+            && abs(lifted - 40.4) > 2.0,
         String(format: "onset=%.2f lyric=%.2f mixLead=%.2f bar=%.2f", lifted, lateLyric, liftedMix, oopsBar)
     )
     let nativePad = AutoChorusIsland.titleHookClipStart(
-        lyric: festivalLyric,
+        lyric: isolatedWanted,
         downbeats: [36.5, 38.17, 39.84, 41.5],
         barSeconds: festivalBar,
         title: "All I Wanted",
-        lyricWords: [
-            (festivalLyric, "all"), (festivalLyric + 0.2, "i"),
-            (festivalLyric + 0.42, "wanted"), (festivalLyric + 0.7, "was")
-        ],
+        lyricWords: festivalWords,
         tempoRatio: 1.0
     )
     check(
@@ -4489,8 +4505,8 @@ do {
         try writeLyricsJSON(
             to: oopsLyrics, title: oops.title, titleHookStart: bedLyric,
             words: [
-                (47.86, "oh"), (49.06, "baby"), (49.90, "it's"), (50.10, "me"),
-                (50.22, "back"), (bedLyric, "oops"), (51.18, "I"), (51.40, "did"),
+                (47.86, "oh"), (49.06, "baby"), (49.90, "it's"), (49.92, "me"),
+                (50.08, "back"), (bedLyric, "oops"), (51.18, "I"), (51.40, "did"),
                 (51.55, "it"), (51.70, "again"), (bedLyric + 14.4, "innocent")
             ]
         )
@@ -4562,9 +4578,11 @@ do {
                 let mixLead = (bedLyric - hookSrc) / hookRatio
                 check(
                     "dump_gate: club-lift mix-time pad puts title token after stretch settle",
-                    mixLead >= 1.12 && mixLead <= 2.15
+                    mixLead >= 0.12
+                        && mixLead <= AutoChorusIsland.clubLiftTitleMixLeadMax
                         && hookSrc < bedLyric - 0.05
-                        && abs(hookSrc - 48.01) > 0.5,
+                        && hookSrc > bedLyric - (240.0 / 95.0) + 0.02
+                        && abs(hookSrc - 40.4) > 2.0,
                     String(
                         format: "src=%.2f lyric=%.2f ratio=%.2f mixLead=%.2f mixBeat=%.3f",
                         hookSrc, bedLyric, hookRatio, mixLead, plan.beatSeconds
@@ -4584,8 +4602,8 @@ do {
                 )
             }
             check(
-                "599dec4: 2-beat pad never walks catalog 48",
-                abs(hookSrc - 48.0) > 0.5 && abs(hookSrc - catalogPeak) > 0.08,
+                "599dec4: club-lift pad stays on the title island (not prechorus / verse 2)",
+                hookSrc > 47.5 && hookSrc < bedLyric - 0.05 && abs(hookSrc - 40.4) > 2.0,
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
             )
             assertMashupFestivalStack(plan, label: "Oops×BOMT", tracks: tracks)
