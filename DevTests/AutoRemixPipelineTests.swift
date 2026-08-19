@@ -160,7 +160,7 @@ do {
     }
 }
 
-// MARK: - 5. Two-song mashup targets ≥3 handoffs
+// MARK: - 5. Two-song mashup — club bed + hook flip (not 4-bar ping-pong)
 
 do {
     let tracks = [
@@ -171,7 +171,15 @@ do {
     switch outcome {
     case .success(_, let plan, let summary):
         check("Two songs → Mashup mode", plan.mode == .mashup)
-        check("Two-song mashup handoffs ≥ 3", plan.handoffCount >= 3, "got \(plan.handoffCount)")
+        check("Bed owner assigned", plan.mashupBedSongID != nil)
+        check("Drop 1 vocal assigned", plan.mashupVocalSongID != nil)
+        check("Drop 2 flip assigned", plan.mashupDrop2SongID != nil)
+        check(
+            "Drop 1 and Drop 2 are different roles",
+            plan.mashupDrop2SongID != plan.mashupVocalSongID
+                || plan.mashupDrop2SongID == plan.mashupBedSongID,
+            "drop1=\(plan.mashupVocalSongID?.uuidString ?? "?") drop2=\(plan.mashupDrop2SongID?.uuidString ?? "?")"
+        )
         check("Summary sequence uses song names", summary.sequence.contains("Groove Anchor") || summary.sequence.contains("Vocal Feature"))
         let letters = AutoRemixPlanner.summary(for: plan, tracks: tracks)
         _ = letters
@@ -180,7 +188,7 @@ do {
     }
 }
 
-// MARK: - 6. One-song remix keeps SFX sparse (preservation-first)
+// MARK: - 6. One-song remix club SFX density (pulse is separate)
 
 do {
     let remixTracks = [makeSong(title: "Solo Remix", bpm: 128, key: "G")]
@@ -188,20 +196,92 @@ do {
         makeSong(title: "M1", bpm: 128, key: "G", color: .pink),
         makeSong(title: "M2", bpm: 128, key: "Em", color: .blue),
     ]
-    let remix = AutoRemixRunner.runEntireProject(tracks: remixTracks, seed: 55)
-    let mashup = AutoRemixRunner.runEntireProject(tracks: mashupTracks, seed: 55)
+    // High-confidence signal so the club phrase-grid path fires (not the
+    // sparse energy-curve fallback).
+    func hiConf(_ duration: Double, _ bpm: Double) -> SongSignalFeatures {
+        let hop = 0.5
+        let hops = max(8, Int(duration / hop))
+        var energy = [Double](repeating: 0.55, count: hops)
+        var vocal = [Double](repeating: 0.5, count: hops)
+        var bass = [Double](repeating: 0.45, count: hops)
+        for i in 0..<hops {
+            let t = Double(i) * hop
+            if t > duration * 0.35 && t < duration * 0.55 { energy[i] = 0.9; vocal[i] = 0.7 }
+            if t > duration * 0.7 && t < duration * 0.85 { energy[i] = 0.95; vocal[i] = 0.75 }
+        }
+        return SongSignalFeatures(
+            sampleRate: 44_100,
+            durationSeconds: duration,
+            rmsCurveDB: [Double](repeating: -12, count: hops),
+            onsetStrength: [Double](repeating: 0.7, count: hops),
+            hopSeconds: hop,
+            downbeatOffsetSeconds: 0,
+            beatConfidence: 0.95,
+            leadingSilenceSeconds: 0,
+            trailingSilenceSeconds: 0,
+            quietRegions: [],
+            energyCurve: energy,
+            bassEnergyCurve: bass,
+            vocalPresenceCurve: vocal,
+            noveltyCurve: [Double](repeating: 0.4, count: hops),
+            drumConfidence: 0.7,
+            overallConfidence: 0.95
+        )
+    }
+    let remixSignals = Dictionary(uniqueKeysWithValues: remixTracks.map { ($0.id, hiConf($0.durationSeconds ?? 180, 128)) })
+    let mashSignals = Dictionary(uniqueKeysWithValues: mashupTracks.map { ($0.id, hiConf($0.durationSeconds ?? 180, 128)) })
+    let remix = AutoRemixRunner.runEntireProject(tracks: remixTracks, seed: 55, signals: remixSignals)
+    let mashup = AutoRemixRunner.runEntireProject(tracks: mashupTracks, seed: 55, signals: mashSignals)
     switch (remix, mashup) {
     case (.success(_, let rp, _), .success(_, let mp, _)):
-        // SFX density is bounded by musical need — a one-song remix is
-        // NOT required to be denser than a mashup (the opposite of the
-        // old montage contract).
+        let musical = rp.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
         let rMinutes = max(rp.targetDuration / 60, 0.01)
+        let perMin = Double(musical.count) / rMinutes
         check(
-            "One-song remix SFX ≤ 3 events/min",
-            Double(rp.sfxEvents.count) / rMinutes <= 3.0 + 0.0001,
-            String(format: "%.2f events/min", Double(rp.sfxEvents.count) / rMinutes)
+            "One-song remix used club phrase grid (not energy-curve only)",
+            !rp.decisions.contains { $0.kind == .imposedClubEnergyCurve }
+                || musical.count >= 8,
+            "decisions include energy-curve=\(rp.decisions.contains { $0.kind == .imposedClubEnergyCurve }) count=\(musical.count)"
+        )
+        let drops = rp.pulseRegions.filter { $0.role == .drop }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - rp.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + rp.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musical.filter {
+            !inMixWindow($0.timelineStart)
+                && ($0.assetID == "riser" || $0.assetID == "snareBuild" || $0.assetID == "clapFill"
+                    || $0.assetID == "tapeStop" || $0.assetID == "airSweep")
+        }
+        check(
+            "One-song remix: no SFX wallpaper outside mix windows",
+            wallpaper.isEmpty,
+            "wallpaper=\(wallpaper.map(\.assetID))"
+        )
+        check(
+            "One-song remix musical SFX stays finite (≤ 40/min)",
+            perMin <= 40.0 + 0.0001,
+            String(format: "%.2f events/min", perMin)
+        )
+        let ids = Set(musical.map(\.assetID))
+        check(
+            "One-song remix uses a variety of SFX ids",
+            ids.count >= 3,
+            "ids=\(ids.sorted())"
         )
         check("Mashup still coordinates SFX moments", !mp.sfxEvents.isEmpty)
+        let mashMusical = mp.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        check(
+            "Mashup has drop/join SFX (not a silent drip)",
+            mashMusical.count >= 3,
+            "count=\(mashMusical.count)"
+        )
+        check("One-song remix records pulse regions", !rp.pulseRegions.isEmpty)
     default:
         check("Remix vs Mashup SFX comparison runs", false)
     }
@@ -222,8 +302,18 @@ do {
             .filter { $0.element.role == .dominant }
             .sorted { $0.element.timelineStart < $1.element.timelineStart }
         if dominants.count >= 2 {
+            let firstIdx = dominants[0].offset
             let secondIdx = dominants[1].offset
             let threshold = dominants[1].element.timelineStart
+            // Equal-power blends may already overlap same-song neighbors —
+            // trim to a butt join so the +1s shift creates a real hole.
+            if broken.placements[firstIdx].timelineEnd > threshold - 0.001 {
+                let trimmed = threshold - broken.placements[firstIdx].timelineStart
+                if trimmed > 0.05 {
+                    broken.placements[firstIdx].timelineDuration = trimmed
+                }
+            }
+            broken.placements[secondIdx].overlapsPreviousSeconds = 0
             broken.placements[secondIdx].timelineStart += 1.0
             for i in broken.placements.indices where i != secondIdx
                 && broken.placements[i].timelineStart >= threshold - 0.001 {
@@ -231,6 +321,14 @@ do {
             }
             for i in broken.sfxEvents.indices where broken.sfxEvents[i].timelineStart >= threshold - 0.001 {
                 broken.sfxEvents[i].timelineStart += 1.0
+            }
+            for i in broken.intentionalGaps.indices where broken.intentionalGaps[i].start >= threshold - 0.001 {
+                broken.intentionalGaps[i].start += 1.0
+                broken.intentionalGaps[i].end += 1.0
+            }
+            for i in broken.pulseRegions.indices where broken.pulseRegions[i].timelineStart >= threshold - 0.001 {
+                broken.pulseRegions[i].timelineStart += 1.0
+                broken.pulseRegions[i].timelineEnd += 1.0
             }
 
             let repaired = AutoRemixValidator.validate(broken, profiles: profiles, tuning: .standard)
@@ -248,7 +346,14 @@ do {
             }
             var largestAccidental = 0.0
             for pair in zip(merged, merged.dropFirst()) {
-                let gap = pair.1.0 - pair.0.1
+                let gapStart = pair.0.1
+                let gapEnd = pair.1.0
+                let gap = gapEnd - gapStart
+                let intentional = repaired.intentionalGaps.contains { g in
+                    let overlap = min(gapEnd, g.end) - max(gapStart, g.start)
+                    return overlap > gap * 0.5
+                }
+                if intentional { continue }
                 if gap > largestAccidental { largestAccidental = gap }
             }
             check(
@@ -290,7 +395,7 @@ do {
             }
             check(
                 "Intentional micro-pause preserved",
-                stillMarked || pause <= validated.beatSeconds * 0.25 + 0.01
+                stillMarked || pause <= AutoTuning.standard.maxIntentionalPauseBeats * validated.beatSeconds + 0.01
             )
         } else {
             check("Intentional micro-pause preserved", false, "no placements")

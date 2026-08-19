@@ -12,54 +12,66 @@ func check(_ name: String, _ condition: @autoclosure () -> Bool) {
 }
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-let iconSet = root.appendingPathComponent("Mixr/Assets.xcassets/AppIcon.appiconset")
-let contentsURL = iconSet.appendingPathComponent("Contents.json")
-let iconFilename = "MixrAppIcon.png"
-let iconURL = iconSet.appendingPathComponent(iconFilename)
-let approvedArtworkSHA256 =
-    "1cee50ba4fc96df34f4ca58beea7cbaddf48188f1b9b6e1579fe3f297108aca2"
+let iconBundle = root.appendingPathComponent("Mixr/AppIcon.icon")
+let manifestURL = iconBundle.appendingPathComponent("icon.json")
+let assetsDirectory = iconBundle.appendingPathComponent("Assets")
 
-let contentsData = try Data(contentsOf: contentsURL)
-let contents = try JSONSerialization.jsonObject(with: contentsData) as? [String: Any]
-let images = contents?["images"] as? [[String: Any]] ?? []
-let universalIcon = images.first {
-    $0["idiom"] as? String == "universal"
-        && $0["platform"] as? String == "ios"
-        && $0["size"] as? String == "1024x1024"
-        && $0["appearances"] == nil
+// Artwork approved for release, keyed by the `image-name` used in icon.json.
+// Re-pin deliberately when the icon changes — a surprise digest here means the
+// shipping icon moved without anyone signing off on it.
+let approvedArtworkSHA256 = [
+    "mixr-bars-neon.png": "1033bd28547307141f28eb3dca4aaae0e587961b3989aa6a305e2c5d9abbc110"
+]
+
+guard let manifestData = try? Data(contentsOf: manifestURL) else {
+    check("Icon Composer manifest exists at Mixr/AppIcon.icon/icon.json", false)
+    exit(1)
 }
 
-check(
-    "Universal iOS app icon references the production artwork",
-    universalIcon?["filename"] as? String == iconFilename
-)
-check("Production app icon exists", FileManager.default.fileExists(atPath: iconURL.path))
+let manifest = (try? JSONSerialization.jsonObject(with: manifestData)) as? [String: Any]
+check("Icon Composer manifest parses as a JSON object", manifest != nil)
 
-if let iconData = try? Data(contentsOf: iconURL) {
-    let digest = SHA256.hash(data: iconData)
+let groups = manifest?["groups"] as? [[String: Any]] ?? []
+check("Manifest declares at least one layer group", !groups.isEmpty)
+
+let layers = groups.flatMap { $0["layers"] as? [[String: Any]] ?? [] }
+check("Manifest declares at least one layer", !layers.isEmpty)
+
+// Layers may be fill-only, so only the image-backed ones need artwork on disk.
+let imageNames = layers.compactMap { $0["image-name"] as? String }
+check("Manifest references at least one image layer", !imageNames.isEmpty)
+
+for name in imageNames {
+    let artworkURL = assetsDirectory.appendingPathComponent(name)
+
+    guard let artworkData = try? Data(contentsOf: artworkURL) else {
+        check("Layer artwork \"\(name)\" exists under AppIcon.icon/Assets", false)
+        continue
+    }
+    check("Layer artwork \"\(name)\" exists under AppIcon.icon/Assets", true)
+
+    let digest = SHA256.hash(data: artworkData)
         .map { String(format: "%02x", $0) }
         .joined()
-    check("Production app icon uses the approved revised artwork", digest == approvedArtworkSHA256)
-} else {
-    check("Production app icon uses the approved revised artwork", false)
-}
 
-if let source = CGImageSourceCreateWithURL(iconURL as CFURL, nil),
-   let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-    check("Production app icon is 1024 pixels wide", image.width == 1024)
-    check("Production app icon is 1024 pixels high", image.height == 1024)
+    if let approved = approvedArtworkSHA256[name] {
+        check("Layer artwork \"\(name)\" matches the approved revision", digest == approved)
+    } else {
+        check("Layer artwork \"\(name)\" is pinned in approvedArtworkSHA256", false)
+        print("      unpinned digest: \(digest)")
+    }
 
-    let opaqueAlphaModes: Set<CGImageAlphaInfo> = [
-        .none,
-        .noneSkipFirst,
-        .noneSkipLast,
-    ]
+    guard let source = CGImageSourceCreateWithURL(artworkURL as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else {
+        check("Layer artwork \"\(name)\" decodes", false)
+        continue
+    }
+    check("Layer artwork \"\(name)\" decodes", true)
     check(
-        "Production app icon has no alpha channel",
-        opaqueAlphaModes.contains(image.alphaInfo)
+        "Layer artwork \"\(name)\" is square (\(image.width)x\(image.height))",
+        image.width == image.height
     )
-} else {
-    check("Production app icon can be decoded", false)
 }
 
 if failures > 0 {

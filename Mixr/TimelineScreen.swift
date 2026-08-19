@@ -582,6 +582,15 @@ struct TimelineScreen: View {
         .task {
             library.attachPersistence(context: modelContext)
             library.attachUndoManager(envUndoManager)
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-MixrSeedDemoAudio") {
+                try? await Task.sleep(for: .seconds(2.4))
+                if selectedClipID == nil,
+                   let clip = library.tracks.first(where: { !$0.isSFXTrack })?.clips.first {
+                    selectedClipID = clip.id
+                }
+            }
+#endif
         }
         // The window's UndoManager can arrive/change after first render.
         .onChange(of: envUndoManager.map(ObjectIdentifier.init)) { _, _ in
@@ -819,6 +828,8 @@ struct TimelineScreen: View {
         switch state {
         case "sfx":
             showSFXPanel = true
+        case "auto":
+            showAutoDialog = true
         case "delete":
             showDeleteProjectConfirm = true
         default:
@@ -2818,12 +2829,14 @@ private struct TLTrackArea: View {
 
     private var sidebarTrackRows: some View {
         VStack(spacing: 0) {
+            let primarySFXID = tracks.first(where: { $0.isSFXTrack })?.id
             ForEach(Array(tracks.enumerated()), id: \.element.id) { _, track in
                 TLSongRow(
                     rowHeight: rowHeight,
                     track: track,
                     rowWidth: sidebarWidth,
                     isSelected: track.id == selectedTrackID,
+                    showsSFXChrome: !track.isSFXTrack || track.id == primarySFXID,
                     onDragChanged: { delta in
                         if draggingID == nil { draggingID = track.id }
                         dragTranslation = delta
@@ -3328,6 +3341,9 @@ private struct TLSongRow: View {
     let track: MixrTrack
     let rowWidth: CGFloat
     var isSelected: Bool = false
+    /// Top SFX row owns the chip + headings. Spill SFX rows share the
+    /// gradient background but stay empty of chrome (editor convention).
+    var showsSFXChrome: Bool = true
     var onDragChanged: ((CGFloat) -> Void)? = nil
     var onDragEnded: ((CGFloat) -> Void)?   = nil
     var onDelete: (() -> Void)? = nil
@@ -3341,6 +3357,10 @@ private struct TLSongRow: View {
 
     private var isDeleteRevealed: Bool {
         swipeOffset <= -revealThreshold
+    }
+
+    private var isSFXSpillLane: Bool {
+        track.isSFXTrack && !showsSFXChrome
     }
 
     var body: some View {
@@ -3390,17 +3410,22 @@ private struct TLSongRow: View {
                 onDragEnded: onDragEnded
             )
 
-            MixrSongColorChip(
-                color: track.color,
-                artworkData: track.artworkData,
-                icon: "music.note",
-                usesSFXMark: track.isSFXTrack,
-                size: artworkSize
-            )
+            if isSFXSpillLane {
+                // Spill SFX rows: gradient only — no chip, no headings.
+                Spacer(minLength: 0)
+            } else {
+                MixrSongColorChip(
+                    color: track.color,
+                    artworkData: track.artworkData,
+                    icon: "music.note",
+                    usesSFXMark: track.isSFXTrack,
+                    size: artworkSize
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
-                titleRow
-                metadataRow
+                VStack(alignment: .leading, spacing: 2) {
+                    titleRow
+                    metadataRow
+                }
             }
         }
         .padding(.horizontal, 10)

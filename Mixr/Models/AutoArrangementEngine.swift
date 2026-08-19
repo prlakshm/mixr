@@ -206,19 +206,15 @@ private struct TimelineEditor {
 
     // MARK: SFX
 
-    /// Adds an SFX clip at a unit using the shared collision rule.
+    /// Adds an SFX clip at an exact unit. If it would collide on the current
+    /// SFX row, places it on an adjacent SFX row (editor-style stacking).
     mutating func addSFX(_ definitionID: String, atUnit unit: CGFloat) {
         guard let definition = SoundEffectLibrary.definition(for: definitionID) else { return }
-        let idx = ensureSFXTrack()
-        let start = SoundEffectLibrary.nonOverlappingStart(
-            proposedStart: max(0, unit),
-            lengthUnits: definition.lengthUnits,
-            in: tracks[idx].clips
+        SoundEffectLibrary.placeExact(
+            definition: definition,
+            atUnit: max(0, unit),
+            into: &tracks
         )
-        tracks[idx].clips.append(
-            MixrClip(id: UUID(), start: start, length: definition.lengthUnits, soundEffectID: definition.id)
-        )
-        tracks[idx].clips.sort { $0.start < $1.start }
     }
 
     /// Adds an SFX so it ENDS at `unit` (risers/builds into a drop).
@@ -228,29 +224,6 @@ private struct TimelineEditor {
         let start = unit - definition.lengthUnits
         guard start >= 0 else { return }
         addSFX(definitionID, atUnit: start)
-    }
-
-    private mutating func ensureSFXTrack() -> Int {
-        if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
-        tracks.append(
-            MixrTrack(
-                id: UUID(),
-                title: "Sound Effects",
-                artist: "Built-in SFX",
-                duration: "",
-                durationSeconds: nil,
-                bpm: nil,
-                key: nil,
-                color: .silver,
-                volume: 0.85,
-                isMuted: false,
-                trackType: .soundEffect,
-                url: nil,
-                artworkData: nil,
-                clips: []
-            )
-        )
-        return tracks.count - 1
     }
 }
 
@@ -427,15 +400,14 @@ enum AutoArrangementEngine {
 
     // MARK: - Scope: Entire Project
 
-    /// Maximum pitch-preserving tempo stretch for beatmatching (±8%).
-    private static let beatmatchTolerance = 0.08
+    /// Maximum pitch-preserving tempo stretch for beatmatching (±8% vocal gate).
+    private static let beatmatchTolerance = AutoClubTempo.maxVocalStretch
 
     /// Entire project is mode-aware:
-    /// - 1 song  → a REMIX of that song (intro shape, pre-drop chokes into
-    ///   the chorus/drop candidates, shaped outro, volume energy story).
-    /// - 2+ songs → a MASHUP: songs beatmatched toward the first song's BPM
-    ///   (within ±8%, pitch-preserving), chained through phrase-aligned
-    ///   blend sections, released with a shaped outro.
+    /// - 1 song  → a CLUB REMIX of that song (intro → build → drop → break →
+    ///   drop 2 energy story with pre-drop chokes and coordinated SFX).
+    /// - 2+ songs → a MASHUP: songs beatmatched toward a shared pocket,
+    ///   chained through phrase-aligned blend sections.
     private static func arrangeEntireProject(
         editor: inout TimelineEditor,
         analyses: [UUID: SongAnalysis]
@@ -517,11 +489,10 @@ enum AutoArrangementEngine {
 
     // MARK: - Scope: Single-Song Remix
 
-    /// One song → a remix, not a mashup: shaped intro, a ducked + blurred
-    /// pre-drop "choke" into each chorus/drop candidate (riser or snare
-    /// build into it, impact on it, air out after), and a shaped outro.
-    /// Clip volumes carry the energy story — intro 0.85, choke 0.8,
-    /// drop 1.0, outro 0.85 — stored on the model for per-clip gain.
+    /// One song → club remix energy on the arrangement-engine path:
+    /// shaped intro, ducked + blurred pre-drop choke into each chorus/drop,
+    /// denser treatment on the second drop, and a shaped outro. Pulse SFX
+    /// (kick) are added only when the source kit is thin.
     private static func arrangeSingleSongRemix(
         trackIdx: Int,
         editor: inout TimelineEditor,
@@ -531,18 +502,19 @@ enum AutoArrangementEngine {
               let main = editor.tracks[trackIdx].clips.min(by: { $0.start < $1.start })
         else { return }
 
-        // Anchor at 0 and shape the opening.
         editor.shiftTrackClips(trackIdx: trackIdx, byUnits: -main.start)
         applyIntroShaping(main.id, analysis: analysis, editor: &editor)
 
-        // Drop moments at the chorus candidates.
         let barUnits = MixrTimeline.units(fromSeconds: analysis.barSeconds)
-        // The choke must satisfy the minimum clip length; widen from 2 bars
-        // if the song is fast.
         let chokeUnits = max(barUnits * 2, MixrTimeline.minClipLengthUnits + 0.1)
+        let pulse = AutoClubPulse.policy(
+            drumStrength: analysis.drumStrength,
+            bassDensity: analysis.bassDensity,
+            bpm: analysis.bpm,
+            analysisConfidence: analysis.analysisConfidence
+        )
 
         for (k, chorus) in analysis.chorusOrDropCandidates.prefix(2).enumerated() {
-            // Find the (possibly already split) clip containing this drop.
             guard let body = editor.tracks[trackIdx].clips.first(where: { clip in
                 !clip.isSoundEffect
                     && chorus.startSeconds > clip.songSeconds(atUnit: clip.start)
@@ -552,26 +524,33 @@ enum AutoArrangementEngine {
             let dropUnit = body.unit(forSongSeconds: chorus.startSeconds)
             let chokeStart = dropUnit - chokeUnits
 
-            // Pre-drop choke: a short section that ducks and blurs so the
-            // drop lands harder — the classic EDM pre-drop cut.
             if let (_, rest) = editor.splitClip(body.id, atUnit: chokeStart),
                let (chokeID, dropID) = editor.splitClip(rest, atUnit: dropUnit) {
-                editor.setClipVolume(chokeID, 0.8)
-                editor.setEffect(chokeID, .blur, level: k == 0 ? 42 : 30)
-                editor.setEffect(chokeID, .echo, level: 24)
+                editor.setClipVolume(chokeID, 0.55)
+                editor.setEffect(chokeID, .blur, level: k == 0 ? 48 : 36)
+                editor.setEffect(chokeID, .echo, level: 28)
                 editor.setEchoPreset(chokeID, .pingPong)
 
                 editor.setClipVolume(dropID, 1.0)
-                editor.setEffect(dropID, .reverb, level: 10)
-                editor.setReverbPreset(dropID, .hall)
+                editor.setEffect(dropID, .reverb, level: k == 0 ? 10 : 16)
+                editor.setReverbPreset(dropID, k == 0 ? .hall : .ambient)
             }
 
             editor.addSFXEnding(k == 0 ? "riser" : "snareBuild", atUnit: dropUnit)
             editor.addSFX("impact", atUnit: dropUnit)
-            editor.addSFX(k == 0 ? "sweepDown" : "downlifter", atUnit: dropUnit)
+            if k == 0 {
+                editor.addSFX("sweepDown", atUnit: dropUnit)
+            } else {
+                editor.addSFX("airSweep", atUnit: dropUnit)
+            }
+
+            // Thin sources get a kick on the drop downbeat — never a second
+            // kick when the source already slams.
+            if pulse.writesKick {
+                editor.addSFX("clubKick", atUnit: dropUnit)
+            }
         }
 
-        // Shaped release.
         if let lastID = editor.lastClipID(onTrack: trackIdx) {
             applyOutroShaping(lastID, analysis: analysis, editor: &editor)
         }

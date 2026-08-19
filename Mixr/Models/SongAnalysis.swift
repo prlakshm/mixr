@@ -210,17 +210,34 @@ enum SongAnalyzer {
         let outro = SongSection(kind: .outro, startSeconds: outroStart, endSeconds: duration)
 
         let chorus1Start = max(intro.endSeconds, snap(duration * 0.28))
-        let chorus1 = SongSection(
+        var chorus1 = SongSection(
             kind: .chorus,
             startSeconds: chorus1Start,
             endSeconds: min(outro.startSeconds, chorus1Start + phrase)
         )
         let chorus2Start = max(chorus1.endSeconds, snap(duration * 0.60))
-        let chorus2 = SongSection(
+        var chorus2 = SongSection(
             kind: .chorus,
             startSeconds: chorus2Start,
             endSeconds: min(outro.startSeconds, chorus2Start + phrase)
         )
+
+        // Measured title-chorus: duration-fraction `.first` often lands on a
+        // repeated prechorus (Oops ~40.4s) not the title line (~46s).
+        if let signal,
+           let refined = AutoChorusIsland.refineChoruses(
+               signal: signal,
+               downbeats: downbeats,
+               barSeconds: bar,
+               phraseSeconds: phrase,
+               duration: duration,
+               introEnd: intro.endSeconds,
+               outroStart: outro.startSeconds,
+               title: track.title
+           ) {
+            chorus1 = refined.0
+            chorus2 = refined.1
+        }
 
         let bridgeStart = max(chorus2.endSeconds, snap(duration * 0.76))
         let bridge = bridgeStart < outro.startSeconds - bar

@@ -1,18 +1,18 @@
 {
   "fill": {
-    "automatic-gradient": "extended-srgb:0.07843,0.01961,0.16863,1.00000"
+    "automatic-gradient": "extended-srgb:0.00784,0.00000,0.02353,1.00000"
   },
   "groups": [
     {
       "layers": [
         {
-          "image-name": "mixr logo 4.png",
-          "name": "mixr logo 4",
+          "image-name": "mixr-bars-neon.png",
+          "name": "mixr bars neon",
           "position-specializations": [
             {
               "idiom": "square",
               "value": {
-                "scale": 0.89,
+                "scale": 1.0,
                 "translation-in-points": [
                   0,
                   0

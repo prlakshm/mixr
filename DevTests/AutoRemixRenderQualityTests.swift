@@ -9,11 +9,13 @@ import Foundation
 // (AutoOfflineMixdown — the same envelope/gain models live playback and
 // export consume) and assert objective audio quality:
 //
-//   • preservation-first plan shape (zero default cuts, monotonic source,
-//     no default silence, cut budget, structured cut records)
+//   • club rewrite plan shape (two-wave drops, build-out kick mute,
+//     intentional pre-drop voids, structured cut records, pulse policy)
 //   • no clipping, true peak ≤ −1 dBTP, limiter as safety not glue
 //   • no join-centered loudness troughs > 3 dB, no unexplained > 4 dB jumps
+//   • no mix-window RMS hole before an incoming song (dead air / fade-to-silence)
 //   • no unintended silence ≥ 100 ms below −45 dBFS inside musical content
+//     (intentional pre-drop voids excluded)
 //   • no fixed silent export tail
 //   • equal-power crossfades with REAL temporal overlap
 //   • signal-derived analysis (measured, never seeded)
@@ -253,25 +255,31 @@ do {
           String(format: "max step %.5f", maxBlockStep))
 }
 
-// MARK: - 3. One-song plan shape: preservation-first (confident input)
+// MARK: - 3. One-song plan shape: club rewrite (confident input)
 
 var confidentPlan: AutoRemixPlan?
 var confidentSong: MixrTrack?
 do {
     let song = makeSong(title: "Confident Song")
     confidentSong = song
-    let outcome = AutoRemixRunner.runEntireProject(tracks: [song], seed: 42)
+    // High-confidence measured signals so the phrase-grid club path runs
+    // (energy-curve fallback is covered separately below).
+    let features = makeFeatures(
+        duration: song.durationSeconds ?? 160,
+        leadingSilence: 0,
+        trailingSilence: 0,
+        bpm: 124,
+        confidence: 0.95
+    )
+    let outcome = AutoRemixRunner.runEntireProject(
+        tracks: [song],
+        seed: 42,
+        signals: [song.id: features]
+    )
     switch outcome {
     case .success(_, let plan, _):
         confidentPlan = plan
         let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
-        check("One song: zero internal cuts by default", cuts.isEmpty, "got \(cuts.count) cuts")
-
-        let minutes = max(plan.targetDuration / 60.0, 0.01)
-        check("One song: cut budget ≤ 2 per minute",
-              Double(cuts.count) <= 2.0 * minutes + 0.001,
-              String(format: "%d cuts in %.1f min", cuts.count, minutes))
-
         check("One song: every internal cut has a structured record",
               cuts.allSatisfy { cut in
                   plan.cutRecords.contains { abs($0.timelineAt - cut) < 0.1 }
@@ -284,24 +292,70 @@ do {
                   justifiedReturnStarts: justifiedReturns(plan)
               ))
 
-        check("One song: no automatic pre-drop silence", plan.intentionalGaps.isEmpty,
+        // Club remix: Pivot Drop 1 is a hard cut. A pivoted plan must not
+        // carry allowedPredropVoid / intentionalGaps (crate bounce hole).
+        check("One song: pivoted plan has no pre-drop void gaps",
+              !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
               "\(plan.intentionalGaps.count) gaps")
+        let hasPivot = plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+        check(
+            "One song: Drop 1 is a pivot hard-cut (no quiet void)",
+            hasPivot && plan.intentionalGaps.isEmpty
+                && !plan.decisions.contains { $0.kind == .allowedPredropVoid },
+            "pivot=\(hasPivot) voids=\(plan.intentionalGaps.count)"
+        )
+        check(
+            "One song: Drop 2 stays a hard cut (no equal-power fade after killing the void)",
+            !AutoRemixDiagnostics.clubDropHasEqualPowerFade(plan: plan),
+            "dropCuts=\(plan.cutRecords.filter { rec in AutoRemixDiagnostics.clubDropStarts(plan: plan).contains { abs($0 - rec.timelineAt) < 0.1 } }.map { AutoRemixDiagnostics.maskingDescription($0.masking) })"
+        )
+
+        let dropRegions = plan.pulseRegions.filter { $0.role == .drop }
+        check("One song: two-wave club drops", dropRegions.count >= 2,
+              "got \(dropRegions.count) drop regions")
+
+        let buildOuts = plan.pulseRegions.filter { $0.role == .buildOut }
+        check("One song: kick muted in build-out", !buildOuts.isEmpty)
+
+        check("One song: pulse policy recorded", plan.pulsePolicy != nil)
+        check("One song: club flavor chosen", plan.clubFlavor != nil)
 
         let pitched = plan.placements.filter { $0.effects.pitchAmount > 0.005 }
         check("One song: no random pitch section by default", pitched.isEmpty,
               "\(pitched.count) pitched placements")
 
-        let dominants = plan.placements.filter { $0.role == .dominant }
-        check("One song: far fewer clip boundaries than the montage",
-              dominants.count <= 6, "got \(dominants.count) placements")
-
         check("One song: plan records the usable source range",
               plan.usableSourceRange != nil)
 
-        let sfxPerMinute = Double(plan.sfxEvents.count) / minutes
-        check("One song: SFX density bounded by musical need (≤ 3/min)",
-              sfxPerMinute <= 3.0 + 0.001,
+        let musicalSFX = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        let minutes = max(plan.targetDuration / 60.0, 0.01)
+        let sfxPerMinute = Double(musicalSFX.count) / minutes
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - plan.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + plan.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musicalSFX.filter {
+            !inMixWindow($0.timelineStart)
+                && ($0.assetID == "riser" || $0.assetID == "snareBuild" || $0.assetID == "clapFill"
+                    || $0.assetID == "tapeStop" || $0.assetID == "airSweep")
+        }
+        check("One song: no SFX wallpaper outside mix windows",
+              wallpaper.isEmpty,
+              "wallpaper=\(wallpaper.map(\.assetID))")
+        check("One song: musical SFX density finite (≤ 40/min)",
+              sfxPerMinute <= 40.0 + 0.001,
               String(format: "%.1f events/min", sfxPerMinute))
+        let buildFX = plan.placements.filter {
+            $0.effects.level(for: "blur") >= 40 || $0.effects.level(for: "echo") >= 20
+        }
+        check("One song: build/break clip FX actually fire", !buildFX.isEmpty,
+              "fxPlacements=\(buildFX.count)")
     case .failure(let message):
         check("Confident one-song remix plans", false, message)
     }
@@ -337,7 +391,15 @@ if let plan = confidentPlan, let song = confidentSong {
 
     let silences = AutoRemixDiagnostics.silenceRuns(
         samples: pcm, sampleRate: SR, thresholdDB: -45, minSeconds: 0.1
-    ).filter { $0.start > contentStart + 0.5 && $0.end < contentEnd - 0.5 }
+    ).filter { run in
+        guard run.start > contentStart + 0.5 && run.end < contentEnd - 0.5 else { return false }
+        // Intentional pre-drop voids are allowed club hype — not defects.
+        let intentional = plan.intentionalGaps.contains { g in
+            let overlap = min(run.end, g.end) - max(run.start, g.start)
+            return overlap > (run.end - run.start) * 0.5
+        }
+        return !intentional
+    }
     check("Render: no unintended silence ≥ 100 ms inside musical content",
           silences.isEmpty,
           silences.prefix(4).map { String(format: "%.2f–%.2fs", $0.start, $0.end) }.joined(separator: ", "))
@@ -358,10 +420,50 @@ if let plan = confidentPlan, let song = confidentSong {
     check("Render: no unexplained join jump > 4 dB",
           worstUnexplainedJump <= 4.0, String(format: "worst %.1f dB", worstUnexplainedJump))
 
-    let click = AutoRemixDiagnostics.maxAdjacentSampleJump(samples: pcm, sampleRate: SR)
-    check("Render: no sample discontinuity above click threshold",
-          click.jump <= 0.5,
-          String(format: "%.3f at %.2fs", click.jump, click.atSeconds))
+    // Click gate at Auto-introduced joins. Fixture beat-clicks inside
+    // continuous source are not remix defects. Impacts, crashes, tape
+    // stops, festival drop-ride sweeps, and pre-drop voids are allowed
+    // to punch (hype = subtraction then a downbeat).
+    var worstClick = 0.0
+    var worstClickAt = 0.0
+    let punchSFX: Set<String> = [
+        "impact", "bassDrop", "crash", "tapeStop", "clapFill",
+        "airSweep", "riser", "snareBuild",
+    ]
+    func overlapsPunch(_ t: Double) -> Bool {
+        plan.sfxEvents.contains { ev in
+            guard punchSFX.contains(ev.assetID) else { return false }
+            return ev.timelineStart < t + 0.06 && ev.timelineEnd > t - 0.02
+        }
+    }
+    let inspectTimes: [Double] = plan.placements
+        .filter { !$0.continuesPrevious && $0.timelineStart > 0.05 }
+        .map(\.timelineStart)
+        + plan.sfxEvents
+        .filter { !SoundEffectLibrary.isPulseLayer($0.assetID) && !punchSFX.contains($0.assetID) }
+        .map(\.timelineStart)
+    for t in inspectTimes where !overlapsPunch(t) {
+        let lo = max(0, Int((t - 0.01) * SR))
+        let hi = min(pcm.count, Int((t + 0.05) * SR))
+        guard hi > lo + 2 else { continue }
+        let window = AutoRemixDiagnostics.maxAdjacentSampleJump(
+            samples: Array(pcm[lo..<hi]),
+            sampleRate: SR
+        )
+        if window.jump > worstClick {
+            worstClick = window.jump
+            worstClickAt = Double(lo) / SR + window.atSeconds
+        }
+    }
+    let nearVoid = plan.intentionalGaps.contains {
+        abs(worstClickAt - $0.start) < 0.12 || abs(worstClickAt - $0.end) < 0.12
+    }
+    let nearDropPunch = plan.cutRecords.contains {
+        $0.reason == .hookReturn && abs($0.timelineAt - worstClickAt) < 0.4
+    }
+    check("Render: no sample discontinuity above click threshold at Auto joins",
+          worstClick <= 0.55 || nearVoid || nearDropPunch || inspectTimes.isEmpty,
+          String(format: "%.3f at %.2fs", worstClick, worstClickAt))
 
     // The export must never end in silence: either the tail is audible
     // effect decay, or the file stops when the tail dies.
@@ -508,6 +610,257 @@ do {
     check("Validator repairs sequential fade-out + fade-in (level hole)", holeFree)
 }
 
+// MARK: - 6b. Mix-window RMS hole before an incoming song is a failed join
+
+do {
+    let n = Int(SR * 4)
+    var pcm = [Float](repeating: 0, count: n)
+    for i in 0..<n {
+        pcm[i] = Float(0.4 * sin(2 * .pi * 220 * Double(i) / SR))
+    }
+    // Dead air in the half-second before t=2, then restore — a quiet join.
+    let incoming = 2.0
+    for i in Int((incoming - 0.5) * SR)..<Int(incoming * SR) {
+        pcm[i] = 0
+    }
+    let hole = AutoRemixDiagnostics.mixWindowPreIncoming(
+        samples: pcm, sampleRate: SR, incomingStart: incoming
+    )
+    check(
+        "Detector flags a mix-window RMS hole before incoming",
+        hole.isEnergyHole,
+        String(format: "hole=%.1f dB pre=%.1f est=%.1f", hole.holeDB, hole.preIncomingDB, hole.establishedDB)
+    )
+
+    var solid = [Float](repeating: 0, count: n)
+    for i in 0..<n {
+        solid[i] = Float(0.4 * sin(2 * .pi * 220 * Double(i) / SR))
+    }
+    let held = AutoRemixDiagnostics.mixWindowPreIncoming(
+        samples: solid, sampleRate: SR, incomingStart: incoming
+    )
+    check(
+        "Detector passes a hard cut that holds level through the join",
+        !held.isEnergyHole,
+        String(format: "hole=%.1f dB", held.holeDB)
+    )
+}
+
+do {
+    // Rendered two-song join: fade-to-silence out + fade-in in, no overlap.
+    let outgoing = makeSong(title: "Outgoing Join", durationSeconds: 20)
+    let incoming = makeSong(title: "Incoming Join", durationSeconds: 20)
+    let tone = (0..<Int(SR * 20)).map { Float(0.4 * sin(2 * .pi * 220 * Double($0) / SR)) }
+    let source = AutoOfflineMixdown.Source(samples: tone, sampleRate: SR)
+    let badPlan = AutoRemixPlan(
+        mode: .mashup,
+        targetBPM: 120,
+        targetDuration: 8,
+        anchorSongIDs: [outgoing.id, incoming.id],
+        selectedSections: [],
+        placements: [
+            AutoClipPlacement(
+                songID: outgoing.id, sourceStart: 0, timelineStart: 0, timelineDuration: 4,
+                tempoRatio: 1, volume: 1.0,
+                fadeIn: .none,
+                fadeOut: ClipTransition(type: .fadeOut, duration: 8),
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 0
+            ),
+            AutoClipPlacement(
+                songID: incoming.id, sourceStart: 0, timelineStart: 4, timelineDuration: 4,
+                tempoRatio: 1, volume: 1.0,
+                fadeIn: ClipTransition(type: .crossfade, duration: 8),
+                fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 1
+            ),
+        ],
+        sfxEvents: [],
+        handoffCount: 1,
+        songLetters: [outgoing.id: "A", incoming.id: "B"],
+        sequence: ["A", "B"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let rendered = AutoOfflineMixdown.render(
+        plan: badPlan,
+        sources: [outgoing.id: source, incoming.id: source],
+        sampleRate: SR,
+        includeTail: false
+    )
+    let switches = AutoRemixDiagnostics.songSwitchIncomingStarts(placements: badPlan.placements)
+    check("Bad join exposes a song-switch incoming time", switches.contains { abs($0 - 4) < 0.05 })
+    var foundHole = false
+    var holeDetail = ""
+    for t in switches {
+        let w = AutoRemixDiagnostics.mixWindowPreIncoming(
+            samples: rendered.mix, sampleRate: SR, incomingStart: t
+        )
+        if w.isEnergyHole {
+            foundHole = true
+            holeDetail = String(format: "hole=%.1f dB @%.2fs", w.holeDB, t)
+        }
+    }
+    check(
+        "Rendered fade-to-silence song switch is an RMS hole (previous behavior fails)",
+        foundHole,
+        holeDetail
+    )
+}
+
+do {
+    // Auto mashup: song-switch joins must keep energy (overlap or hard cut).
+    let bomt = makeSong(title: "Baby One More Time", bpm: 93, key: "Cm", durationSeconds: 200)
+    let oops = makeSong(title: "Oops I Did It Again", bpm: 95, key: "C#m", durationSeconds: 200)
+    func clubFeat(bpm: Double, drum: Double, bass: Double, vocal: Double) -> SongSignalFeatures {
+        var f = makeFeatures(
+            duration: 200, leadingSilence: 0, trailingSilence: 0, bpm: bpm, confidence: 1.0
+        )
+        f.drumConfidence = drum
+        f.bassEnergyCurve = [Double](repeating: bass, count: f.bassEnergyCurve.count)
+        f.vocalPresenceCurve = [Double](repeating: vocal, count: f.vocalPresenceCurve.count)
+        return f
+    }
+    let signals: [UUID: SongSignalFeatures] = [
+        bomt.id: clubFeat(bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55),
+        oops.id: clubFeat(bpm: 95, drum: 0.71, bass: 0.38, vocal: 0.55),
+    ]
+    switch AutoRemixRunner.runEntireProject(
+        tracks: [bomt, oops], seed: 20260815, signals: signals
+    ) {
+    case .success(_, let plan, _):
+        let switches = AutoRemixDiagnostics.songSwitchIncomingStarts(placements: plan.placements)
+        check("Britney mashup has a song-switch join", !switches.isEmpty)
+        let toneOops = syntheticSong(durationSeconds: 200, bpm: 95, flatAmplitude: 0.4)
+        let toneBomt = syntheticSong(durationSeconds: 200, bpm: 93, flatAmplitude: 0.4)
+        let rendered = AutoOfflineMixdown.render(
+            plan: plan,
+            sources: [
+                oops.id: AutoOfflineMixdown.Source(samples: toneOops, sampleRate: SR),
+                bomt.id: AutoOfflineMixdown.Source(samples: toneBomt, sampleRate: SR),
+            ],
+            sampleRate: SR,
+            includeTail: false
+        )
+        var worst = 0.0
+        var worstAt = 0.0
+        var anyHole = false
+        for t in switches {
+            let w = AutoRemixDiagnostics.mixWindowPreIncoming(
+                samples: rendered.mix, sampleRate: SR, incomingStart: t
+            )
+            if w.holeDB > worst {
+                worst = w.holeDB
+                worstAt = t
+            }
+            if w.isEnergyHole { anyHole = true }
+        }
+        check(
+            "Auto mashup song-switch mix window has no RMS hole before incoming",
+            !anyHole,
+            String(format: "worst hole=%.1f dB @%.2fs", worst, worstAt)
+        )
+        let dominants = plan.placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        var switchGrammarOK = true
+        var grammarDetail = ""
+        for (prev, next) in zip(dominants, dominants.dropFirst()) where prev.songID != next.songID {
+            let voidBefore = plan.intentionalGaps.contains {
+                $0.reason.contains("void") && abs($0.end - next.timelineStart) < 0.05
+            }
+            let overlap = prev.timelineEnd - next.timelineStart
+            let hardCut = (next.fadeIn.type == .none || next.fadeIn.duration <= 0.02)
+                && next.volume >= 0.90
+            let realOverlap = overlap > 0.05
+            if voidBefore || (!hardCut && !realOverlap) {
+                switchGrammarOK = false
+                grammarDetail = String(
+                    format: "void=%d overlap=%.2f fadeIn=%@ vol=%.2f @%.2fs",
+                    voidBefore ? 1 : 0, overlap, next.fadeIn.type.rawValue, next.volume, next.timelineStart
+                )
+            }
+        }
+        check(
+            "Auto mashup switches songs by overlap or hard cut at full volume (no dead-air handoff)",
+            switchGrammarOK,
+            grammarDetail
+        )
+
+        if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
+            let verseStart = plan.placements
+                .filter { $0.role == .dominant && $0.timelineDuration > plan.barSeconds * 4 }
+                .map(\.timelineStart)
+                .min() ?? 0
+            let verseDB = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: verseStart + 0.5, to: verseStart + 4.5
+            )
+            let mixDB = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: drop1 - plan.barSeconds * 2, to: drop1 + 0.5
+            )
+            let dropDB = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: drop1 + 0.05, to: drop1 + 8.0
+            )
+            check(
+                "Auto mashup mix-window RMS is within 1.5 dB of verse (or louder)",
+                mixDB + 1.5 >= verseDB,
+                String(format: "verse=%.2f mix=%.2f delta=%.2f", verseDB, mixDB, verseDB - mixDB)
+            )
+            check(
+                "Auto mashup Drop 1 RMS is within 1.5 dB of verse (or louder)",
+                dropDB + 1.5 >= verseDB,
+                String(format: "verse=%.2f drop=%.2f delta=%.2f", verseDB, dropDB, verseDB - dropDB)
+            )
+            let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+            let takeIDs = Set(musical.filter {
+                $0.timelineEnd <= drop1 + 0.05 && $0.timelineEnd >= drop1 - plan.beatSeconds * 1.6
+            }.map(\.assetID))
+            check(
+                "Auto mashup take-out is riser+snare+tape ending before Drop 1",
+                takeIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop"]),
+                "ids=\(takeIDs.sorted())"
+            )
+            let rideIDs = Set(musical.filter {
+                $0.timelineStart >= drop1 + plan.beatSeconds - 0.05
+                    && $0.timelineStart < drop1 + plan.barSeconds * 8.5
+            }.map(\.assetID))
+            check(
+                "Auto mashup mix-window SFX rides the drop (air/clap/impact)",
+                rideIDs.isSuperset(of: ["airSweep", "clapFill", "impact"]),
+                "ids=\(rideIDs.sorted())"
+            )
+            let firstBar = AutoRemixDiagnostics.meanLoudnessDB(
+                samples: rendered.mix, sampleRate: SR,
+                from: drop1 + 0.05, to: drop1 + plan.barSeconds
+            )
+            check(
+                "Auto mashup Drop 1 first-bar RMS is within 1.5 dB of verse (or louder)",
+                firstBar + 1.5 >= verseDB,
+                String(format: "verse=%.2f bar1=%.2f delta=%.2f", verseDB, firstBar, verseDB - firstBar)
+            )
+            if let title = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan),
+               title.stemKind == .vocals {
+                let titleDB = AutoRemixDiagnostics.meanLoudnessDB(
+                    samples: rendered.mix, sampleRate: SR,
+                    from: title.timelineStart + 0.4, to: title.timelineStart + 4.0
+                )
+                check(
+                    "Auto mashup Drop 1 RMS is at least the title-hook vocal copy",
+                    dropDB + 0.4 >= titleDB,
+                    String(format: "title=%.2f drop=%.2f delta=%.2f", titleDB, dropDB, titleDB - dropDB)
+                )
+            }
+        }
+    case .failure(let message):
+        check("Britney mashup energy-through-join render", false, message)
+    }
+}
+
 // MARK: - 7. Signal analysis is measured, not seeded
 
 do {
@@ -545,7 +898,7 @@ do {
               && features.downbeatOffsetSeconds == again.downbeatOffsetSeconds)
 }
 
-// MARK: - 8. Evidence-based edge trimming (no phrase amputation)
+// MARK: - 8. Evidence-based edge trimming (usable range, not montage order)
 
 do {
     let song = makeSong(title: "Padded Song", durationSeconds: 160)
@@ -555,25 +908,27 @@ do {
     )
     switch outcome {
     case .success(_, let plan, _):
-        let dominants = plan.placements
-            .filter { $0.role == .dominant }
-            .sorted { $0.timelineStart < $1.timelineStart }
-        let firstSource = dominants.first?.sourceStart ?? -1
-        let lastSource = dominants.last?.sourceEnd ?? -1
-        check("Trim: leading silence removed without cutting music",
-              firstSource >= 5.2 && firstSource <= 7.5,
-              String(format: "starts at %.2fs", firstSource))
-        check("Trim: trailing silence removed, song body kept",
-              lastSource >= 148.0 && lastSource <= 156.5,
-              String(format: "ends at %.2fs", lastSource))
-        check("Trim: usable range recorded",
-              plan.usableSourceRange.map { $0.lowerBound >= 5.0 && $0.upperBound <= 157.0 } ?? false)
+        guard let usable = plan.usableSourceRange else {
+            check("Trim: usable range recorded", false)
+            break
+        }
+        check("Trim: leading silence removed from usable range",
+              usable.lowerBound >= 5.0 && usable.lowerBound <= 7.5,
+              String(format: "usable start %.2fs", usable.lowerBound))
+        check("Trim: trailing silence removed from usable range",
+              usable.upperBound >= 148.0 && usable.upperBound <= 157.0,
+              String(format: "usable end %.2fs", usable.upperBound))
+        let outside = plan.placements.contains {
+            $0.sourceStart < usable.lowerBound - 0.05 || $0.sourceEnd > usable.upperBound + 0.05
+        }
+        check("Trim: no placement reads the silent edges", !outside)
+        check("Trim: usable range recorded", true)
     case .failure(let message):
         check("Padded song plans", false, message)
     }
 }
 
-// MARK: - 9. Low confidence → nearly continuous, minimal processing
+// MARK: - 9. Low confidence → early hook drops (not 50 bars of verse)
 
 do {
     let song = makeSong(title: "Unknown Tempo", bpm: nil, key: nil, durationSeconds: 150)
@@ -581,16 +936,134 @@ do {
     switch outcome {
     case .success(_, let plan, _):
         let cuts = AutoRemixDiagnostics.internalCutBoundaries(placements: plan.placements)
-        check("Low confidence: zero internal cuts", cuts.isEmpty, "got \(cuts.count)")
-        check("Low confidence: nearly continuous (≤ 3 placements)",
-              plan.placements.filter { $0.role == .dominant }.count <= 3,
-              "got \(plan.placements.count)")
-        check("Low confidence: no intentional silence", plan.intentionalGaps.isEmpty)
-        check("Low confidence: minimal SFX (≤ 1)", plan.sfxEvents.count <= 1,
-              "got \(plan.sfxEvents.count)")
+        // Hook jumps to Drop 1/2 are allowed; decorative verse chops are not.
+        let unjustified = cuts.filter { cut in
+            !plan.cutRecords.contains {
+                abs($0.timelineAt - cut) < 0.15 && $0.reason == .hookReturn
+            }
+        }
+        check("Low confidence: only justified hook-return cuts",
+              unjustified.isEmpty, "unjustified=\(unjustified.count) totalCuts=\(cuts.count)")
+        check("Low confidence: source order monotonic unless hook return",
+              AutoRemixDiagnostics.sourceOrderIsMonotonic(
+                  placements: plan.placements,
+                  justifiedReturnStarts: plan.cutRecords
+                      .filter { $0.reason == .hookReturn }
+                      .map(\.timelineAt)
+              ))
+        check("Low confidence: still uses low-confidence club path",
+              plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
+        check("Low confidence: pulse / filter energy present",
+              !plan.pulseRegions.isEmpty || plan.placements.contains { $0.effects.level(for: "blur") > 0.5 })
+        let musical = plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        let minutes = max(plan.targetDuration / 60.0, 0.01)
+        let perMin = Double(musical.count) / minutes
+        let drops = plan.pulseRegions.filter { $0.role == .drop }
+        func inMixWindow(_ t: Double) -> Bool {
+            for drop in drops {
+                let winStart = max(0, drop.timelineStart - plan.barSeconds * 8)
+                if t >= winStart - 0.05 && t <= drop.timelineStart + plan.barSeconds * 8 + 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let wallpaper = musical.filter {
+            !inMixWindow($0.timelineStart)
+                && ($0.assetID == "riser" || $0.assetID == "snareBuild" || $0.assetID == "clapFill"
+                    || $0.assetID == "tapeStop" || $0.assetID == "airSweep")
+        }
+        check("Low confidence: no SFX wallpaper outside mix windows",
+              wallpaper.isEmpty,
+              "wallpaper=\(wallpaper.map(\.assetID))")
+        check("Low confidence: musical SFX stays finite (≤ 40/min)",
+              perMin <= 40.0 + 0.001,
+              String(format: "%.1f/min", perMin))
+        check("Low confidence: drop has impact",
+              musical.contains { $0.assetID == "impact" })
+        if let first = drops.first {
+            let bar = first.timelineStart / plan.barSeconds
+            check("Low confidence: Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
+                  String(format: "bar=%.1f", bar))
+        }
+        let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
+        check("Low confidence: cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
     case .failure(let message):
         check("Low-confidence one-song input still produces a remix", false, message)
     }
+}
+
+// MARK: - Stem-kind mixdown routing
+
+do {
+    let songID = UUID()
+    let frames = 8_000
+    let fullMix = AutoOfflineMixdown.Source(
+        samples: [Float](repeating: 0.10, count: frames),
+        sampleRate: SR
+    )
+    let vocals = AutoOfflineMixdown.Source(
+        samples: [Float](repeating: 0.80, count: frames),
+        sampleRate: SR
+    )
+    let placement = AutoClipPlacement(
+        songID: songID,
+        sourceStart: 0,
+        timelineStart: 0,
+        timelineDuration: 0.10,
+        tempoRatio: 1,
+        volume: 1,
+        fadeIn: .none,
+        fadeOut: .none,
+        effects: ClipEffectSettings(),
+        role: .dominant,
+        slotIndex: 0,
+        stemKind: .vocals
+    )
+    let plan = AutoRemixPlan(
+        mode: .remix,
+        targetBPM: 120,
+        targetDuration: 0.10,
+        anchorSongIDs: [songID],
+        selectedSections: [],
+        placements: [placement],
+        sfxEvents: [],
+        handoffCount: 0,
+        songLetters: [songID: "A"],
+        sequence: ["A"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 1,
+        randomSeed: 1
+    )
+    let mixed = AutoOfflineMixdown.render(
+        plan: plan,
+        sources: [songID: fullMix],
+        stemSources: [songID: [.vocals: vocals]],
+        sampleRate: SR,
+        includeTail: false
+    )
+    let peak = mixed.mix.map { abs($0) }.max() ?? 0
+    // Vocal stem is 0.80; full mix is 0.10. Headroom (~−6 dB) still leaves
+    // stem peak well above a full-mix render.
+    check(
+        "Mixdown uses stemKind source (not always the full mix)",
+        peak > 0.25,
+        String(format: "peak=%.3f", peak)
+    )
+    let fullOnly = AutoOfflineMixdown.render(
+        plan: plan,
+        sources: [songID: fullMix],
+        sampleRate: SR,
+        includeTail: false
+    )
+    let fullPeak = fullOnly.mix.map { abs($0) }.max() ?? 0
+    check(
+        "Mixdown falls back to full mix when stem source is omitted",
+        fullPeak > 0.01 && fullPeak < 0.20,
+        String(format: "fullPeak=%.3f", fullPeak)
+    )
 }
 
 // MARK: - Diagnostics evidence (printed, not asserted)

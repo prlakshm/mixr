@@ -7,7 +7,7 @@ import Foundation
 // The graph is a mirror of MixrPlaybackEngine's live graph:
 //
 //   per song track: player → timePitch → EQ → flanger → delay → reverb → mainMixer
-//   SFX track:      player → mainMixer
+//   each SFX row:   player → mainMixer  (one player per row so stacks mix)
 //   master:         mainMixer → peak limiter → output
 //
 // Every clip is scheduled with the same trim/offset/speed math as live
@@ -130,27 +130,30 @@ nonisolated enum MixrExportRenderer {
             chains.append((track, chain))
         }
 
-        // SFX track: buffers straight into the mixer (same as live).
-        var sfxPlayer: AVAudioPlayerNode?
-        var sfxSchedule: [(buffer: AVAudioPCMBuffer, startSeconds: Double)] = []
-        if let sfxTrack = tracks.first(where: { $0.isSFXTrack }) {
+        // Every SFX row: buffers straight into the mixer (one player per row,
+        // same as live — stacked hits on adjacent lanes must all render).
+        var sfxPlayers: [(track: MixrTrack, player: AVAudioPlayerNode, schedule: [(buffer: AVAudioPCMBuffer, startSeconds: Double)])] = []
+        for sfxTrack in tracks where sfxTrack.isSFXTrack {
+            var schedule: [(buffer: AVAudioPCMBuffer, startSeconds: Double)] = []
             for clip in sfxTrack.clips.sorted(by: { $0.start < $1.start }) {
                 guard let effectID = clip.soundEffectID,
                       let definition = SoundEffectLibrary.definition(for: effectID),
                       let buffer = sfxBuffer(for: definition)
                 else { continue }
-                sfxSchedule.append((buffer, MixrTimeline.seconds(fromUnits: clip.start)))
+                schedule.append((buffer, MixrTimeline.seconds(fromUnits: clip.start)))
             }
-            if let format = sfxSchedule.first?.buffer.format {
-                let player = AVAudioPlayerNode()
-                engine.attach(player)
-                engine.connect(player, to: engine.mainMixerNode, format: format)
-                sfxPlayer = player
-                sfxSchedule = sfxSchedule.filter { $0.buffer.format == format }
-            }
+            guard let format = schedule.first?.buffer.format else { continue }
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: format)
+            sfxPlayers.append((
+                sfxTrack,
+                player,
+                schedule.filter { $0.buffer.format == format }
+            ))
         }
 
-        guard !chains.isEmpty || sfxPlayer != nil else { throw ExportError.nothingToExport }
+        guard !chains.isEmpty || !sfxPlayers.isEmpty else { throw ExportError.nothingToExport }
 
         // Master output protection — identical placement to live playback.
         let limiter = ClipEffectDSP.makePeakLimiter()
@@ -177,18 +180,19 @@ nonisolated enum MixrExportRenderer {
                 .filter({ !$0.isSoundEffect })
                 .min(by: { $0.start < $1.start }) {
                 chain.timePitch.rate = Float(max(first.playbackSpeed, 0.03125))
+                chain.timePitch.overlap = abs(first.playbackSpeed - 1.0) > 0.08 ? 32 : 8
                 if abs(first.playbackSpeed - 1.0) >= 0.001 { chain.timePitch.bypass = false }
             }
         }
-        if let sfxPlayer {
-            let sr = sfxSchedule.first?.buffer.format.sampleRate ?? 44_100
-            for item in sfxSchedule {
-                sfxPlayer.scheduleBuffer(
+        for entry in sfxPlayers {
+            let sr = entry.schedule.first?.buffer.format.sampleRate ?? 44_100
+            for item in entry.schedule {
+                entry.player.scheduleBuffer(
                     item.buffer,
                     at: AVAudioTime(sampleTime: AVAudioFramePosition(item.startSeconds * sr), atRate: sr)
                 )
             }
-            sfxPlayer.play()
+            entry.player.play()
         }
 
         // ── Output file ──
@@ -238,7 +242,7 @@ nonisolated enum MixrExportRenderer {
 
         renderLoop: while rendered < totalFrames {
             let t = Double(rendered) / outputSR
-            applyParameters(at: t, tracks: tracks, chains: chains, sfxPlayer: sfxPlayer)
+            applyParameters(at: t, tracks: tracks, chains: chains, sfxPlayers: sfxPlayers.map { ($0.track, $0.player) })
 
             let framesThisBlock = AVAudioFrameCount(min(AVAudioFramePosition(blockFrames), totalFrames - rendered))
             do {
@@ -364,23 +368,26 @@ nonisolated enum MixrExportRenderer {
         at t: Double,
         tracks: [MixrTrack],
         chains: [(track: MixrTrack, chain: ExportChain)],
-        sfxPlayer: AVAudioPlayerNode?
+        sfxPlayers: [(track: MixrTrack, player: AVAudioPlayerNode)]
     ) {
         let soloActive = tracks.contains { $0.isSoloed }
 
-        // Policy ducking under major SFX — identical to the live tick.
+        // Policy ducking under major SFX — every SFX row, identical to live.
         var duckGain = 1.0
-        if let sfxTrack = tracks.first(where: { $0.isSFXTrack }),
-           !sfxTrack.isMuted, !soloActive || sfxTrack.isSoloed {
-            let events = sfxTrack.clips.compactMap { clip -> AutoSFXEvent? in
-                guard let id = clip.soundEffectID else { return nil }
-                return AutoSFXEvent(
-                    assetID: id,
-                    timelineStart: MixrTimeline.seconds(fromUnits: clip.start),
-                    purpose: ""
-                )
+        let duckEvents: [AutoSFXEvent] = tracks
+            .filter { $0.isSFXTrack && !$0.isMuted && (!soloActive || $0.isSoloed) }
+            .flatMap { track in
+                track.clips.compactMap { clip -> AutoSFXEvent? in
+                    guard let id = clip.soundEffectID else { return nil }
+                    return AutoSFXEvent(
+                        assetID: id,
+                        timelineStart: MixrTimeline.seconds(fromUnits: clip.start),
+                        purpose: ""
+                    )
+                }
             }
-            duckGain = AutoGainPolicy.duckGain(at: t, sfxEvents: events)
+        if !duckEvents.isEmpty {
+            duckGain = AutoGainPolicy.duckGain(at: t, sfxEvents: duckEvents)
         }
 
         for (track, chain) in chains {
@@ -443,7 +450,7 @@ nonisolated enum MixrExportRenderer {
             chain.playerB.volume = laneVolumes[1]
         }
 
-        if let sfxPlayer, let sfxTrack = tracks.first(where: { $0.isSFXTrack }) {
+        for (sfxTrack, sfxPlayer) in sfxPlayers {
             let audible = !sfxTrack.isMuted && (!soloActive || sfxTrack.isSoloed)
             sfxPlayer.volume = audible ? Float(sfxTrack.volume) : 0
         }

@@ -240,58 +240,39 @@ final class TrackLibrary: ObservableObject {
 
     // MARK: - Sound Effects
 
-    /// Index of the silver SFX track, creating it (pinned last) if needed.
-    @discardableResult
-    private func ensureSFXTrack() -> Int {
-        if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
-        let sfxTrack = MixrTrack(
-            id: UUID(),
-            title: "Sound Effects",
-            artist: "Built-in SFX",
-            duration: "",
-            durationSeconds: nil,
-            bpm: nil,
-            key: nil,
-            color: .silver,
-            volume: 0.85,
-            isMuted: false,
-            trackType: .soundEffect,
-            url: nil,
-            artworkData: nil,
-            clips: []
-        )
-        tracks.append(sfxTrack)
-        return tracks.count - 1
-    }
-
-    /// Adds an SFX clip at the playhead, sliding right past any overlapping
-    /// SFX clips (never overlapping, never negative). Returns the new clip id.
+    /// Adds an SFX clip at the playhead on the first SFX row that fits at
+    /// that exact time; otherwise creates an adjacent SFX row (same as
+    /// dragging a one-shot up/down). Per row, clips never overlap.
     @discardableResult
     func addSoundEffect(_ definition: SoundEffectDefinition, atPlayheadUnit unit: CGFloat) -> UUID {
-        // Scope to the SFX track's clips when it exists; creating the track
-        // is a structural edit.
         let existingSFXTrackID = tracks.first(where: { $0.isSFXTrack })?.id
-        let scope: TimelineEditScope = existingSFXTrackID.map { .trackClips($0) } ?? .tracks
-
-        var newClipID = UUID()
-        performEdit("Add Sound Effect", scope: scope) {
-            let idx = withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                ensureSFXTrack()
+        let willNeedNewLane: Bool = {
+            let want = max(0, unit)
+            let sfx = tracks.filter(\.isSFXTrack)
+            guard !sfx.isEmpty else { return true }
+            return !sfx.contains {
+                SoundEffectLibrary.fitsExactly(
+                    proposedStart: want,
+                    lengthUnits: definition.lengthUnits,
+                    in: $0.clips
+                )
             }
-            let start = SoundEffectLibrary.nonOverlappingStart(
-                proposedStart: max(0, unit),
-                lengthUnits: definition.lengthUnits,
-                in: tracks[idx].clips
-            )
-            let clip = MixrClip(
-                id: newClipID,
-                start: start,
-                length: definition.lengthUnits,
-                soundEffectID: definition.id
-            )
-            tracks[idx].clips.append(clip)
-            tracks[idx].clips.sort { $0.start < $1.start }
-            newClipID = clip.id
+        }()
+        // New spill lane is structural; exact fit on an existing row is clips-only.
+        let scope: TimelineEditScope = (!willNeedNewLane && existingSFXTrackID != nil)
+            ? .trackClips(existingSFXTrackID!)
+            : .tracks
+
+        let newClipID = UUID()
+        performEdit("Add Sound Effect", scope: scope) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                _ = SoundEffectLibrary.placeExact(
+                    definition: definition,
+                    atUnit: max(0, unit),
+                    into: &tracks,
+                    clipID: newClipID
+                )
+            }
         }
         return newClipID
     }
@@ -493,8 +474,37 @@ final class TrackLibrary: ObservableObject {
         Task { @MainActor in
             await Task.yield()
             loadProjects()
+#if DEBUG
+            seedDemoAudioIfRequested()
+#endif
         }
     }
+
+#if DEBUG
+    /// App Store screenshot helper: import WAV/MP3 files from Documents/DemoAudio
+    /// when launched with `-MixrSeedDemoAudio` and the timeline is empty.
+    private func seedDemoAudioIfRequested() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-MixrSeedDemoAudio") else { return }
+        guard tracks.filter({ !$0.isSFXTrack }).isEmpty else { return }
+
+        let demoDirectory = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        )[0].appendingPathComponent("DemoAudio", isDirectory: true)
+
+        let allowed = Set(["wav", "mp3", "m4a", "aiff", "caf"])
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: demoDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        let urls = files
+            .filter { allowed.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard !urls.isEmpty else { return }
+        addTracks(from: urls)
+    }
+#endif
 
     private func fetchRecords() -> [MixrProjectRecord] {
         guard let modelContext else { return [] }

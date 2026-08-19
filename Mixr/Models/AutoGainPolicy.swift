@@ -40,14 +40,16 @@ nonisolated enum AutoGainPolicy {
     /// cannot blow the 6 dB mix-bus headroom on their own.
     static func nominalGain(forSFX id: String) -> Double {
         switch id {
-        case "impact", "bassDrop": 0.25          // ≈ −12 dB
-        case "crash": 0.30                       // ≈ −10.5 dB
-        case "riser", "snareBuild": 0.32         // ≈ −10 dB
-        case "reverseCymbal": 0.28               // ≈ −11 dB
-        case "downlifter", "tapeStop": 0.25      // ≈ −12 dB
-        case "airSweep", "sweepUp", "sweepDown": 0.20  // ≈ −14 dB
-        case "clapFill": 0.28
-        default: 0.25
+        case "impact", "bassDrop": 0.18          // ≈ −15 dB
+        case "crash": 0.22                       // ≈ −13 dB
+        case "riser", "snareBuild": 0.24         // ≈ −12.5 dB
+        case "reverseCymbal": 0.22               // ≈ −13 dB
+        case "downlifter", "tapeStop": 0.20      // ≈ −14 dB
+        case "airSweep", "sweepUp", "sweepDown": 0.16  // ≈ −16 dB
+        case "clapFill": 0.20
+        case "clubKick": 0.14                    // Auto thin-song pulse
+        case "clubBass": 0.12
+        default: 0.20
         }
     }
 
@@ -59,10 +61,12 @@ nonisolated enum AutoGainPolicy {
     // MARK: Ducking
 
     /// Duck depth under a major impact, dB (smoothly ramped).
-    static let duckDepthDB = 3.0
+    /// Deep enough that impact+crash+clap stacks stay under the ceiling
+    /// without the limiter becoming the mix glue.
+    static let duckDepthDB = 4.5
     static let duckAttackSeconds = 0.06
-    static let duckHoldSeconds = 0.25
-    static let duckReleaseSeconds = 0.30
+    static let duckHoldSeconds = 0.28
+    static let duckReleaseSeconds = 0.32
 
     /// Gain applied to the SONG bus at time `t` while major SFX play.
     /// Smooth attack/hold/release envelope around each major impact;
@@ -92,15 +96,84 @@ nonisolated enum AutoGainPolicy {
 
     // MARK: Song placement gain
 
-    /// Volume for the continuous one-song remix placement. One value for
-    /// the whole song — the song's own dynamics carry the energy story —
-    /// leaving ≈ 1 dB of clip headroom before track gain and SFX.
+    /// Fallback song volume when a placement has no energy story.
     static let preservationSongVolume = 0.9
 
-    /// Placement volume for an energy-storied slot (mashup path).
-    static func songPlacementVolume(energy: Double) -> Double {
-        0.82 + 0.18 * min(1, max(0, energy))
+    /// Pivot wallpaper grain volume. HPF/blur takes the kick out; clip
+    /// volume stays at least as loud as the verse so the join is not a hole.
+    /// Incoming-join vocal grains use `vocalStemMakeupDefault` so they are
+    /// not quieter than the title-hook vocal copy.
+    static let pivotGrainVolume = 1.0
+
+    /// Incoming Drop 1 / hook-replace attack — full clip volume, no fade-in.
+    /// Must stay at least as loud as the title-hook vocal copy (RMS makeup).
+    static let incomingDropVolume = 1.0
+
+    /// Isolated vocal stems are quieter than a full mix. Auto may write
+    /// clip volume above 1.0 as makeup so Drop 1 first-bar RMS matches
+    /// the bed verse. Playback/export multiply this through; do not clamp
+    /// to unity in the applier.
+    static let maxClipVolume = 3.5
+
+    /// Fallback makeup when a vocal stem has no RMS curve (~+4 dB).
+    static let vocalStemMakeupDefault = 1.58
+
+    /// Isolated title-hook vocals at the same clip volume read louder than a
+    /// mixed Drop 1. Extra linear gain (~+6.4 dB) so incoming Drop 1 mix RMS
+    /// stays at least the title copy after the shared ceiling limiter.
+    /// Do not duck the title stem.
+    static let dropVsIsolatedTitleBoost = 2.10
+
+    /// Per-stem volume for drums/bass/other under a title-hook vocal copy.
+    /// Three instrumental stems at ~0.62 sum louder than the isolated vocal
+    /// and Whisper-small of the first 4s hears drums / the next line instead
+    /// of the distinctive token. Keep each stem well below the title vocal.
+    /// Offline mixdown has no blur HPF, so this volume is the duck.
+    static let titleInstrumentalDuckVolume = 0.18
+
+    /// Role-based join staging — clip volume floors by placement role.
+    /// Validated on rendered PCM in golden/render tiers, not clip fields alone.
+    enum JoinRole: Sendable {
+        case titleStem
+        case titleBed
+        case pivotGrain
+        case dropGuest
+        case bedUnderDrop
     }
+
+    static func roleStagingVolume(
+        role: JoinRole,
+        measuredStemRMS: Double? = nil,
+        referenceRMS: Double? = nil,
+        useIncomingJoin: Bool = false,
+        stemKind: AutoStemKind? = nil
+    ) -> Double {
+        switch role {
+        case .titleStem:
+            return vocalStemMakeupDefault
+        case .titleBed:
+            return titleInstrumentalDuckVolume
+        case .pivotGrain:
+            if useIncomingJoin || stemKind == .vocals {
+                return vocalStemMakeupDefault
+            }
+            return pivotGrainVolume
+        case .dropGuest:
+            return vocalStemMakeupDefault
+        case .bedUnderDrop:
+            return incomingDropVolume
+        }
+    }
+
+    /// Placement volume for an energy-storied club / mashup slot.
+    /// Enough contrast for build-out subtraction vs drop payoff without
+    /// creating unexplained join jumps > 4 dB in offline PCM.
+    static func songPlacementVolume(energy: Double) -> Double {
+        0.58 + 0.42 * min(1, max(0, energy))
+    }
+
+    /// Extra attenuation when the pulse layer owns the low end.
+    static let pulseDuckedSongVolumeScale = 0.88
 
     // MARK: Tail trimming
 

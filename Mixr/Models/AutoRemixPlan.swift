@@ -65,6 +65,33 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case savedStrongestForPeak
     case duoAlternationFallback
     case excludedLowConfidenceSong
+    case choseClubTempo
+    case wroteClubPulse
+    case skippedSecondKick
+    case imposedClubEnergyCurve
+    case assignedMashupRoles
+    case refusedMashupPair
+    case allowedPredropVoid
+    case choseClubFlavor
+    case usedCameoOnly
+    case skippedIncompatibleHook
+    /// Second vocal stacked under a drop (chant / harmony / title line).
+    case stackedVocalOverlay
+    /// Supporting vocal ducked / EQ'd under a dense lead.
+    case duckedSupportingVocal
+    /// Refused two full-mix drops that would stack kicks/subs.
+    case rejectedDualBassStack
+    /// Short same-song hook duplicate used as a DJ echo / stutter throw.
+    case hookEchoThrow
+    /// Guest hook replaced the bed vocal on a drop (one melody).
+    case hookReplace
+    /// Xirex-style pivot: 1-beat last-word of a completed phrase, looped 2–4 bars.
+    case pivotWallpaperLoop
+    /// Phrase too short / low confidence for a last-word grain — skip the
+    /// loop rather than slicing the title.
+    case skippedPivotWallpaper
+    /// Offline Demucs sidecar used (vocal grain, drums kick, or bed instrumental).
+    case usedStemSidecar
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -93,7 +120,7 @@ struct AutoDecision: Sendable, Equatable {
         case .replacedComplexOverlapWithHardCut:
             return "Replaced a complex overlap with a hard cut\(detail.map { " before \($0)" } ?? "")."
         case .addedRiserIntoDrop:
-            return "Used a \(detail ?? "riser") into the drop."
+            return "addedRiserIntoDrop — \(detail ?? "festival take-out + drop-ride") into the drop."
         case .removedInvalidSFX:
             return "Removed an invalid SFX event\(detail.map { " (\($0))" } ?? "")."
         case .repairedTimelineGap:
@@ -116,6 +143,42 @@ struct AutoDecision: Sendable, Equatable {
                 ?? "Could not reach the full A → B → A → B alternation without incomplete sections."
         case .excludedLowConfidenceSong:
             return "Excluded \(song): \(detail ?? "not enough timeline for a recognizable phrase")."
+        case .choseClubTempo:
+            return "Club tempo for \(song): \(detail ?? "pocket decision")."
+        case .wroteClubPulse:
+            return "Wrote a club pulse under \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .skippedSecondKick:
+            return "Skipped a second kick on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .imposedClubEnergyCurve:
+            return "Imposed a club energy curve on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .assignedMashupRoles:
+            return detail ?? "Assigned mashup roles (hook vs club bed)."
+        case .refusedMashupPair:
+            return detail ?? "Refused a mashup pairing that would wreck the vocal."
+        case .allowedPredropVoid:
+            return "Left an intentional pre-drop void\(detail.map { " (\($0))" } ?? "")."
+        case .choseClubFlavor:
+            return "Club flavor: \(detail ?? "festival rewrite")."
+        case .usedCameoOnly:
+            return "Used \(song) as a short cameo\(detail.map { " — \($0)" } ?? "") rather than a full vocal drop."
+        case .skippedIncompatibleHook:
+            return "Skipped \(song) as a full hook\(detail.map { ": \($0)" } ?? "")."
+        case .stackedVocalOverlay:
+            return "Stacked \(song) as a vocal overlay\(detail.map { " — \($0)" } ?? "")."
+        case .duckedSupportingVocal:
+            return "Ducked \(song) under the lead vocal\(detail.map { " — \($0)" } ?? "")."
+        case .rejectedDualBassStack:
+            return "Rejected a dual kick/bass stack\(detail.map { " — \($0)" } ?? "")."
+        case .hookEchoThrow:
+            return "Threw a hook echo duplicate of \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .hookReplace:
+            return "Hook-replaced \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .pivotWallpaperLoop:
+            return "Pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .skippedPivotWallpaper:
+            return "Skipped the pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .usedStemSidecar:
+            return "Used stem sidecar for \(song)\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -163,11 +226,13 @@ struct AutoClipPlacement: Sendable {
     /// split made only to change effects). Continuous edges get no fades
     /// of any kind — the audio underneath is continuous.
     var continuesPrevious: Bool = false
-    /// > 0 when this placement deliberately OVERLAPS the previous
-    /// placement of the same song by this many timeline seconds for a
-    /// true equal-power crossfade. The validator only permits same-song
-    /// overlap that is declared here.
+    /// > 0 when this placement deliberately OVERLAPS another placement of
+    /// the same song — equal-power crossfade, or a short supporting DJ
+    /// echo / stutter layer under the lead. The validator only permits
+    /// same-song overlap that is declared here (or a supporting echo throw).
     var overlapsPreviousSeconds: Double = 0
+    /// Offline Demucs sidecar this clip should play (`nil` = the song's full mix).
+    var stemKind: AutoStemKind? = nil
 
     nonisolated var timelineEnd: Double { timelineStart + timelineDuration }
     nonisolated var sourceDuration: Double { timelineDuration * tempoRatio }
@@ -234,6 +299,79 @@ struct AutoSFXEvent: Sendable {
     nonisolated var timelineEnd: Double { timelineStart + duration }
 }
 
+// MARK: - Festival Drop 1 mix window
+
+/// Take-out (riser/snare/tape) ends on the last pivot beat — the Drop 1
+/// downbeat — not a beat early (that hole was ~−24 dB) and not on the
+/// guest's first syllable. Drop-ride (air/clap/impact) starts after that
+/// attack, on extra SFX rows.
+enum AutoFestivalMixWindow {
+    static func events(
+        dropAt: Double,
+        dropEnd: Double,
+        barSec: Double,
+        beatSec: Double,
+        protectedRanges: [(Double, Double)],
+        existing: [AutoSFXEvent] = []
+    ) -> [AutoSFXEvent] {
+        var sfx = existing
+        let takeOutEnd = dropAt
+        let attackLo = dropAt
+        let attackHi = dropAt + beatSec
+        let windowStart = max(0, takeOutEnd - max(2 * barSec, 4.0))
+
+        func alreadyHas(_ id: String, near t: Double, slack: Double = 0.12) -> Bool {
+            sfx.contains { $0.assetID == id && abs($0.timelineStart - t) < slack }
+        }
+        func overlapsProtected(start: Double, duration: Double) -> Bool {
+            let end = start + duration
+            if start < attackHi - 0.01 && end > attackLo + 0.01 { return true }
+            for (lo, hi) in protectedRanges {
+                if start < hi && end > lo { return true }
+            }
+            return false
+        }
+        func placeEnding(_ id: String, atEnd end: Double, purpose: String) {
+            guard let def = SoundEffectLibrary.definition(for: id) else { return }
+            // End exactly on the last pivot beat. Do not slide start forward
+            // (that pushes the tail onto Drop 1's first syllable and the
+            // overlap guard then drops the hit — a silent pre-drop).
+            let start = end - def.durationSeconds
+            guard start >= windowStart - 0.05, start >= -0.01 else { return }
+            if overlapsProtected(start: start, duration: def.durationSeconds) { return }
+            if alreadyHas(id, near: start, slack: 0.15) { return }
+            sfx.append(AutoSFXEvent(assetID: id, timelineStart: start, purpose: purpose))
+        }
+        func placeAt(_ id: String, t: Double, purpose: String) {
+            guard let def = SoundEffectLibrary.definition(for: id) else { return }
+            guard t >= dropAt + beatSec - 0.02, t < dropEnd - 0.08 else { return }
+            if overlapsProtected(start: t, duration: def.durationSeconds) { return }
+            if alreadyHas(id, near: t, slack: 0.12) { return }
+            sfx.append(AutoSFXEvent(assetID: id, timelineStart: t, purpose: purpose))
+        }
+
+        placeEnding("riser", atEnd: takeOutEnd, purpose: "riser take-out before the drop")
+        placeEnding("snareBuild", atEnd: takeOutEnd, purpose: "snare-roll take-out before the drop")
+        placeEnding("tapeStop", atEnd: takeOutEnd, purpose: "tape-stop take-out")
+        placeEnding("sweepUp", atEnd: takeOutEnd, purpose: "sweep-up take-out before the drop")
+        placeAt("airSweep", t: dropAt + beatSec, purpose: "air sweep after drop attack")
+        placeAt("bassDrop", t: dropAt + 0.5 * barSec, purpose: "bass-drop one-shot after the attack")
+        placeAt("impact", t: dropAt + barSec, purpose: "impact ride bar 2")
+        placeAt("clapFill", t: dropAt + 2 * barSec, purpose: "clap fill in the drop")
+        placeAt("sweepUp", t: dropAt + 3 * barSec, purpose: "sweep ride in the drop")
+        placeAt("impact", t: dropAt + 4 * barSec, purpose: "impact ride mid drop")
+        placeAt("airSweep", t: dropAt + 4 * barSec, purpose: "air sweep mid drop")
+        placeAt("clapFill", t: dropAt + 5 * barSec, purpose: "clap fill mid drop")
+        placeAt("clapFill", t: dropAt + 6 * barSec, purpose: "clap fill late drop")
+        placeAt("airSweep", t: dropAt + 7 * barSec, purpose: "air sweep late drop")
+        placeAt("impact", t: dropAt + 8 * barSec, purpose: "impact ride drop half")
+        return Array(sfx.dropFirst(existing.count))
+    }
+
+    static let festivalDetail =
+        "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+}
+
 // MARK: - Intentional Silence
 
 /// A deliberate gap the validator must not close (pre-drop pause, etc.).
@@ -259,11 +397,24 @@ struct AutoRemixPlan: Sendable {
     /// Structured record for EVERY internal cut (source discontinuity).
     /// A cut without a record here is invalid.
     var cutRecords: [AutoCutRecord] = []
-    /// Source range the one-song remix preserves (after evidence-based
-    /// edge trimming). nil for mashups.
+    /// Source range the one-song remix draws from after evidence-based
+    /// edge trimming. nil for mashups.
     var usableSourceRange: ClosedRange<Double>? = nil
     /// Deliberate micro-pauses / intentional silence the validator preserves.
+    /// Club remix uses this for the pre-drop void (hype = subtraction).
     var intentionalGaps: [AutoIntentionalGap] = []
+    /// Club pulse policy for the arrangement (one-kick rule).
+    var pulsePolicy: AutoClubPulse.Policy? = nil
+    /// Pulse regions on the timeline (mute kick in build-out / void / break).
+    var pulseRegions: [AutoClubPulse.Region] = []
+    /// Recipe flavor bias (Calvin / Guetta / … instincts).
+    var clubFlavor: AutoClubFlavor? = nil
+    /// Mashup: song chosen as Drop 1 sung hook (nil for one-song remix).
+    var mashupVocalSongID: UUID? = nil
+    /// Mashup: song chosen as Drop 2 flip hook (nil when unused).
+    var mashupDrop2SongID: UUID? = nil
+    /// Mashup: song chosen as the club bed (nil for one-song remix).
+    var mashupBedSongID: UUID? = nil
     /// Song-change count between consecutive dominant slots.
     var handoffCount: Int
     /// Arrangement letter per song (anchor = "A").
@@ -278,11 +429,74 @@ struct AutoRemixPlan: Sendable {
     var confidence: Double
     /// Retained for deterministic re-runs / debugging (not shown in the UI sheet).
     var randomSeed: UInt64
+    /// Resolved Demucs sidecars per song (empty → full-mix fallback).
+    var stemsBySongID: [UUID: AutoStemSet] = [:]
 
     nonisolated var beatSeconds: Double { 60.0 / max(targetBPM, 40) }
     nonisolated var barSeconds: Double { beatSeconds * 4 }
     /// One eighth note at the target tempo.
     nonisolated var eighthNoteSeconds: Double { beatSeconds * 0.5 }
+
+    /// Crate dump_gate greps `plan.decisions.prefix(16)`. Festival / wallpaper
+    /// used to append after every selectedAnchor, so mashup dumps looked
+    /// empty even when Drop 1 had the stack. Hoist them next to Drop 1.
+    mutating func promoteMixWindowDump() {
+        guard mode == .mashup else { return }
+        func isFestival(_ d: AutoDecision) -> Bool {
+            d.kind == .addedRiserIntoDrop
+                && (d.detail ?? "").localizedCaseInsensitiveContains("festival")
+                && (d.detail ?? "").localizedCaseInsensitiveContains("take-out")
+        }
+        func isWallpaper(_ d: AutoDecision) -> Bool {
+            d.kind == .pivotWallpaperLoop
+        }
+        func isDrop1Guest(_ d: AutoDecision) -> Bool {
+            d.kind == .selectedAnchor && (d.detail ?? "").contains("Drop 1 guest placed")
+        }
+        func isFestivalStamp(_ d: AutoDecision) -> Bool {
+            d.kind == .selectedAnchor
+                && (d.detail ?? "").localizedCaseInsensitiveContains("addedRiserIntoDrop")
+                && (d.detail ?? "").localizedCaseInsensitiveContains("festival")
+        }
+
+        var hot: [AutoDecision] = []
+        var drop1: AutoDecision?
+        decisions.removeAll { d in
+            if isFestival(d) || isWallpaper(d) {
+                hot.append(d)
+                return true
+            }
+            if isFestivalStamp(d) { return true }
+            if isDrop1Guest(d), drop1 == nil {
+                drop1 = d
+                return true
+            }
+            return false
+        }
+        var seen = Set<String>()
+        hot = hot.filter { d in
+            let key = "\(d.kind)|\(d.detail ?? "")"
+            if seen.contains(key) { return false }
+            seen.insert(key)
+            return true
+        }
+        if !hot.contains(where: isFestival) {
+            hot.insert(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: AutoFestivalMixWindow.festivalDetail
+                ),
+                at: 0
+            )
+        }
+        let rolesIdx = decisions.firstIndex { $0.kind == .assignedMashupRoles } ?? 0
+        let insertAt = min(rolesIdx + 1, decisions.count)
+        var block: [AutoDecision] = []
+        if let drop1 { block.append(drop1) }
+        block.append(contentsOf: hot)
+        decisions.insert(contentsOf: block, at: insertAt)
+    }
 }
 
 // MARK: - User-Facing Summary
@@ -318,30 +532,72 @@ struct AutoTuning: Sendable {
     var uniquenessWeight = 0.10
     var transitionWeight = 0.10
 
-    /// Max pitch-preserving tempo stretch for beatmatching (±).
-    var maxStretch = 0.08
+    /// Max pitch-preserving tempo stretch for beatmatching (±) — vocal gate.
+    var maxStretch = AutoClubTempo.maxVocalStretch
+    /// Instrumental / bed stretch preference for mashups.
+    var maxInstrumentalStretch = AutoClubTempo.maxInstrumentalStretch
     /// Supporting source gain during overlaps (≈ −7 dB).
     var supportVolume = 0.45
+    /// Duckier gain when two dense vocals share a drop (≈ −10 dB).
+    var duckedVocalSupportVolume = 0.32
+    /// Optional call-and-response overlay on a drop (bars). Hook-replace
+    /// is the default — dual vocals are not stacked for the full drop.
+    var vocalOverlayBars = 8
+    /// Bars into the drop before an optional call-and-response enters.
+    var vocalOverlayEntryBars = 0
+    /// When false (default), mashups are hook-replace: guest in, bed vocal
+    /// carved out. Set true only for an explicit ≤8-bar call-and-response.
+    var allowCallAndResponseOverlay = false
+    /// Mix window length in bars (last N of outgoing + first N of drop).
+    var mixWindowBars = 8
+    /// Max short echo-throw chops in one mix window (legacy; prefer pivot loop).
+    var maxMixWindowEchoThrows = 0
+    /// Bars of 1-beat pivot-grain wallpaper before hook-replace (Xirex move).
+    /// Default 2 bars = 8× quarter-note grains. Range 1–2 bars (4–8×).
+    /// 4-bar / 16× wallpaper is too long.
+    var pivotWallpaperBars = 2
+    /// Repeats of the 1-beat pivot grain (= bars × 4 when quarter-note).
+    var pivotWallpaperBeats: Int { max(4, min(8, clampedPivotWallpaperBars * 4)) }
+    /// Clamped wallpaper length: 1–2 bars.
+    var clampedPivotWallpaperBars: Int { max(1, min(2, pivotWallpaperBars)) }
+
+    /// Reserved mix-window length for the pivot loop (seconds).
+    func pivotWindowSeconds(barSec: Double) -> Double {
+        Double(clampedPivotWallpaperBars) * barSec
+    }
+    /// Grain-search lookback slightly wider than the reserved window.
+    func pivotLookbackSeconds(barSec: Double) -> Double {
+        pivotWindowSeconds(barSec: barSec) + barSec * 0.5
+    }
+    /// Optional bounce-harness stems root (`.../Stems/htdemucs_ft` or `.../Stems`).
+    var stemsRoot: URL? = nil
+    /// Test / harness override: song ID → sidecar URLs (no disk layout required).
+    var explicitStemsBySongID: [UUID: AutoStemSet] = [:]
     /// Minimum directional-compatibility score before Auto risks an overlap.
     var minOverlapScore = 0.55
-    /// Analysis confidence below this → safe fallback (crossfades only).
+    /// Analysis confidence below this → energy-curve club-ify without invented cuts.
     var lowConfidenceThreshold = 0.5
-    /// Max corrective pitch on a supporting overlap, semitones.
-    var maxCorrectivePitchSemitones = 3
-    /// Timeline budget for the arrangement.
+    /// Max corrective pitch on a supporting overlap / bed, semitones.
+    /// Mashup pitches the BED, not the star vocal — keep ≤ ~2.
+    var maxCorrectivePitchSemitones = 2
+    /// Timeline budget for the arrangement (streaming-length club rewrite).
     var maxTimelineSeconds = 232.0
     /// Longest unintended silence tolerated between clips (beats).
     /// 0.5 beat = one eighth note at the target BPM.
     var maxGapBeats = 0.5
-    /// Max length of a deliberate pre-drop pause (beats).
-    var maxIntentionalPauseBeats = 0.25
+    /// Max length of a deliberate pre-drop void (beats). Half-bar = 2.
+    var maxIntentionalPauseBeats = 2.0
+    /// Preferred pre-drop void length (beats) when confidence supports it.
+    var preferredPredropVoidBeats = 1.0
     /// Minimum clip segment length in timeline seconds (model minimum ≈3.7 s).
     var minSegmentSeconds: Double = MixrTimeline.seconds(fromUnits: MixrTimeline.minClipLengthUnits) + 0.05
 
-    /// Remix: seconds between major coordinated SFX moments (~2–4 / min).
-    var remixMajorSFXSpacing = 16.0
-    /// Mashup: sparser SFX — song changes already create excitement.
-    var mashupMajorSFXSpacing = 24.0
+    /// Remix: seconds between major coordinated SFX moments.
+    /// Festival club density — roughly one major moment every 4–8 bars
+    /// (~8–12s at house/midtempo), not a polite radio-edit drip.
+    var remixMajorSFXSpacing = 8.0
+    /// Mashup: still busy — song changes are not enough excitement alone.
+    var mashupMajorSFXSpacing = 12.0
 
     static let standard = AutoTuning()
 }

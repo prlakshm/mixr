@@ -7,7 +7,9 @@ import Foundation
 //
 // Turns a VALIDATED AutoRemixPlan into concrete MixrTrack clip arrays.
 // Songs keep their tracks (id, color, mix state); only clips are rebuilt.
-// The SFX track's clips are replaced by the plan's coordinated events.
+// SFX: clips are packed onto one or more SFX rows with per-row
+// nonOverlappingStart. Simultaneous hits (riser + impact + pulse) land on
+// adjacent SFX rows — same as a user dragging a one-shot up/down.
 // Returns the applied plan so the summary reflects skipped SFX / repairs.
 // The caller wraps the whole apply in one undo snapshot.
 
@@ -24,25 +26,99 @@ nonisolated enum AutoRemixApplier {
         var appliedPlan = plan
         let placementsBySong = Dictionary(grouping: plan.placements, by: \.songID)
         let arrangedSongIDs = Set(plan.placements.map(\.songID))
+        var stemTracksByParent: [UUID: [MixrTrack]] = [:]
 
         for ti in result.indices where !result[ti].isSFXTrack {
             let trackID = result[ti].id
             if let placements = placementsBySong[trackID] {
-                result[ti].clips = placements
+                let resolvedStems = plan.stemsBySongID[trackID]
+                    ?? AutoStemResolver.resolve(songURL: result[ti].url)
+                func stemURL(_ kind: AutoStemKind) -> URL? { resolvedStems.url(for: kind) }
+
+                let fullMix = placements.filter { p in
+                    guard let kind = p.stemKind else { return true }
+                    return stemURL(kind) == nil
+                }
+                result[ti].clips = fullMix
                     .sorted { $0.timelineStart < $1.timelineStart }
                     .map(makeClip)
+
+                var extras: [MixrTrack] = []
+                for kind in AutoStemKind.allCases {
+                    let kindPlacements = placements.filter { $0.stemKind == kind }
+                    guard !kindPlacements.isEmpty, let url = stemURL(kind) else { continue }
+                    let parent = result[ti]
+                    extras.append(
+                        MixrTrack(
+                            id: UUID(),
+                            title: "\(parent.title) · \(kind.rawValue)",
+                            artist: parent.artist,
+                            duration: parent.duration,
+                            durationSeconds: parent.durationSeconds,
+                            bpm: parent.bpm,
+                            key: parent.key,
+                            color: parent.color,
+                            volume: parent.volume,
+                            isMuted: false,
+                            url: url,
+                            artworkData: nil,
+                            clips: kindPlacements
+                                .sorted { $0.timelineStart < $1.timelineStart }
+                                .map(makeClip)
+                        )
+                    )
+                }
+                if !extras.isEmpty {
+                    stemTracksByParent[trackID] = extras
+                }
             } else if !result[ti].clips.isEmpty, !arrangedSongIDs.isEmpty {
                 // Song excluded by the planner (reported in warnings).
                 result[ti].clips = []
             }
         }
 
-        // ── SFX track: replace with the plan's events (skip unknowns) ──
+        let parentIDs = result.filter { !$0.isSFXTrack }.map(\.id)
+        for parentID in parentIDs.reversed() {
+            guard let extras = stemTracksByParent[parentID],
+                  let idx = result.firstIndex(where: { $0.id == parentID }) else { continue }
+            for (offset, extra) in extras.enumerated() {
+                result.insert(extra, at: idx + 1 + offset)
+            }
+        }
+
+        // Expand pulse regions into on-grid hits, then merge with musical SFX.
+        let pulseHits: [AutoSFXEvent]
+        if let policy = plan.pulsePolicy, !plan.pulseRegions.isEmpty {
+            pulseHits = AutoClubPulse.scheduleHits(
+                regions: plan.pulseRegions,
+                policy: policy,
+                beatSeconds: plan.beatSeconds,
+                barSeconds: plan.barSeconds,
+                halfTimeDrop: plan.clubFlavor?.bias.halfTimeDrop ?? false
+            ).map {
+                AutoSFXEvent(assetID: $0.assetID, timelineStart: $0.timelineStart, purpose: $0.purpose)
+            }
+        } else {
+            pulseHits = []
+        }
+        var allSFX = (plan.sfxEvents + pulseHits).sorted { $0.timelineStart < $1.timelineStart }
+
+        if appliedPlan.mode == .mashup {
+            allSFX.append(contentsOf: mashupFestivalEventsIfMissing(plan: appliedPlan, existing: allSFX))
+            allSFX.sort { $0.timelineStart < $1.timelineStart }
+        }
+
+        // Reset every SFX row, then pack exact-time hits across rows.
+        for ti in result.indices where result[ti].isSFXTrack {
+            result[ti].clips = []
+        }
+
         var placedSFX: [AutoSFXEvent] = []
-        if !plan.sfxEvents.isEmpty {
-            let idx = ensureSFXTrack(in: &result)
-            var clips: [MixrClip] = []
-            for event in plan.sfxEvents.sorted(by: { $0.timelineStart < $1.timelineStart }) {
+        if !allSFX.isEmpty {
+            if !result.contains(where: { $0.isSFXTrack }) {
+                result.append(SoundEffectLibrary.makeSFXTrack(primary: true))
+            }
+            for event in allSFX {
                 guard let definition = SoundEffectLibrary.definition(for: event.assetID) else {
                     appliedPlan.decisions.append(
                         AutoDecision(
@@ -56,70 +132,144 @@ nonisolated enum AutoRemixApplier {
                     )
                     continue
                 }
-                let start = SoundEffectLibrary.nonOverlappingStart(
-                    proposedStart: MixrTimeline.units(fromSeconds: max(0, event.timelineStart)),
-                    lengthUnits: definition.lengthUnits,
-                    in: clips
+                let unit = MixrTimeline.units(fromSeconds: max(0, event.timelineStart))
+                SoundEffectLibrary.placeExact(
+                    definition: definition,
+                    atUnit: unit,
+                    into: &result
                 )
-                clips.append(
-                    MixrClip(
-                        id: UUID(),
-                        start: start,
-                        length: definition.lengthUnits,
-                        soundEffectID: definition.id
-                    )
-                )
-                placedSFX.append(event)
+                if !SoundEffectLibrary.isPulseLayer(definition.id) {
+                    placedSFX.append(event)
+                }
             }
-            result[idx].clips = clips
-        } else if let idx = result.firstIndex(where: { $0.isSFXTrack }) {
-            result[idx].clips = []
+            // Drop unused empty spill lanes (keep the primary / top SFX row).
+            pruneEmptySecondarySFXTracks(&result)
+        } else {
+            pruneEmptySecondarySFXTracks(&result)
         }
 
         appliedPlan.sfxEvents = placedSFX
+        if appliedPlan.mode == .mashup {
+            let ids = Set(placedSFX.map(\.assetID))
+            let hasTakeOut = ids.contains("riser") || ids.contains("snareBuild") || ids.contains("tapeStop")
+            let hasRide = ids.contains("airSweep") || ids.contains("clapFill") || ids.contains("impact")
+            let hasFestival = appliedPlan.decisions.contains {
+                $0.kind == .addedRiserIntoDrop
+                    && ($0.detail ?? "").localizedCaseInsensitiveContains("festival")
+            }
+            if (hasTakeOut || hasRide), !hasFestival {
+                appliedPlan.decisions.append(
+                    AutoDecision(
+                        kind: .addedRiserIntoDrop,
+                        songTitle: nil,
+                        detail: AutoFestivalMixWindow.festivalDetail
+                    )
+                )
+            }
+            appliedPlan.promoteMixWindowDump()
+        }
         return Applied(tracks: result, plan: appliedPlan)
+    }
+
+    /// Drop 1 take-out + drop-ride on extra SFX rows when the planner list
+    /// was empty (dump-only) or validator stripped the payoff.
+    private static func mashupFestivalEventsIfMissing(
+        plan: AutoRemixPlan,
+        existing: [AutoSFXEvent]
+    ) -> [AutoSFXEvent] {
+        let musical = existing.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }
+        let ids = Set(musical.map(\.assetID))
+        let hasTakeOut = ids.contains("riser") && ids.contains("snareBuild") && ids.contains("tapeStop")
+        let hasRide = ids.contains("airSweep") && ids.contains("clapFill") && ids.contains("impact")
+        if hasTakeOut && hasRide { return [] }
+
+        let beatSec = plan.beatSeconds
+        let barSec = plan.barSeconds
+        let pulseDrop = plan.pulseRegions
+            .filter { $0.role == .drop }
+            .min(by: { $0.timelineStart < $1.timelineStart })
+        let joinEnd = plan.pulseRegions
+            .filter { $0.role == .buildOut }
+            .map(\.timelineEnd)
+            .min()
+        let grainJoin = plan.placements
+            .filter {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+            }
+            .map(\.timelineEnd)
+            .max()
+        guard let dropAt = pulseDrop?.timelineStart ?? joinEnd ?? grainJoin else { return [] }
+        let dropEnd = pulseDrop?.timelineEnd
+            ?? plan.placements
+                .filter { p in
+                    p.role == .dominant && abs(p.timelineStart - dropAt) < 0.2
+                }
+                .map(\.timelineEnd)
+                .max()
+            ?? (dropAt + 16 * barSec)
+        var protected: [(Double, Double)] = plan.pulseRegions.compactMap { r in
+            guard r.role == .groove || r.role == .introTease else { return nil }
+            guard r.timelineStart < dropAt - 0.25 else { return nil }
+            return (r.timelineStart, min(r.timelineEnd, r.timelineStart + 4))
+        }
+        if let title = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
+            protected.append((
+                title.timelineStart,
+                title.timelineStart + min(4, title.timelineDuration)
+            ))
+        }
+        return AutoFestivalMixWindow.events(
+            dropAt: dropAt,
+            dropEnd: dropEnd,
+            barSec: barSec,
+            beatSec: beatSec,
+            protectedRanges: protected,
+            existing: musical
+        )
+    }
+
+    /// Removes empty SFX spill lanes; keeps the first (top) SFX row even if empty.
+    private static func pruneEmptySecondarySFXTracks(_ tracks: inout [MixrTrack]) {
+        var seenPrimary = false
+        tracks.removeAll { track in
+            guard track.isSFXTrack else { return false }
+            if !seenPrimary {
+                seenPrimary = true
+                return false
+            }
+            return track.clips.isEmpty
+        }
     }
 
     // MARK: - Clip construction
 
     private static func makeClip(_ p: AutoClipPlacement) -> MixrClip {
-        MixrClip(
+        let units = MixrTimeline.units(fromSeconds: max(0.05, p.timelineDuration))
+        // Short supporting echo / stutter chops may sit below the global
+        // clip minimum so bounce WAVs hear the literal duplicate.
+        let isShortEcho = p.role == .supporting
+            && units < MixrTimeline.minClipLengthUnits
+            && (
+                p.overlapsPreviousSeconds > 0.05
+                    || p.effects.level(for: MixrEffect.echo.rawValue) >= 8
+                    || p.effects.level(for: MixrEffect.blur.rawValue) >= 36
+                    || p.fadeOut.type == .echoOut
+            )
+        let minUnits: CGFloat = isShortEcho
+            ? max(0.12, units)
+            : MixrTimeline.minClipLengthUnits
+        return MixrClip(
             id: UUID(),
             start: MixrTimeline.units(fromSeconds: p.timelineStart),
-            length: max(
-                MixrTimeline.minClipLengthUnits,
-                MixrTimeline.units(fromSeconds: p.timelineDuration)
-            ),
+            length: max(minUnits, units),
             playbackSpeed: p.tempoRatio,
             transitionIn: p.fadeIn,
             transitionOut: p.fadeOut,
-            volume: min(1, max(0, p.volume)),
+            volume: min(AutoGainPolicy.maxClipVolume, max(0, p.volume)),
             effects: AutoSupportedEffects.sanitize(p.effects),
             soundEffectID: nil,
             sourceOffsetSeconds: max(0, p.sourceStart)
         )
-    }
-
-    private static func ensureSFXTrack(in tracks: inout [MixrTrack]) -> Int {
-        if let idx = tracks.firstIndex(where: { $0.isSFXTrack }) { return idx }
-        tracks.append(
-            MixrTrack(
-                id: UUID(),
-                title: "Sound Effects",
-                artist: "Built-in SFX",
-                duration: "",
-                durationSeconds: nil,
-                bpm: nil,
-                key: nil,
-                color: .silver,
-                volume: 0.85,
-                isMuted: false,
-                trackType: .soundEffect,
-                url: nil,
-                artworkData: nil,
-                clips: []
-            )
-        )
-        return tracks.count - 1
     }
 }

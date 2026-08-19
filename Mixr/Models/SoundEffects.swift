@@ -20,6 +20,10 @@ enum SFXSynthesisType: String, Sendable {
     case bassDrop
     case tapeStop
     case airSweep
+    /// Four-on-the-floor kick for thin-song pulse / manual placement.
+    case clubKick
+    /// Bass/sub weight for thin-song pulse / manual placement.
+    case clubBass
 }
 
 // MARK: - Sound Effect Definition
@@ -47,6 +51,9 @@ struct SoundEffectDefinition: Identifiable, Equatable, Sendable {
 // MARK: - Library
 
 enum SoundEffectLibrary {
+    /// Full SFX menu — every built-in one-shot, including the club pulse
+    /// kick/bass that Auto Remix places on thin songs. Users can drag these
+    /// manually like any other SFX.
     nonisolated static let all: [SoundEffectDefinition] = [
         SoundEffectDefinition(id: "riser",          title: "Riser",          icon: "chart.line.uptrend.xyaxis",   durationSeconds: 4.0, assetName: "riser.wav",          synthesisType: .riser),
         SoundEffectDefinition(id: "downlifter",     title: "Downlifter",     icon: "chart.line.downtrend.xyaxis", durationSeconds: 2.0, assetName: "downlifter.wav",     synthesisType: .downlifter),
@@ -60,19 +67,36 @@ enum SoundEffectLibrary {
         SoundEffectDefinition(id: "bassDrop",       title: "Bass Drop",      icon: "arrow.down.to.line",          durationSeconds: 1.5, assetName: "bass_drop.wav",      synthesisType: .bassDrop),
         SoundEffectDefinition(id: "tapeStop",       title: "Tape Stop",      icon: "recordingtape",               durationSeconds: 1.0, assetName: "tape_stop.wav",      synthesisType: .tapeStop),
         SoundEffectDefinition(id: "airSweep",       title: "Air Sweep",      icon: "wind",                        durationSeconds: 2.0, assetName: "air_sweep.wav",      synthesisType: .airSweep),
+        SoundEffectDefinition(id: "clubKick",       title: "Club Kick",      icon: "circle.fill",                 durationSeconds: 0.18, assetName: "club_kick.wav",      synthesisType: .clubKick),
+        SoundEffectDefinition(id: "clubBass",       title: "Club Bass",      icon: "waveform.path",               durationSeconds: 0.28, assetName: "club_bass.wav",      synthesisType: .clubBass),
     ]
+
+    /// Pulse-layer ids Auto schedules on a dense beat grid (exact placement,
+    /// no collision slide). Same assets appear in `all` for the SFX menu.
+    nonisolated static let pulseLayerIDs: Set<String> = ["clubKick", "clubBass"]
 
     /// nonisolated: looked up by the background export renderer too.
     nonisolated static func definition(for id: String) -> SoundEffectDefinition? {
         all.first { $0.id == id }
     }
 
-    // MARK: - Collision-free placement
+    /// True for short pulse hits that must stay on the beat grid when Auto
+    /// places them (still first-class menu items for manual use).
+    nonisolated static func isPulseLayer(_ id: String) -> Bool {
+        pulseLayerIDs.contains(id)
+    }
 
-    /// Resolves a non-overlapping start on the SFX track:
+    // MARK: - Collision-free placement (per SFX row)
+
+    /// Resolves a non-overlapping start on ONE SFX track:
     /// starting at `proposedStart`, while the proposed range overlaps an
     /// existing clip, slide the start to the end of that clip and retry.
     /// Never returns a negative start.
+    ///
+    /// Clips on a single SFX row never overlap. To stack riser + impact +
+    /// pulse at the same time, place the colliding hit on an adjacent SFX
+    /// row (`placeExact` / Auto Remix extra tracks) — same as a user
+    /// dragging a one-shot up or down.
     static func nonOverlappingStart(
         proposedStart: CGFloat,
         lengthUnits: CGFloat,
@@ -98,5 +122,87 @@ enum SoundEffectLibrary {
         }
 
         return max(0, start)
+    }
+
+    /// True when `proposedStart` can host `lengthUnits` on this row without sliding.
+    static func fitsExactly(
+        proposedStart: CGFloat,
+        lengthUnits: CGFloat,
+        in clips: [MixrClip],
+        epsilon: CGFloat = MixrTimeline.clipEdgeEpsilon
+    ) -> Bool {
+        let want = max(0, proposedStart)
+        let resolved = nonOverlappingStart(
+            proposedStart: want,
+            lengthUnits: lengthUnits,
+            in: clips,
+            epsilon: epsilon
+        )
+        return abs(resolved - want) <= epsilon
+    }
+
+    /// Empty SFX timeline row (primary or spill lane). Extra lanes share the
+    /// SFX gradient in the UI but only the top row shows chip/headings.
+    static func makeSFXTrack(primary: Bool = true) -> MixrTrack {
+        MixrTrack(
+            id: UUID(),
+            title: primary ? "Sound Effects" : "Sound Effects",
+            artist: primary ? "Built-in SFX" : "",
+            duration: "",
+            durationSeconds: nil,
+            bpm: nil,
+            key: nil,
+            color: .silver,
+            volume: 0.85,
+            isMuted: false,
+            trackType: .soundEffect,
+            url: nil,
+            artworkData: nil,
+            clips: []
+        )
+    }
+
+    /// Places a one-shot at an exact timeline unit: first SFX row that fits
+    /// without sliding, else appends a new SFX row (editor-style stacking).
+    /// Returns the track index used.
+    @discardableResult
+    static func placeExact(
+        definition: SoundEffectDefinition,
+        atUnit unit: CGFloat,
+        into tracks: inout [MixrTrack],
+        clipID: UUID = UUID()
+    ) -> Int {
+        let want = max(0, unit)
+        let sfxIndices = tracks.indices.filter { tracks[$0].isSFXTrack }
+        for idx in sfxIndices {
+            if fitsExactly(
+                proposedStart: want,
+                lengthUnits: definition.lengthUnits,
+                in: tracks[idx].clips
+            ) {
+                tracks[idx].clips.append(
+                    MixrClip(
+                        id: clipID,
+                        start: want,
+                        length: definition.lengthUnits,
+                        soundEffectID: definition.id
+                    )
+                )
+                tracks[idx].clips.sort { $0.start < $1.start }
+                return idx
+            }
+        }
+        let primary = sfxIndices.isEmpty
+        tracks.append(makeSFXTrack(primary: primary))
+        let idx = tracks.count - 1
+        tracks[idx].clips.append(
+            MixrClip(
+                id: clipID,
+                start: want,
+                length: definition.lengthUnits,
+                soundEffectID: definition.id
+            )
+        )
+        return idx
     }
 }

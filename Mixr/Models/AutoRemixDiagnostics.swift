@@ -207,6 +207,56 @@ nonisolated enum AutoRemixDiagnostics {
         nonisolated var jumpDB: Double { abs(afterDB - beforeDB) }
     }
 
+    /// Mix-window energy immediately before an incoming song attacks.
+    struct MixWindowPreIncoming {
+        var incomingStart: Double
+        var establishedDB: Double
+        var preIncomingDB: Double
+        var incomingAttackDB: Double
+
+        /// How far RMS dropped in the last half-second before incoming, dB.
+        nonisolated var holeDB: Double { max(0, establishedDB - preIncomingDB) }
+
+        /// Dead air / fade-to-silence / both-sides duck before the new song.
+        /// Spectral thinning at full clip volume is not this — the mix must
+        /// actually collapse relative to the audio that was already playing.
+        nonisolated var isEnergyHole: Bool { holeDB >= 8.0 }
+    }
+
+    /// RMS in the mix window before `incomingStart` vs the established
+    /// level just earlier. A hole here is a failed song-switch join.
+    static func mixWindowPreIncoming(
+        samples: [Float],
+        sampleRate: Double,
+        incomingStart t: Double
+    ) -> MixWindowPreIncoming {
+        MixWindowPreIncoming(
+            incomingStart: t,
+            establishedDB: meanLoudnessDB(
+                samples: samples, sampleRate: sampleRate, from: t - 1.35, to: t - 0.55
+            ),
+            preIncomingDB: meanLoudnessDB(
+                samples: samples, sampleRate: sampleRate, from: t - 0.45, to: t - 0.02
+            ),
+            incomingAttackDB: meanLoudnessDB(
+                samples: samples, sampleRate: sampleRate, from: t + 0.02, to: t + 0.45
+            )
+        )
+    }
+
+    /// Timeline starts where a dominant clip of a *different* song takes over.
+    static func songSwitchIncomingStarts(placements: [AutoClipPlacement]) -> [Double] {
+        let dominants = placements
+            .filter { $0.role == .dominant }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        var starts: [Double] = []
+        for (prev, next) in zip(dominants, dominants.dropFirst()) where prev.songID != next.songID {
+            if starts.last.map({ abs($0 - next.timelineStart) < 0.05 }) == true { continue }
+            starts.append(next.timelineStart)
+        }
+        return starts
+    }
+
     /// Short-term loudness immediately before / across / after a
     /// transition boundary.
     static func boundaryLoudness(
@@ -348,6 +398,313 @@ nonisolated enum AutoRemixDiagnostics {
             }
         }
         return cuts
+    }
+
+    /// Complete hook / title line. Catalog teasers are 2–4 bars; a first
+    /// Deck A hook shorter than this is a sub-phrase chop.
+    static let minCompleteHookBars = 7.5
+    /// Opening title region (first “Oops” / first hook line).
+    static let titleRegionBars = 4.0
+
+    /// Deck A is the mashup bed, else the remix anchor.
+    static func firstDeckASongID(plan: AutoRemixPlan) -> UUID? {
+        plan.mashupBedSongID ?? plan.anchorSongIDs.first
+    }
+
+    /// First Deck A hook before Drop 1: the groove-pulse phrase after the
+    /// intro tease, not the intro itself and not Drop 1.
+    static func firstDeckAHookPlacement(plan: AutoRemixPlan) -> AutoClipPlacement? {
+        guard let deckA = firstDeckASongID(plan: plan) else { return nil }
+        let dropStart = plan.pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .min() ?? plan.targetDuration
+        let preDrop = plan.placements
+            .filter {
+                $0.songID == deckA
+                    && $0.role == .dominant
+                    && $0.timelineStart < dropStart - 0.05
+            }
+            .sorted { $0.timelineStart < $1.timelineStart }
+        guard !preDrop.isEmpty else { return nil }
+
+        let grooves = plan.pulseRegions.filter {
+            $0.role == .groove && $0.timelineStart < dropStart - 0.05
+        }
+        let inGroove = preDrop.filter { p in
+            grooves.contains { g in
+                p.timelineStart < g.timelineEnd - 0.05
+                    && p.timelineEnd > g.timelineStart + 0.05
+            }
+        }
+        if let hook = inGroove.max(by: { $0.timelineStart < $1.timelineStart }) {
+            return hook
+        }
+        // Intro + hook without groove tags: last pre-drop phrase is the hook.
+        if preDrop.count >= 2 { return preDrop.last }
+        return preDrop.first
+    }
+
+    /// True when the first Deck A hook starts on a repeated prechorus /
+    /// intro-glued 28% snap (~20s or ~40s on Oops) instead of the title chorus.
+    static func firstDeckAHookIsEarlyPrechorus(
+        plan: AutoRemixPlan,
+        prechorusStarts: [Double],
+        titleChorusStart: Double,
+        toleranceSeconds: Double = 4.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onPrechorus = prechorusStarts.contains { abs(hook.sourceStart - $0) < toleranceSeconds }
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onPrechorus && !onTitle
+    }
+
+    /// True when the first Deck A hook sources a late verse (Oops verse 2 ~78s)
+    /// instead of the first title chorus (~46s).
+    static func firstDeckAHookIsLateVerseTwo(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        verseTwoStart: Double,
+        toleranceSeconds: Double = 6.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onVerseTwo = abs(hook.sourceStart - verseTwoStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onVerseTwo && !onTitle
+    }
+
+    /// True when bed hook lands on mid-song verse 2 (~65.7s on real Oops crate).
+    static func firstDeckAHookIsMidSongVerseLift(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        midVerseStart: Double = 65.7,
+        toleranceSeconds: Double = 5.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onMid = abs(hook.sourceStart - midVerseStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onMid && !onTitle
+    }
+
+    /// True when bed hook is the 28% prechorus snap (~40.4s on Oops).
+    static func firstDeckAHookIsPrechorusSnap(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        prechorusStart: Double = 40.4,
+        toleranceSeconds: Double = 3.5
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onPre = abs(hook.sourceStart - prechorusStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onPre && !onTitle
+    }
+
+    /// True when bed hook starts on the chorus tail (~50.5s “oh baby baby” line).
+    static func firstDeckAHookIsChorusTail(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        chorusTailStart: Double = 50.5,
+        toleranceSeconds: Double = 3.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let onTail = abs(hook.sourceStart - chorusTailStart) < toleranceSeconds
+        let onTitle = abs(hook.sourceStart - titleChorusStart) < toleranceSeconds
+        return onTail && !onTitle
+    }
+
+    /// Pre-drop Deck A dominants overlapping the last 8 bars of A (mix window).
+    static func lastEightOfAPlacements(plan: AutoRemixPlan) -> [AutoClipPlacement] {
+        guard let deckA = firstDeckASongID(plan: plan) else { return [] }
+        guard let dropStart = firstDropStart(plan: plan) else { return [] }
+        let windowStart = dropStart - plan.barSeconds * 8
+        return plan.placements
+            .filter {
+                $0.songID == deckA
+                    && $0.role == .dominant
+                    && $0.timelineEnd > windowStart + 0.05
+                    && $0.timelineStart < dropStart - 0.05
+            }
+            .sorted { $0.timelineStart < $1.timelineStart }
+    }
+
+    /// True when last-8-of-A walks into verse 2 (16-bar linear from 45.5s → ~66s).
+    static func lastEightOfAWalksIntoVerseTwo(
+        plan: AutoRemixPlan,
+        titleChorusStart: Double,
+        verseTwoStart: Double = 65.7,
+        toleranceSeconds: Double = 6.0
+    ) -> Bool {
+        let hits = lastEightOfAPlacements(plan: plan)
+        guard !hits.isEmpty else { return false }
+        let onVerse = hits.contains { abs($0.sourceStart - verseTwoStart) < toleranceSeconds }
+        let onTitle = hits.contains { abs($0.sourceStart - titleChorusStart) < plan.barSeconds * 1.2 }
+        return onVerse && !onTitle
+    }
+
+    /// True when Drop 1 guest starts on BOMT verse/prechorus (need-to-know @39s,
+    /// confess @47s, mashability @47.1s) instead of “hit me” title downbeat ~60s.
+    static func guestDrop1MissesTitleDownbeat(
+        plan: AutoRemixPlan,
+        guestSongID: UUID,
+        titleChorusStart: Double,
+        maxBarsLate: Double = 1.25
+    ) -> Bool {
+        guard let dropStart = firstDropStart(plan: plan) else { return true }
+        guard let guest = plan.placements
+            .filter({
+                $0.songID == guestSongID && $0.role == .dominant
+                    && abs($0.timelineStart - dropStart) < 0.15
+            })
+            .min(by: { abs($0.timelineStart - dropStart) < abs($1.timelineStart - dropStart) })
+        else { return true }
+        return abs(guest.sourceStart - titleChorusStart) > plan.barSeconds * maxBarsLate
+    }
+
+    /// True when guest Drop 1 sources a late verse groove (BOMT loneliness
+    /// verse ~95s) instead of the first title chorus (~60s).
+    static func guestDrop1IsLateVerseGroove(
+        plan: AutoRemixPlan,
+        guestSongID: UUID,
+        titleChorusStart: Double,
+        lateVerseStart: Double,
+        toleranceSeconds: Double = 8.0
+    ) -> Bool {
+        guard let dropStart = firstDropStart(plan: plan) else { return false }
+        guard let guest = plan.placements
+            .filter({
+                $0.songID == guestSongID && $0.role == .dominant
+                    && abs($0.timelineStart - dropStart) < 0.15
+            })
+            .min(by: { abs($0.timelineStart - dropStart) < abs($1.timelineStart - dropStart) })
+        else { return false }
+        let onLate = abs(guest.sourceStart - lateVerseStart) < toleranceSeconds
+        let onTitle = abs(guest.sourceStart - titleChorusStart) < toleranceSeconds
+        return onLate && !onTitle
+    }
+
+    /// True when the first Deck A hook starts before the bed's first chorus
+    /// anchor — i.e. verse / pre-chorus apology, not a complete hook line.
+    static func firstDeckAHookSourcesBeforeChorus(
+        plan: AutoRemixPlan,
+        chorusAnchorSeconds: Double,
+        toleranceBars: Double = 1.0
+    ) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let bar = max(plan.barSeconds, 1e-6)
+        return hook.sourceStart + toleranceBars * bar < chorusAnchorSeconds - 0.05
+    }
+
+    /// True when the first Deck A hook is a sub-phrase slice of the opening
+    /// title (e.g. a 4-bar teaser of “Oops I did it again”). Complete 8-bar
+    /// title/hook lines are not chops.
+    static func firstDeckAHookIsSubPhraseTitleChop(plan: AutoRemixPlan) -> Bool {
+        guard let hook = firstDeckAHookPlacement(plan: plan) else { return false }
+        let bar = max(plan.barSeconds, 1e-6)
+        let subPhrase = hook.timelineDuration + 0.05 < bar * minCompleteHookBars
+        let inTitle = hook.sourceStart <= bar * titleRegionBars + 0.05
+        return subPhrase && inTitle
+    }
+
+    /// True when a 1-beat (or similar) pre-drop void is parked on this drop.
+    /// Pivot Drop 1 must not have one — that hole is the old quiet song-switch.
+    static func preDropVoidAt(plan: AutoRemixPlan, dropStart: Double, toleranceSeconds: Double = 0.08) -> Bool {
+        let gap = plan.intentionalGaps.contains {
+            $0.reason.localizedCaseInsensitiveContains("void")
+                && abs($0.end - dropStart) < toleranceSeconds
+        }
+        let pulse = plan.pulseRegions.contains {
+            $0.role == .void && abs($0.timelineEnd - dropStart) < toleranceSeconds
+        }
+        return gap || pulse
+    }
+
+    /// First pulse Drop 1, if the plan wrote one.
+    static func firstDropStart(plan: AutoRemixPlan) -> Double? {
+        plan.pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .min()
+    }
+
+    /// True when Drop 1 has a pivot wallpaper loop (decision or 1-beat grains).
+    static func drop1HasPivotWallpaper(plan: AutoRemixPlan) -> Bool {
+        guard let dropStart = firstDropStart(plan: plan) else { return false }
+        if plan.decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) {
+            return true
+        }
+        let beat = plan.beatSeconds
+        let grains = plan.placements.filter {
+            $0.role == .supporting
+                && abs($0.timelineDuration - beat) < beat * 0.35
+                && $0.timelineStart >= dropStart - plan.barSeconds * 2.5
+                && $0.timelineStart < dropStart - 0.02
+        }
+        return grains.count >= 4
+    }
+
+    /// Pulse Drop starts (Drop 1, Drop 2, …), earliest first.
+    static func clubDropStarts(plan: AutoRemixPlan) -> [Double] {
+        plan.pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .sorted()
+    }
+
+    /// True when this timeline instant is a club drop attack (Drop 1 or Drop 2).
+    static func incomingIsClubDrop(
+        pulseRegions: [AutoClubPulse.Region],
+        timelineStart: Double,
+        toleranceSeconds: Double = 0.08
+    ) -> Bool {
+        pulseRegions.contains {
+            $0.role == .drop && abs($0.timelineStart - timelineStart) < toleranceSeconds
+        }
+    }
+
+    static func isEqualPowerMasking(_ masking: AutoCutMasking) -> Bool {
+        if case .equalPowerCrossfade = masking { return true }
+        return false
+    }
+
+    /// True when a club drop was rewritten into an equal-power fade-in.
+    /// Killing the Drop 2 void without this gate produced a ~10 dB energy dive
+    /// (`masking=equal-power crossfade`) on the same-song hook return.
+    static func clubDropHasEqualPowerFade(plan: AutoRemixPlan) -> Bool {
+        let starts = clubDropStarts(plan: plan)
+        let masked = plan.cutRecords.contains { rec in
+            starts.contains { abs($0 - rec.timelineAt) < 0.1 }
+                && isEqualPowerMasking(rec.masking)
+        }
+        let fadedIn = plan.placements.contains { p in
+            p.role == .dominant
+                && incomingIsClubDrop(pulseRegions: plan.pulseRegions, timelineStart: p.timelineStart)
+                && p.fadeIn.type != .none
+                && p.fadeIn.duration > 0.02
+        }
+        return masked || fadedIn
+    }
+
+    /// True when the planner emitted a quiet void on a pivoted Drop 1 join.
+    /// Crate bounce treats `pivotWallpaperLoop` + `allowedPredropVoid` /
+    /// any intentional gap as that hole — not only a gap whose end matches
+    /// Drop 1's pulse time.
+    static func pivotJoinHasQuietVoid(plan: AutoRemixPlan) -> Bool {
+        guard drop1HasPivotWallpaper(plan: plan) else { return false }
+        if let drop1 = firstDropStart(plan: plan),
+           preDropVoidAt(plan: plan, dropStart: drop1) {
+            return true
+        }
+        if plan.decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) {
+            if plan.decisions.contains(where: { $0.kind == .allowedPredropVoid }) {
+                return true
+            }
+            if plan.intentionalGaps.contains(where: {
+                $0.reason.localizedCaseInsensitiveContains("void")
+            }) {
+                return true
+            }
+        }
+        return false
     }
 
     /// True when dominant placements consume the source in strictly

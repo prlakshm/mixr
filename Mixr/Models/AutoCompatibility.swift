@@ -99,13 +99,16 @@ nonisolated enum AutoTempo {
         return Fit(ratio: 1.0, gridAligned: false, halfOrDoubleTime: false)
     }
 
-    /// Target BPM: the anchor's tempo when most songs can lock to it,
-    /// otherwise the median of the songs' tempos — always favoring
-    /// minimal total stretching.
+    /// Target BPM for a multi-song set: prefer a shared pocket, otherwise
+    /// the anchor when most songs can lock, otherwise the median.
     static func targetBPM(profiles: [AutoSongProfile], anchorID: UUID, maxStretch: Double) -> Double {
         let bpms = profiles.map(\.analysis.bpm)
         guard let anchorBPM = profiles.first(where: { $0.songID == anchorID })?.analysis.bpm else {
             return bpms.sorted()[bpms.count / 2]
+        }
+        if let pocket = AutoClubTempo.classify(anchorBPM) {
+            let samePocket = bpms.filter { AutoClubTempo.classify($0) == pocket }
+            if samePocket.count >= max(1, bpms.count / 2) { return anchorBPM }
         }
         let locked = bpms.filter { fit(songBPM: $0, targetBPM: anchorBPM, maxStretch: maxStretch).gridAligned }
         if Double(locked.count) >= Double(bpms.count) * 0.5 { return anchorBPM }
@@ -117,10 +120,12 @@ nonisolated enum AutoTempo {
 
 /// Directional pairing verdict: how well `support` works UNDER `dominant`.
 /// A ↦ B and B ↦ A are evaluated independently — a vocal-heavy section
-/// can ride over a sparse groove even when the reverse pairing fails.
+/// can ride over a sparse groove even when the reverse pairing fails
+/// (COCOLA / AutoMashup 2025 directional compatibility).
 struct AutoDirectionalCompat: Sendable {
     var score: Double
     /// Corrective pitch to apply to the SUPPORTING side, semitones.
+    /// AutoMashUpper: pitch/stretch the bed, not the star vocal.
     var pitchCorrectionSemitones: Int
     /// Recommended overlap length; 0 = use a clean phrase-aligned handoff.
     var overlapBars: Int
@@ -136,7 +141,7 @@ nonisolated enum AutoCompatibility {
         targetBPM: Double,
         tuning: AutoTuning
     ) -> AutoDirectionalCompat {
-        // Harmonic: allow small corrective shifts on the support side only.
+        // Harmonic (AutoMashUpper chroma × key transposition proxy via Camelot).
         let keyA = AutoKey.parse(dominantProfile.analysis.key)
         let keyB = AutoKey.parse(supportProfile.analysis.key)
         let harmonic = AutoKey.bestCorrection(keyA, keyB, maxShift: tuning.maxCorrectivePitchSemitones)
@@ -146,10 +151,12 @@ nonisolated enum AutoCompatibility {
         let fitB = AutoTempo.fit(songBPM: supportProfile.analysis.bpm, targetBPM: targetBPM, maxStretch: tuning.maxStretch)
         let tempoScore: Double = (fitA.gridAligned && fitB.gridAligned) ? 1.0 : 0.25
 
-        // Vocal collision: one dominant vocal source at a time.
-        let vocalScore = max(0, 1 - max(0, dominant.vocal + support.vocal - 1.1))
+        // Vocal collision: complementary vocals may share midrange; only
+        // extreme double-dense verses score poorly (planner ducks those).
+        let vocalScore = max(0.35, 1 - max(0, dominant.vocal + support.vocal - 1.35))
 
-        // Bass collision: two bass-heavy drops can't share the low end.
+        // Bass collision / spectral balance (AutoMashUpper): two bass-heavy
+        // drops can't share the low end.
         let bothDrops = dominant.label == .chorus && support.label == .chorus
         let bassLoad = dominantProfile.analysis.bassDensity + supportProfile.analysis.bassDensity
         let bassScore: Double = bothDrops && bassLoad > 1.3 ? 0.3 : 1.0
@@ -168,6 +175,7 @@ nonisolated enum AutoCompatibility {
         var overlapBars = 0
         if weighted >= tuning.minOverlapScore, fitA.gridAligned, fitB.gridAligned,
            confidence >= tuning.lowConfidenceThreshold {
+            // Mixxx AutoDJ: similar BPM → longer phrase overlap when strong.
             overlapBars = weighted >= 0.72 ? 2 : 1
         }
 
@@ -180,5 +188,89 @@ nonisolated enum AutoCompatibility {
             pitchCorrectionSemitones: overlapBars > 0 ? correction : 0,
             overlapBars: overlapBars
         )
+    }
+}
+
+// MARK: - N-song mashup hook gates
+
+/// How an added song may appear over the club bed.
+nonisolated enum AutoMashupHookGate: String, Sendable {
+    /// Full 8–16 bar vocal hook on a drop or cameo island.
+    case fullHook
+    /// Short teaser / chop only (key or stretch is borderline).
+    case cameoChop
+    /// Do not place as a lead vocal.
+    case skip
+}
+
+nonisolated enum AutoMashupCompat {
+
+    struct Verdict: Sendable {
+        var gate: AutoMashupHookGate
+        var keyScore: Double
+        var vocalRatio: Double
+        var detail: String
+    }
+
+    /// Per-added-song compatibility vs the chosen club bed.
+    static func hookGate(
+        hook: AutoSongProfile,
+        bed: AutoSongProfile,
+        targetBPM: Double,
+        tuning: AutoTuning
+    ) -> Verdict {
+        // Prefer Camelot same / ±1 / relative (via AutoKey.score + ≤2 st fix).
+        let key = AutoKey.bestCorrection(
+            AutoKey.parse(bed.analysis.key),
+            AutoKey.parse(hook.analysis.key),
+            maxShift: min(2, tuning.maxCorrectivePitchSemitones)
+        )
+        let fit = AutoTempo.fit(
+            songBPM: hook.analysis.bpm,
+            targetBPM: targetBPM,
+            maxStretch: tuning.maxStretch
+        )
+        let stretchOK = fit.gridAligned && abs(fit.ratio - 1) <= tuning.maxStretch + 0.0001
+        let liftRatio = AutoClubTempo.clubHouseLiftRatio(
+            songBPM: hook.analysis.bpm, targetBPM: targetBPM
+        )
+        let vocalRatio = liftRatio ?? (stretchOK ? fit.ratio : 1.0)
+        let tempoOK = stretchOK || liftRatio != nil
+
+        if key.score < 0.40 {
+            return Verdict(gate: .skip, keyScore: key.score, vocalRatio: 1, detail: "key clash beyond Camelot neighborhood / ±2 st")
+        }
+        if !tempoOK {
+            // Far stretch — allow a short chop at native tempo only if key is OK.
+            if key.score >= 0.5 {
+                return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: 1,
+                               detail: "stretch gate failed — cameo chop at native tempo")
+            }
+            return Verdict(gate: .skip, keyScore: key.score, vocalRatio: 1, detail: "stretch would wreck the vocal")
+        }
+        if key.score < 0.5 {
+            return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: vocalRatio,
+                           detail: "weak Camelot — short cameo only")
+        }
+        if abs(key.shiftSemitones) > 2 {
+            return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: vocalRatio,
+                           detail: "vocal pitch would exceed ±2 st — cameo only")
+        }
+        return Verdict(
+            gate: .fullHook,
+            keyScore: key.score,
+            vocalRatio: vocalRatio,
+            detail: liftRatio != nil
+                ? "full hook over bed (club-lift into house)"
+                : "full hook over bed"
+        )
+    }
+
+    /// True when a guest should land in the breakdown runway (ballad / low energy
+    /// against a peak-time bed) rather than a slam drop.
+    static func needsBreakdownRunway(guest: AutoSongProfile, bed: AutoSongProfile) -> Bool {
+        let guestE = guest.analysis.meanEnergy(from: 0, to: guest.analysis.durationSeconds)
+        let bedE = bed.analysis.meanEnergy(from: 0, to: bed.analysis.durationSeconds)
+        return guestE < 0.45 && bedE > 0.65
     }
 }

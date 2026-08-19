@@ -5,6 +5,7 @@
 #   Scripts/run_auto_remix_tests.sh            # run all harnesses
 #   Scripts/run_auto_remix_tests.sh pipeline   # plan-legality tests only
 #   Scripts/run_auto_remix_tests.sh render     # rendered-PCM quality tests only
+#   Scripts/run_auto_remix_tests.sh golden     # perceptual golden tier
 #
 # Works on macOS (xcrun swiftc) and Linux (swiftc on PATH or $SWIFT_BIN).
 set -euo pipefail
@@ -26,11 +27,19 @@ SOURCES=(
   "$ROOT/Mixr/Models/MixrTrack.swift"
   "$ROOT/Mixr/Models/SongAnalysis.swift"
   "$ROOT/Mixr/Models/SongSignalAnalysis.swift"
+  "$ROOT/Mixr/Models/AutoChorusIsland.swift"
   "$ROOT/Mixr/Models/SoundEffects.swift"
+  "$ROOT/Mixr/Models/AutoClubTempo.swift"
+  "$ROOT/Mixr/Models/AutoClubPulse.swift"
+  "$ROOT/Mixr/Models/AutoClubFlavor.swift"
   "$ROOT/Mixr/Models/AutoCompatibility.swift"
+  "$ROOT/Mixr/Models/AutoMashability.swift"
+  "$ROOT/Mixr/Models/AutoPivotWord.swift"
+  "$ROOT/Mixr/Models/AutoStemSidecar.swift"
   "$ROOT/Mixr/Models/AutoSectionCatalog.swift"
   "$ROOT/Mixr/Models/AutoRemixPlan.swift"
   "$ROOT/Mixr/Models/AutoRemixPlanner.swift"
+  "$ROOT/Mixr/Models/AutoJoinEngine.swift"
   "$ROOT/Mixr/Models/AutoRemixValidator.swift"
   "$ROOT/Mixr/Models/AutoRemixApplier.swift"
   "$ROOT/Mixr/Models/AutoRemixRunner.swift"
@@ -65,4 +74,16 @@ fi
 
 if [[ "$WHICH" == "render" || "$WHICH" == "all" ]]; then
   run_harness "$ROOT/DevTests/AutoRemixRenderQualityTests.swift" /tmp/mixr_auto_render_tests
+fi
+
+if [[ "$WHICH" == "club" || "$WHICH" == "all" ]]; then
+  run_harness "$ROOT/DevTests/AutoClubRemixTests.swift" /tmp/mixr_auto_club_tests
+fi
+
+if [[ "$WHICH" == "join" || "$WHICH" == "all" ]]; then
+  run_harness "$ROOT/DevTests/AutoJoinEngineTests.swift" /tmp/mixr_auto_join_tests
+fi
+
+if [[ "$WHICH" == "golden" || "$WHICH" == "all" ]]; then
+  run_harness "$ROOT/DevTests/AutoRemixGoldenTests.swift" /tmp/mixr_auto_golden_tests
 fi

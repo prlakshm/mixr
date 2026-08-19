@@ -506,6 +506,7 @@ struct SFXLibraryPanel: View {
     private static let displayOrder: [String] = [
         "riser", "downlifter", "impact",
         "crash", "snareBuild", "clapFill",
+        "clubKick", "clubBass",
     ]
 
     private static var orderedEffects: [SoundEffectDefinition] {

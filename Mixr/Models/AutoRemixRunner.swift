@@ -38,8 +38,13 @@ enum AutoRemixRunner {
         tracks: [MixrTrack],
         tuning: AutoTuning = .standard,
         seed: UInt64 = UInt64(Date().timeIntervalSince1970),
-        signals: [UUID: SongSignalFeatures] = [:]
+        signals: [UUID: SongSignalFeatures] = [:],
+        stemsRoot: URL? = nil
     ) -> Outcome {
+        var tuning = tuning
+        if let stemsRoot {
+            tuning.stemsRoot = stemsRoot
+        }
         let songTracks = tracks.filter { !$0.isSFXTrack && !$0.clips.isEmpty }
         guard !songTracks.isEmpty else {
             return .failure(message: "Add at least one song clip before running Auto on the entire project.")

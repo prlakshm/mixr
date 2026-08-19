@@ -63,8 +63,30 @@ struct AutoSongProfile: Sendable {
     let anchorScore: Double
     /// Fit as the vocal/hook feature.
     let featureScore: Double
+    /// Offline Demucs sidecars when present (empty → full mix).
+    var stems: AutoStemSet = .empty
+    /// Kick/drum energy measured from the drums stem (nil if unread).
+    /// Bed/hook scoring keeps full-mix `drumStrength`. Pulse reads
+    /// `pulseDrumStrength` — thin full-mix is never overridden by a loud stem.
+    var stemDrumStrength: Double? = nil
 
     var lowConfidence: Bool { analysis.analysisConfidence < AutoTuning.standard.lowConfidenceThreshold }
+
+    /// One-kick pulse input. Full-mix drum strength owns the decision when the
+    /// source is thin — a loud Demucs drums.wav must not skip pulse on sparse
+    /// pop (stupid song). Stem only raises the reading when full-mix is already
+    /// mid/strong (Britney-class beds stay no-pulse).
+    var pulseDrumStrength: Double {
+        let full = analysis.drumStrength
+        let stem = stemDrumStrength ?? 0
+        if full < AutoClubPulse.thinDrumThreshold {
+            return full
+        }
+        if full >= AutoClubPulse.slammingDrumThreshold {
+            return max(full, stem)
+        }
+        return max(full, stem * 0.35)
+    }
 
     /// Best unused candidate for a label, by SectionValue. `used` ranges
     /// are (start, end) source intervals already placed; overlap > 50%
@@ -104,7 +126,25 @@ enum AutoSectionCatalog {
         tuning: AutoTuning = .standard,
         signal: SongSignalFeatures? = nil
     ) -> AutoSongProfile {
-        let analysis = SongAnalyzer.analyze(track: track, signal: signal)
+        let stems = AutoStemResolver.resolve(track: track, tuning: tuning)
+        let withVocals = stems.vocals.map { vocalsURL in
+            AutoStemVocalCurve.merge(
+                into: signal,
+                vocalsURL: vocalsURL,
+                durationHint: track.durationSeconds,
+                bpmHint: track.bpm.map(Double.init)
+            )
+        } ?? signal
+        let enrichedSignal = AutoLyricSidecar.merge(
+            into: withVocals,
+            lyricsURL: stems.lyrics,
+            title: track.title
+        ) ?? withVocals
+        let analysis = SongAnalyzer.analyze(track: track, signal: enrichedSignal)
+        let stemDrumStrength = AutoStemKickEnergy.drumStrength(from: stems.drums)
+        // Do not overwrite analysis.drumStrength — bed/hook scoring and the
+        // Britney title/groove lock must keep full-mix curves. Pulse reads
+        // stemDrumStrength separately.
         let bar = analysis.barSeconds
         let duration = analysis.durationSeconds
         let confidence = analysis.analysisConfidence
@@ -154,13 +194,30 @@ enum AutoSectionCatalog {
 
         // ── Choruses / drops: the payoff material ──
         for (i, chorus) in analysis.chorusOrDropCandidates.enumerated() {
-            let hookScore = 0.92 - Double(i) * 0.06
+            let localEnergy = analysis.meanEnergy(from: chorus.startSeconds, to: chorus.endSeconds)
+            let localVocal = analysis.meanVocalDensity(from: chorus.startSeconds, to: chorus.endSeconds)
+            let rise: Double
+            if let signal = analysis.signal, AutoChorusIsland.hasUsableEnergyShape(signal) {
+                let after = AutoChorusIsland.mean(
+                    signal.energyCurve, hop: signal.hopSeconds,
+                    from: chorus.startSeconds, to: chorus.startSeconds + 4
+                )
+                let before = AutoChorusIsland.mean(
+                    signal.energyCurve, hop: signal.hopSeconds,
+                    from: chorus.startSeconds - 4, to: chorus.startSeconds
+                )
+                rise = max(0, after - before)
+            } else {
+                rise = 0
+            }
+            // Measured lift outranks catalog order (`.first` used to win at 0.92).
+            let hookScore = min(1, 0.48 + localEnergy * 0.22 + localVocal * 0.12 + rise * 0.28 - Double(i) * 0.02)
             add(.chorus, start: chorus.startSeconds, bars: 8, hook: hookScore, uniqueness: 0.85, transitionUse: 0.55)
             if chorus.durationSeconds >= bar * 15 {
                 add(.chorus, start: chorus.startSeconds, bars: 16, hook: hookScore, uniqueness: 0.8, transitionUse: 0.45)
             }
             // Teaser: the first 4 bars of the hook — instant recognizability.
-            add(.teaser, start: chorus.startSeconds, bars: 4, hook: min(1, hookScore + 0.06), uniqueness: 0.7, transitionUse: 0.9)
+            add(.teaser, start: chorus.startSeconds, bars: 4, hook: min(1, hookScore + 0.04), uniqueness: 0.7, transitionUse: 0.9)
         }
 
         // ── Pre-chorus builds ──
@@ -208,7 +265,9 @@ enum AutoSectionCatalog {
             analysis: analysis,
             candidates: candidates,
             anchorScore: anchorScore,
-            featureScore: featureScore
+            featureScore: featureScore,
+            stems: stems,
+            stemDrumStrength: stemDrumStrength
         )
     }
 }

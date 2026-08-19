@@ -383,6 +383,59 @@ check(
         )
 )
 
+let playbackSource = try! String(
+    contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("Mixr/Models/MixrPlaybackEngine.swift"),
+    encoding: .utf8
+)
+let exportSource = try! String(
+    contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("Mixr/Models/MixrExportRenderer.swift"),
+    encoding: .utf8
+)
+let soundEffectsSource = try! String(
+    contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("Mixr/Models/SoundEffects.swift"),
+    encoding: .utf8
+)
+let applierSource = try! String(
+    contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("Mixr/Models/AutoRemixApplier.swift"),
+    encoding: .utf8
+)
+
+check(
+    "Extra SFX rows have no extra header chrome (top row owns chip)",
+    timelineSource.contains("showsSFXChrome:")
+        && timelineSource.contains("isSFXSpillLane")
+        && timelineSource.contains("Spill SFX rows: gradient only")
+        && timelineSource.contains("primarySFXID")
+)
+
+check(
+    "SFX packing keeps per-row nonOverlappingStart and placeExact spill lanes",
+    soundEffectsSource.contains("static func placeExact(")
+        && soundEffectsSource.contains("static func fitsExactly(")
+        && soundEffectsSource.contains("static func nonOverlappingStart(")
+        && applierSource.contains("SoundEffectLibrary.placeExact(")
+        && !applierSource.contains("overlappingStart")
+)
+
+check(
+    "Playback mixes every SFX track (not first-only)",
+    playbackSource.contains("sfxChains")
+        && playbackSource.contains("for sfxTrack in snapshot where sfxTrack.isSFXTrack")
+        && !playbackSource.contains("first(where: { $0.isSFXTrack })")
+        && playbackSource.contains("ensureSFXChain(trackID:")
+)
+
+check(
+    "Export mixes every SFX track (not first-only)",
+    exportSource.contains("sfxPlayers")
+        && exportSource.contains("for sfxTrack in tracks where sfxTrack.isSFXTrack")
+        && !exportSource.contains("first(where: { $0.isSFXTrack })")
+)
+
 if failures > 0 {
     exit(1)
 }

@@ -31,6 +31,11 @@ struct ClipTransition: Equatable, Sendable, Codable {
     }
 
     nonisolated static let none = ClipTransition()
+
+    /// Hard cut: type none with **zero** fade duration. `.none` still defaults
+    /// to duration 0.5 (UI / legacy), which dumps as fadeDur=0.50 and is not
+    /// a hard cut.
+    nonisolated static let hardCut = ClipTransition(type: .none, duration: 0)
 }
 
 enum GripSide: Equatable {

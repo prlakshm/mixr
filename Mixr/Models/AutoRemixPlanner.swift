@@ -4,11 +4,9 @@ import Foundation
 //
 // Generates an AutoRemixPlan from the project's songs:
 //
-//   1 song   → REMIX: rearranged hook-forward edit with hype SFX
-//   2 songs  → MASHUP: A → B → A → B → A (roles switch, ≥3 handoffs)
-//   3 songs  → MASHUP: A → B → A → C → B → C → A
-//   4 songs  → MASHUP: A → B → C → A → D → B → C → A
-//   5+ songs → MASHUP: anchor-and-rotation (A → B → C → A → D → E → B → A …)
+//   1 song   → REMIX: club phrase-grid rewrite + thin-song pulse
+//   2…5 songs → MASHUP: one club bed + rotating hooks on the two-wave
+//                club shape; complementary vocal stacks on drops OK
 //
 // Every handoff picks ONE primary transition recipe; SFX arrive as
 // coordinated events (riser + impact = one moment); low-confidence songs
@@ -31,6 +29,9 @@ enum AutoRemixPlanner {
         /// Shrink priority when the arrangement exceeds the timeline budget
         /// (higher shrinks first).
         var shrinkPriority = 1
+        /// Repeat the same ~8-bar title chorus (do not walk 16 source bars
+        /// into verse 2). Timeline still fills 16 bars before Drop 1.
+        var holdTitleChorus = false
     }
 
     private struct PlacedSlot {
@@ -68,7 +69,7 @@ enum AutoRemixPlanner {
         }
         guard let plan else { return nil }
 
-        let byID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.songID, $0) })
+        let byID = Dictionary(profiles.map { ($0.songID, $0) }, uniquingKeysWith: { first, _ in first })
         return (plan, byID)
     }
 
@@ -147,15 +148,12 @@ enum AutoRemixPlanner {
         return out
     }
 
-    // MARK: - Remix (one song, preservation-first)
+    // MARK: - Remix (one song → streaming-length club rewrite)
     //
-    // A one-song Auto Remix PRESERVES the song: one continuous placement
-    // covering the usable source range, trimmed only where measured
-    // evidence shows silence at the edges. Internal cuts default to ZERO;
-    // any cut requires signal evidence, a structured AutoCutRecord, and
-    // an audible masking layer — never a cut for variety. Effects ride on
-    // source-continuous segment splits, not structural edits. When
-    // analysis confidence is low the result is a nearly untouched song.
+    // Rebuild onto an 8/16/32-bar phrase grid with a two-wave club shape:
+    // intro → groove → build → drop 1 → breakdown → build 2 → drop 2 → outro.
+    // Hype is subtraction then a downbeat — intentional pre-drop voids are
+    // allowed. Thin songs get a pulse; slamming kits never get a second kick.
 
     private static func remixPlan(
         profile: AutoSongProfile,
@@ -166,17 +164,17 @@ enum AutoRemixPlanner {
         let analysis = profile.analysis
         let duration = analysis.durationSeconds
         guard duration > 1 else { return nil }
-        let bpm = analysis.bpm
-        let beat = 60.0 / max(bpm, 40)
-        let bar = beat * 4
 
         var decisions: [AutoDecision] = [
-            AutoDecision(kind: .selectedAnchor, songTitle: profile.title, detail: "remix — preservation-first")
+            AutoDecision(kind: .selectedAnchor, songTitle: profile.title, detail: "club remix rewrite")
         ]
         var warnings: [String] = []
 
         let signal = analysis.signal
         let signalTrusted = (signal?.overallConfidence ?? 0) >= 0.4
+        let confident = signalTrusted
+            && analysis.analysisConfidence >= tuning.lowConfidenceThreshold
+            && (signal?.beatConfidence ?? (analysis.bpmIsReal ? 1.0 : 0.0)) > 0.35
 
         // ── Usable range: trim only MEASURED edge silence ──
         var usableStart = 0.0
@@ -209,144 +207,969 @@ enum AutoRemixPlanner {
             warnings.append("Edge trimming would have removed too much material; kept the full source.")
         }
 
-        // Timeline budget: trim the END, never chop the middle.
-        var trimmedForBudget = false
-        if usableEnd - usableStart > tuning.maxTimelineSeconds {
-            usableEnd = usableStart + tuning.maxTimelineSeconds
-            trimmedForBudget = true
+        let meanVocal = analysis.meanVocalDensity(from: usableStart, to: usableEnd)
+        let tempo = AutoClubTempo.remixDecision(
+            songBPM: analysis.bpm,
+            vocalHeavy: meanVocal > 0.55,
+            maxVocalStretch: tuning.maxStretch,
+            maxInstrumentalStretch: tuning.maxInstrumentalStretch
+        )
+        decisions.append(
+            AutoDecision(kind: .choseClubTempo, songTitle: profile.title, detail: tempo.detail)
+        )
+
+        let flavor = AutoClubFlavor.choose(
+            drumStrength: analysis.drumStrength,
+            bassDensity: analysis.bassDensity,
+            vocalDensity: meanVocal,
+            bpm: tempo.targetBPM,
+            seed: seed
+        )
+        decisions.append(
+            AutoDecision(kind: .choseClubFlavor, songTitle: profile.title, detail: flavor.rawValue)
+        )
+
+        let pulse = AutoClubPulse.policy(
+            drumStrength: profile.pulseDrumStrength,
+            bassDensity: analysis.bassDensity,
+            bpm: analysis.bpm,
+            analysisConfidence: analysis.analysisConfidence
+        )
+        if AutoClubPulse.violatesOneKickRule(policy: pulse) {
+            // Defensive — policy() never emits this, but keep the invariant.
+            warnings.append("One-kick rule violated; stripping written kick.")
+        }
+        if pulse.sourceHasClubKick {
+            decisions.append(
+                AutoDecision(kind: .skippedSecondKick, songTitle: profile.title, detail: pulse.detail)
+            )
+        } else if pulse.writesKick {
+            decisions.append(
+                AutoDecision(kind: .wroteClubPulse, songTitle: profile.title, detail: pulse.detail)
+            )
+        }
+        if profile.stems.drums != nil {
             decisions.append(
                 AutoDecision(
-                    kind: .shortenedForMaterial,
+                    kind: .usedStemSidecar,
                     songTitle: profile.title,
-                    detail: "ending to fit the timeline"
+                    detail: "kick energy from drums.wav"
                 )
             )
         }
 
-        let confident = signalTrusted
-            && analysis.analysisConfidence >= tuning.lowConfidenceThreshold
-            && (signal?.beatConfidence ?? 0) > 0.4
+        let targetBPM = tempo.targetBPM
+        let beat = 60.0 / max(targetBPM, 40)
+        let bar = beat * 4
+        let ratio = tempo.ratio
+
+        // Xirex grammar: opening uncut → one complete hook → 2-bar pivot
+        // wallpaper → Drop 1 hard cut. Cut earlier (~bar 18): no long groove
+        // runway after the hook is already done.
+        let shape: [(role: AutoCandidateSection.Label, bars: Int, energy: Double, pulse: AutoClubPulse.RegionRole, entry: AutoTransitionRecipe)] = [
+            (.intro, 8, 0.45, .introTease, .none),
+            (.chorus, 8, 0.88, .groove, .none),                 // title hook (hard cut, no fade-in)
+            (.build, 2, 0.70, .buildOut, .flangerBuild),      // pivot wallpaper window
+            (.chorus, 16, 1.0, .drop, .hardHypeCut),          // Drop 1
+            (.breakdown, 8, 0.42, .breakdown, .atmosphericHandoff),
+            (.build, 8, 0.82, .build, .flangerBuild),         // Build 2 denser
+            (.chorus, 16, 1.0, .drop, .hardHypeCut),          // Drop 2
+            (.ending, 4, 0.55, .outro, .vocalEchoOut),
+        ]
+
         if !confident {
             decisions.append(
-                AutoDecision(kind: .usedLowConfidenceFallback, songTitle: profile.title, detail: nil)
-            )
-        }
-
-        let volume = AutoGainPolicy.preservationSongVolume
-
-        // A trailing fade only when we cut into audible material.
-        let endsMidAudio = trimmedForBudget
-            || (usableEnd < duration - 0.05 && (signal.map { $0.trailingSilenceSeconds <= 0.35 } ?? true))
-        let finalFadeOut: ClipTransition = endsMidAudio
-            ? ClipTransition(type: .fadeOut, duration: 2, curve: AutoTransitionEnvelope.equalPowerCurveName)
-            : .none
-
-        // ── Optional SOURCE-CONTINUOUS effect segments (no cutting) ──
-        struct Segment {
-            var sourceStart: Double
-            var sourceEnd: Double
-            var fx: ClipEffectSettings
-        }
-        var segments: [Segment] = []
-        var liftBoundary: Double?
-        if confident, let signal, usableEnd - usableStart > bar * 24 {
-            liftBoundary = biggestEnergyRise(
-                signal: signal,
-                analysis: analysis,
-                from: usableStart + bar * 8,
-                to: usableEnd - bar * 8,
-                minRise: 0.18
-            )
-        }
-        if let lift = liftBoundary,
-           lift - bar * 4 > usableStart + bar * 8,
-           lift < usableEnd - bar * 8 {
-            var buildFX = ClipEffectSettings()
-            buildFX.flangerAmount = 0.16
-            buildFX.setLevel(12, for: MixrEffect.echo.rawValue)
-            buildFX.echoPreset = .classic
-            segments = [
-                Segment(sourceStart: usableStart, sourceEnd: lift - bar * 4, fx: ClipEffectSettings()),
-                Segment(sourceStart: lift - bar * 4, sourceEnd: lift, fx: AutoSupportedEffects.sanitize(buildFX)),
-                Segment(sourceStart: lift, sourceEnd: usableEnd, fx: ClipEffectSettings()),
-            ]
-            decisions.append(
                 AutoDecision(
-                    kind: .addedRiserIntoDrop,
+                    kind: .usedLowConfidenceFallback,
                     songTitle: profile.title,
-                    detail: "filtered build into the song's biggest lift"
+                    detail: nil
                 )
             )
-        } else {
-            segments = [Segment(sourceStart: usableStart, sourceEnd: usableEnd, fx: ClipEffectSettings())]
+            decisions.append(
+                AutoDecision(
+                    kind: .imposedClubEnergyCurve,
+                    songTitle: profile.title,
+                    detail: "filter + pulse + SFX without invented structural cuts"
+                )
+            )
+            return lowConfidenceClubPlan(
+                profile: profile,
+                usableStart: usableStart,
+                usableEnd: usableEnd,
+                tempo: tempo,
+                pulse: pulse,
+                flavor: flavor,
+                tuning: tuning,
+                decisions: decisions,
+                warnings: warnings,
+                seed: seed
+            )
         }
 
-        // ── Placements: gapless, source order untouched ──
         var placements: [AutoClipPlacement] = []
-        for (i, seg) in segments.enumerated() {
-            let isLast = i == segments.count - 1
+        var selected: [AutoSelectedSection] = []
+        var cutRecords: [AutoCutRecord] = []
+        var intentionalGaps: [AutoIntentionalGap] = []
+        var pulseRegions: [AutoClubPulse.Region] = []
+        var sfx: [AutoSFXEvent] = []
+        var transitionsUsed: [AutoTransitionRecipe] = []
+        var usedRanges: [(Double, Double)] = []
+        var cursor = 0.0
+        var lastSourceEnd: Double?
+        var dropIndex = 0
+
+        for (slotIdx, slot) in shape.enumerated() {
+            let labels: [AutoCandidateSection.Label]
+            switch slot.role {
+            case .intro: labels = [.intro, .groove] // never teaser — protect title
+            case .groove: labels = [.groove, .chorus]
+            case .build: labels = [.build, .groove]
+            // First complete A hook stays chorus/groove — never a 2–4 bar title teaser.
+            case .chorus:
+                labels = slot.entry == .hardHypeCut ? [.chorus, .teaser] : [.chorus, .groove]
+            case .breakdown: labels = [.breakdown, .groove]
+            case .ending: labels = [.ending, .teaser, .chorus]
+            default: labels = [slot.role]
+            }
+
+            guard var section = profile.best(labels, tuning: tuning, used: usedRanges, allowReuse: true)
+                ?? fallbackSection(profile: profile, label: slot.role, bars: slot.bars, usableStart: usableStart, usableEnd: usableEnd)
+            else { continue }
+
+            // Protect opening: intro always starts at the record head.
+            if slot.role == .intro {
+                section = AutoCandidateSection(
+                    songID: section.songID,
+                    label: .intro,
+                    startSeconds: usableStart,
+                    barCount: slot.bars,
+                    barSeconds: section.barSeconds,
+                    hook: section.hook,
+                    energy: section.energy,
+                    vocal: section.vocal,
+                    clarity: section.clarity,
+                    rhythm: section.rhythm,
+                    uniqueness: section.uniqueness,
+                    transitionUse: section.transitionUse,
+                    confidence: section.confidence
+                )
+            }
+
+            // Drop slots (hard hype): strongest chorus islands ≥8 bars.
+            // First complete hook (pulse .groove / clean crossfade) keeps the
+            // record playing — never a title teaser or mid-song jump that
+            // chops the first “Oops”.
+            if slot.role == .chorus {
+                let hooks = profile.candidates
+                    .filter { ($0.label == .chorus || $0.label == .teaser) && $0.barCount >= 8 }
+                    .sorted { $0.hook > $1.hook }
+                if slot.entry == .hardHypeCut {
+                    if dropIndex < hooks.count {
+                        section = hooks[dropIndex]
+                    } else if let bestHook = hooks.first {
+                        section = bestHook
+                    }
+                } else if slot.pulse == .groove {
+                    let start = lastSourceEnd ?? usableStart
+                    section = AutoCandidateSection(
+                        songID: section.songID,
+                        label: .chorus,
+                        startSeconds: min(start, max(usableStart, usableEnd - Double(slot.bars) * bar * ratio)),
+                        barCount: slot.bars,
+                        barSeconds: section.barSeconds,
+                        hook: max(section.hook, 0.85),
+                        energy: slot.energy,
+                        vocal: section.vocal,
+                        clarity: section.clarity,
+                        rhythm: section.rhythm,
+                        uniqueness: section.uniqueness,
+                        transitionUse: section.transitionUse,
+                        confidence: section.confidence
+                    )
+                }
+            }
+
+            // Clamp section into usable range and requested bar count.
+            let wantSeconds = Double(slot.bars) * bar
+            let sourceDur = wantSeconds * ratio
+
+            // One-song club rewrite stays source-forward except justified
+            // hook returns on the drop. Random rewinds get deleted by the
+            // validator and leave audible holes — the opposite of busy.
+            if slot.role != .chorus,
+               let last = lastSourceEnd,
+               section.startSeconds < last - 0.05 {
+                let advanced = min(last, max(usableStart, usableEnd - sourceDur))
+                section = AutoCandidateSection(
+                    songID: section.songID,
+                    label: section.label,
+                    startSeconds: max(usableStart, advanced),
+                    barCount: slot.bars,
+                    barSeconds: section.barSeconds,
+                    hook: section.hook,
+                    energy: section.energy,
+                    vocal: section.vocal,
+                    clarity: section.clarity,
+                    rhythm: section.rhythm,
+                    uniqueness: section.uniqueness,
+                    transitionUse: section.transitionUse,
+                    confidence: section.confidence
+                )
+            }
+
+            if section.startSeconds < usableStart {
+                section = AutoCandidateSection(
+                    songID: section.songID,
+                    label: section.label,
+                    startSeconds: usableStart,
+                    barCount: slot.bars,
+                    barSeconds: section.barSeconds,
+                    hook: section.hook,
+                    energy: section.energy,
+                    vocal: section.vocal,
+                    clarity: section.clarity,
+                    rhythm: section.rhythm,
+                    uniqueness: section.uniqueness,
+                    transitionUse: section.transitionUse,
+                    confidence: section.confidence
+                )
+            }
+            if section.startSeconds + sourceDur > usableEnd {
+                // Never rewind a non-chorus slot just to fit length — shorten
+                // into the remaining source instead (avoids validator holes).
+                let floor = (slot.role == .chorus)
+                    ? usableStart
+                    : (lastSourceEnd ?? usableStart)
+                let start = max(floor, usableEnd - sourceDur)
+                let clampedStart = min(max(usableStart, start), max(usableStart, usableEnd - bar * 2))
+                section = AutoCandidateSection(
+                    songID: section.songID,
+                    label: section.label,
+                    startSeconds: clampedStart,
+                    barCount: slot.bars,
+                    barSeconds: section.barSeconds,
+                    hook: section.hook,
+                    energy: section.energy,
+                    vocal: section.vocal,
+                    clarity: section.clarity,
+                    rhythm: section.rhythm,
+                    uniqueness: section.uniqueness,
+                    transitionUse: section.transitionUse,
+                    confidence: section.confidence
+                )
+            }
+
+            // Build-out: last 4 bars of a build mute kick+bass.
+            // Build-out: last 4 bars of a build mute kick+bass.
+            let regionRole = slot.pulse
+            let timelineBars = slot.bars
+            var buildBodyBars = slot.bars
+            if slot.role == .build, slot.bars >= 8 {
+                buildBodyBars = slot.bars - 4
+            }
+
+            // No 1-beat pre-drop void. Pivot Drop 1 is loop + hard cut at
+            // full clip volume. Auto must not emit `allowedPredropVoid` on
+            // the same plan as `pivotWallpaperLoop` (crate bounce flags
+            // that pair as a quiet Drop 1 hole).
+
+            if slot.entry != .none { transitionsUsed.append(slot.entry) }
+
+            // Xirex 1–2 bar pivot window: no dominant audio here — grains land
+            // when Drop 1 emits (after the completed hook phrase).
+            if slot.role == .build, slot.bars <= 4, slot.pulse == .buildOut {
+                let dur = Double(slot.bars) * bar
+                pulseRegions.append(
+                    AutoClubPulse.Region(role: .buildOut, timelineStart: cursor, timelineEnd: cursor + dur)
+                )
+                cursor += dur
+                continue
+            }
+
+            // Split build into body + buildOut (kick mute).
+            let segments: [(bars: Int, pulse: AutoClubPulse.RegionRole, energy: Double)]
+            if slot.role == .build, buildBodyBars < timelineBars {
+                segments = [
+                    (buildBodyBars, .build, slot.energy * 0.85),
+                    // Build-out: kick mute / filter — keep audible energy (not dead air).
+                    (timelineBars - buildBodyBars, .buildOut, 0.52),
+                ]
+            } else {
+                segments = [(timelineBars, regionRole, slot.energy)]
+            }
+
+            var segCursor = cursor
+            for (segIdx, seg) in segments.enumerated() {
+                let segDur = Double(seg.bars) * bar
+                pulseRegions.append(
+                    AutoClubPulse.Region(role: seg.pulse, timelineStart: segCursor, timelineEnd: segCursor + segDur)
+                )
+
+                var fx = ClipEffectSettings()
+                switch slot.role {
+                case .intro:
+                    // Two-deck: intros stay the record — light HPF only.
+                    fx.setLevel(28, for: MixrEffect.blur.rawValue)
+                case .build:
+                    fx.flangerAmount = seg.pulse == .buildOut ? 0.36 : (slot.energy > 0.78 ? 0.30 : 0.22)
+                    fx.setLevel(seg.pulse == .buildOut ? 42 : 18, for: MixrEffect.echo.rawValue)
+                    fx.echoPreset = .pingPong
+                    if seg.pulse == .buildOut {
+                        // Filter sweep into the void/drop — mix window only.
+                        fx.setLevel(58, for: MixrEffect.blur.rawValue)
+                        fx.setLevel(20, for: MixrEffect.reverb.rawValue)
+                        fx.reverbPreset = .hall
+                    } else {
+                        fx.setLevel(18, for: MixrEffect.blur.rawValue)
+                    }
+                case .chorus:
+                    // Filter opens on the downbeat — Diplo energy lives here.
+                    fx.setLevel(dropIndex == 0 ? 6 : 10, for: MixrEffect.blur.rawValue)
+                    fx.setLevel(dropIndex == 0 ? 12 : 16, for: MixrEffect.reverb.rawValue)
+                    fx.reverbPreset = dropIndex == 0 ? .hall : .ambient
+                    fx.setLevel(dropIndex == 0 ? 8 : 12, for: MixrEffect.echo.rawValue)
+                    if dropIndex >= 1, flavor.bias.drop2AiryLayer {
+                        fx.setLevel(14, for: MixrEffect.reverb.rawValue)
+                    }
+                    if flavor.bias.aggressiveLowEnd {
+                        fx.flangerAmount = max(fx.flangerAmount, 0.12)
+                    }
+                case .breakdown:
+                    fx.setLevel(28 + flavor.bias.breakdownVocalClarity * 22, for: MixrEffect.reverb.rawValue)
+                    fx.reverbPreset = .ambient
+                    fx.setLevel(12, for: MixrEffect.blur.rawValue)
+                case .ending:
+                    fx.setLevel(22, for: MixrEffect.reverb.rawValue)
+                    fx.reverbPreset = .ambient
+                case .groove:
+                    // One deck: the record, maybe light HPF — no echo wallpaper.
+                    fx.setLevel(12, for: MixrEffect.blur.rawValue)
+                default:
+                    break
+                }
+                if pulse.duckSourceLowEnd, seg.pulse == .drop || seg.pulse == .groove || seg.pulse == .introTease {
+                    fx.setLevel(max(fx.level(for: MixrEffect.blur.rawValue), 22), for: MixrEffect.blur.rawValue)
+                }
+                fx = AutoSupportedEffects.sanitize(fx)
+
+                let sourceStart = section.startSeconds + Double(segCursor - cursor) * ratio
+                var volume = AutoGainPolicy.songPlacementVolume(energy: seg.energy)
+                if slot.entry == .hardHypeCut, seg.pulse == .drop {
+                    volume = AutoGainPolicy.incomingDropVolume
+                }
+                // Blur ducks low end on pulse; do not also quiet drop/build volumes.
+                if pulse.duckSourceLowEnd, seg.pulse == .groove || seg.pulse == .introTease {
+                    volume *= AutoGainPolicy.pulseDuckedSongVolumeScale
+                }
+
+                let continues = lastSourceEnd.map { abs(sourceStart - $0) < 0.05 } ?? false
+                let discontinuity = lastSourceEnd.map { abs(sourceStart - $0) > 0.05 } ?? false
+
+                if discontinuity, let prevEnd = lastSourceEnd {
+                    let isHookReturn = slot.role == .chorus
+                    let prevVol = placements.last?.volume ?? volume
+                    let volDeltaDB = abs(20 * log10(max(volume, 0.05) / max(prevVol, 0.05)))
+                    let prevBlur = placements.last?.effects.level(for: "blur") ?? 0
+                    let fxFloor = (prevBlur >= 28 || fx.level(for: "blur") >= 28) ? 6.0 : 0.0
+                    let endingFloor = slot.role == .ending ? 6.0 : 0.0
+                    cutRecords.append(
+                        AutoCutRecord(
+                            timelineAt: segCursor,
+                            sourceFrom: prevEnd,
+                            sourceTo: sourceStart,
+                            reason: isHookReturn ? .hookReturn : .redundantRepeat,
+                            confidence: max(0.55, section.confidence),
+                            expectedEnergyDeltaDB: isHookReturn
+                                ? (slot.entry == .hardHypeCut ? max(8.0, volDeltaDB) : max(2.0, volDeltaDB))
+                                : max(volDeltaDB, fxFloor, endingFloor),
+                            masking: slot.entry == .hardHypeCut
+                                ? .sfx(assetID: "impact")
+                                : .alignedHardCut
+                        )
+                    )
+                    if isHookReturn {
+                        decisions.append(
+                            AutoDecision(kind: .returnedToHook, songTitle: profile.title, detail: "drop")
+                        )
+                    }
+                }
+
+                var fadeIn: ClipTransition = .none
+                var fadeOut: ClipTransition = .none
+                // Xirex: hard cut into the hook — no fade-in / volume ramp.
+                if slot.entry == .hardHypeCut, segIdx == 0 {
+                    fadeIn = .none
+                } else if slot.entry == .cleanCrossfade, segIdx == 0, placements.isEmpty == false {
+                    fadeIn = ClipTransition(
+                        type: .crossfade,
+                        duration: 2,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName
+                    )
+                }
+                if slot.role == .ending {
+                    fadeOut = ClipTransition(type: .echoOut, duration: 8)
+                } else if slot.role == .build, seg.pulse == .buildOut, slot.bars >= 8 {
+                    // Long builds may echo out; the 1–2 bar pivot window is grains only.
+                    fadeOut = ClipTransition(type: .echoOut, duration: 4)
+                }
+
+                placements.append(
+                    AutoClipPlacement(
+                        songID: profile.songID,
+                        sourceStart: sourceStart,
+                        timelineStart: segCursor,
+                        timelineDuration: segDur,
+                        tempoRatio: ratio,
+                        volume: volume,
+                        fadeIn: fadeIn,
+                        fadeOut: fadeOut,
+                        effects: fx,
+                        role: .dominant,
+                        slotIndex: slotIdx,
+                        continuesPrevious: continues && segIdx > 0
+                    )
+                )
+                lastSourceEnd = sourceStart + segDur * ratio
+                segCursor += segDur
+            }
+
+            // Coordinated club SFX — festival stack on Drop 1 mix window only.
+            let segEnd = segCursor
+            if slot.role == .build, slot.bars >= 8 {
+                let buildEnd = segEnd
+                if let snare = SoundEffectLibrary.definition(for: "snareBuild"),
+                   buildEnd - snare.durationSeconds >= cursor {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "snareBuild",
+                            timelineStart: buildEnd - snare.durationSeconds,
+                            purpose: "snare roll through build-out"
+                        )
+                    )
+                }
+                if let riser = SoundEffectLibrary.definition(for: "riser"),
+                   buildEnd - riser.durationSeconds >= cursor {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "riser",
+                            timelineStart: buildEnd - riser.durationSeconds,
+                            purpose: "riser into the drop"
+                        )
+                    )
+                }
+            }
+
+            if slot.role == .groove || slot.role == .intro {
+                // Two-deck: verses/grooves stay one deck — no clap wallpaper.
+            }
+
+            if slot.role == .chorus, slot.entry == .hardHypeCut {
+                let dropAt = placements.last(where: { $0.slotIndex == slotIdx })?.timelineStart
+                    ?? cursor
+                if dropIndex == 0 {
+                    let dropDur = placements.last(where: { $0.slotIndex == slotIdx })?.timelineDuration
+                        ?? 16 * bar
+                    appendFestivalMixWindowStack(
+                        dropAt: dropAt,
+                        dropEnd: dropAt + dropDur,
+                        barSec: bar,
+                        beatSec: beat,
+                        flavor: flavor,
+                        protectedRanges: lyricOnsetProtectedRanges(
+                            pulseRegions: pulseRegions, dropAt: dropAt, placements: placements
+                        ),
+                        sfx: &sfx,
+                        decisions: &decisions
+                    )
+                } else {
+                    sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: dropAt, purpose: "impact on drop downbeat"))
+                    let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
+                    if cymbalCount < 2 {
+                        sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: dropAt, purpose: "crash punctuation on drop"))
+                    }
+                    decisions.append(
+                        AutoDecision(
+                            kind: .addedRiserIntoDrop,
+                            songTitle: profile.title,
+                            detail: "drop 2 flip (impact)"
+                        )
+                    )
+                }
+                // Xirex pivot wallpaper before Drop 1 only.
+                if dropIndex == 0,
+                   let phrase = placements.last(where: {
+                       $0.role == .dominant && $0.slotIndex != slotIdx
+                   }) {
+                    AutoJoinEngine.appendPivotWallpaperLoop(
+                        completedPhrase: phrase,
+                        dropTimelineStart: dropAt,
+                        deckATitle: profile.title,
+                        deckBTitle: profile.title,
+                        barSec: bar,
+                        beatSec: beat,
+                        tuning: tuning,
+                        grainStem: profile.stems.hasVocals ? .vocals : nil,
+                        signal: profile.analysis.signal,
+                        placements: &placements,
+                        pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
+                        decisions: &decisions
+                    )
+                }
+                dropIndex += 1
+            }
+
+            if slot.role == .breakdown {
+                let breakAt = cursor
+                sfx.append(
+                    AutoSFXEvent(assetID: "downlifter", timelineStart: breakAt, purpose: "downlifter into breakdown")
+                )
+            }
+
+            if slot.role == .ending {
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: cursor, purpose: "final hit"))
+                sfx.append(
+                    AutoSFXEvent(assetID: "downlifter", timelineStart: cursor + 0.8, purpose: "downlifter out")
+                )
+            }
+
+            selected.append(
+                AutoSelectedSection(
+                    songID: profile.songID,
+                    sourceStart: section.startSeconds,
+                    sourceEnd: section.startSeconds + wantSeconds * ratio,
+                    phraseType: slot.role.rawValue,
+                    barCount: slot.bars,
+                    hookScore: section.hook,
+                    energyScore: section.energy,
+                    vocalDensity: section.vocal,
+                    compatibilityRole: .dominant,
+                    confidence: section.confidence
+                )
+            )
+            usedRanges.append((section.startSeconds, section.startSeconds + wantSeconds * ratio))
+            cursor = segCursor
+            _ = rng.next() // keep seed progression stable across flavors
+        }
+
+        // Pulse hits are scheduled from regions at apply/render time so the
+        // musical SFX list stays sparse (risers/impacts), not one event per kick.
+        _ = AutoClubPulse.scheduleHits(
+            regions: pulseRegions,
+            policy: pulse,
+            beatSeconds: beat,
+            barSeconds: bar,
+            halfTimeDrop: flavor.bias.halfTimeDrop
+        )
+
+        // Blend verse→build joins with equal-power. Club drops stay hard
+        // cuts (pivot Drop 1, hook-return Drop 2) — never a quiet void and
+        // never an equal-power fade-in that dives energy after the slam.
+        blendAdjacentHandoffs(
+            placements: &placements,
+            intentionalGaps: intentionalGaps,
+            pulseRegions: pulseRegions,
+            songDurations: [profile.songID: analysis.durationSeconds],
+            barSec: bar,
+            beatSec: beat,
+            tuning: tuning,
+            cutRecords: &cutRecords
+        )
+
+        AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
+            placements: placements,
+            beatSec: beat,
+            barSec: bar,
+            decisions: &decisions,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
+        )
+
+        ensureFestivalDrop1Stack(
+            pulseRegions: pulseRegions,
+            placements: placements,
+            barSec: bar,
+            beatSec: beat,
+            flavor: flavor,
+            mode: .remix,
+            sfx: &sfx,
+            decisions: &decisions
+        )
+
+        let totalDuration = placements.map(\.timelineEnd).max() ?? cursor
+        AutoJoinEngine.boostJoinClipVolumes(
+            placements: &placements,
+            pulseRegions: pulseRegions,
+            beatSec: beat,
+            barSec: bar,
+            profiles: [profile.songID: profile]
+        )
+        AutoJoinEngine.applyOpeningFadeIn(
+            placements: &placements,
+            beatSec: beat,
+            decisions: &decisions
+        )
+        return AutoRemixPlan(
+            mode: .remix,
+            targetBPM: targetBPM,
+            targetDuration: totalDuration,
+            anchorSongIDs: [profile.songID],
+            selectedSections: selected,
+            placements: placements,
+            sfxEvents: sfx.sorted { $0.timelineStart < $1.timelineStart },
+            cutRecords: cutRecords,
+            usableSourceRange: usableStart...usableEnd,
+            intentionalGaps: intentionalGaps,
+            pulsePolicy: pulse,
+            pulseRegions: pulseRegions,
+            clubFlavor: flavor,
+            mashupVocalSongID: nil,
+            mashupBedSongID: nil,
+            handoffCount: 0,
+            songLetters: [profile.songID: "A"],
+            sequence: shape.map { _ in "A" },
+            sequenceTitles: [profile.title],
+            transitionsUsed: transitionsUsed,
+            decisions: decisions,
+            warnings: warnings,
+            confidence: analysis.analysisConfidence,
+            randomSeed: seed,
+            stemsBySongID: [profile.songID: profile.stems]
+        )
+    }
+
+    /// Low-confidence club path: still uses the compact phrase-grid TIMELINE
+    /// (Drop 1 at bar 24) and jumps source to the strongest hook island for
+    /// drops. We avoid inventing decorative mid-verse cuts, but "no cuts" must
+    /// not mean "play 50 bars of verse before the drop."
+    private static func lowConfidenceClubPlan(
+        profile: AutoSongProfile,
+        usableStart: Double,
+        usableEnd: Double,
+        tempo: AutoClubTempo.Decision,
+        pulse: AutoClubPulse.Policy,
+        flavor: AutoClubFlavor,
+        tuning: AutoTuning,
+        decisions: [AutoDecision],
+        warnings: [String],
+        seed: UInt64
+    ) -> AutoRemixPlan? {
+        let targetBPM = tempo.targetBPM
+        let beat = 60.0 / max(targetBPM, 40)
+        let bar = beat * 4
+        let ratio = tempo.ratio
+
+        // Xirex-ish low-conf shape: opening → first hook → 2-bar pivot → Drop 1 (~bar 18).
+        struct Seg {
+            var role: AutoClubPulse.RegionRole
+            var bars: Int
+            var energy: Double
+        }
+        let shape: [Seg] = [
+            .init(role: .introTease, bars: 8, energy: 0.42),
+            .init(role: .groove, bars: 8, energy: 0.80), // first complete hook listen-through
+            .init(role: .buildOut, bars: 2, energy: 0.50), // pivot wallpaper window
+            .init(role: .drop, bars: 16, energy: 1.00),
+            .init(role: .breakdown, bars: 8, energy: 0.40),
+            .init(role: .build, bars: 4, energy: 0.70),
+            .init(role: .buildOut, bars: 4, energy: 0.48),
+            .init(role: .drop, bars: 16, energy: 1.00),
+            .init(role: .outro, bars: 4, energy: 0.45),
+        ]
+
+        // Strongest chorus / teaser islands for Drop 1 and Drop 2.
+        let hooks = profile.candidates
+            .filter { ($0.label == .chorus || $0.label == .teaser) && $0.barCount >= 8 }
+            .sorted { $0.hook > $1.hook }
+        let hook1 = hooks.first?.startSeconds
+            ?? profile.analysis.chorusOrDropCandidates.first?.startSeconds
+            ?? max(usableStart, usableStart + (usableEnd - usableStart) * 0.28)
+        let hook2 = hooks.dropFirst().first?.startSeconds
+            ?? hooks.first.map { $0.startSeconds + Double($0.barCount) * $0.barSeconds }
+            ?? hook1
+
+        var placements: [AutoClipPlacement] = []
+        var pulseRegions: [AutoClubPulse.Region] = []
+        var intentionalGaps: [AutoIntentionalGap] = []
+        var cutRecords: [AutoCutRecord] = []
+        var sfx: [AutoSFXEvent] = []
+        var decisions = decisions
+        var cursor = 0.0
+        var lastSourceEnd: Double?
+        var dropIndex = 0
+        var cymbalPunctuation = 0  // crash+reverseCymbal cap (≤2)
+
+        for (i, seg) in shape.enumerated() {
+            let segDur = Double(seg.bars) * bar
+            let t0 = cursor
+            let t1 = cursor + segDur
+
+            let role = seg.role
+            pulseRegions.append(AutoClubPulse.Region(role: role, timelineStart: t0, timelineEnd: t1))
+
+            var fx = ClipEffectSettings()
+            if role == .introTease {
+                fx.setLevel(28, for: MixrEffect.blur.rawValue)
+            }
+            if role == .breakdown {
+                fx.setLevel(36, for: MixrEffect.blur.rawValue)
+                fx.setLevel(28, for: MixrEffect.reverb.rawValue)
+                fx.reverbPreset = .ambient
+            }
+            if role == .groove {
+                fx.setLevel(12, for: MixrEffect.blur.rawValue)
+            }
+            if role == .build {
+                fx.flangerAmount = 0.26
+                fx.setLevel(18, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .pingPong
+                fx.setLevel(18, for: MixrEffect.blur.rawValue)
+            }
+            if role == .buildOut {
+                fx.flangerAmount = 0.34
+                fx.setLevel(56, for: MixrEffect.blur.rawValue)
+                fx.setLevel(36, for: MixrEffect.echo.rawValue)
+                fx.echoPreset = .pingPong
+                fx.setLevel(18, for: MixrEffect.reverb.rawValue)
+            }
+            if role == .drop {
+                fx.setLevel(8, for: MixrEffect.blur.rawValue)
+                fx.setLevel(14, for: MixrEffect.reverb.rawValue)
+                fx.reverbPreset = .hall
+                fx.setLevel(8, for: MixrEffect.echo.rawValue)
+            }
+            if pulse.duckSourceLowEnd, role == .drop || role == .groove {
+                fx.setLevel(max(fx.level(for: MixrEffect.blur.rawValue), 24), for: MixrEffect.blur.rawValue)
+            }
+            fx = AutoSupportedEffects.sanitize(fx)
+
+            var volume = AutoGainPolicy.songPlacementVolume(energy: seg.energy)
+            if role == .drop {
+                volume = AutoGainPolicy.incomingDropVolume
+            }
+            if pulse.duckSourceLowEnd, role == .groove || role == .introTease {
+                volume *= AutoGainPolicy.pulseDuckedSongVolumeScale
+            }
+
+            // Source: continuous through tease/build; JUMP to hook on drops.
+            // First complete-hook listen-through (pre-pivot groove@0.80) also
+            // jumps to the strongest hook — then plays it continuous once.
+            let sourceStart: Double
+            let sourceContinuous: Bool
+            let isFirstHookPass = role == .groove && seg.energy >= 0.78 && dropIndex == 0
+            if role == .drop || isFirstHookPass {
+                let hookStart = dropIndex == 0 ? hook1 : hook2
+                let clamped = min(max(usableStart, hookStart), max(usableStart, usableEnd - segDur * ratio))
+                sourceStart = clamped
+                sourceContinuous = false
+                if role == .drop, let prevEnd = lastSourceEnd, abs(clamped - prevEnd) > 0.05 {
+                    cutRecords.append(
+                        AutoCutRecord(
+                            timelineAt: t0,
+                            sourceFrom: prevEnd,
+                            sourceTo: clamped,
+                            reason: .hookReturn,
+                            confidence: max(0.55, profile.analysis.analysisConfidence),
+                            expectedEnergyDeltaDB: 8.0,
+                            masking: .sfx(assetID: "impact")
+                        )
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .returnedToHook,
+                            songTitle: profile.title,
+                            detail: String(format: "low-conf Drop %d → hook @%.1fs", dropIndex + 1, clamped)
+                        )
+                    )
+                }
+            } else if role == .buildOut, seg.bars <= 4, dropIndex == 0 {
+                // Pivot window — no dominant audio; grains added at drop.
+                pulseRegions.append(AutoClubPulse.Region(role: role, timelineStart: t0, timelineEnd: t1))
+                cursor = t1
+                continue
+            } else if let prev = lastSourceEnd {
+                sourceStart = role == .introTease ? usableStart : prev
+                sourceContinuous = role != .introTease
+            } else {
+                sourceStart = usableStart
+                sourceContinuous = false
+            }
+
+            var fadeOut: ClipTransition = .none
+            if role == .outro {
+                fadeOut = ClipTransition(
+                    type: .echoOut,
+                    duration: 6,
+                    curve: AutoTransitionEnvelope.equalPowerCurveName
+                )
+            } else if role == .buildOut || role == .build {
+                fadeOut = ClipTransition(type: .echoOut, duration: 4)
+            }
+
             placements.append(
                 AutoClipPlacement(
                     songID: profile.songID,
-                    sourceStart: seg.sourceStart,
-                    timelineStart: seg.sourceStart - usableStart,
-                    timelineDuration: seg.sourceEnd - seg.sourceStart,
-                    tempoRatio: 1.0,
+                    sourceStart: sourceStart,
+                    timelineStart: t0,
+                    timelineDuration: segDur,
+                    tempoRatio: ratio,
                     volume: volume,
                     fadeIn: .none,
-                    fadeOut: isLast ? finalFadeOut : .none,
-                    effects: seg.fx,
+                    fadeOut: fadeOut,
+                    effects: fx,
                     role: .dominant,
                     slotIndex: i,
-                    continuesPrevious: i > 0
+                    continuesPrevious: sourceContinuous
                 )
             )
-        }
+            lastSourceEnd = sourceStart + segDur * ratio
 
-        // ── Sparse, coordinated SFX: one riser + impact at the lift ──
-        var sfx: [AutoSFXEvent] = []
-        if confident, let lift = liftBoundary, usableEnd - usableStart >= 60 {
-            let liftTimeline = lift - usableStart
-            if let riser = SoundEffectLibrary.definition(for: "riser"),
-               liftTimeline - riser.durationSeconds >= 0 {
-                sfx.append(
-                    AutoSFXEvent(
-                        assetID: "riser",
-                        timelineStart: liftTimeline - riser.durationSeconds,
-                        purpose: "riser into the song's own lift"
+            // Two-deck: SFX only in mix window / on the drop — not groove wallpaper.
+            if role == .buildOut, !(seg.bars <= 4 && dropIndex == 0) {
+                // Non-pivot build-outs may carry snare/riser into a plain drop.
+                if let snare = SoundEffectLibrary.definition(for: "snareBuild"), t1 - snare.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "snareBuild",
+                            timelineStart: t1 - snare.durationSeconds,
+                            purpose: "snare through build-out"
+                        )
                     )
-                )
+                }
+                if let riser = SoundEffectLibrary.definition(for: "riser"),
+                   t1 - riser.durationSeconds >= t0 {
+                    sfx.append(
+                        AutoSFXEvent(
+                            assetID: "riser",
+                            timelineStart: t1 - riser.durationSeconds,
+                            purpose: "riser into the drop"
+                        )
+                    )
+                }
             }
-            sfx.append(
-                AutoSFXEvent(assetID: "impact", timelineStart: liftTimeline, purpose: "impact on the lift downbeat")
-            )
+            if role == .drop {
+                if dropIndex == 0 {
+                    appendFestivalMixWindowStack(
+                        dropAt: t0,
+                        dropEnd: t1,
+                        barSec: bar,
+                        beatSec: beat,
+                        flavor: flavor,
+                        protectedRanges: lyricOnsetProtectedRanges(
+                            pulseRegions: pulseRegions, dropAt: t0, placements: placements
+                        ),
+                        sfx: &sfx,
+                        decisions: &decisions
+                    )
+                } else {
+                    sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "impact on drop"))
+                    if cymbalPunctuation < 2 {
+                        sfx.append(AutoSFXEvent(assetID: "crash", timelineStart: t0, purpose: "crash punctuation on drop"))
+                        cymbalPunctuation += 1
+                    }
+                }
+                if dropIndex == 0,
+                   let phrase = placements.last(where: {
+                       $0.role == .dominant && $0.timelineEnd <= t0 + 0.05
+                   }) {
+                    AutoJoinEngine.appendPivotWallpaperLoop(
+                        completedPhrase: phrase,
+                        dropTimelineStart: t0,
+                        deckATitle: profile.title,
+                        deckBTitle: profile.title,
+                        barSec: bar,
+                        beatSec: beat,
+                        tuning: tuning,
+                        grainStem: profile.stems.hasVocals ? .vocals : nil,
+                        signal: profile.analysis.signal,
+                        placements: &placements,
+                        pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
+                        decisions: &decisions
+                    )
+                }
+                dropIndex += 1
+            }
+            if role == .breakdown {
+                sfx.append(AutoSFXEvent(assetID: "downlifter", timelineStart: t0, purpose: "downlifter into breakdown"))
+            }
+            if role == .outro {
+                sfx.append(AutoSFXEvent(assetID: "impact", timelineStart: t0, purpose: "final hit"))
+            }
+
+            cursor = t1
         }
 
-        let totalDuration = usableEnd - usableStart
+        _ = AutoClubPulse.scheduleHits(
+            regions: pulseRegions,
+            policy: pulse,
+            beatSeconds: beat,
+            barSeconds: bar,
+            halfTimeDrop: flavor.bias.halfTimeDrop
+        )
+
+        AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
+            placements: placements,
+            beatSec: beat,
+            barSec: bar,
+            decisions: &decisions,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
+        )
+
+        let timelineDur = cursor
         let section = AutoSelectedSection(
             songID: profile.songID,
             sourceStart: usableStart,
-            sourceEnd: usableEnd,
+            sourceEnd: min(usableEnd, lastSourceEnd ?? usableStart),
             phraseType: "song",
-            barCount: Int((totalDuration / bar).rounded()),
-            hookScore: 1.0,
-            energyScore: analysis.meanEnergy(from: usableStart, to: usableEnd),
-            vocalDensity: analysis.meanVocalDensity(from: usableStart, to: usableEnd),
+            barCount: Int((timelineDur / bar).rounded()),
+            hookScore: hooks.first?.hook ?? 0.8,
+            energyScore: profile.analysis.meanEnergy(from: usableStart, to: usableEnd),
+            vocalDensity: profile.analysis.meanVocalDensity(from: usableStart, to: usableEnd),
             compatibilityRole: .dominant,
-            confidence: analysis.analysisConfidence
+            confidence: profile.analysis.analysisConfidence
         )
 
+        ensureFestivalDrop1Stack(
+            pulseRegions: pulseRegions,
+            placements: placements,
+            barSec: bar,
+            beatSec: beat,
+            flavor: flavor,
+            mode: .remix,
+            sfx: &sfx,
+            decisions: &decisions
+        )
+
+        AutoJoinEngine.boostJoinClipVolumes(
+            placements: &placements,
+            pulseRegions: pulseRegions,
+            beatSec: beat,
+            barSec: bar,
+            profiles: [profile.songID: profile]
+        )
+        AutoJoinEngine.applyOpeningFadeIn(
+            placements: &placements,
+            beatSec: beat,
+            decisions: &decisions
+        )
         return AutoRemixPlan(
             mode: .remix,
-            targetBPM: bpm,
-            targetDuration: totalDuration,
+            targetBPM: targetBPM,
+            targetDuration: timelineDur,
             anchorSongIDs: [profile.songID],
             selectedSections: [section],
             placements: placements,
-            sfxEvents: sfx,
-            cutRecords: [],                       // zero internal cuts by default
+            sfxEvents: sfx.sorted { $0.timelineStart < $1.timelineStart },
+            cutRecords: cutRecords,
             usableSourceRange: usableStart...usableEnd,
-            intentionalGaps: [],                  // silence only by explicit recipe
+            intentionalGaps: intentionalGaps,
+            pulsePolicy: pulse,
+            pulseRegions: pulseRegions,
+            clubFlavor: flavor,
+            mashupVocalSongID: nil,
+            mashupBedSongID: nil,
             handoffCount: 0,
             songLetters: [profile.songID: "A"],
             sequence: ["A"],
@@ -354,8 +1177,133 @@ enum AutoRemixPlanner {
             transitionsUsed: [],
             decisions: decisions,
             warnings: warnings,
-            confidence: analysis.analysisConfidence,
-            randomSeed: seed
+            confidence: profile.analysis.analysisConfidence,
+            randomSeed: seed,
+            stemsBySongID: [profile.songID: profile.stems]
+        )
+    }
+
+    /// Carve a pre-drop void from the end of the previous bar so the drop
+    /// remains on a downbeat (bar boundary). Does not advance the cursor.
+    private static func carvePredropVoid(
+        voidStart: Double,
+        dropStart: Double,
+        placements: inout [AutoClipPlacement],
+        pulseRegions: inout [AutoClubPulse.Region],
+        intentionalGaps: inout [AutoIntentionalGap],
+        minSegmentSeconds: Double
+    ) {
+        if let idx = placements.indices.last {
+            let newDur = voidStart - placements[idx].timelineStart
+            if newDur >= minSegmentSeconds {
+                placements[idx].timelineDuration = newDur
+            }
+        }
+        for i in pulseRegions.indices where pulseRegions[i].timelineEnd > voidStart + 0.001 {
+            if pulseRegions[i].timelineStart >= voidStart - 0.001 {
+                pulseRegions[i].timelineEnd = pulseRegions[i].timelineStart
+            } else {
+                pulseRegions[i].timelineEnd = voidStart
+            }
+        }
+        pulseRegions.removeAll { $0.timelineEnd - $0.timelineStart < 0.02 }
+        intentionalGaps.append(
+            AutoIntentionalGap(start: voidStart, end: dropStart, reason: "pre-drop void")
+        )
+        pulseRegions.append(
+            AutoClubPulse.Region(role: .void, timelineStart: voidStart, timelineEnd: dropStart)
+        )
+    }
+
+
+    /// 8-bar chorus continuation from `from` (snapped to a downbeat). Nil
+    /// when the source cannot host a complete line — caller must skip.
+    private static func completePhraseSection(
+        profile: AutoSongProfile,
+        from: Double,
+        bars: Int,
+        energy: Double
+    ) -> AutoCandidateSection? {
+        let bar = profile.analysis.barSeconds
+        let want = Double(max(8, bars))
+        let snapped = profile.analysis.downbeats.last { $0 <= from + 0.01 } ?? max(0, from)
+        let need = want * bar
+        guard snapped + need <= profile.analysis.durationSeconds - 0.15 else { return nil }
+        return AutoCandidateSection(
+            songID: profile.songID,
+            label: .chorus,
+            startSeconds: snapped,
+            barCount: max(8, bars),
+            barSeconds: bar,
+            hook: 0.9,
+            energy: energy,
+            vocal: 0.7,
+            clarity: 0.7,
+            rhythm: profile.analysis.drumStrength,
+            uniqueness: 0.7,
+            transitionUse: 0.55,
+            confidence: profile.analysis.analysisConfidence
+        )
+    }
+
+
+    /// Best cameo-chop guest to own Drop 1 when full-hook stretch fails.
+    private static func bestCameoDrop1Guest(
+        cameos: [AutoSongProfile],
+        bed: AutoSongProfile,
+        targetBPM: Double,
+        tuning: AutoTuning
+    ) -> AutoSongProfile? {
+        cameos.max { a, b in
+            let ia = AutoMashability.bestIsland(
+                guest: a, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+            )?.score ?? AutoStemRoleProxy.hookScore(for: a)
+            let ib = AutoMashability.bestIsland(
+                guest: b, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+            )?.score ?? AutoStemRoleProxy.hookScore(for: b)
+            return ia < ib
+        }
+    }
+
+    /// Fallback candidate when the catalog has no matching label.
+    private static func fallbackSection(
+        profile: AutoSongProfile,
+        label: AutoCandidateSection.Label,
+        bars: Int,
+        usableStart: Double,
+        usableEnd: Double
+    ) -> AutoCandidateSection? {
+        let bar = profile.analysis.barSeconds
+        let start: Double
+        switch label {
+        case .intro: start = usableStart
+        case .chorus, .teaser:
+            start = profile.analysis.chorusOrDropCandidates.first?.startSeconds ?? usableStart + bar * 8
+        case .groove:
+            start = profile.analysis.verseCandidates.first?.startSeconds ?? usableStart + bar * 4
+        case .build:
+            start = profile.analysis.buildCandidates.first?.startSeconds
+                ?? (profile.analysis.chorusOrDropCandidates.first.map { $0.startSeconds - bar * 4 } ?? usableStart)
+        case .breakdown:
+            start = profile.analysis.bridgeCandidate?.startSeconds ?? usableStart + (usableEnd - usableStart) * 0.7
+        case .ending:
+            start = max(usableStart, usableEnd - Double(bars) * bar)
+        }
+        let clamped = min(max(usableStart, start), max(usableStart, usableEnd - Double(bars) * bar))
+        return AutoCandidateSection(
+            songID: profile.songID,
+            label: label,
+            startSeconds: clamped,
+            barCount: bars,
+            barSeconds: bar,
+            hook: label == .chorus ? 0.85 : 0.5,
+            energy: 0.6,
+            vocal: 0.5,
+            clarity: 0.5,
+            rhythm: profile.analysis.drumStrength,
+            uniqueness: 0.5,
+            transitionUse: 0.5,
+            confidence: profile.analysis.analysisConfidence
         )
     }
 
@@ -399,7 +1347,7 @@ enum AutoRemixPlanner {
         return (snapped >= from && snapped <= to) ? snapped : raw
     }
 
-    // MARK: - Mashup (2+ songs)
+    // MARK: - Mashup (2…5 songs) — one bed, rotating hooks on the club shape
 
     private static func mashupPlan(
         profiles: [AutoSongProfile],
@@ -407,132 +1355,462 @@ enum AutoRemixPlanner {
         seed: UInt64,
         rng: inout AutoRandom
     ) -> AutoRemixPlan? {
-        guard let anchor = profiles.max(by: { $0.anchorScore < $1.anchorScore }) else { return nil }
-        let features = profiles
-            .filter { $0.songID != anchor.songID }
-            .sorted { $0.featureScore > $1.featureScore }
-        var ordered = [anchor] + features
+        // Cap the club rewrite at five songs — extras are dropped by confidence.
+        var pool = profiles
+        if pool.count > 5 {
+            pool.sort { $0.analysis.analysisConfidence > $1.analysis.analysisConfidence }
+            let dropped = Array(pool.suffix(from: 5))
+            pool = Array(pool.prefix(5))
+            // Re-sort later after role assignment; keep decisions below.
+            _ = dropped
+        }
+
+        // ONE club bed: prefer the pocket that keeps guests legal, then
+        // same-pocket groove/kit vs strongest-hook vocal (not raw drum max).
+        guard let bed = chooseClubBed(pool: pool, tuning: tuning) else { return nil }
+        let guests = pool.filter { $0.songID != bed.songID }
+
+        let tempoSeed = AutoClubTempo.mashupDecision(
+            vocalBPM: guests.first?.analysis.bpm ?? bed.analysis.bpm,
+            bedBPM: bed.analysis.bpm,
+            maxVocalStretch: tuning.maxStretch,
+            maxInstrumentalStretch: tuning.maxInstrumentalStretch
+        )
+        let targetBPM = tempoSeed.ok ? tempoSeed.targetBPM : AutoTempo.targetBPM(
+            profiles: pool,
+            anchorID: bed.songID,
+            maxStretch: tuning.maxInstrumentalStretch
+        )
 
         var preDecisions: [AutoDecision] = [
-            AutoDecision(kind: .selectedAnchor, songTitle: anchor.title, detail: "groove / continuity")
+            AutoDecision(kind: .selectedAnchor, songTitle: bed.title, detail: "club bed / one kick+bass owner")
         ]
         var preWarnings: [String] = []
-
-        if ordered.count >= 6 {
-            let budgetBars = Int(tuning.maxTimelineSeconds / (240.0 / anchor.analysis.bpm))
-            let neededBars = 24 + ordered.count * 10
-            if neededBars > budgetBars,
-               let weakest = ordered.dropFirst().min(by: {
-                   $0.analysis.analysisConfidence < $1.analysis.analysisConfidence
-               }) {
-                ordered.removeAll { $0.songID == weakest.songID }
+        if profiles.count > 5 {
+            preWarnings.append("Capped mashup at 5 songs for a streaming-length club rewrite.")
+            for p in profiles where !pool.contains(where: { $0.songID == p.songID }) {
                 preDecisions.append(
-                    AutoDecision(
-                        kind: .excludedLowConfidenceSong,
-                        songTitle: weakest.title,
-                        detail: "not enough timeline for a recognizable phrase from every song"
-                    )
-                )
-                preWarnings.append(
-                    "Excluded \(weakest.title): not enough timeline for a recognizable phrase from every song, and its analysis confidence was lowest."
+                    AutoDecision(kind: .excludedLowConfidenceSong, songTitle: p.title, detail: "over the 5-song club mashup cap")
                 )
             }
         }
 
-        let targetBPM = AutoTempo.targetBPM(
-            profiles: ordered,
-            anchorID: anchor.songID,
-            maxStretch: tuning.maxStretch
+        // Gate every guest; rank full-hook candidates by AutoMashup hook-role
+        // proxy + featureScore (star topline ≠ max drums).
+        var fullHooks: [AutoSongProfile] = []
+        var cameos: [AutoSongProfile] = []
+        for guest in guests.sorted(by: {
+            AutoStemRoleProxy.hookScore(for: $0) > AutoStemRoleProxy.hookScore(for: $1)
+        }) {
+            let verdict = AutoMashupCompat.hookGate(
+                hook: guest, bed: bed, targetBPM: targetBPM, tuning: tuning
+            )
+            switch verdict.gate {
+            case .fullHook:
+                fullHooks.append(guest)
+            case .cameoChop:
+                cameos.append(guest)
+                preDecisions.append(
+                    AutoDecision(kind: .usedCameoOnly, songTitle: guest.title, detail: verdict.detail)
+                )
+            case .skip:
+                preDecisions.append(
+                    AutoDecision(kind: .skippedIncompatibleHook, songTitle: guest.title, detail: verdict.detail)
+                )
+                preWarnings.append("Skipped \(guest.title): \(verdict.detail)")
+            }
+        }
+
+        // Prefer the guest whose best 8–16 bar island mashability vs the bed
+        // wins (AutoMashUpper local mashability — not whole-song stretch).
+        if fullHooks.count > 1 {
+            fullHooks.sort { a, b in
+                let ia = AutoMashability.bestIsland(
+                    guest: a, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+                )?.score ?? AutoStemRoleProxy.hookScore(for: a)
+                let ib = AutoMashability.bestIsland(
+                    guest: b, bed: bed, wantBars: 16, targetBPM: targetBPM, tuning: tuning
+                )?.score ?? AutoStemRoleProxy.hookScore(for: b)
+                return ia > ib
+            }
+        }
+
+        // Drop 1 = strongest full hook; Drop 2 = next (or bed chorus flip on duo).
+        // Stretch-failed guests (cameoChop) still own Drop 1 as phrase islands
+        // at native tempo — never demote them to post-drop groove slots only.
+        var drop1: AutoSongProfile?
+        if let first = fullHooks.first {
+            drop1 = first
+        } else if let cameo = bestCameoDrop1Guest(
+            cameos: cameos,
+            bed: bed,
+            targetBPM: targetBPM,
+            tuning: tuning
+        ) {
+            drop1 = cameo
+            cameos.removeAll { $0.songID == cameo.songID }
+            preDecisions.append(
+                AutoDecision(
+                    kind: .usedCameoOnly,
+                    songTitle: cameo.title,
+                    detail: "phrase-chop Drop 1 at native tempo (stretch gate failed)"
+                )
+            )
+        }
+        let drop2Candidate = fullHooks.dropFirst().first
+        // Surplus full hooks become cameos (rotate islands, don't stack).
+        if fullHooks.count > 2 {
+            cameos.append(contentsOf: fullHooks.suffix(from: 2))
+        }
+        // Energy matching: ballads prefer breakdown runway.
+        var breakdownCameo: AutoSongProfile?
+        var grooveCameo: AutoSongProfile?
+        var outroCameo: AutoSongProfile?
+        var remainingCameos = cameos
+        if let soft = remainingCameos.first(where: { AutoMashupCompat.needsBreakdownRunway(guest: $0, bed: bed) }) {
+            breakdownCameo = soft
+            remainingCameos.removeAll { $0.songID == soft.songID }
+            preDecisions.append(
+                AutoDecision(
+                    kind: .usedCameoOnly,
+                    songTitle: soft.title,
+                    detail: "breakdown runway (energy match)"
+                )
+            )
+        }
+        if let g = remainingCameos.first {
+            grooveCameo = g
+            remainingCameos.removeFirst()
+        }
+        if let o = remainingCameos.first {
+            outroCameo = o
+            remainingCameos.removeFirst()
+        }
+        // Any leftover cameos → outro teaser chain (still ≥8 bars each when placed).
+        if breakdownCameo == nil, let soft = remainingCameos.first {
+            breakdownCameo = soft
+            remainingCameos.removeFirst()
+        }
+
+        // ordered indices: 0 = bed, then drop1, drop2 (if guest), then cameos used in slots.
+        var ordered: [AutoSongProfile] = [bed]
+        if let drop1 { ordered.append(drop1) }
+        let drop2IsBedFlip = drop2Candidate == nil && drop1 != nil
+        if let drop2Candidate { ordered.append(drop2Candidate) }
+        var indexOf: [UUID: Int] = [bed.songID: 0]
+        for (i, p) in ordered.enumerated() where i > 0 { indexOf[p.songID] = i }
+        func ensureIndex(_ p: AutoSongProfile) -> Int {
+            if let i = indexOf[p.songID] { return i }
+            ordered.append(p)
+            let i = ordered.count - 1
+            indexOf[p.songID] = i
+            return i
+        }
+        let grooveIdx = grooveCameo.map { ensureIndex($0) }
+        let breakIdx = breakdownCameo.map { ensureIndex($0) }
+        let outroIdx = outroCameo.map { ensureIndex($0) }
+        for leftover in remainingCameos { _ = ensureIndex(leftover) }
+
+        let drop1Idx = drop1.map { indexOf[$0.songID]! }
+        let drop2Idx: Int = {
+            if let d = drop2Candidate { return indexOf[d.songID]! }
+            return 0 // bed chorus flip
+        }()
+
+        // Hook-replace default: one guest melody on the drop. Optional
+        // call-and-response is gated (≤8 bars) — never dual-vocal wallpaper.
+        func vocalEnough(_ idx: Int) -> Bool {
+            let p = ordered[idx]
+            return p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds) >= 0.35
+                || p.featureScore >= 0.45
+        }
+        func pickOverlay(excluding lead: Int?, prefer: [Int?]) -> Int? {
+            var seen = Set<Int>()
+            if let lead { seen.insert(lead) }
+            for candidate in prefer {
+                guard let idx = candidate, !seen.contains(idx), vocalEnough(idx) else { continue }
+                seen.insert(idx)
+                return idx
+            }
+            return nil
+        }
+        let drop1OverlayIdx: Int? = tuning.allowCallAndResponseOverlay
+            ? pickOverlay(
+                excluding: drop1Idx,
+                prefer: [
+                    drop2Candidate.map { indexOf[$0.songID]! },
+                    grooveIdx, breakIdx, outroIdx,
+                ]
+            )
+            : nil
+        let drop2OverlayIdx: Int? = tuning.allowCallAndResponseOverlay
+            ? pickOverlay(
+                excluding: drop2Idx,
+                prefer: [drop1Idx, outroIdx, grooveIdx, breakIdx]
+            )
+            : nil
+
+        let roleDetail: String
+        if let drop1, let drop2Candidate {
+            roleDetail = "Bed: \(bed.title); Drop 1: \(drop1.title); Drop 2: \(drop2Candidate.title)"
+        } else if let drop1 {
+            roleDetail = "Bed: \(bed.title); Drop 1: \(drop1.title); Drop 2: \(bed.title) hook flip"
+        } else {
+            roleDetail = "Bed: \(bed.title) — no compatible full vocal hook; bed carries both drops"
+            preWarnings.append("No guest passed the full-hook gate; bed material carries the drops.")
+        }
+        preDecisions.insert(
+            AutoDecision(kind: .assignedMashupRoles, songTitle: nil, detail: roleDetail),
+            at: 0
         )
 
-        let slots: [Slot]
-        switch ordered.count {
-        case 2: slots = duoSlots()
-        case 3: slots = trioSlots()
-        case 4: slots = quadSlots()
-        default: slots = rotationSlots(count: ordered.count)
+        // Bed pitch from strongest drop hook when available.
+        let pitchPartner = drop1 ?? drop2Candidate
+        let keyFit = AutoKey.bestCorrection(
+            AutoKey.parse(pitchPartner?.analysis.key),
+            AutoKey.parse(bed.analysis.key),
+            maxShift: tuning.maxCorrectivePitchSemitones
+        )
+        let bedPitch = (pitchPartner != nil && keyFit.score >= 0.5) ? keyFit.shiftSemitones : 0
+
+        let bedTempo = AutoClubTempo.mashupDecision(
+            vocalBPM: drop1?.analysis.bpm ?? bed.analysis.bpm,
+            bedBPM: bed.analysis.bpm,
+            maxVocalStretch: tuning.maxStretch,
+            maxInstrumentalStretch: tuning.maxInstrumentalStretch
+        )
+        preDecisions.append(
+            AutoDecision(kind: .choseClubTempo, songTitle: bed.title, detail: bedTempo.detail)
+        )
+        if !bedTempo.ok {
+            preWarnings.append(bedTempo.detail)
         }
+
+        let slots = nSongClubMashupSlots(
+            drop1Idx: drop1Idx,
+            drop2Idx: drop2Idx,
+            drop2IsBedFlip: drop2IsBedFlip || drop1 == nil,
+            grooveCameoIdx: grooveIdx,
+            breakdownCameoIdx: breakIdx,
+            outroCameoIdx: outroIdx
+        )
+
+        // Per-guest vocal stretch from the hook gate (Drop 1 + Drop 2 + cameos).
+        let resolvedBPM = bedTempo.ok ? bedTempo.targetBPM : targetBPM
+        var guestTempoRatios: [UUID: Double] = [:]
+        for guest in ordered where guest.songID != bed.songID {
+            let v = AutoMashupCompat.hookGate(
+                hook: guest, bed: bed, targetBPM: resolvedBPM, tuning: tuning
+            )
+            guestTempoRatios[guest.songID] = v.vocalRatio
+        }
+        let vocalTempoRatio = drop1.flatMap { guestTempoRatios[$0.songID] }
 
         var plan = buildPlan(
             mode: .mashup,
             slots: slots,
             ordered: ordered,
-            targetBPM: targetBPM,
+            targetBPM: resolvedBPM,
             tuning: tuning,
             seed: seed,
             rng: &rng,
-            preDecisions: preDecisions
+            preDecisions: preDecisions,
+            mashupVocalID: drop1?.songID,
+            mashupBedID: bed.songID,
+            bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+            vocalTempoRatio: vocalTempoRatio,
+            bedPitchSemitones: bedPitch,
+            guestTempoRatios: guestTempoRatios,
+            mashupDrop2ID: drop2IsBedFlip || drop1 == nil ? bed.songID : drop2Candidate?.songID,
+            drop1VocalOverlayIdx: drop1OverlayIdx,
+            drop2VocalOverlayIdx: drop2OverlayIdx
         )
         plan?.warnings.insert(contentsOf: preWarnings, at: 0)
+        _ = rng.next()
         return plan
     }
 
-    /// A → B → A → B → A (roles switch; ≥3 handoffs; returns vary treatment).
-    private static func duoSlots() -> [Slot] {
-        [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.62),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.8),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.9, isReturn: true),
-            Slot(songIdx: 1, role: .chorus, bars: 16, entry: .blurReveal, energy: 0.95, isReturn: true, shrinkPriority: 1),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0),
-        ]
-    }
+    /// Choose the club bed for an N-song mashup.
+    /// - Same pocket duo: star topline = vocal, partner = bed. Never assign
+    ///   bed by raw max drumConfidence (BOMT 1.00 must not beat Oops 0.71).
+    /// - Cross-pocket / N>2: prefer a bed whose native pocket the arrangement
+    ///   will actually keep (no parking a 144 festival bed at 95).
+    private static func chooseClubBed(
+        pool: [AutoSongProfile],
+        tuning: AutoTuning
+    ) -> AutoSongProfile? {
+        guard !pool.isEmpty else { return nil }
+        if pool.count == 1 { return pool[0] }
 
-    private static func trioSlots() -> [Slot] {
-        [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.62),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.78),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.88, isReturn: true),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.82),
-            Slot(songIdx: 1, role: .groove, bars: 8, entry: .flangerBuild, energy: 0.72, isReturn: true, shrinkPriority: 2),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.95, isReturn: true),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0),
-        ]
-    }
-
-    private static func quadSlots() -> [Slot] {
-        [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.6),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.75),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.8),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.9, isReturn: true),
-            Slot(songIdx: 3, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.85),
-            Slot(songIdx: 1, role: .groove, bars: 8, entry: .flangerBuild, energy: 0.72, isReturn: true, shrinkPriority: 2),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .atmosphericHandoff, energy: 0.9, isReturn: true, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true),
-            Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0),
-        ]
-    }
-
-    private static func rotationSlots(count: Int) -> [Slot] {
-        var slots: [Slot] = [
-            Slot(songIdx: 0, role: .teaser, bars: 4, entry: .none, energy: 0.55, shrinkPriority: 2),
-            Slot(songIdx: 0, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.6),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.75),
-            Slot(songIdx: 2, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.8),
-            Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 0.88, isReturn: true),
-            Slot(songIdx: 3, role: .chorus, bars: 8, entry: .reverseEntrance, energy: 0.82),
-            Slot(songIdx: 4, role: .chorus, bars: 8, entry: .blurReveal, energy: 0.86),
-            Slot(songIdx: 1, role: .chorus, bars: 8, entry: .flangerBuild, energy: 0.9, isReturn: true, shrinkPriority: 2),
-        ]
-        for extra in 5..<count {
-            slots.append(
-                Slot(
-                    songIdx: extra,
-                    role: .chorus,
-                    bars: 8,
-                    entry: extra % 2 == 0 ? .reverseEntrance : .blurReveal,
-                    energy: 0.85
-                )
-            )
+        // Locked gold-standard pair in any N-song crate: Oops = bed when BOMT is present.
+        if let locked = AutoMashupRoleLock.britneyBed(in: pool) {
+            return locked
         }
-        slots.append(Slot(songIdx: 0, role: .chorus, bars: 8, entry: .hardHypeCut, energy: 1.0, isFinalPeak: true, isReturn: true))
-        slots.append(Slot(songIdx: 0, role: .ending, bars: 4, entry: .vocalEchoOut, energy: 0.6, isEnding: true, shrinkPriority: 0))
+
+        if pool.count == 2 {
+            let a = pool[0], b = pool[1]
+            let pa = AutoClubTempo.classify(a.analysis.bpm)
+            let pb = AutoClubTempo.classify(b.analysis.bpm)
+            if let pa, let pb, pa == pb {
+                return samePocketDuoBed(a, b)
+            }
+        }
+
+        return pool.max { bedFitness($0, pool: pool, tuning: tuning) < bedFitness($1, pool: pool, tuning: tuning) }
+    }
+
+    /// Same-pocket duo bed. Midtempo pop pairs (Britney-class) often measure
+    /// similar — or even skewed — vocal density. Bed = groove partner via
+    /// soft-capped drums + bass (AutoMashup role proxy spirit: bed ≠ max
+    /// drumConfidence). Vocal density must NOT invert Oops↔BOMT; the hotter
+    /// raw drum bus is usually the radio single that rides Drop 1.
+    private static func samePocketDuoBed(_ a: AutoSongProfile, _ b: AutoSongProfile) -> AutoSongProfile {
+        func grooveBed(_ p: AutoSongProfile) -> Double {
+            // Soft-cap so drum 1.00 cannot beat a 0.71 groove partner.
+            let drum = min(p.analysis.drumStrength, 0.72)
+            let bass = p.analysis.bassDensity
+            let softPrefer = (1.0 - min(1.0, p.analysis.drumStrength)) * 0.35
+            // Tiny vocal term as tie-break only — never enough to flip 1.00 vs 0.71.
+            let vocal = p.analysis.meanVocalDensity(from: 0, to: p.analysis.durationSeconds)
+            return drum * 0.30 + bass * 0.40 + softPrefer - vocal * 0.05
+        }
+        return grooveBed(a) >= grooveBed(b) ? a : b
+    }
+
+    /// Bed fitness across pockets: must keep the bed's native pocket on the
+    /// timeline. A festival bed that would resolve to a midtempo median is
+    /// disqualified (all-5 crate → no 144 song parked at 95).
+    private static func bedFitness(
+        _ candidate: AutoSongProfile,
+        pool: [AutoSongProfile],
+        tuning: AutoTuning
+    ) -> Double {
+        let guests = pool.filter { $0.songID != candidate.songID }
+        let bedBPM = candidate.analysis.bpm
+        let pocket = AutoClubTempo.classify(bedBPM)
+        let pocketRank: Double
+        switch pocket {
+        case .festival: pocketRank = 1.0
+        case .house: pocketRank = 0.95
+        case .midtempoPop: pocketRank = 0.55
+        case .other: pocketRank = 0.4
+        case nil: pocketRank = 0.35
+        }
+
+        // Will AutoTempo.targetBPM actually keep this bed's pocket?
+        let resolvedTarget = AutoTempo.targetBPM(
+            profiles: pool,
+            anchorID: candidate.songID,
+            maxStretch: tuning.maxInstrumentalStretch
+        )
+        let keepsPocket = abs(resolvedTarget - bedBPM) / max(bedBPM, 1) <= 0.10
+        let pocketKeepScore: Double = keepsPocket ? 1.0 : 0.05
+
+        var guestScore = 0.0
+        for g in guests {
+            let decision = AutoClubTempo.mashupDecision(
+                vocalBPM: g.analysis.bpm,
+                bedBPM: bedBPM,
+                maxVocalStretch: tuning.maxStretch,
+                maxInstrumentalStretch: tuning.maxInstrumentalStretch
+            )
+            if decision.ok, abs(decision.targetBPM - bedBPM) / max(bedBPM, 1) <= 0.10 {
+                guestScore += 1.0
+            } else if decision.ok {
+                guestScore += 0.25
+            } else {
+                // Cameo at native tempo — fine, but does not justify yanking the bed.
+                guestScore += 0.35
+            }
+        }
+        let guestNorm = guestScore / Double(max(guests.count, 1))
+
+        // Soft-cap drums so raw 1.00 cannot dominate bed choice.
+        let groove = min(candidate.analysis.drumStrength, 0.72) * 0.10
+            + candidate.analysis.bassDensity * 0.08
+        let meanVocal = candidate.analysis.meanVocalDensity(
+            from: 0, to: candidate.analysis.durationSeconds
+        )
+        let instrumental = (1.0 - min(1, meanVocal)) * 0.10
+        let conf = candidate.analysis.analysisConfidence * 0.05
+
+        return pocketKeepScore * 0.40
+            + pocketRank * 0.20
+            + guestNorm * 0.22
+            + groove
+            + instrumental
+            + conf
+    }
+
+    /// Legacy single-song bed heuristic (tests / debugging).
+    private static func bedScore(_ p: AutoSongProfile) -> Double {
+        bedFitness(p, pool: [p], tuning: .standard)
+    }
+
+    /// Two-wave club shape for N-song mashups. Indices into `ordered`
+    /// (0 = bed). Min stay 8 bars; hooks prefer 16. No 4-bar ping-pong.
+    /// Xirex: bed intro → complete bed chorus (16 bars) → 2-bar pivot → guest Drop 1
+    /// (~bar 24). Groove cameos move after Drop 1 so the join stays early.
+    private static func nSongClubMashupSlots(
+        drop1Idx: Int?,
+        drop2Idx: Int,
+        drop2IsBedFlip: Bool,
+        grooveCameoIdx: Int?,
+        breakdownCameoIdx: Int?,
+        outroCameoIdx: Int?
+    ) -> [Slot] {
+        var slots: [Slot] = [
+            Slot(songIdx: 0, role: .intro, bars: 6, entry: .none, energy: 0.45, shrinkPriority: 2),
+        ]
+        // Complete Deck A title chorus BEFORE pivot: 8 bars + 8-bar HOLD of
+        // the same island (16 timeline bars). Do not linearly walk 16 source
+        // bars from the title downbeat into verse 2 (“you see my problem is this”).
+        slots.append(Slot(
+            songIdx: 0, role: .chorus, bars: 8, entry: .none, energy: 0.88,
+            shrinkPriority: 0
+        ))
+        slots.append(Slot(
+            songIdx: 0, role: .chorus, bars: 8, entry: .none, energy: 0.88,
+            shrinkPriority: 0, holdTitleChorus: true
+        ))
+        // 2-bar pivot window — replaced with 1-beat wallpaper grains at emit time.
+        slots.append(Slot(songIdx: 0, role: .build, bars: 2, entry: .flangerBuild, energy: 0.72, shrinkPriority: 1))
+
+        if let d1 = drop1Idx {
+            slots.append(Slot(songIdx: d1, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
+        } else {
+            slots.append(Slot(songIdx: 0, role: .chorus, bars: 16, entry: .hardHypeCut, energy: 1.0))
+        }
+
+        // Optional groove cameo after the first join (not before — keeps Drop 1 early).
+        if let g = grooveCameoIdx {
+            slots.append(Slot(songIdx: g, role: .groove, bars: 8, entry: .cleanCrossfade, energy: 0.55))
+        }
+
+        if let b = breakdownCameoIdx {
+            slots.append(Slot(songIdx: b, role: .breakdown, bars: 8, entry: .atmosphericHandoff, energy: 0.38))
+        } else {
+            slots.append(Slot(songIdx: 0, role: .breakdown, bars: 8, entry: .atmosphericHandoff, energy: 0.4))
+        }
+
+        slots.append(Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.82, isReturn: true))
+        slots.append(
+            Slot(
+                songIdx: drop2Idx,
+                role: .chorus,
+                bars: 16,
+                entry: .hardHypeCut,
+                energy: 1.0,
+                isFinalPeak: true,
+                isReturn: drop2IsBedFlip || (drop1Idx.map { $0 == drop2Idx } ?? false)
+            )
+        )
+
+        if let o = outroCameoIdx {
+            slots.append(Slot(songIdx: o, role: .teaser, bars: 8, entry: .vocalEchoOut, energy: 0.5, isEnding: true, shrinkPriority: 0))
+        } else {
+            slots.append(Slot(songIdx: 0, role: .ending, bars: 8, entry: .vocalEchoOut, energy: 0.55, isEnding: true, shrinkPriority: 0))
+        }
         return slots
     }
 
@@ -546,7 +1824,16 @@ enum AutoRemixPlanner {
         tuning: AutoTuning,
         seed: UInt64,
         rng: inout AutoRandom,
-        preDecisions: [AutoDecision] = []
+        preDecisions: [AutoDecision] = [],
+        mashupVocalID: UUID? = nil,
+        mashupBedID: UUID? = nil,
+        bedTempoRatio: Double? = nil,
+        vocalTempoRatio: Double? = nil,
+        bedPitchSemitones: Int = 0,
+        guestTempoRatios: [UUID: Double] = [:],
+        mashupDrop2ID: UUID? = nil,
+        drop1VocalOverlayIdx: Int? = nil,
+        drop2VocalOverlayIdx: Int? = nil
     ) -> AutoRemixPlan? {
         let barSec = 240.0 / max(targetBPM, 40)
         let beatSec = barSec / 4
@@ -555,16 +1842,95 @@ enum AutoRemixPlanner {
         var decisions: [AutoDecision] = preDecisions
         var warnings: [String] = []
         var intentionalGaps: [AutoIntentionalGap] = []
+        var pulseRegions: [AutoClubPulse.Region] = []
 
         let letters = ordered.enumerated().reduce(into: [UUID: String]()) { dict, item in
             dict[item.element.songID] = String(UnicodeScalar(UInt8(65 + min(item.offset, 25))))
         }
 
+        // Pulse from the bed (or first song): one-kick rule for mashups.
+        let pulseSource = ordered.first(where: { $0.songID == mashupBedID }) ?? ordered[0]
+        let pulse = AutoClubPulse.policy(
+            drumStrength: pulseSource.pulseDrumStrength,
+            bassDensity: pulseSource.analysis.bassDensity,
+            bpm: pulseSource.analysis.bpm,
+            analysisConfidence: pulseSource.analysis.analysisConfidence
+        )
+        if pulse.sourceHasClubKick {
+            decisions.append(
+                AutoDecision(kind: .skippedSecondKick, songTitle: pulseSource.title, detail: pulse.detail)
+            )
+        } else if pulse.writesKick {
+            decisions.append(
+                AutoDecision(kind: .wroteClubPulse, songTitle: pulseSource.title, detail: pulse.detail)
+            )
+        }
+        if pulseSource.stems.drums != nil {
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: pulseSource.title,
+                    detail: "kick energy from drums.wav"
+                )
+            )
+        }
+
+        // Mashup club flavor — Diplo default when pop vocals sit on a club bed.
+        let vocalDensity = ordered.map {
+            $0.analysis.meanVocalDensity(from: 0, to: $0.analysis.durationSeconds)
+        }.max() ?? 0.5
+        var mashupFlavor = AutoClubFlavor.choose(
+            drumStrength: pulseSource.analysis.drumStrength,
+            bassDensity: pulseSource.analysis.bassDensity,
+            vocalDensity: vocalDensity,
+            bpm: pulseSource.analysis.bpm,
+            seed: seed ^ 0xD1_F10
+        )
+        // Mashup is a festival rewrite. Calvin is solo piano-ballad only.
+        if mode == .mashup, mashupFlavor == .calvin {
+            mashupFlavor = .diplo
+        }
+        decisions.append(
+            AutoDecision(kind: .choseClubFlavor, songTitle: pulseSource.title, detail: mashupFlavor.rawValue)
+        )
+
         var fits: [Int: AutoTempo.Fit] = [:]
         for (i, p) in ordered.enumerated() {
-            let fit = mode == .remix
-                ? AutoTempo.Fit(ratio: 1.0, gridAligned: true, halfOrDoubleTime: false)
-                : AutoTempo.fit(songBPM: p.analysis.bpm, targetBPM: targetBPM, maxStretch: tuning.maxStretch)
+            let fit: AutoTempo.Fit
+            if mode == .remix {
+                fit = AutoTempo.Fit(ratio: 1.0, gridAligned: true, halfOrDoubleTime: false)
+            } else if let bedID = mashupBedID, p.songID == bedID, let bedTempoRatio {
+                let lift = AutoClubTempo.clubHouseLiftRatio(
+                    songBPM: p.analysis.bpm, targetBPM: targetBPM
+                )
+                fit = AutoTempo.Fit(
+                    ratio: bedTempoRatio,
+                    gridAligned: abs(bedTempoRatio - 1) <= tuning.maxInstrumentalStretch || lift != nil,
+                    halfOrDoubleTime: lift != nil
+                )
+            } else if let guestRatio = guestTempoRatios[p.songID] {
+                // Drop 1 / Drop 2 / cameo guests — gate-approved stretch only.
+                let lift = AutoClubTempo.clubHouseLiftRatio(
+                    songBPM: p.analysis.bpm, targetBPM: targetBPM
+                )
+                fit = AutoTempo.Fit(
+                    ratio: guestRatio,
+                    gridAligned: abs(guestRatio - 1) <= tuning.maxStretch + 0.0001 || lift != nil,
+                    halfOrDoubleTime: lift != nil
+                )
+            } else if let vocalID = mashupVocalID, p.songID == vocalID, let vocalTempoRatio {
+                fit = AutoTempo.Fit(
+                    ratio: vocalTempoRatio,
+                    gridAligned: abs(vocalTempoRatio - 1) <= tuning.maxStretch || abs(vocalTempoRatio - 1) < 0.0001,
+                    halfOrDoubleTime: false
+                )
+            } else {
+                fit = AutoTempo.fit(
+                    songBPM: p.analysis.bpm,
+                    targetBPM: targetBPM,
+                    maxStretch: p.songID == mashupVocalID ? tuning.maxStretch : tuning.maxInstrumentalStretch
+                )
+            }
             fits[i] = fit
             if mode == .mashup {
                 if abs(fit.ratio - 1) > 0.0001 {
@@ -586,7 +1952,7 @@ enum AutoRemixPlanner {
                     )
                 } else if !fit.gridAligned {
                     warnings.append(
-                        "\(p.title) is outside the safe ±8% stretch window; Auto kept its native tempo and used clean phrase-aligned handoffs for it."
+                        "\(p.title) is outside the safe stretch window; Auto kept its native tempo and used clean phrase-aligned handoffs for it."
                     )
                 }
             }
@@ -594,11 +1960,13 @@ enum AutoRemixPlanner {
 
         var slots = slotsIn
         func totalSeconds() -> Double { slots.reduce(0) { $0 + Double($1.bars) * barSec } }
+        // Mashups keep ≥8-bar identity stays (no 4-bar ping-pong).
+        let barFloor = mode == .mashup ? 8 : 4
         var shrinkPass = 2
         while totalSeconds() > tuning.maxTimelineSeconds, shrinkPass >= 1 {
             var shrunk = false
-            for i in slots.indices where slots[i].shrinkPriority >= shrinkPass && slots[i].bars > 4 {
-                slots[i].bars = slots[i].bars == 16 ? 8 : 4
+            for i in slots.indices where slots[i].shrinkPriority >= shrinkPass && slots[i].bars > barFloor {
+                slots[i].bars = slots[i].bars == 16 ? 8 : barFloor
                 shrunk = true
                 if totalSeconds() <= tuning.maxTimelineSeconds { break }
             }
@@ -618,9 +1986,22 @@ enum AutoRemixPlanner {
             let used = usedRanges[profile.songID] ?? []
 
             let labelChain: [[AutoCandidateSection.Label]]
+            let isFirstCompleteAHook = mode == .mashup
+                && slot.songIdx == 0
+                && slot.role == .chorus
+                && slot.entry != .hardHypeCut
+                && !slot.isReturn
+                && !slot.holdTitleChorus
             switch slot.role {
             case .teaser: labelChain = [[.teaser], [.chorus], [.groove]]
-            case .chorus: labelChain = [[.chorus], [.groove], [.teaser]]
+            case .chorus:
+                // First complete Deck A hook never falls through to a 2–4 bar
+                // title teaser. Skip the loop later if no last-word grain.
+                if isFirstCompleteAHook {
+                    labelChain = [[.chorus], [.groove]]
+                } else {
+                    labelChain = [[.chorus], [.groove], [.teaser]]
+                }
             case .groove: labelChain = [[.groove], [.chorus], [.breakdown]]
             case .build: labelChain = [[.build], [.groove]]
             case .breakdown: labelChain = [[.breakdown], [.groove], [.chorus]]
@@ -640,7 +2021,202 @@ enum AutoRemixPlanner {
                     break
                 }
             }
-            guard let section else {
+
+            // Title-chorus hold: replay the same 8-bar island (not verse 2).
+            if mode == .mashup, slot.holdTitleChorus, slot.role == .chorus {
+                if let prior = placed.last(where: {
+                    $0.slot.songIdx == slot.songIdx
+                        && $0.slot.role == .chorus
+                        && !$0.slot.holdTitleChorus
+                        && $0.slot.entry != .hardHypeCut
+                }) {
+                    section = AutoCandidateSection(
+                        songID: prior.section.songID,
+                        label: .chorus,
+                        startSeconds: prior.section.startSeconds,
+                        barCount: 8,
+                        barSeconds: prior.section.barSeconds,
+                        hook: prior.section.hook,
+                        energy: prior.section.energy,
+                        vocal: prior.section.vocal,
+                        clarity: prior.section.clarity,
+                        rhythm: prior.section.rhythm,
+                        uniqueness: prior.section.uniqueness,
+                        transitionUse: prior.section.transitionUse,
+                        confidence: prior.section.confidence
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .returnedToHook,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "title chorus hold @%.1fs (repeat 8-bar island, not verse-2 walk)",
+                                prior.section.startSeconds
+                            )
+                        )
+                    )
+                }
+            }
+            if isFirstCompleteAHook {
+                let introEnd = profile.analysis.introCandidate?.endSeconds ?? barSec * 8
+                let phrase = profile.analysis.phraseBoundaries.count >= 2
+                    ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+                    : barSec * 8
+                let measuredEntrance = AutoChorusIsland.bestEntrance(
+                    signal: profile.analysis.signal,
+                    downbeats: profile.analysis.downbeats,
+                    barSeconds: barSec,
+                    duration: profile.analysis.durationSeconds,
+                    introEnd: introEnd,
+                    phraseSeconds: phrase,
+                    title: profile.title
+                )
+                if let chorus = AutoJoinEngine.bedFirstCompleteChorusSection(
+                    profile: profile,
+                    used: used,
+                    bars: slot.bars,
+                    energy: slot.energy,
+                    tempoRatio: fit.ratio
+                ) {
+                    section = chorus
+                    let rawList: String
+                    if let sig = profile.analysis.signal {
+                        rawList = AutoChorusIsland.titleEntranceCandidates(
+                            signal: sig,
+                            downbeats: profile.analysis.downbeats,
+                            barSeconds: barSec,
+                            duration: profile.analysis.durationSeconds,
+                            introEnd: introEnd,
+                            phraseSeconds: phrase,
+                            title: profile.title
+                        )
+                        .map { String(format: "%.1f", $0.startSeconds) }
+                        .joined(separator: ",")
+                    } else {
+                        rawList = ""
+                    }
+                    let dump = AutoChorusIsland.bedHookDecisionDump(
+                        profile: profile,
+                        measured: measuredEntrance,
+                        chosenStart: chorus.startSeconds
+                    )
+                    let tokensDump = AutoChorusIsland.titleTokensDump(profile.title)
+                    let lyricDump = AutoChorusIsland.lyricHookDump(profile.analysis.signal)
+                    decisions.append(
+                        AutoDecision(
+                            kind: .selectedAnchor,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "bed complete hook @%.2fs entry=%@ (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | %@ | raw=[%@] | %@ | %@",
+                                chorus.startSeconds,
+                                slot.entry.rawValue,
+                                dump,
+                                rawList,
+                                tokensDump,
+                                lyricDump
+                            )
+                        )
+                    )
+                } else {
+                    let lastUsedEnd = used.map(\.1).max()
+                    let bad = section.map { $0.barCount < 8 || $0.label == .teaser } ?? true
+                    let rewind = section.flatMap { s in lastUsedEnd.map { s.startSeconds < $0 - 0.05 } } ?? false
+                    let beforeChorus = section.map {
+                        let anchor = profile.analysis.chorusOrDropCandidates.first?.startSeconds ?? 0
+                        return $0.startSeconds + barSec * 1.0 < anchor - 0.05
+                    } ?? true
+                    if section == nil || bad || rewind || beforeChorus {
+                        let from = lastUsedEnd ?? max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
+                        if let complete = completePhraseSection(
+                            profile: profile,
+                            from: from,
+                            bars: max(8, slot.bars),
+                            energy: slot.energy
+                        ) {
+                            section = complete
+                        } else if bad {
+                            section = nil
+                        }
+                    }
+                }
+            }
+
+            // AutoMashUpper (Davies 2014): mashability is LOCAL — snap drop
+            // vocals to the best 8–16 bar island over the bed (beat-offset
+            // search), not a whole-song stretch of the star vocal.
+            if mode == .mashup, slot.role == .chorus,
+               let bedID = mashupBedID, profile.songID != bedID,
+               let bedProfile = ordered.first(where: { $0.songID == bedID }),
+               let island = AutoMashability.bestIsland(
+                   guest: profile,
+                   bed: bedProfile,
+                   wantBars: max(8, slot.bars),
+                   targetBPM: targetBPM,
+                   tuning: tuning,
+                   titleEntranceOnly: profile.songID == mashupVocalID && !slot.isReturn
+               ),
+               let base = section {
+                let isDrop1Vocal = profile.songID == mashupVocalID && !slot.isReturn && !slot.isFinalPeak
+                let placedStart = isDrop1Vocal
+                    ? AutoMashability.drop1GuestStart(guest: profile, island: island)
+                    : island.guestStart
+                section = AutoCandidateSection(
+                    songID: base.songID,
+                    label: base.label,
+                    startSeconds: placedStart,
+                    barCount: max(base.barCount, island.bars),
+                    barSeconds: base.barSeconds,
+                    hook: max(base.hook, island.score),
+                    energy: base.energy,
+                    vocal: base.vocal,
+                    clarity: base.clarity,
+                    rhythm: max(base.rhythm, island.rhythmic),
+                    uniqueness: base.uniqueness,
+                    transitionUse: base.transitionUse,
+                    confidence: base.confidence
+                )
+                let titleStr = AutoChorusIsland.bestEntrance(
+                    signal: profile.analysis.signal,
+                    downbeats: profile.analysis.downbeats,
+                    barSeconds: profile.analysis.barSeconds,
+                    duration: profile.analysis.durationSeconds,
+                    introEnd: profile.analysis.introCandidate?.endSeconds ?? barSec * 8,
+                    phraseSeconds: profile.analysis.phraseBoundaries.count >= 2
+                        ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+                        : barSec * 8,
+                    title: profile.title
+                ).map { String(format: "%.1f", $0.startSeconds) } ?? "nil"
+                let catalog = profile.analysis.chorusOrDropCandidates
+                    .map { String(format: "%.1f", $0.startSeconds) }
+                    .joined(separator: ",")
+                if isDrop1Vocal {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .selectedAnchor,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "Drop 1 guest placed @%.1fs (titleEntrance=%@ mashability=%.1f chorusOrDrop=[%@]) over bed @%.1fs (score %.2f) %@ %@",
+                                placedStart, titleStr, island.guestStart, catalog, island.bedStart, island.score,
+                                AutoChorusIsland.titleTokensDump(profile.title),
+                                AutoChorusIsland.lyricHookDump(profile.analysis.signal)
+                            )
+                        )
+                    )
+                } else {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .selectedAnchor,
+                            songTitle: profile.title,
+                            detail: String(
+                                format: "AutoMashUpper island @%.1fs over bed @%.1fs (score %.2f)",
+                                island.guestStart, island.bedStart, island.score
+                            )
+                        )
+                    )
+                }
+            }
+
+            guard var section = section else {
                 warnings.append(
                     "No usable \(slot.role.rawValue) section found in \(profile.title); skipped that appearance."
                 )
@@ -654,11 +2230,85 @@ enum AutoRemixPlanner {
                 continue
             }
 
+            // Protect Deck A opening: never a teaser chop of the *title*.
+            // Lead the intro into the first title-hook so the first identity
+            // word is not a hard cut from record-head silence. Fade-in is
+            // applied after placements exist.
+            if slot.role == .intro {
+                let introSource = Double(slot.bars) * barSec * max(fit.ratio, 0.0001)
+                let phrase = profile.analysis.phraseBoundaries.count >= 2
+                    ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+                    : barSec * 8
+                let hook = AutoChorusIsland.bestEntrance(
+                    signal: profile.analysis.signal,
+                    downbeats: profile.analysis.downbeats,
+                    barSeconds: profile.analysis.barSeconds,
+                    duration: profile.analysis.durationSeconds,
+                    introEnd: profile.analysis.introCandidate?.endSeconds ?? barSec * 8,
+                    phraseSeconds: phrase,
+                    title: profile.title
+                )?.startSeconds ?? profile.analysis.signal?.lyricTitleHookStart
+                let recordHead = max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
+                let open: Double
+                if let hook, hook > introSource + 0.25 {
+                    open = max(recordHead, hook - introSource)
+                } else {
+                    open = recordHead
+                }
+                if abs(section.startSeconds - open) > 0.05 {
+                    section = AutoCandidateSection(
+                        songID: section.songID,
+                        label: .intro,
+                        startSeconds: open,
+                        barCount: section.barCount,
+                        barSeconds: section.barSeconds,
+                        hook: section.hook,
+                        energy: section.energy,
+                        vocal: section.vocal,
+                        clarity: section.clarity,
+                        rhythm: section.rhythm,
+                        uniqueness: section.uniqueness,
+                        transitionUse: section.transitionUse,
+                        confidence: section.confidence
+                    )
+                }
+            }
+
+            // Xirex: reserve the 1–2 bar pivot wallpaper window on the timeline
+            // (no dominant island). Grains are emitted when Drop 1 lands.
+            if mode == .mashup, slot.role == .build, slot.bars <= 4, !slot.isReturn {
+                let dur = Double(slot.bars) * barSec
+                pulseRegions.append(
+                    AutoClubPulse.Region(
+                        role: .buildOut,
+                        timelineStart: cursor,
+                        timelineEnd: cursor + dur
+                    )
+                )
+                cursor += dur
+                continue
+            }
+
             var bars = slot.bars
             let songDuration = profile.analysis.durationSeconds
             let availableSeconds = (songDuration - 0.15 - section.startSeconds) / max(fit.ratio, 0.0001)
-            while bars > minBars, Double(bars) * barSec > availableSeconds {
+            let identityFloor = mode == .mashup ? max(minBars, 8) : minBars
+            while bars > identityFloor, Double(bars) * barSec > availableSeconds {
                 bars -= minBars
+            }
+            // Mashups: skip rather than emit a sub-8-bar island (intro tease may be 6 bars).
+            if mode == .mashup, bars < 8, slot.role != .intro {
+                warnings.append(
+                    "\(profile.title) lacked 8 bars for \(slot.role.rawValue); skipped to avoid a 4-bar switch."
+                )
+                decisions.append(
+                    AutoDecision(
+                        kind: .skippedWeakSection,
+                        songTitle: profile.title,
+                        detail: "\(slot.role.rawValue) (under 8-bar identity floor)"
+                    )
+                )
+                continue
             }
             guard Double(bars) * barSec <= availableSeconds, bars >= 2 else {
                 warnings.append(
@@ -684,7 +2334,8 @@ enum AutoRemixPlanner {
             }
 
             // Shorten weak low-energy grooves that aren't serving contrast.
-            if slot.role == .groove, section.energy < 0.35, section.hook < 0.45, bars > 4 {
+            // Mashups keep the 8-bar identity floor.
+            if mode != .mashup, slot.role == .groove, section.energy < 0.35, section.hook < 0.45, bars > 4 {
                 bars = 4
                 decisions.append(
                     AutoDecision(
@@ -703,32 +2354,54 @@ enum AutoRemixPlanner {
             // Never emit the exact same clip solely to pad handoff count.
             var entry = slot.entry
             var energy = slot.energy
-            if reused, slot.isReturn {
+            if reused, slot.isReturn, !slot.holdTitleChorus {
                 if entry == .none || entry == .cleanCrossfade {
                     entry = .hardHypeCut
                 }
                 energy = min(1, energy + 0.08)
             }
 
-            // Intentional micro-pause before a hard hype cut (≤ 1/4 beat).
-            if entry == .hardHypeCut, !profile.lowConfidence, cursor > 0 {
-                let pause = min(tuning.maxIntentionalPauseBeats * beatSec, beatSec * 0.25)
-                if pause > 0.001 {
-                    intentionalGaps.append(
-                        AutoIntentionalGap(
-                            start: cursor,
-                            end: cursor + pause,
-                            reason: "pre-drop pause"
-                        )
-                    )
-                    cursor += pause
-                }
-            }
+            // No 1-beat pre-drop void. Pivot Drop 1 is loop + hard cut at full
+            // clip volume; a void next to `pivotWallpaperLoop` is the quiet
+            // hole crate bounce flags. Drop 2 is also a hard cut / impact.
 
             let duration = Double(bars) * barSec
             var mutableSlot = slot
             mutableSlot.entry = entry
             mutableSlot.energy = energy
+
+            let pulseRole: AutoClubPulse.RegionRole
+            switch slot.role {
+            case .intro, .teaser: pulseRole = .introTease
+            case .groove: pulseRole = .groove
+            case .build: pulseRole = .build
+            case .chorus:
+                // Only hard-hype hook-replace is a Drop. The bed's completed
+                // chorus before the pivot stays "the record" (groove pulse).
+                pulseRole = entry == .hardHypeCut ? .drop : .groove
+            case .breakdown: pulseRole = .breakdown
+            case .ending: pulseRole = .outro
+            }
+            // Build-out mute for last 4 bars of builds ≥ 8.
+            if slot.role == .build, bars >= 8 {
+                let bodyBars = bars - 4
+                let bodyDur = Double(bodyBars) * barSec
+                pulseRegions.append(
+                    AutoClubPulse.Region(role: .build, timelineStart: cursor, timelineEnd: cursor + bodyDur)
+                )
+                pulseRegions.append(
+                    AutoClubPulse.Region(
+                        role: .buildOut,
+                        timelineStart: cursor + bodyDur,
+                        timelineEnd: cursor + duration
+                    )
+                )
+            } else {
+                pulseRegions.append(
+                    AutoClubPulse.Region(role: pulseRole, timelineStart: cursor, timelineEnd: cursor + duration)
+                )
+            }
+
             placed.append(
                 PlacedSlot(
                     slot: mutableSlot,
@@ -756,19 +2429,13 @@ enum AutoRemixPlanner {
         }
         guard placed.count >= 2 else { return nil }
 
-        // Duo alternation: target ≥3 handoffs without inventing tiny clips.
-        if mode == .mashup, ordered.count == 2 {
-            let handoffs = countHandoffs(placed)
-            if handoffs < 3 {
-                decisions.append(
-                    AutoDecision(
-                        kind: .duoAlternationFallback,
-                        songTitle: nil,
-                        detail: "Could not reach A → B → A → B without incomplete sections — kept the cleanest valid alternation."
-                    )
-                )
+        // Club mashups rotate hooks across islands — do not invent 4-bar
+        // ping-pong just to inflate handoff count.
+        if mode == .mashup {
+            let shortStay = placed.contains { $0.timelineDuration + 0.001 < Double(8) * barSec && !$0.slot.isEnding }
+            if shortStay {
                 warnings.append(
-                    "Fewer than three song handoffs — duration or analysis confidence prevented a full A → B → A → B without incomplete sections."
+                    "A mashup island landed under 8 bars after material limits — prefer fewer islands over 4-bar switches."
                 )
             }
         }
@@ -815,34 +2482,54 @@ enum AutoRemixPlanner {
             let isHandoff = prev != nil && prev!.slot.songIdx != ps.slot.songIdx
             let entry = ps.slot.entry
             let boundary = ps.timelineStart
-            let baseVolume = 0.82 + 0.18 * ps.slot.energy
+            let isIncomingDrop = entry == .hardHypeCut && ps.slot.role == .chorus
+            let baseVolume = isIncomingDrop
+                ? AutoGainPolicy.incomingDropVolume
+                : (0.82 + 0.18 * ps.slot.energy)
             let allowMajorSFX = boundary - lastMajorSFXTime >= majorSFXSpacing
 
             if i > 0 { transitionsUsed.append(entry) }
 
+            // Xirex 1–2 bar pivot window: no dominant bed audio — wallpaper grains
+            // are placed when Drop 1 emits (after the completed chorus phrase).
+            let isPivotWindow = mode == .mashup
+                && ps.slot.role == .build
+                && ps.slot.bars <= 4
+                && !ps.slot.isReturn
+            if isPivotWindow {
+                lastMajorSFXTime = boundary
+                continue
+            }
+
             var bodyFX = ClipEffectSettings()
             switch ps.slot.role {
             case .teaser:
-                bodyFX.setLevel(28, for: MixrEffect.blur.rawValue)
-                bodyFX.setLevel(14, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(34, for: MixrEffect.blur.rawValue)
+                bodyFX.setLevel(20, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .reverse
             case .build:
                 if !profile.lowConfidence {
-                    bodyFX.flangerAmount = ps.slot.energy > 0.75 ? 0.26 : 0.16
+                    bodyFX.flangerAmount = ps.slot.energy > 0.75 ? 0.34 : 0.24
+                    bodyFX.setLevel(28, for: MixrEffect.echo.rawValue)
+                    bodyFX.echoPreset = .pingPong
+                    bodyFX.setLevel(22, for: MixrEffect.blur.rawValue)
                 }
             case .chorus:
-                bodyFX.setLevel(8, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(12, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .hall
+                bodyFX.setLevel(14, for: MixrEffect.echo.rawValue)
             case .breakdown:
-                bodyFX.setLevel(18, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(28, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .ambient
+                bodyFX.setLevel(24, for: MixrEffect.echo.rawValue)
+                bodyFX.echoPreset = .classic
             case .ending:
-                bodyFX.setLevel(24, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(30, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .ambient
-                bodyFX.setLevel(20, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(28, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .classic
             case .groove, .intro:
-                break
+                bodyFX.setLevel(12, for: MixrEffect.echo.rawValue)
             }
             bodyFX = AutoSupportedEffects.sanitize(bodyFX)
 
@@ -868,22 +2555,58 @@ enum AutoRemixPlanner {
                     duration: headSeconds,
                     fx: headFX,
                     volume: baseVolume * 0.92,
-                    fadeIn: ClipTransition(type: .crossfade, duration: 4),
+                    fadeIn: ClipTransition(
+                        type: .crossfade,
+                        duration: 4,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName
+                    ),
                     fadeOut: .none
                 ))
             }
 
             let bodyStart = headSeconds
             let bodyDuration = ps.timelineDuration - headSeconds - tailSeconds
-            var bodyFadeIn: ClipTransition = headSeconds > 0 ? .none : ClipTransition(type: .crossfade, duration: 1)
-            var bodyFadeOut: ClipTransition = tailSeconds > 0 ? .none : ClipTransition(type: .fadeOut, duration: 1)
+            let equalPower = AutoTransitionEnvelope.equalPowerCurveName
+            // Never fade both neighbors toward silence — equal-power crossfade
+            // keeps energy continuous through handoffs (void is the only hole).
+            var bodyFadeIn: ClipTransition = headSeconds > 0
+                ? .none
+                : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
+            var bodyFadeOut: ClipTransition = tailSeconds > 0
+                ? .none
+                : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
             if entry == .cleanCrossfade, headSeconds == 0 {
-                bodyFadeIn = ClipTransition(type: .crossfade, duration: 4)
+                bodyFadeIn = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
+            }
+            // Title-hook chorus (first complete A hook + 8+8 hold): hard cut.
+            // A crossfade on this slot eats the identifiable opening word.
+            let isTitleHookSlot = mode == .mashup
+                && ps.slot.role == .chorus
+                && entry != .hardHypeCut
+                && !ps.slot.isFinalPeak
+                && (ps.slot.holdTitleChorus || (ps.slot.songIdx == 0 && !ps.slot.isReturn))
+            if isTitleHookSlot, headSeconds == 0 {
+                bodyFadeIn = .hardCut
+            }
+            let hookVolume = isTitleHookSlot
+                ? max(baseVolume, AutoGainPolicy.incomingDropVolume)
+                : baseVolume
+            // Xirex: hard cut into the hook-replace drop (no crossfade, no fade-in).
+            if entry == .hardHypeCut, headSeconds == 0 {
+                bodyFadeIn = .hardCut
+                bodyFadeOut = next == nil
+                    ? bodyFadeOut
+                    : ClipTransition(type: .crossfade, duration: 2, curve: equalPower)
+            }
+            // Song-switch into a hard cut: outgoing stays at full clip volume
+            // through the join (no fade-to-silence just to change records).
+            if nextIsHandoff, nextEntry == .hardHypeCut, tailSeconds == 0 {
+                bodyFadeOut = .none
             }
             if ps.slot.isEnding {
                 bodyFadeOut = ClipTransition(type: .echoOut, duration: 6)
             } else if nextIsHandoff, nextEntry == .cleanCrossfade, tailSeconds == 0 {
-                bodyFadeOut = ClipTransition(type: .fadeOut, duration: 4)
+                bodyFadeOut = ClipTransition(type: .crossfade, duration: 4, curve: equalPower)
             }
 
             var emittedPitchMoment = false
@@ -900,9 +2623,9 @@ enum AutoRemixPlanner {
                     pitchFX.reverbPreset = .smallRoom
                     pitchFX = AutoSupportedEffects.sanitize(pitchFX)
 
-                    segments.append((bodyStart, cleanA, bodyFX, baseVolume, bodyFadeIn, .none))
-                    segments.append((bodyStart + cleanA, partBars, pitchFX, baseVolume, .none, .none))
-                    segments.append((bodyStart + cleanA + partBars, partBars, bodyFX, baseVolume, .none, bodyFadeOut))
+                    segments.append((bodyStart, cleanA, bodyFX, hookVolume, bodyFadeIn, .none))
+                    segments.append((bodyStart + cleanA, partBars, pitchFX, hookVolume, .none, .none))
+                    segments.append((bodyStart + cleanA + partBars, partBars, bodyFX, hookVolume, .none, bodyFadeOut))
                     emittedPitchMoment = true
                     decisions.append(
                         AutoDecision(
@@ -914,7 +2637,36 @@ enum AutoRemixPlanner {
                 }
             }
             if !emittedPitchMoment {
-                segments.append((bodyStart, bodyDuration, bodyFX, baseVolume, bodyFadeIn, bodyFadeOut))
+                segments.append((bodyStart, bodyDuration, bodyFX, hookVolume, bodyFadeIn, bodyFadeOut))
+            }
+
+            if isTitleHookSlot {
+                decisions.append(
+                    AutoDecision(
+                        kind: .selectedAnchor,
+                        songTitle: profile.title,
+                        detail: String(
+                            format: "title-hook clip src=%.2fs t=%.1fs entry=%@ fadeIn=%@ fadeDur=%.2f %@ %@ %@",
+                            ps.section.startSeconds,
+                            ps.timelineStart,
+                            entry.rawValue,
+                            bodyFadeIn.type.rawValue,
+                            bodyFadeIn.duration,
+                            profile.stems.hasVocals ? "vocal-stem" : "full-mix",
+                            AutoChorusIsland.titleTokensDump(profile.title),
+                            AutoChorusIsland.lyricHookDump(profile.analysis.signal)
+                        )
+                    )
+                )
+                if profile.stems.hasVocals {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .usedStemSidecar,
+                            songTitle: profile.title,
+                            detail: "title-hook from vocals.wav"
+                        )
+                    )
+                }
             }
 
             if tailSeconds > 0 {
@@ -950,6 +2702,13 @@ enum AutoRemixPlanner {
             }
 
             for seg in segments where seg.duration > 0.01 {
+                let hookVocalStem = mode == .mashup
+                    && ps.slot.role == .chorus
+                    && profile.stems.hasVocals
+                    && (
+                        isTitleHookSlot
+                            || (entry == .hardHypeCut && mashupBedID != profile.songID)
+                    )
                 placements.append(
                     AutoClipPlacement(
                         songID: profile.songID,
@@ -962,34 +2721,92 @@ enum AutoRemixPlanner {
                         fadeOut: seg.fadeOut,
                         effects: AutoSupportedEffects.sanitize(seg.fx),
                         role: .dominant,
-                        slotIndex: i
+                        slotIndex: i,
+                        stemKind: hookVocalStem ? .vocals : nil
                     )
                 )
             }
 
-            // Directional overlap under mashup handoffs.
+            if isTitleHookSlot, profile.stems.hasVocals {
+                appendTitleHookInstrumentalUnderLead(
+                    lead: ps,
+                    profile: profile,
+                    slotIndex: i,
+                    placements: &placements,
+                    decisions: &decisions
+                )
+            }
+
+            // Club mashup drops: bed under the hook (hook-replace) + optional
+            // short call-and-response. Xirex pivot wallpaper before Drop 1 only
+            // (hard cut into hook-replace) — never on the bed's own complete chorus.
+            if mode == .mashup, ps.slot.role == .chorus {
+                if !ps.slot.isFinalPeak,
+                   !decisions.contains(where: { $0.kind == .pivotWallpaperLoop }),
+                   (entry == .hardHypeCut || profile.songID == mashupVocalID),
+                   let bedID = mashupBedID,
+                   let bedTitle = ordered.first(where: { $0.songID == bedID })?.title,
+                   let phrase = placements.last(where: {
+                       $0.songID == bedID
+                           && $0.role == .dominant
+                           && $0.timelineStart + 0.05 < ps.timelineStart
+                   }) {
+                    let bedStems = ordered.first(where: { $0.songID == bedID })?.stems
+                    AutoJoinEngine.appendPivotWallpaperLoop(
+                        completedPhrase: phrase,
+                        dropTimelineStart: ps.timelineStart,
+                        deckATitle: bedTitle,
+                        deckBTitle: profile.title,
+                        barSec: barSec,
+                        beatSec: beatSec,
+                        tuning: tuning,
+                        grainStem: (bedStems?.hasVocals ?? false) ? .vocals : nil,
+                        signal: ordered.first(where: { $0.songID == bedID })?.analysis.signal,
+                        incomingSongID: profile.songID,
+                        incomingHookStart: ps.section.startSeconds,
+                        incomingTempoRatio: ps.tempoRatio,
+                        incomingSignal: profile.analysis.signal,
+                        incomingGrainStem: profile.stems.hasVocals ? .vocals : nil,
+                        placements: &placements,
+                        pulseRegions: &pulseRegions,
+                        intentionalGaps: &intentionalGaps,
+                        decisions: &decisions
+                    )
+                }
+                appendMashupDropStacks(
+                    lead: ps,
+                    leadProfile: profile,
+                    leadSlotIndex: i,
+                    ordered: ordered,
+                    fits: fits,
+                    mashupBedID: mashupBedID,
+                    overlaySongIdx: ps.slot.isFinalPeak ? drop2VocalOverlayIdx : drop1VocalOverlayIdx,
+                    dropLabel: ps.slot.isFinalPeak ? "Drop 2" : "Drop 1",
+                    barSec: barSec,
+                    tuning: tuning,
+                    usedRanges: &usedRanges,
+                    placements: &placements,
+                    decisions: &decisions
+                )
+            }
+
+            // Directional overlap under mashup handoffs (non-drop recipes).
+            // Vocals may overlap with ducking; reject only dual kick/bass full mixes.
             if mode == .mashup, isHandoff, let prev,
                ![.hardHypeCut, .cleanCrossfade, .none].contains(entry) {
                 let prevProfile = ordered[prev.slot.songIdx]
-                let compat = AutoCompatibility.directional(
-                    dominant: ps.section,
-                    dominantProfile: profile,
-                    support: prev.section,
-                    supportProfile: prevProfile,
-                    targetBPM: targetBPM,
-                    tuning: tuning
-                )
-                let overlapSeconds = Double(compat.overlapBars) * barSec
-                let prevSourceEnd = prev.section.startSeconds + prev.timelineDuration * prev.tempoRatio
-                let supportAvailable = prevProfile.analysis.durationSeconds - 0.15 - prevSourceEnd
+                let dualBass = profile.analysis.bassDensity > 0.65
+                    && prevProfile.analysis.bassDensity > 0.65
+                    && profile.analysis.drumStrength > 0.65
+                    && prevProfile.analysis.drumStrength > 0.65
+                    && ps.slot.role == .chorus && prev.slot.role == .chorus
 
-                let denseVocals = ps.section.vocal > 0.65 && prev.section.vocal > 0.65
-                if denseVocals, compat.overlapBars > 0 {
+                if dualBass {
                     decisions.append(
                         AutoDecision(
-                            kind: .avoidedVocalOverlap,
+                            kind: .rejectedDualBassStack,
                             songTitle: profile.title,
-                            detail: prevProfile.title
+                            detail: "vs \(prevProfile.title)"
                         )
                     )
                     decisions.append(
@@ -999,92 +2816,153 @@ enum AutoRemixPlanner {
                             detail: profile.title
                         )
                     )
-                } else if compat.overlapBars > 0,
-                          overlapSeconds >= tuning.minSegmentSeconds,
-                          supportAvailable >= overlapSeconds * prev.tempoRatio {
-                    var supportFX = ClipEffectSettings()
-                    supportFX.setLevel(32, for: MixrEffect.blur.rawValue)
-                    if compat.pitchCorrectionSemitones != 0 {
-                        supportFX.pitchDirection = compat.pitchCorrectionSemitones > 0 ? .up : .down
-                        supportFX.pitchAmount = Double(abs(compat.pitchCorrectionSemitones)) / 12.0
-                    }
-                    supportFX = AutoSupportedEffects.sanitize(supportFX)
-                    placements.append(
-                        AutoClipPlacement(
-                            songID: prevProfile.songID,
-                            sourceStart: prevSourceEnd,
-                            timelineStart: boundary,
-                            timelineDuration: overlapSeconds,
-                            tempoRatio: prev.tempoRatio,
-                            volume: tuning.supportVolume,
-                            fadeIn: .none,
-                            fadeOut: ClipTransition(type: .fadeOut, duration: 4),
-                            effects: supportFX,
-                            role: .supporting,
-                            slotIndex: i
-                        )
+                } else {
+                    let compat = AutoCompatibility.directional(
+                        dominant: ps.section,
+                        dominantProfile: profile,
+                        support: prev.section,
+                        supportProfile: prevProfile,
+                        targetBPM: targetBPM,
+                        tuning: tuning
                     )
-                    if compat.pitchCorrectionSemitones != 0 {
-                        let sign = compat.pitchCorrectionSemitones > 0 ? "+" : ""
-                        decisions.append(
-                            AutoDecision(
-                                kind: .pitchCorrectedOverlap,
-                                songTitle: prevProfile.title,
-                                detail: "\(sign)\(compat.pitchCorrectionSemitones) semitones"
+                    // Mixxx AutoDJ phrase match: overlap = outro∩intro, not a hole.
+                    let stretchFar = abs((fits[ps.slot.songIdx]?.ratio ?? 1) - 1) > tuning.maxStretch * 0.9
+                        || abs((fits[prev.slot.songIdx]?.ratio ?? 1) - 1) > tuning.maxInstrumentalStretch * 0.9
+                    let phrase = AutoPhraseMatch.plan(
+                        outgoingDuration: min(prev.timelineDuration, barSec * 4),
+                        incomingIntroDuration: min(ps.timelineDuration, barSec * 4),
+                        beatSeconds: beatSec,
+                        barSeconds: barSec,
+                        bpmAligned: (fits[ps.slot.songIdx]?.gridAligned ?? false)
+                            && (fits[prev.slot.songIdx]?.gridAligned ?? false),
+                        stretchFar: stretchFar
+                    )
+                    let overlapSeconds = max(
+                        Double(max(compat.overlapBars, 1)) * barSec * 0.5,
+                        phrase.overlapSeconds
+                    )
+                    let prevSourceEnd = prev.section.startSeconds + prev.timelineDuration * prev.tempoRatio
+                    let supportAvailable = prevProfile.analysis.durationSeconds - 0.15 - prevSourceEnd
+                    let denseVocals = ps.section.vocal > 0.55 && prev.section.vocal > 0.55
+                    let allowOverlap = (compat.overlapBars > 0 || denseVocals || phrase.preferLongCrossfade)
+                        && overlapSeconds >= tuning.minSegmentSeconds
+                        && supportAvailable >= overlapSeconds * prev.tempoRatio
+
+                    if phrase.preferTapeStop {
+                        addSFX("tapeStop", at: max(0, boundary - 0.3), purpose: "Mixxx-style spinback into far-BPM join")
+                    }
+
+                    if allowOverlap {
+                        var supportFX = ClipEffectSettings()
+                        var supportVol = tuning.supportVolume
+                        if denseVocals {
+                            supportFX.setLevel(34, for: MixrEffect.blur.rawValue)
+                            supportVol = tuning.duckedVocalSupportVolume
+                            decisions.append(
+                                AutoDecision(
+                                    kind: .duckedSupportingVocal,
+                                    songTitle: prevProfile.title,
+                                    detail: "under \(profile.title)"
+                                )
+                            )
+                        } else {
+                            supportFX.setLevel(22, for: MixrEffect.blur.rawValue)
+                        }
+                        let mayPitchSupport = mashupBedID == nil
+                            || prevProfile.songID == mashupBedID
+                        if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
+                            supportFX.pitchDirection = compat.pitchCorrectionSemitones > 0 ? .up : .down
+                            supportFX.pitchAmount = Double(abs(compat.pitchCorrectionSemitones)) / 12.0
+                        }
+                        supportFX = AutoSupportedEffects.sanitize(supportFX)
+                        placements.append(
+                            AutoClipPlacement(
+                                songID: prevProfile.songID,
+                                sourceStart: prevSourceEnd,
+                                timelineStart: boundary,
+                                timelineDuration: min(overlapSeconds, ps.timelineDuration),
+                                tempoRatio: prev.tempoRatio,
+                                volume: supportVol,
+                                fadeIn: .none,
+                                fadeOut: ClipTransition(type: .fadeOut, duration: 4),
+                                effects: supportFX,
+                                role: .supporting,
+                                slotIndex: i
                             )
                         )
+                        if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
+                            let sign = compat.pitchCorrectionSemitones > 0 ? "+" : ""
+                            decisions.append(
+                                AutoDecision(
+                                    kind: .pitchCorrectedOverlap,
+                                    songTitle: prevProfile.title,
+                                    detail: "\(sign)\(compat.pitchCorrectionSemitones) semitones"
+                                )
+                            )
+                        }
                     }
-                } else if compat.overlapBars == 0,
-                          ![.hardHypeCut, .cleanCrossfade].contains(entry),
-                          !profile.lowConfidence {
-                    // Low compatibility → prefer a clean cut over a muddy overlap.
-                    // (Entry recipe already chosen; note the restraint.)
                 }
             }
 
-            // Coordinated SFX — denser in remix, sparingly in mashup.
-            let isMajorReveal = ps.slot.isFinalPeak
-                || entry == .hardHypeCut
-                || (entry == .reverseEntrance && (mode == .remix || ps.slot.energy >= 0.9))
+            // Coordinated SFX — Drop 1 mix window is a festival stack when
+            // the flavor is maximalist; verses stay one record.
+            let isDropReveal = ps.slot.role == .chorus && entry == .hardHypeCut
 
-            if i > 0, allowMajorSFX {
+            if i > 0, (allowMajorSFX || isDropReveal) {
                 switch entry {
-                case .hardHypeCut where mode == .remix || isMajorReveal || ps.slot.isFinalPeak:
-                    let buildID = ps.slot.isFinalPeak ? "snareBuild" : "riser"
-                    addSFXEnding(
-                        buildID,
-                        at: boundary,
-                        purpose: ps.slot.isFinalPeak ? "snare build into the final drop" : "riser into the drop"
-                    )
-                    addSFX("impact", at: boundary, purpose: "impact on the drop downbeat")
-                    if ps.slot.isFinalPeak {
-                        addSFXEnding("riser", at: boundary, purpose: "riser into the final drop")
-                    }
-                    decisions.append(
-                        AutoDecision(
-                            kind: .addedRiserIntoDrop,
-                            songTitle: nil,
-                            detail: ps.slot.isFinalPeak ? "snare build + impact" : "riser + impact"
+                case .hardHypeCut where isDropReveal || mode == .remix || ps.slot.isFinalPeak:
+                    let isDrop1 = isDropReveal && !ps.slot.isFinalPeak
+                    if isDrop1 {
+                        appendFestivalMixWindowStack(
+                            dropAt: boundary,
+                            dropEnd: boundary + ps.timelineDuration,
+                            barSec: barSec,
+                            beatSec: beatSec,
+                            flavor: mashupFlavor,
+                            protectedRanges: lyricOnsetProtectedRanges(
+                                pulseRegions: pulseRegions, dropAt: boundary, placements: placements
+                            ),
+                            sfx: &sfx,
+                            decisions: &decisions
                         )
-                    )
+                    } else {
+                        addSFX("impact", at: boundary, purpose: "impact on the drop downbeat")
+                        let cymbalCount = sfx.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }.count
+                        if cymbalCount < 2 {
+                            addSFX("crash", at: boundary, purpose: "crash punctuation on drop")
+                        }
+                        decisions.append(
+                            AutoDecision(
+                                kind: .addedRiserIntoDrop,
+                                songTitle: nil,
+                                detail: ps.slot.isFinalPeak ? "drop 2 flip impact" : "drop slam"
+                            )
+                        )
+                    }
                     lastMajorSFXTime = boundary
                 case .reverseEntrance where mode == .remix || ps.slot.energy >= 0.88:
-                    addSFXEnding("reverseCymbal", at: boundary, purpose: "reverse cymbal into the hook reveal")
                     addSFX("impact", at: boundary, purpose: "impact on the new entrance")
                     lastMajorSFXTime = boundary
-                case .blurReveal where mode == .remix && ps.slot.energy >= 0.9:
+                case .blurReveal where mode == .remix && ps.slot.energy >= 0.85:
                     addSFX("impact", at: boundary, purpose: "impact on the reveal")
                     lastMajorSFXTime = boundary
-                case .vocalEchoOut where mode == .remix:
+                case .vocalEchoOut where mode == .remix || mode == .mashup:
                     if prev?.slot.role == .chorus, ps.slot.energy < prev!.slot.energy {
                         addSFX("downlifter", at: boundary, purpose: "downlifter out of the drop")
                         lastMajorSFXTime = boundary
                     }
-                case .flangerBuild where mode == .remix:
-                    addSFX("impact", at: boundary, purpose: "impact on the flanger release")
+                case .flangerBuild where mode == .remix || mode == .mashup:
+                    // Skip SFX on the 1–2 bar pivot window — grains + Drop 1 slam own it.
+                    if ps.slot.bars >= 8 {
+                        addSFXEnding("snareBuild", at: boundary + ps.timelineDuration, purpose: "snare through the build")
+                        addSFXEnding("riser", at: boundary + ps.timelineDuration, purpose: "riser through the build")
+                        lastMajorSFXTime = boundary + ps.timelineDuration
+                    }
+                case .atmosphericHandoff:
+                    addSFX("downlifter", at: boundary, purpose: "downlifter into breakdown")
                     lastMajorSFXTime = boundary
-                case .hardHypeCut where mode == .mashup && !isMajorReveal:
-                    // Mashup: song switch is enough — skip impact on every handoff.
+                case .cleanCrossfade:
+                    // Two-deck: no clap wallpaper on verse/groove handoffs.
                     break
                 default:
                     break
@@ -1094,12 +2972,6 @@ enum AutoRemixPlanner {
             if ps.slot.isEnding {
                 addSFX("impact", at: boundary, purpose: "final hit")
                 addSFX("downlifter", at: boundary + 1.05, purpose: "downlifter after the final hit")
-            }
-
-            // Remix: extra purposeful sweep out of each build.
-            if mode == .remix, ps.slot.role == .build,
-               boundary + ps.timelineDuration - lastMajorSFXTime >= majorSFXSpacing * 0.75 {
-                addSFXEnding("airSweep", at: boundary + ps.timelineDuration, purpose: "white-noise sweep into the payoff")
             }
         }
 
@@ -1151,15 +3023,114 @@ enum AutoRemixPlanner {
         }
         let confidence = sections.map(\.confidence).reduce(0, +) / Double(max(sections.count, 1))
 
-        return AutoRemixPlan(
+        // Pitch the BED only (never the star vocal) when a small Camelot fix helps.
+        if bedPitchSemitones != 0, let bedID = mashupBedID {
+            let amount = min(1.0, Double(abs(bedPitchSemitones)) / 3.0)
+            for i in placements.indices where placements[i].songID == bedID {
+                placements[i].effects.pitchDirection = bedPitchSemitones > 0 ? .up : .down
+                placements[i].effects.pitchAmount = amount
+                placements[i].effects = AutoSupportedEffects.sanitize(placements[i].effects)
+            }
+            if let bedTitle = ordered.first(where: { $0.songID == bedID })?.title {
+                decisions.append(
+                    AutoDecision(
+                        kind: .pitchCorrectedOverlap,
+                        songTitle: bedTitle,
+                        detail: "\(bedPitchSemitones > 0 ? "+" : "")\(bedPitchSemitones) st on bed"
+                    )
+                )
+            }
+        }
+
+        // Continuous energy through verse handoffs. Club drops stay hard cuts
+        // at full clip volume (no 1-beat void, no equal-power fade-in).
+        var songDurations: [UUID: Double] = [:]
+        for p in ordered {
+            songDurations[p.songID] = p.analysis.durationSeconds
+        }
+        var cutRecords: [AutoCutRecord] = []
+        blendAdjacentHandoffs(
+            placements: &placements,
+            intentionalGaps: intentionalGaps,
+            pulseRegions: pulseRegions,
+            songDurations: songDurations,
+            barSec: barSec,
+            beatSec: beatSec,
+            tuning: tuning,
+            cutRecords: &cutRecords
+        )
+
+        // Club pulse hits materialize at apply/render from pulseRegions.
+        _ = AutoClubPulse.scheduleHits(
+            regions: pulseRegions,
+            policy: pulse,
+            beatSeconds: beatSec,
+            barSeconds: barSec,
+            halfTimeDrop: mashupFlavor.bias.halfTimeDrop
+        )
+
+        ensureMashupDrop1Wallpaper(
+            mode: mode,
+            mashupBedID: mashupBedID,
+            mashupVocalID: mashupVocalID,
+            ordered: ordered,
+            barSec: barSec,
+            beatSec: beatSec,
+            tuning: tuning,
+            placements: &placements,
+            pulseRegions: &pulseRegions,
+            intentionalGaps: &intentionalGaps,
+            decisions: &decisions
+        )
+
+        AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
+            placements: placements,
+            beatSec: beatSec,
+            barSec: barSec,
+            decisions: &decisions,
+            intentionalGaps: &intentionalGaps,
+            pulseRegions: &pulseRegions
+        )
+
+        ensureFestivalDrop1Stack(
+            pulseRegions: pulseRegions,
+            placements: placements,
+            barSec: barSec,
+            beatSec: beatSec,
+            flavor: mashupFlavor,
+            mode: mode,
+            sfx: &sfx,
+            decisions: &decisions
+        )
+
+        AutoJoinEngine.boostJoinClipVolumes(
+            placements: &placements,
+            pulseRegions: pulseRegions,
+            beatSec: beatSec,
+            barSec: barSec,
+            profiles: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0) })
+        )
+        AutoJoinEngine.applyOpeningFadeIn(
+            placements: &placements,
+            beatSec: beatSec,
+            decisions: &decisions
+        )
+        var plan = AutoRemixPlan(
             mode: mode,
             targetBPM: targetBPM,
             targetDuration: cursorEnd(placed),
             anchorSongIDs: [ordered[0].songID],
             selectedSections: sections,
             placements: placements,
-            sfxEvents: sfx,
+            sfxEvents: sfx.sorted { $0.timelineStart < $1.timelineStart },
+            cutRecords: cutRecords,
             intentionalGaps: intentionalGaps,
+            pulsePolicy: pulse,
+            pulseRegions: pulseRegions,
+            clubFlavor: mashupFlavor,
+            mashupVocalSongID: mashupVocalID,
+            mashupDrop2SongID: mashupDrop2ID,
+            mashupBedSongID: mashupBedID,
             handoffCount: handoffs,
             songLetters: letters,
             sequence: sequence,
@@ -1168,9 +3139,871 @@ enum AutoRemixPlanner {
             decisions: decisions,
             warnings: warnings,
             confidence: confidence,
-            randomSeed: seed
+            randomSeed: seed,
+            stemsBySongID: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0.stems) })
+        )
+        plan.promoteMixWindowDump()
+        return plan
+    }
+
+    /// Equal-power overlaps on verse→build joins. Club drops (pivot Drop 1,
+    /// hook-return Drop 2) stay hard cuts at full clip volume — no quiet
+    /// void and no equal-power fade-in.
+    private static func blendAdjacentHandoffs(
+        placements: inout [AutoClipPlacement],
+        intentionalGaps: [AutoIntentionalGap],
+        pulseRegions: [AutoClubPulse.Region],
+        songDurations: [UUID: Double],
+        barSec: Double,
+        beatSec: Double,
+        tuning: AutoTuning,
+        cutRecords: inout [AutoCutRecord]
+    ) {
+        let equalPower = AutoTransitionEnvelope.equalPowerCurveName
+        // Prefer 1 bar of overlap; Mixxx AutoDJ lengthens when both sides
+        // have long phrase material and BPM is aligned.
+        let overlapSec = max(tuning.minSegmentSeconds, min(barSec, beatSec * 4))
+        let overlapBeats = overlapSec / max(beatSec, 0.001)
+
+        let dominantIdxs = placements.indices
+            .filter { placements[$0].role == .dominant }
+            .sorted { placements[$0].timelineStart < placements[$1].timelineStart }
+
+        for (prevIdx, nextIdx) in zip(dominantIdxs, dominantIdxs.dropFirst()) {
+            let prev = placements[prevIdx]
+            let next = placements[nextIdx]
+
+            // Legacy pre-drop void (must not be present on a pivoted plan).
+            let voidBeforeNext = intentionalGaps.contains { abs($0.end - next.timelineStart) < 0.05 }
+            if voidBeforeNext { continue }
+
+            // Xirex pivot hard cut: 1-beat grains fill the window before the
+            // drop — do NOT invent an equal-power fade-in (quiet → gradual).
+            let lookback = tuning.pivotLookbackSeconds(barSec: barSec)
+            let pivotWindow = tuning.pivotWindowSeconds(barSec: barSec)
+            let pivotBeforeNext = placements.contains { g in
+                g.role == .supporting
+                    && abs(g.timelineDuration - beatSec) < beatSec * 0.4
+                    && g.timelineStart >= next.timelineStart - lookback
+                    && g.timelineStart < next.timelineStart - 0.02
+                    && g.timelineEnd <= next.timelineStart + 0.08
+            }
+            if pivotBeforeNext {
+                placements[nextIdx].fadeIn = .none
+                placements[nextIdx].volume = max(
+                    placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
+                let loopStart = next.timelineStart - pivotWindow
+                for i in placements.indices {
+                    let p = placements[i]
+                    let isGrain = p.role == .supporting
+                        && abs(p.timelineDuration - beatSec) < beatSec * 0.4
+                    if isGrain { continue }
+                    guard p.timelineEnd > loopStart + 0.01,
+                          p.timelineStart < next.timelineStart - 0.01 else { continue }
+                    if p.timelineStart >= loopStart - 0.01 {
+                        placements[i].timelineDuration = 0
+                    } else {
+                        let newDur = loopStart - p.timelineStart
+                        if newDur >= 0.05 {
+                            placements[i].timelineDuration = newDur
+                            placements[i].fadeOut = .none
+                        } else {
+                            placements[i].timelineDuration = 0
+                        }
+                    }
+                }
+                continue
+            }
+
+            // Drop 1 / Drop 2: hard cut at full clip volume. Do not invent
+            // an equal-power fade (that dive appeared after the Drop 2 void
+            // was removed) and do not park a 1-beat quiet hole.
+            if AutoRemixDiagnostics.incomingIsClubDrop(
+                pulseRegions: pulseRegions,
+                timelineStart: next.timelineStart
+            ) {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .none
+                placements[nextIdx].fadeIn = .none
+                placements[nextIdx].volume = max(
+                    placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
+                let sourceJump = abs(next.sourceStart - prev.sourceEnd) > 0.05
+                if sourceJump {
+                    if let i = cutRecords.firstIndex(where: { abs($0.timelineAt - next.timelineStart) < 0.1 }) {
+                        if AutoRemixDiagnostics.isEqualPowerMasking(cutRecords[i].masking) {
+                            cutRecords[i].masking = .sfx(assetID: "impact")
+                            cutRecords[i].expectedEnergyDeltaDB = max(
+                                cutRecords[i].expectedEnergyDeltaDB, 8.0
+                            )
+                        }
+                    } else {
+                        cutRecords.append(
+                            AutoCutRecord(
+                                timelineAt: next.timelineStart,
+                                sourceFrom: prev.sourceEnd,
+                                sourceTo: next.sourceStart,
+                                reason: .hookReturn,
+                                confidence: 0.7,
+                                expectedEnergyDeltaDB: 8.0,
+                                masking: .sfx(assetID: "impact")
+                            )
+                        )
+                    }
+                }
+                continue
+            }
+
+            // Source-continuous neighbors (energy-curve / no-cut path): do not
+            // invent an overlap cut — that would manufacture internal edits.
+            let sourceContinuous = abs(next.sourceStart - (
+                prev.sourceStart + prev.timelineDuration * prev.tempoRatio
+            )) < 0.05 || next.continuesPrevious
+            if sourceContinuous {
+                continue
+            }
+
+            // Title-chorus hold: rewind to the same 8-bar island — hard cut.
+            // Do not linearly extend the previous clip into verse 2.
+            let titleHoldRewind = prev.songID == next.songID
+                && next.sourceStart < prev.sourceEnd - 0.05
+                && abs(next.sourceStart - prev.sourceStart) < barSec * 0.75
+            if titleHoldRewind {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .hardCut
+                placements[nextIdx].fadeIn = .hardCut
+                cutRecords.append(
+                    AutoCutRecord(
+                        timelineAt: next.timelineStart,
+                        sourceFrom: prev.sourceEnd,
+                        sourceTo: next.sourceStart,
+                        reason: .hookReturn,
+                        confidence: 0.75,
+                        expectedEnergyDeltaDB: 2.0,
+                        masking: .alignedHardCut
+                    )
+                )
+                continue
+            }
+
+            // Same-song jump into a title-hook island: hard cut. A crossfade
+            // on this join eats the identifiable opening word on every song.
+            let titleHookJump = prev.songID == next.songID
+                && next.sourceStart > prev.sourceEnd + barSec * 0.25
+                && next.timelineDuration >= barSec * 7.5
+                && prev.timelineStart <= barSec * 10
+                && !AutoRemixDiagnostics.incomingIsClubDrop(
+                    pulseRegions: pulseRegions,
+                    timelineStart: next.timelineStart
+                )
+            if titleHookJump {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .hardCut
+                placements[nextIdx].fadeIn = .hardCut
+                cutRecords.append(
+                    AutoCutRecord(
+                        timelineAt: next.timelineStart,
+                        sourceFrom: prev.sourceEnd,
+                        sourceTo: next.sourceStart,
+                        reason: .hookReturn,
+                        confidence: 0.8,
+                        expectedEnergyDeltaDB: 3.0,
+                        masking: .alignedHardCut
+                    )
+                )
+                continue
+            }
+
+            // Different songs: never overlap two dominants (dual full mixes).
+            // Switch by a hard cut at full clip volume — no fade-in from silence.
+            if prev.songID != next.songID {
+                if placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
+                    let trimmed = next.timelineStart - placements[prevIdx].timelineStart
+                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
+                        placements[prevIdx].timelineDuration = trimmed
+                    }
+                }
+                placements[prevIdx].fadeOut = .hardCut
+                placements[nextIdx].fadeIn = .hardCut
+                placements[nextIdx].volume = max(
+                    placements[nextIdx].volume,
+                    AutoGainPolicy.incomingDropVolume
+                )
+                let hasSupport = placements.contains {
+                    $0.role == .supporting
+                        && $0.songID == prev.songID
+                        && $0.timelineStart < next.timelineStart + overlapSec
+                        && $0.timelineEnd > next.timelineStart + 0.05
+                }
+                if !hasSupport {
+                    let songDur = songDurations[prev.songID] ?? .infinity
+                    let srcStart = placements[prevIdx].sourceStart
+                        + placements[prevIdx].timelineDuration * placements[prevIdx].tempoRatio
+                    if srcStart + overlapSec * prev.tempoRatio <= songDur - 0.05 {
+                        var supportFX = ClipEffectSettings()
+                        supportFX.setLevel(22, for: MixrEffect.blur.rawValue)
+                        placements.append(
+                            AutoClipPlacement(
+                                songID: prev.songID,
+                                sourceStart: srcStart,
+                                timelineStart: next.timelineStart,
+                                timelineDuration: min(overlapSec, next.timelineDuration),
+                                tempoRatio: prev.tempoRatio,
+                                volume: max(0.78, tuning.supportVolume + 0.30),
+                                fadeIn: .none,
+                                fadeOut: ClipTransition(
+                                    type: .crossfade, duration: overlapBeats, curve: equalPower
+                                ),
+                                effects: AutoSupportedEffects.sanitize(supportFX),
+                                role: .supporting,
+                                slotIndex: next.slotIndex
+                            )
+                        )
+                    }
+                }
+                continue
+            }
+
+            // Same-song already overlapping enough.
+            if next.timelineStart < prev.timelineEnd - overlapSec * 0.5 {
+                if placements[nextIdx].overlapsPreviousSeconds < 0.01 {
+                    let existing = prev.timelineEnd - next.timelineStart
+                    if existing > 0.05 {
+                        placements[nextIdx].overlapsPreviousSeconds = existing
+                        placements[prevIdx].fadeOut = ClipTransition(
+                            type: .crossfade, duration: existing / max(beatSec, 0.001), curve: equalPower
+                        )
+                        placements[nextIdx].fadeIn = ClipTransition(
+                            type: .crossfade, duration: existing / max(beatSec, 0.001), curve: equalPower
+                        )
+                    }
+                }
+                continue
+            }
+
+            // Same song: source room to extend the previous clip through the join.
+            let songDur = songDurations[prev.songID] ?? .infinity
+            let extraSource = overlapSec * prev.tempoRatio
+            guard prev.sourceEnd + extraSource <= songDur - 0.05 else { continue }
+
+            let join = next.timelineStart
+            placements[prevIdx].timelineDuration = (join + overlapSec) - prev.timelineStart
+            placements[prevIdx].fadeOut = ClipTransition(
+                type: .crossfade, duration: overlapBeats, curve: equalPower
+            )
+            placements[nextIdx].fadeIn = ClipTransition(
+                type: .crossfade, duration: overlapBeats, curve: equalPower
+            )
+            placements[nextIdx].overlapsPreviousSeconds = overlapSec
+
+            if abs(next.sourceStart - prev.sourceEnd) > 0.05 {
+                let hasRecord = cutRecords.contains { abs($0.timelineAt - join) < 0.1 }
+                if !hasRecord {
+                    cutRecords.append(
+                        AutoCutRecord(
+                            timelineAt: join,
+                            sourceFrom: prev.sourceEnd,
+                            sourceTo: next.sourceStart,
+                            reason: .redundantRepeat,
+                            confidence: 0.7,
+                            expectedEnergyDeltaDB: 0,
+                            masking: .equalPowerCrossfade(seconds: overlapSec)
+                        )
+                    )
+                } else if let i = cutRecords.firstIndex(where: { abs($0.timelineAt - join) < 0.1 }) {
+                    cutRecords[i].masking = .equalPowerCrossfade(seconds: overlapSec)
+                }
+            }
+        }
+        placements.removeAll { $0.timelineDuration < 0.05 }
+    }
+
+    private static func fadesTowardSilence(_ t: ClipTransition) -> Bool {
+        switch t.type {
+        case .fadeOut, .echoOut: return true
+        default: return false
+        }
+    }
+
+    /// Title-hook copies that must land a title token ride the isolated
+    /// vocal so Whisper-small of the first 4s hears the word. Duck the bed
+    /// instrumental underneath — do not keep a full-mix vocal that buries
+    /// "Oops" under drums.
+    private static func appendTitleHookInstrumentalUnderLead(
+        lead: PlacedSlot,
+        profile: AutoSongProfile,
+        slotIndex: Int,
+        placements: inout [AutoClipPlacement],
+        decisions: inout [AutoDecision]
+    ) {
+        let leads = placements.filter {
+            $0.slotIndex == slotIndex
+                && $0.songID == profile.songID
+                && $0.role == .dominant
+                && $0.stemKind == .vocals
+        }
+        guard !leads.isEmpty else { return }
+        var fx = ClipEffectSettings()
+        fx.setLevel(32, for: MixrEffect.blur.rawValue)
+        fx = AutoSupportedEffects.sanitize(fx)
+        let duckVol = min(0.62, AutoGainPolicy.preservationSongVolume * 0.7)
+        if profile.stems.hasInstrumental {
+            for leadClip in leads {
+                for kind in profile.stems.instrumentalKinds {
+                    placements.append(
+                        AutoClipPlacement(
+                            songID: profile.songID,
+                            sourceStart: leadClip.sourceStart,
+                            timelineStart: leadClip.timelineStart,
+                            timelineDuration: leadClip.timelineDuration,
+                            tempoRatio: leadClip.tempoRatio,
+                            volume: duckVol,
+                            fadeIn: leadClip.fadeIn,
+                            fadeOut: leadClip.fadeOut,
+                            effects: fx,
+                            role: .supporting,
+                            slotIndex: slotIndex,
+                            overlapsPreviousSeconds: leadClip.timelineDuration,
+                            stemKind: kind
+                        )
+                    )
+                }
+            }
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: profile.title,
+                    detail: "ducked drums+bass+other under title-hook vocal"
+                )
+            )
+        } else {
+            for leadClip in leads {
+                placements.append(
+                    AutoClipPlacement(
+                        songID: profile.songID,
+                        sourceStart: leadClip.sourceStart,
+                        timelineStart: leadClip.timelineStart,
+                        timelineDuration: leadClip.timelineDuration,
+                        tempoRatio: leadClip.tempoRatio,
+                        volume: duckVol,
+                        fadeIn: leadClip.fadeIn,
+                        fadeOut: leadClip.fadeOut,
+                        effects: fx,
+                        role: .supporting,
+                        slotIndex: slotIndex,
+                        overlapsPreviousSeconds: leadClip.timelineDuration,
+                        stemKind: nil
+                    )
+                )
+            }
+            decisions.append(
+                AutoDecision(
+                    kind: .duckedSupportingVocal,
+                    songTitle: profile.title,
+                    detail: "full-mix bed ducked under title-hook vocal"
+                )
+            )
+        }
+        _ = lead
+    }
+
+    /// Bed under the drop (one kick/bass) + optional second vocal overlay.
+    /// Vocals may stack; dual full-mix kick/sub stacks are refused.
+    private static func appendMashupDropStacks(
+        lead: PlacedSlot,
+        leadProfile: AutoSongProfile,
+        leadSlotIndex: Int,
+        ordered: [AutoSongProfile],
+        fits: [Int: AutoTempo.Fit],
+        mashupBedID: UUID?,
+        overlaySongIdx: Int?,
+        dropLabel: String,
+        barSec: Double,
+        tuning: AutoTuning,
+        usedRanges: inout [UUID: [(Double, Double)]],
+        placements: inout [AutoClipPlacement],
+        decisions: inout [AutoDecision]
+    ) {
+        // Soften lead lows when a slamming guest sits over the bed kick.
+        // Skip when the guest is already a vocal stem (no kick in the file).
+        if let bedID = mashupBedID, leadProfile.songID != bedID,
+           !leadProfile.stems.hasVocals,
+           leadProfile.analysis.bassDensity > 0.55 || leadProfile.analysis.drumStrength > 0.65 {
+            for i in placements.indices where placements[i].slotIndex == leadSlotIndex
+                && placements[i].songID == leadProfile.songID
+                && placements[i].role == .dominant {
+                var fx = placements[i].effects
+                fx.setLevel(
+                    max(fx.level(for: MixrEffect.blur.rawValue), 24),
+                    for: MixrEffect.blur.rawValue
+                )
+                placements[i].effects = AutoSupportedEffects.sanitize(fx)
+            }
+        }
+
+        // Bed groove under the vocal drop — owns kick/bass when lead is a guest.
+        // Prefer AutoMashUpper island bedStart when mashability found a beat offset.
+        if let bedID = mashupBedID,
+           leadProfile.songID != bedID,
+           let bedIdx = ordered.firstIndex(where: { $0.songID == bedID }) {
+            let bed = ordered[bedIdx]
+            let bedFit = fits[bedIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: true, halfOrDoubleTime: false)
+            let used = usedRanges[bed.songID] ?? []
+            let island = AutoMashability.bestIsland(
+                guest: leadProfile,
+                bed: bed,
+                wantBars: max(8, Int((lead.timelineDuration / max(barSec, 0.001)).rounded())),
+                targetBPM: 240.0 / max(barSec, 0.001),
+                tuning: tuning
+            )
+            var section = bed.best(
+                [.groove, .chorus, .build],
+                tuning: tuning,
+                used: used,
+                allowReuse: true
+            )
+            if let island, let base = section {
+                section = AutoCandidateSection(
+                    songID: base.songID,
+                    label: base.label,
+                    startSeconds: island.bedStart,
+                    barCount: base.barCount,
+                    barSeconds: base.barSeconds,
+                    hook: base.hook,
+                    energy: base.energy,
+                    vocal: base.vocal,
+                    clarity: base.clarity,
+                    rhythm: base.rhythm,
+                    uniqueness: base.uniqueness,
+                    transitionUse: base.transitionUse,
+                    confidence: base.confidence
+                )
+            }
+            if let section {
+                let dualBass = !leadProfile.stems.hasVocals
+                    && bed.analysis.bassDensity > 0.65
+                    && leadProfile.analysis.bassDensity > 0.7
+                    && bed.analysis.drumStrength > 0.7
+                    && leadProfile.analysis.drumStrength > 0.7
+                if dualBass {
+                    decisions.append(
+                        AutoDecision(
+                            kind: .rejectedDualBassStack,
+                            songTitle: bed.title,
+                            detail: "under \(leadProfile.title) on \(dropLabel)"
+                        )
+                    )
+                } else if bed.stems.hasInstrumental {
+                    for kind in bed.stems.instrumentalKinds {
+                        let vol: Double
+                        switch kind {
+                        case .drums: vol = AutoGainPolicy.incomingDropVolume
+                        case .bass: vol = AutoGainPolicy.incomingDropVolume
+                        default: vol = max(0.90, AutoGainPolicy.preservationSongVolume)
+                        }
+                        placements.append(
+                            AutoClipPlacement(
+                                songID: bed.songID,
+                                sourceStart: section.startSeconds,
+                                timelineStart: lead.timelineStart,
+                                timelineDuration: lead.timelineDuration,
+                                tempoRatio: bedFit.ratio,
+                                volume: vol,
+                                fadeIn: ClipTransition(type: .none, duration: 0),
+                                fadeOut: ClipTransition(type: .none, duration: 0),
+                                effects: AutoSupportedEffects.sanitize(ClipEffectSettings()),
+                                role: .supporting,
+                                slotIndex: leadSlotIndex,
+                                overlapsPreviousSeconds: lead.timelineDuration,
+                                stemKind: kind
+                            )
+                        )
+                    }
+                    usedRanges[bed.songID, default: []].append(
+                        (section.startSeconds, section.startSeconds + lead.timelineDuration * bedFit.ratio)
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .hookReplace,
+                            songTitle: leadProfile.title,
+                            detail: "guest vocal stem / bed drums+bass+other under \(dropLabel)"
+                        )
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .usedStemSidecar,
+                            songTitle: bed.title,
+                            detail: "bed instrumental stems under \(dropLabel)"
+                        )
+                    )
+                    if leadProfile.stems.hasVocals {
+                        decisions.append(
+                            AutoDecision(
+                                kind: .usedStemSidecar,
+                                songTitle: leadProfile.title,
+                                detail: "hook-replace from vocals.wav"
+                            )
+                        )
+                    }
+                } else {
+                    var bedFX = ClipEffectSettings()
+                    // Hook-replace: bed keeps kick/bass; carve bed vocal hard
+                    // so the guest melody is the only voice (HPF/blur fallback).
+                    let midCarve: Double = lead.section.vocal > 0.35 ? 48 : 40
+                    bedFX.setLevel(midCarve, for: MixrEffect.blur.rawValue)
+                    bedFX = AutoSupportedEffects.sanitize(bedFX)
+                    placements.append(
+                        AutoClipPlacement(
+                            songID: bed.songID,
+                            sourceStart: section.startSeconds,
+                            timelineStart: lead.timelineStart,
+                            timelineDuration: lead.timelineDuration,
+                            tempoRatio: bedFit.ratio,
+                            // Bed deck stays present under the hook (DJ layering).
+                            volume: max(0.78, tuning.supportVolume + 0.30),
+                            fadeIn: .hardCut,
+                            fadeOut: ClipTransition(
+                                type: .crossfade,
+                                duration: 2,
+                                curve: AutoTransitionEnvelope.equalPowerCurveName
+                            ),
+                            effects: bedFX,
+                            role: .supporting,
+                            slotIndex: leadSlotIndex
+                        )
+                    )
+                    usedRanges[bed.songID, default: []].append(
+                        (section.startSeconds, section.startSeconds + lead.timelineDuration * bedFit.ratio)
+                    )
+                    decisions.append(
+                        AutoDecision(
+                            kind: .hookReplace,
+                            songTitle: leadProfile.title,
+                            detail: "guest in / bed vocal out under \(dropLabel)"
+                        )
+                    )
+                }
+            }
+        }
+
+        // Optional call-and-response only (≤8 bars) — never full-drop dual vocals.
+        guard let overlayIdx = overlaySongIdx,
+              overlayIdx >= 0, overlayIdx < ordered.count,
+              tuning.allowCallAndResponseOverlay else { return }
+        let overlay = ordered[overlayIdx]
+        guard overlay.songID != leadProfile.songID else { return }
+
+        // Refuse overlay if it would be a second slamming full-mix kit.
+        if overlay.analysis.drumStrength > 0.75 && overlay.analysis.bassDensity > 0.7
+            && leadProfile.analysis.drumStrength > 0.7 && leadProfile.analysis.bassDensity > 0.65 {
+            decisions.append(
+                AutoDecision(
+                    kind: .rejectedDualBassStack,
+                    songTitle: overlay.title,
+                    detail: "full-mix overlay under \(leadProfile.title)"
+                )
+            )
+            return
+        }
+
+        let overlayFit = fits[overlayIdx] ?? AutoTempo.Fit(ratio: 1, gridAligned: true, halfOrDoubleTime: false)
+        let used = usedRanges[overlay.songID] ?? []
+        guard let section = overlay.best(
+            [.teaser, .chorus, .groove],
+            tuning: tuning,
+            used: used,
+            allowReuse: true
+        ) else { return }
+
+        let entryBars = max(0, min(tuning.vocalOverlayEntryBars, 8))
+        var overlayBars = max(4, min(tuning.vocalOverlayBars, 8))
+        let availableBars = Int((lead.timelineDuration / max(barSec, 0.001)).rounded(.down)) - entryBars
+        overlayBars = min(overlayBars, max(4, availableBars))
+        let start = lead.timelineStart + Double(entryBars) * barSec
+        let duration = Double(overlayBars) * barSec
+        guard duration >= tuning.minSegmentSeconds,
+              start + duration <= lead.timelineStart + lead.timelineDuration + 0.05 else { return }
+
+        let dense = section.vocal > 0.55 && lead.section.vocal > 0.55
+        var fx = ClipEffectSettings()
+        let volume: Double
+        if dense {
+            fx.setLevel(36, for: MixrEffect.blur.rawValue)
+            fx.setLevel(12, for: MixrEffect.reverb.rawValue)
+            fx.reverbPreset = .hall
+            volume = tuning.duckedVocalSupportVolume
+            decisions.append(
+                AutoDecision(
+                    kind: .duckedSupportingVocal,
+                    songTitle: overlay.title,
+                    detail: "call-response under \(leadProfile.title) on \(dropLabel)"
+                )
+            )
+        } else {
+            fx.setLevel(16, for: MixrEffect.blur.rawValue)
+            volume = tuning.supportVolume
+        }
+        if overlay.analysis.drumStrength > 0.55 || overlay.analysis.bassDensity > 0.55 {
+            fx.setLevel(max(fx.level(for: MixrEffect.blur.rawValue), 40), for: MixrEffect.blur.rawValue)
+        }
+        fx = AutoSupportedEffects.sanitize(fx)
+
+        placements.append(
+            AutoClipPlacement(
+                songID: overlay.songID,
+                sourceStart: section.startSeconds,
+                timelineStart: start,
+                timelineDuration: duration,
+                tempoRatio: overlayFit.ratio,
+                volume: volume,
+                fadeIn: ClipTransition(type: .crossfade, duration: 2),
+                fadeOut: ClipTransition(type: .fadeOut, duration: 4),
+                effects: fx,
+                role: .supporting,
+                slotIndex: leadSlotIndex,
+                overlapsPreviousSeconds: duration,
+                stemKind: overlay.stems.hasVocals ? .vocals : nil
+            )
+        )
+        usedRanges[overlay.songID, default: []].append(
+            (section.startSeconds, section.startSeconds + duration * overlayFit.ratio)
+        )
+        decisions.append(
+            AutoDecision(
+                kind: .stackedVocalOverlay,
+                songTitle: overlay.title,
+                detail: "\(overlayBars) bars call-response on \(dropLabel) under \(leadProfile.title)"
+            )
+        )
+        if overlay.stems.hasVocals {
+            decisions.append(
+                AutoDecision(
+                    kind: .usedStemSidecar,
+                    songTitle: overlay.title,
+                    detail: "call-response from vocals.wav"
+                )
+            )
+        }
+    }
+
+    /// First 4s of groove/intro phrases before Drop 1 — identifiable title
+    /// lines. SFX must not cover these onsets. Also protect the first Deck A
+    /// hook's opening so a long take-out cannot bury the title token.
+    private static func lyricOnsetProtectedRanges(
+        pulseRegions: [AutoClubPulse.Region],
+        dropAt: Double,
+        placements: [AutoClipPlacement] = [],
+        protectSeconds: Double = 4.0
+    ) -> [(Double, Double)] {
+        var ranges: [(Double, Double)] = pulseRegions.compactMap { r in
+            guard r.role == .groove || r.role == .introTease else { return nil }
+            guard r.timelineStart < dropAt - 0.25 else { return nil }
+            return (r.timelineStart, min(r.timelineEnd, r.timelineStart + protectSeconds))
+        }
+        for p in placements where p.role == .dominant && p.timelineStart + 8 < dropAt {
+            ranges.append((
+                p.timelineStart,
+                p.timelineStart + min(protectSeconds, p.timelineDuration)
+            ))
+        }
+        return ranges
+    }
+
+    /// Festival mix-window + drop ride.
+    /// Take-out (riser/snare/tape) ends on the last pivot beat — not on the
+    /// guest's first syllable. Extra impacts / air sweep / clap fill ride
+    /// the drop bars after that attack. Drop 1 always gets this stack
+    /// (mashup is a festival rewrite; Calvin is solo-ballad only).
+    private static func appendFestivalMixWindowStack(
+        dropAt: Double,
+        dropEnd: Double,
+        barSec: Double,
+        beatSec: Double,
+        flavor: AutoClubFlavor,
+        protectedRanges: [(Double, Double)],
+        sfx: inout [AutoSFXEvent],
+        decisions: inout [AutoDecision]
+    ) {
+        let added = AutoFestivalMixWindow.events(
+            dropAt: dropAt,
+            dropEnd: dropEnd,
+            barSec: barSec,
+            beatSec: beatSec,
+            protectedRanges: protectedRanges,
+            existing: sfx
+        )
+        sfx.append(contentsOf: added)
+        if !decisions.contains(where: {
+            $0.kind == .addedRiserIntoDrop && ($0.detail ?? "").contains("festival")
+        }) {
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: AutoFestivalMixWindow.festivalDetail
+                )
+            )
+        }
+        _ = flavor
+    }
+
+    /// Drop 1 mix window must emit the festival stack even if the slot
+    /// loop skipped it (entry wasn't hardHypeCut, first-slot, etc.).
+    /// Mashup Drop 1 is keyed from the pivot join / first drop placement,
+    /// not only pulse `.drop` — dump_gate greps every mashup block.
+    private static func ensureFestivalDrop1Stack(
+        pulseRegions: [AutoClubPulse.Region],
+        placements: [AutoClipPlacement] = [],
+        barSec: Double,
+        beatSec: Double,
+        flavor: AutoClubFlavor,
+        mode: AutoRemixMode = .remix,
+        sfx: inout [AutoSFXEvent],
+        decisions: inout [AutoDecision]
+    ) {
+        let pulseDrop = pulseRegions
+            .filter { $0.role == .drop }
+            .min(by: { $0.timelineStart < $1.timelineStart })
+        let joinEnd = pulseRegions
+            .filter { $0.role == .buildOut }
+            .map(\.timelineEnd)
+            .sorted()
+            .first
+        let grainJoin = placements
+            .filter {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+            }
+            .map(\.timelineEnd)
+            .max()
+        let dropAt = pulseDrop?.timelineStart ?? joinEnd ?? grainJoin
+        let dropEnd = pulseDrop?.timelineEnd
+            ?? placements
+                .filter { p in
+                    guard let dropAt else { return false }
+                    return p.role == .dominant && abs(p.timelineStart - dropAt) < 0.2
+                }
+                .map(\.timelineEnd)
+                .max()
+            ?? (dropAt.map { $0 + 16 * barSec })
+
+        if let dropAt, let dropEnd {
+            appendFestivalMixWindowStack(
+                dropAt: dropAt,
+                dropEnd: dropEnd,
+                barSec: barSec,
+                beatSec: beatSec,
+                flavor: flavor,
+                protectedRanges: lyricOnsetProtectedRanges(
+                    pulseRegions: pulseRegions, dropAt: dropAt, placements: placements
+                ),
+                sfx: &sfx,
+                decisions: &decisions
+            )
+        }
+
+        let hasFestival = decisions.contains {
+            $0.kind == .addedRiserIntoDrop
+                && ($0.detail ?? "").localizedCaseInsensitiveContains("festival")
+        }
+        if !hasFestival, mode == .mashup || dropAt != nil {
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: AutoFestivalMixWindow.festivalDetail
+                )
+            )
+        }
+    }
+
+    /// Drop 1 wallpaper even when the last bed phrase doesn't end exactly
+    /// on the drop (5-song crates, reserved pivot slot, non-hardHypeCut).
+    private static func ensureMashupDrop1Wallpaper(
+        mode: AutoRemixMode,
+        mashupBedID: UUID?,
+        mashupVocalID: UUID?,
+        ordered: [AutoSongProfile],
+        barSec: Double,
+        beatSec: Double,
+        tuning: AutoTuning,
+        placements: inout [AutoClipPlacement],
+        pulseRegions: inout [AutoClubPulse.Region],
+        intentionalGaps: inout [AutoIntentionalGap],
+        decisions: inout [AutoDecision]
+    ) {
+        guard mode == .mashup else { return }
+        if decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) { return }
+        let pulseDrop = pulseRegions
+            .filter { $0.role == .drop }
+            .map(\.timelineStart)
+            .min()
+        let guestDrop = mashupVocalID.flatMap { vocalID in
+            placements
+                .filter { $0.songID == vocalID && $0.role == .dominant }
+                .map(\.timelineStart)
+                .min()
+        }
+        let joinEnd = pulseRegions
+            .filter { $0.role == .buildOut }
+            .map(\.timelineEnd)
+            .min()
+        guard let dropAt = pulseDrop ?? guestDrop ?? joinEnd else { return }
+        let bedID = mashupBedID ?? ordered.first?.songID
+        let phrase = placements.last { p in
+            p.role == .dominant
+                && (bedID == nil || p.songID == bedID)
+                && p.timelineStart + 0.05 < dropAt
+        }
+        guard let phrase else { return }
+        let bed = ordered.first { $0.songID == phrase.songID }
+        let guest = mashupVocalID.flatMap { id in ordered.first { $0.songID == id } }
+            ?? ordered.first { $0.songID != phrase.songID }
+        let dropPlacement = placements.first { p in
+            p.role == .dominant
+                && abs(p.timelineStart - dropAt) < 0.25
+                && (mashupVocalID == nil || p.songID == mashupVocalID)
+        }
+        AutoJoinEngine.appendPivotWallpaperLoop(
+            completedPhrase: phrase,
+            dropTimelineStart: dropAt,
+            deckATitle: bed?.title,
+            deckBTitle: guest?.title,
+            barSec: barSec,
+            beatSec: beatSec,
+            tuning: tuning,
+            grainStem: (bed?.stems.hasVocals ?? false) ? .vocals : nil,
+            signal: bed?.analysis.signal,
+            incomingSongID: guest?.songID,
+            incomingHookStart: dropPlacement?.sourceStart,
+            incomingTempoRatio: dropPlacement?.tempoRatio ?? phrase.tempoRatio,
+            incomingSignal: guest?.analysis.signal,
+            incomingGrainStem: (guest?.stems.hasVocals ?? false) ? .vocals : nil,
+            placements: &placements,
+            pulseRegions: &pulseRegions,
+            intentionalGaps: &intentionalGaps,
+            decisions: &decisions
         )
     }
+
 
     private static func countHandoffs(_ placed: [PlacedSlot]) -> Int {
         var n = 0
