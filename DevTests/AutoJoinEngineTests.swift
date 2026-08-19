@@ -340,6 +340,83 @@ do {
     )
 }
 
+do {
+    let bedID = UUID()
+    let guestID = UUID()
+    let dropStart = 45.0
+    let titleStart = 11.4
+    var placements: [AutoClipPlacement] = [
+        AutoClipPlacement(
+            songID: bedID,
+            sourceStart: 0,
+            timelineStart: 0,
+            timelineDuration: 15.4,
+            tempoRatio: 1.33,
+            volume: 0.9,
+            fadeIn: .none,
+            fadeOut: .none,
+            effects: ClipEffectSettings(),
+            role: .dominant,
+            slotIndex: 0
+        ),
+        AutoClipPlacement(
+            songID: bedID,
+            sourceStart: 50.32,
+            timelineStart: titleStart,
+            timelineDuration: barSec * 8,
+            tempoRatio: 1.33,
+            volume: AutoGainPolicy.vocalStemMakeupDefault,
+            fadeIn: .none,
+            fadeOut: .none,
+            effects: ClipEffectSettings(),
+            role: .dominant,
+            slotIndex: 1,
+            stemKind: .vocals
+        ),
+        AutoClipPlacement(
+            songID: guestID,
+            sourceStart: 60.05,
+            timelineStart: dropStart,
+            timelineDuration: barSec * 16,
+            tempoRatio: 1.35,
+            volume: 1.0,
+            fadeIn: .hardCut,
+            fadeOut: .none,
+            effects: ClipEffectSettings(),
+            role: .dominant,
+            slotIndex: 2,
+            stemKind: .vocals
+        )
+    ]
+    let pulse = [AutoClubPulse.Region(role: .drop, timelineStart: dropStart, timelineEnd: dropStart + 16)]
+    AutoJoinEngine.boostJoinClipVolumes(
+        placements: &placements,
+        pulseRegions: pulse,
+        beatSec: beatSec,
+        barSec: barSec,
+        profiles: [:]
+    )
+    let introHead = placements.first {
+        $0.songID == bedID && $0.stemKind == nil && $0.timelineStart < 1
+    }
+    let introTail = placements.first {
+        $0.songID == bedID && $0.stemKind == nil && abs($0.timelineStart - titleStart) < 0.05
+    }
+    check(
+        "Join: intro full-mix does not keep playing under the title vocal",
+        introHead != nil
+            && (introHead?.timelineEnd ?? 99) <= titleStart + 0.02
+            && (introTail == nil
+                || (introTail?.volume ?? 99) <= AutoGainPolicy.titleInstrumentalDuckVolume + 0.001),
+        String(
+            format: "headEnd=%.2f tailVol=%.2f title=%.2f",
+            introHead?.timelineEnd ?? -1,
+            introTail?.volume ?? -1,
+            titleStart
+        )
+    )
+}
+
 // MARK: - Opening fade
 
 do {

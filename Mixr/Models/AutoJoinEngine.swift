@@ -544,12 +544,38 @@ nonisolated enum AutoJoinEngine {
                 && $0.timelineStart < (dropStarts.min() ?? .infinity) - barSec * 0.25
                 && $0.timelineDuration > beatSec * 2
         }
+        // Intro / verse full-mix must not keep playing at full volume under
+        // the isolated title vocal. Split at the title start so the opening
+        // stays loud and the overlap is ducked (trimming creates a gap the
+        // validator fills with an equal-power overlap that re-buries the token).
+        if let hookStart = titleVocalWindows.map(\.timelineStart).min() {
+            var tails: [AutoClipPlacement] = []
+            for i in placements.indices {
+                let p = placements[i]
+                guard p.role == .dominant, p.stemKind != .vocals else { continue }
+                guard p.timelineStart < hookStart - 0.05, p.timelineEnd > hookStart + 0.05 else { continue }
+                let tailDur = p.timelineEnd - hookStart
+                var tail = p
+                tail.timelineStart = hookStart
+                tail.sourceStart = p.sourceStart + (hookStart - p.timelineStart) * p.tempoRatio
+                tail.timelineDuration = tailDur
+                tail.volume = min(p.volume, AutoGainPolicy.roleStagingVolume(role: .titleBed))
+                tail.continuesPrevious = true
+                tail.fadeIn = .none
+                tails.append(tail)
+                placements[i].timelineDuration = max(0.05, hookStart - p.timelineStart)
+                placements[i].fadeOut = .none
+            }
+            placements.append(contentsOf: tails)
+        }
         // Stacked drums+bass+other at planner duck (~0.62 each) bury the
         // isolated title token. Offline mixdown has no blur DSP, so volume
-        // must carry the duck. Cap overlapping supporting stems; never the vocal.
+        // must carry the duck. Cap overlapping supporting stems and any
+        // full-mix duplicate under the title; never the vocal.
         for i in placements.indices {
             let p = placements[i]
-            guard p.role == .supporting, p.stemKind != .vocals, !isPivotGrain(p) else { continue }
+            if p.stemKind == .vocals { continue }
+            if isPivotGrain(p) { continue }
             let underTitle = titleVocalWindows.contains { v in
                 let overlap = min(v.timelineEnd, p.timelineEnd) - max(v.timelineStart, p.timelineStart)
                 return overlap > beatSec * 0.5
