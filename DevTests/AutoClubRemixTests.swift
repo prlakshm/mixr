@@ -2411,6 +2411,10 @@ do {
             assertMashupPivotFromIncomingGuest(
                 plan: plan,
                 guestID: vocalID,
+                joinTokenLabel: AutoPivotWord.joinToken(
+                    deckATitle: "All I Wanted",
+                    deckBTitle: "All The Things She Said"
+                ),
                 label: "Paramore×tatu"
             )
         }
@@ -2484,6 +2488,7 @@ do {
                     guestID: vocalID,
                     guestHookStart: guestSrc,
                     joinTokenTime: guestJoinWord,
+                    joinTokenLabel: "things",
                     label: "pair B"
                 )
             }
@@ -2790,6 +2795,13 @@ do {
             check(
                 "Britney: pivotWallpaperLoop recorded",
                 plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
+            )
+            assertMashupFestivalStack(plan, label: "Britney mashup")
+            assertMashupPivotFromIncomingGuest(
+                plan: plan,
+                guestID: vocalID,
+                joinTokenLabel: "baby",
+                label: "Britney mashup"
             )
             check(
                 "Britney: zero allowedPredropVoid on a pivoted plan",
@@ -3506,18 +3518,35 @@ func mashupDecisionDump(_ plan: AutoRemixPlan) -> String {
     plan.decisions.map { $0.userFacingSentence + " | " + ($0.detail ?? "") }.joined(separator: "\n")
 }
 
+/// dump_gate greps MASHUP `plan.decisions`: kind `addedRiserIntoDrop` whose
+/// **detail** names festival / take-out / drop-ride. A Drop-2-only
+/// `addedRiserIntoDrop` ("drop 2 flip impact") must fail — that was 6519cf6.
 func assertMashupFestivalStack(_ plan: AutoRemixPlan, label: String) {
-    let dump = mashupDecisionDump(plan).lowercased()
+    let festival = plan.decisions.filter { $0.kind == .addedRiserIntoDrop }
+    let detailHit = festival.contains { d in
+        let detail = (d.detail ?? "").lowercased()
+        return detail.contains("festival")
+            && detail.contains("take-out")
+            && (detail.contains("drop-ride") || detail.contains("drop ride"))
+    }
+    let summary = plan.decisions.map(\.userFacingSentence).joined(separator: "\n").lowercased()
     let ids = Set(plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.map(\.assetID))
     check(
-        "\(label): mashup dump records festival take-out + drop-ride",
-        plan.mode == .mashup
-            && plan.decisions.contains { $0.kind == .addedRiserIntoDrop }
-            && dump.contains("addedriserintodrop")
-            && dump.contains("festival")
-            && dump.contains("take-out")
-            && (dump.contains("drop-ride") || dump.contains("drop ride"))
-            && ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
+        "\(label): dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride",
+        plan.mode == .mashup && detailHit,
+        "details=\(festival.map { $0.detail ?? "nil" })"
+    )
+    check(
+        "\(label): dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride",
+        summary.contains("addedriserintodrop")
+            && summary.contains("festival")
+            && summary.contains("take-out")
+            && (summary.contains("drop-ride") || summary.contains("drop ride")),
+        summary
+    )
+    check(
+        "\(label): mashup writes festival take-out + drop-ride SFX",
+        ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
         "ids=\(ids.sorted())"
     )
 }
@@ -3537,6 +3566,8 @@ func assertMashupPivotFromIncomingGuest(
     guestID: UUID,
     guestHookStart: Double? = nil,
     joinTokenTime: Double? = nil,
+    joinTokenLabel: String? = nil,
+    outgoingTokenTime: Double? = nil,
     label: String
 ) {
     let grains = drop1JoinGrains(in: plan)
@@ -3550,6 +3581,20 @@ func assertMashupPivotFromIncomingGuest(
         !grains.isEmpty && grains.allSatisfy { $0.songID == guestID },
         "n=\(grains.count) guest=\(grains.filter { $0.songID == guestID }.count)"
     )
+    let loopDump = plan.decisions
+        .filter { $0.kind == .pivotWallpaperLoop }
+        .map { $0.detail ?? "" }
+        .joined(separator: " | ")
+        .lowercased()
+    if let joinTokenLabel {
+        check(
+            "\(label): pivot dump is the incoming join token, not the outgoing last line",
+            loopDump.contains(joinTokenLabel.lowercased())
+                && loopDump.contains("incoming-join")
+                && !loopDump.contains("innocent"),
+            loopDump
+        )
+    }
     if let g0 = grains.first, let joinTokenTime {
         check(
             "\(label): pivot grain source is the incoming join token",
@@ -3563,6 +3608,13 @@ func assertMashupPivotFromIncomingGuest(
             String(format: "src=%.2f hook=%.2f", g0.sourceStart, guestHookStart)
         )
     }
+    if let g0 = grains.first, let outgoingTokenTime {
+        check(
+            "\(label): pivot grain is not the outgoing last line",
+            abs(g0.sourceStart - outgoingTokenTime) > plan.barSeconds,
+            String(format: "src=%.2f outgoing=%.2f", g0.sourceStart, outgoingTokenTime)
+        )
+    }
 }
 
 func assertTitleHookLead(
@@ -3574,14 +3626,21 @@ func assertTitleHookLead(
 ) {
     let beat = barSeconds / 4
     let want = lyric - Double(beats) * beat
+    let oneBeat = lyric - beat
     let lead = lyric - onset
+    // dump_gate: 2-beat ≈ 49.1 at lyric 50.38 / 94 BPM. Slack of 1 bar×0.35
+    // would still accept 6519cf6's 1-beat 49.75 — reject that explicitly.
+    let nearWant = beats >= 2 ? abs(onset - want) < beat * 0.5 : abs(onset - want) < barSeconds * 0.35
+    let notOneBeat = beats < 2 || abs(onset - oneBeat) > beat * 0.35
+    let notFullBar = lead < barSeconds * 0.9 && abs(onset - (lyric - barSeconds)) > 0.5
+    let depthOK = beats >= 2 ? lead > beat * 1.55 : lead < beat * 1.55
     check(
         label,
-        abs(onset - want) < barSeconds * 0.35
-            && onset < lyric - 0.05
-            && lead < barSeconds * 0.9
-            && (beats >= 2 ? lead > beat * 1.35 : lead < beat * 1.55),
-        String(format: "onset=%.2f lyric=%.2f beat=%.2f wantBeats=%d lead=%.2f", onset, lyric, beat, beats, lead)
+        nearWant && onset < lyric - 0.05 && notOneBeat && notFullBar && depthOK,
+        String(
+            format: "onset=%.2f lyric=%.2f beat=%.2f want=%.2f oneBeat=%.2f lead=%.2f",
+            onset, lyric, beat, want, oneBeat, lead
+        )
     )
 }
 
@@ -3960,7 +4019,10 @@ do {
     do {
         try writeLyricsJSON(
             to: oopsLyrics, title: oops.title, titleHookStart: bedLyric,
-            words: [(bedLyric, "oops"), (50.6, "I"), (50.9, "did"), (51.2, "it"), (51.5, "again")]
+            words: [
+                (bedLyric, "oops"), (50.6, "I"), (50.9, "did"), (51.2, "it"), (51.5, "again"),
+                (bedLyric + 14.4, "innocent")
+            ]
         )
         let guestJoinWord = dropLyric + 0.44
         try writeLyricsJSON(
@@ -4019,6 +4081,17 @@ do {
                 label: "599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48"
             )
             check(
+                "dump_gate: lyric 50.38 → src ≈ two beats (49.1), not 1-beat 49.75, not bar 48.01",
+                abs(hookSrc - (bedLyric - 2 * plan.beatSeconds)) < plan.beatSeconds * 0.45
+                    && abs(hookSrc - (bedLyric - plan.beatSeconds)) > plan.beatSeconds * 0.35
+                    && abs(hookSrc - 48.01) > 0.5,
+                String(
+                    format: "src=%.2f lyric=%.2f beat=%.3f two=%.2f one=%.2f",
+                    hookSrc, bedLyric, plan.beatSeconds,
+                    bedLyric - 2 * plan.beatSeconds, bedLyric - plan.beatSeconds
+                )
+            )
+            check(
                 "599dec4: 2-beat pad never walks catalog 48",
                 abs(hookSrc - 48.0) > 0.5 && abs(hookSrc - catalogPeak) > 0.08,
                 String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
@@ -4030,6 +4103,8 @@ do {
                     guestID: vocalID,
                     guestHookStart: guestSrc,
                     joinTokenTime: guestJoinWord,
+                    joinTokenLabel: "baby",
+                    outgoingTokenTime: bedLyric + 14.4,
                     label: "Oops×BOMT"
                 )
             }
