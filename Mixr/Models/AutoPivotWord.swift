@@ -127,6 +127,93 @@ nonisolated enum AutoPivotWord {
         return bTokens.first
     }
 
+    /// Distinctive join token of the *incoming* song (Drop 1 guest), not a
+    /// generic shared filler ("all") and not the outgoing chorus tail.
+    static func joinToken(deckATitle: String, deckBTitle: String) -> String? {
+        let a = Set(tokens(in: deckATitle))
+        let bTokens = tokens(in: deckBTitle)
+        let shared = a.intersection(Set(bTokens))
+        if let rare = shared.first(where: { distinctiveLexicon.contains($0) }) {
+            return rare
+        }
+        if let rare = bTokens.first(where: { distinctiveLexicon.contains($0) }) {
+            return rare
+        }
+        if let sharedPivot = shared.first(where: {
+            pivotLexicon.contains($0) && !genericFillers.contains($0)
+        }) {
+            return sharedPivot
+        }
+        if let attack = bTokens.first(where: { pivotLexicon.contains($0) }) {
+            return attack
+        }
+        if let sharedLong = shared.sorted(by: { $0.count > $1.count })
+            .first(where: { !genericFillers.contains($0) }) {
+            return sharedLong
+        }
+        return bTokens.first(where: { !genericFillers.contains($0) }) ?? bTokens.first
+    }
+
+    /// 1-beat grain of the incoming join token, taken from the guest hook
+    /// (after the attack so the shared word is inside the grain — not verse
+    /// filler and not sample 0 of the hook).
+    static func joinTokenGrainSource(
+        token: String?,
+        lyricWords: [(t: Double, word: String)] = [],
+        hookStart: Double,
+        beatSec: Double,
+        tempoRatio: Double,
+        vocalPresence: [Double] = [],
+        hopSeconds: Double = 0.1
+    ) -> Double {
+        let grainDur = beatSec * max(tempoRatio, 0.0001)
+        let lo = max(0, hookStart - 2 * beatSec)
+        let hi = hookStart + 16 * beatSec
+        func clamp(_ t: Double) -> Double {
+            min(max(t, lo), max(lo, hi - grainDur))
+        }
+
+        if let token = token?.lowercased(), !lyricWords.isEmpty {
+            let afterAttack = hookStart + 0.4 * beatSec
+            let hits = lyricWords.filter { w in
+                let word = w.word.lowercased().filter { $0.isLetter }
+                return (word == token || word.contains(token) || token.contains(word))
+                    && w.t >= lo && w.t < hi
+            }
+            let preferred = hits.filter { $0.t >= afterAttack }
+            let pool = preferred.isEmpty ? hits : preferred
+            if let best = pool.min(by: { $0.t < $1.t }) {
+                return clamp(best.t - grainDur * 0.15)
+            }
+        }
+
+        if !vocalPresence.isEmpty, hopSeconds > 0.001 {
+            let searchLo = max(lo, hookStart + 0.35 * beatSec)
+            var bestT = hookStart
+            var bestV = -1.0
+            var t = searchLo
+            while t + grainDur <= hi + 0.001 {
+                let i0 = max(0, Int(t / hopSeconds))
+                let i1 = min(vocalPresence.count - 1, Int((t + grainDur) / hopSeconds))
+                if i1 >= i0 {
+                    var s = 0.0
+                    for i in i0...i1 { s += vocalPresence[i] }
+                    let v = s / Double(i1 - i0 + 1)
+                    if v > bestV {
+                        bestV = v
+                        bestT = t
+                    }
+                }
+                t += beatSec
+            }
+            if bestV >= 0.18 {
+                return clamp(bestT)
+            }
+        }
+
+        return clamp(hookStart)
+    }
+
     /// Source second of the last 1-beat grain of a completed phrase.
     /// `phraseSourceStart`…`phraseSourceEnd` must already have played once.
     /// Prefers the last pivot-token / vocal-energy beat so the loop is

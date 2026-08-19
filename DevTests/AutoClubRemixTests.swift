@@ -2406,8 +2406,92 @@ do {
             }
         } ?? false
         check("Paramore+tatu tatu dominant on Drop 1 downbeat", tatuOnDrop1)
+        assertMashupFestivalStack(plan, label: "Paramore×tatu")
+        if let vocalID = plan.mashupVocalSongID {
+            assertMashupPivotFromIncomingGuest(
+                plan: plan,
+                guestID: vocalID,
+                label: "Paramore×tatu"
+            )
+        }
     case .failure(let message):
         check("Paramore+tatu mashup", false, message)
+    }
+}
+
+do {
+    // Same general helpers as Oops×BOMT: adaptive pad, incoming join grain, festival dump.
+    let bed = makeSong(title: "All I Wanted", bpm: 144, key: "Em", color: .purple)
+    let guest = makeSong(title: "All The Things She Said", bpm: 90, key: "Am", color: .pink)
+    let bedLyric = 39.84
+    let guestLyric = 52.0
+    let guestJoinWord = guestLyric + 0.85
+    let stemRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mixr-lyrics-pair-\(UUID().uuidString)", isDirectory: true)
+    let bedLyrics = stemRoot.appendingPathComponent("All I Wanted", isDirectory: true)
+        .appendingPathComponent("lyrics.json")
+    let guestLyrics = stemRoot.appendingPathComponent("All The Things She Said", isDirectory: true)
+        .appendingPathComponent("lyrics.json")
+    do {
+        try writeLyricsJSON(
+            to: bedLyrics, title: bed.title, titleHookStart: bedLyric,
+            words: [
+                (bedLyric, "all"), (bedLyric + 0.20, "i"), (bedLyric + 0.42, "wanted"),
+                (bedLyric + 0.70, "was"), (bedLyric + 0.90, "you")
+            ]
+        )
+        try writeLyricsJSON(
+            to: guestLyrics, title: guest.title, titleHookStart: guestLyric,
+            words: [
+                (guestLyric, "all"), (guestLyric + 0.25, "the"), (guestJoinWord, "things"),
+                (guestLyric + 1.10, "she"), (guestLyric + 1.30, "said")
+            ]
+        )
+        var tuning = AutoTuning.standard
+        tuning.explicitStemsBySongID[bed.id] = AutoStemSet(lyrics: bedLyrics)
+        tuning.explicitStemsBySongID[guest.id] = AutoStemSet(lyrics: guestLyrics)
+        let signals: [UUID: SongSignalFeatures] = [
+            bed.id: crateFeatures(duration: 220, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50),
+            guest.id: crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
+        ]
+        switch AutoRemixRunner.runEntireProject(
+            tracks: [bed, guest],
+            tuning: tuning,
+            seed: 33,
+            signals: signals
+        ) {
+        case .success(_, let plan, _):
+            let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
+            assertTitleHookLead(
+                onset: hookSrc,
+                lyric: bedLyric,
+                barSeconds: plan.barSeconds,
+                beats: 1,
+                label: "pair B: 1-beat pad when the distinctive token is already inside the first 1–2s"
+            )
+            assertMashupFestivalStack(plan, label: "pair B")
+            if let vocalID = plan.mashupVocalSongID {
+                let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan) ?? -1
+                let guestSrc = plan.placements
+                    .filter {
+                        $0.songID == vocalID && $0.role == .dominant
+                            && abs($0.timelineStart - drop1Start) < 0.15
+                    }
+                    .min { abs($0.timelineStart - drop1Start) < abs($1.timelineStart - drop1Start) }?
+                    .sourceStart
+                assertMashupPivotFromIncomingGuest(
+                    plan: plan,
+                    guestID: vocalID,
+                    guestHookStart: guestSrc,
+                    joinTokenTime: guestJoinWord,
+                    label: "pair B"
+                )
+            }
+        case .failure(let message):
+            check("pair B lyrics mashup", false, message)
+        }
+    } catch {
+        check("pair B lyrics fixture write", false, "\(error)")
     }
 }
 
@@ -2439,6 +2523,7 @@ do {
               "bedBPM=\(plan.targetBPM)")
         check("All-5 keeps Oops bed when Britney pair in crate", plan.mashupBedSongID == oops.id,
               "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "other")")
+        assertMashupFestivalStack(plan, label: "all-5")
         // Bed's native pocket should match the arrangement target.
         if let bedID = plan.mashupBedSongID {
             let bedTrack = [bomt, oops, stupid, paramore, tatu].first { $0.id == bedID }
@@ -2745,11 +2830,11 @@ do {
                 "earlyChops=\(earlyChops.count)"
             )
 
-            // Pivot wallpaper: 1-beat last-word grains, 4–8× (~1–2 bars), immediately before Drop 1.
+            // Pivot wallpaper: 1-beat incoming join-token grains, 4–8× (~1–2 bars), immediately before Drop 1.
             let beat = plan.beatSeconds
             let grains = plan.placements.filter { p in
                 p.role == .supporting
-                    && p.songID == bedID
+                    && p.songID == vocalID
                     && abs(p.timelineDuration - beat) < beat * 0.35
                     && p.timelineStart >= drop1Start - plan.barSeconds * 2.5
                     && p.timelineStart < drop1Start - 0.02
@@ -3417,6 +3502,89 @@ func pivotGrains(in plan: AutoRemixPlan, songID: UUID, before dropStart: Double)
     return grains
 }
 
+func mashupDecisionDump(_ plan: AutoRemixPlan) -> String {
+    plan.decisions.map { $0.userFacingSentence + " | " + ($0.detail ?? "") }.joined(separator: "\n")
+}
+
+func assertMashupFestivalStack(_ plan: AutoRemixPlan, label: String) {
+    let dump = mashupDecisionDump(plan).lowercased()
+    let ids = Set(plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.map(\.assetID))
+    check(
+        "\(label): mashup dump records festival take-out + drop-ride",
+        plan.mode == .mashup
+            && plan.decisions.contains { $0.kind == .addedRiserIntoDrop }
+            && dump.contains("addedriserintodrop")
+            && dump.contains("festival")
+            && dump.contains("take-out")
+            && (dump.contains("drop-ride") || dump.contains("drop ride"))
+            && ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
+        "ids=\(ids.sorted())"
+    )
+}
+
+func drop1JoinGrains(in plan: AutoRemixPlan) -> [AutoClipPlacement] {
+    guard let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) else { return [] }
+    return plan.placements.filter { p in
+        p.role == .supporting
+            && abs(p.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.35
+            && p.timelineStart >= drop1 - plan.barSeconds * 2.5
+            && p.timelineStart < drop1 - 0.02
+    }.sorted { $0.timelineStart < $1.timelineStart }
+}
+
+func assertMashupPivotFromIncomingGuest(
+    plan: AutoRemixPlan,
+    guestID: UUID,
+    guestHookStart: Double? = nil,
+    joinTokenTime: Double? = nil,
+    label: String
+) {
+    let grains = drop1JoinGrains(in: plan)
+    check(
+        "\(label): pivot wallpaper is 4–8× of a 1-beat grain",
+        grains.count >= 4 && grains.count <= 8,
+        "count=\(grains.count)"
+    )
+    check(
+        "\(label): pivot grains are the incoming guest, not the outgoing bed tail",
+        !grains.isEmpty && grains.allSatisfy { $0.songID == guestID },
+        "n=\(grains.count) guest=\(grains.filter { $0.songID == guestID }.count)"
+    )
+    if let g0 = grains.first, let joinTokenTime {
+        check(
+            "\(label): pivot grain source is the incoming join token",
+            abs(g0.sourceStart - joinTokenTime) < plan.barSeconds * 1.2,
+            String(format: "src=%.2f token=%.2f", g0.sourceStart, joinTokenTime)
+        )
+    } else if let g0 = grains.first, let guestHookStart {
+        check(
+            "\(label): pivot grain source is on the incoming hook",
+            abs(g0.sourceStart - guestHookStart) < plan.barSeconds * 4,
+            String(format: "src=%.2f hook=%.2f", g0.sourceStart, guestHookStart)
+        )
+    }
+}
+
+func assertTitleHookLead(
+    onset: Double,
+    lyric: Double,
+    barSeconds: Double,
+    beats: Int,
+    label: String
+) {
+    let beat = barSeconds / 4
+    let want = lyric - Double(beats) * beat
+    let lead = lyric - onset
+    check(
+        label,
+        abs(onset - want) < barSeconds * 0.35
+            && onset < lyric - 0.05
+            && lead < barSeconds * 0.9
+            && (beats >= 2 ? lead > beat * 1.35 : lead < beat * 1.55),
+        String(format: "onset=%.2f lyric=%.2f beat=%.2f wantBeats=%d lead=%.2f", onset, lyric, beat, beats, lead)
+    )
+}
+
 do {
     let song = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Songs/Oops I Did It Again.mp3")
     let vocals = URL(fileURLWithPath: "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/vocals.wav")
@@ -3505,13 +3673,12 @@ do {
         title: oops.title
     ) ?? -1
     let oopsBar = oopsProfile.analysis.barSeconds
-    check(
-        "lyrics sidecar: titleHookOnset is one beat before Oops, not a bar early",
-        abs(oopsOnset - (oopsHook - oopsBar / 4)) < oopsBar * 0.35
-            && oopsOnset < oopsHook - 0.05
-            && oopsHook - oopsOnset < oopsBar / 4 * 1.5
-            && abs(oopsOnset - 50.5) > 1.5,
-        String(format: "onset=%.2f hook=%.2f tail=50.5 bar=%.2f", oopsOnset, oopsHook, oopsBar)
+    assertTitleHookLead(
+        onset: oopsOnset,
+        lyric: oopsHook,
+        barSeconds: oopsBar,
+        beats: 2,
+        label: "lyrics sidecar: distinctive title attack pads 2 beats, not 1 beat / not a bar"
     )
     let snapped = AutoChorusIsland.snapLyricWordOnset(
         oopsHook, downbeats: oopsProfile.analysis.downbeats, barSeconds: oopsBar
@@ -3535,11 +3702,18 @@ do {
         title: oops.title
     ) ?? -1
     check(
-        "lyrics sidecar wins over energy island (hook start is one beat before JSON field)",
-        abs(overrideOnset - (sidecarOverride - oopsBar / 4)) < oopsBar * 0.35
-            && overrideOnset < sidecarOverride - 0.05
+        "lyrics sidecar wins over energy island (hook start is padded, not energy 48)",
+        overrideOnset < sidecarOverride - 0.05
+            && sidecarOverride - overrideOnset < oopsBar * 0.9
             && abs(overrideOnset - 48.0) > 2.0,
         String(format: "onset=%.2f lyric=%.2f energy=48.0", overrideOnset, sidecarOverride)
+    )
+    assertTitleHookLead(
+        onset: overrideOnset,
+        lyric: sidecarOverride,
+        barSeconds: oopsBar,
+        beats: 2,
+        label: "lyrics sidecar override: distinctive attack still 2-beat pad"
     )
 
     // 9843f9b: lyric just before a catalog downbeat must not snap AFTER
@@ -3566,13 +3740,16 @@ do {
         title: oops.title
     ) ?? -1
     let beat = oopsBar / 4
+    assertTitleHookLead(
+        onset: lateOnset,
+        lyric: lateLyric,
+        barSeconds: oopsBar,
+        beats: 2,
+        label: "title-hook clip pads 2 beats when 1 beat still edge-cuts the title token (not a full bar / catalog 48)"
+    )
     check(
-        "title-hook clip starts one beat before the lyric (not a full bar / catalog 48)",
-        abs(lateOnset - (lateLyric - beat)) < oopsBar * 0.35
-            && lateOnset < lateLyric - 0.05
-            && lateLyric - lateOnset < beat * 1.5
-            && abs(lateOnset - catalogPeak) > 0.08
-            && abs(lateOnset - 48.0) > 0.5,
+        "2-beat pad never walks a full bar / catalog 48",
+        abs(lateOnset - 48.0) > 0.5 && lateLyric - lateOnset < oopsBar * 0.9,
         String(format: "onset=%.2f lyric=%.2f beat=%.2f catalog=%.1f", lateOnset, lateLyric, beat, catalogPeak)
     )
     let oneBeatGuest = AutoChorusIsland.titleHookClipStart(
@@ -3584,6 +3761,46 @@ do {
         abs(oneBeatGuest - (lateLyric - beat)) < oopsBar * 0.35
             && oneBeatGuest <= lateLyric - 0.05,
         String(format: "guest=%.2f lyric=%.2f beat=%.2f", oneBeatGuest, lateLyric, beat)
+    )
+
+    let festivalBPM = 144.0
+    let festivalBar = 240.0 / festivalBPM
+    let festivalLyric = 39.84
+    let laterTokenStart = AutoChorusIsland.titleHookClipStart(
+        lyric: festivalLyric,
+        downbeats: [36.5, 38.17, 39.84, 41.5],
+        barSeconds: festivalBar,
+        title: "All I Wanted",
+        lyricWords: [
+            (festivalLyric, "all"), (festivalLyric + 0.2, "i"),
+            (festivalLyric + 0.42, "wanted"), (festivalLyric + 0.7, "was")
+        ]
+    )
+    assertTitleHookLead(
+        onset: laterTokenStart,
+        lyric: festivalLyric,
+        barSeconds: festivalBar,
+        beats: 1,
+        label: "title-hook keeps 1 beat when the distinctive token is already inside the first 1–2s"
+    )
+
+    check(
+        "join token is the incoming distinctive hook word, not a generic shared filler",
+        AutoPivotWord.joinToken(deckATitle: "Oops I Did It Again", deckBTitle: "Baby One More Time") == "baby"
+            && AutoPivotWord.joinToken(deckATitle: "All I Wanted", deckBTitle: "All The Things She Said") == "things",
+        "oops×bomt=\(AutoPivotWord.joinToken(deckATitle: "Oops I Did It Again", deckBTitle: "Baby One More Time") ?? "nil") paramore×tatu=\(AutoPivotWord.joinToken(deckATitle: "All I Wanted", deckBTitle: "All The Things She Said") ?? "nil")"
+    )
+    let incomingBaby = AutoPivotWord.joinTokenGrainSource(
+        token: "baby",
+        lyricWords: [(40.0, "baby"), (60.26, "hit"), (60.5, "me"), (60.7, "baby")],
+        hookStart: 59.62,
+        beatSec: 0.64,
+        tempoRatio: 1
+    )
+    check(
+        "incoming join grain is the guest hook token, not verse filler",
+        abs(incomingBaby - 60.7) < 0.8 && abs(incomingBaby - 40.0) > 8,
+        String(format: "grain=%.2f", incomingBaby)
     )
 
     // Pivot grain must be an identifiable word, not the empty last beat of the phrase.
@@ -3688,10 +3905,15 @@ do {
             }?.detail ?? ""
             check(
                 "lyrics sidecar: planner bed hook is titleHookStart (not energy tail)",
-                abs(hookSrc - (oopsHook - plan.barSeconds / 4)) < plan.barSeconds * 0.35
-                    && hookSrc < oopsHook - 0.05
-                    && abs(hookSrc - 50.5) > 1.5,
+                abs(hookSrc - 50.5) > 1.5,
                 String(format: "src=%.2f want=%.2f %@", hookSrc, oopsHook, bedDump)
+            )
+            assertTitleHookLead(
+                onset: hookSrc,
+                lyric: oopsHook,
+                barSeconds: plan.barSeconds,
+                beats: 2,
+                label: "lyrics sidecar: planner bed pads 2 beats for a distinctive attack"
             )
             check(
                 "lyrics sidecar: planner Drop 1 is titleHookStart (not verse)",
@@ -3740,10 +3962,12 @@ do {
             to: oopsLyrics, title: oops.title, titleHookStart: bedLyric,
             words: [(bedLyric, "oops"), (50.6, "I"), (50.9, "did"), (51.2, "it"), (51.5, "again")]
         )
+        let guestJoinWord = dropLyric + 0.44
         try writeLyricsJSON(
             to: bomtLyrics, title: bomt.title, titleHookStart: dropLyric,
-            words: [(40.0, "baby"), (dropLyric, "hit"), (60.5, "me"), (60.7, "baby"),
-                    (61.0, "one"), (61.2, "more"), (61.4, "time")]
+            words: [(dropLyric - 20.26, "baby"), (dropLyric, "hit"), (dropLyric + 0.24, "me"),
+                    (guestJoinWord, "baby"), (dropLyric + 0.74, "one"),
+                    (dropLyric + 0.94, "more"), (dropLyric + 1.14, "time")]
         )
         var tuning = AutoTuning.standard
         tuning.explicitStemsBySongID[oops.id] = AutoStemSet(lyrics: oopsLyrics)
@@ -3781,34 +4005,34 @@ do {
                 $0.kind == .selectedAnchor && ($0.detail ?? "").contains("Drop 1 guest placed")
             }?.detail ?? ""
             check(
-                "599dec4: bed placed start is one beat before lyric, not a full bar / catalog 48",
-                abs(hookSrc - (bedLyric - plan.barSeconds / 4)) < plan.barSeconds * 0.35
-                    && hookSrc < bedLyric - 0.05
-                    && bedLyric - hookSrc < plan.barSeconds / 4 * 1.5
-                    && abs(hookSrc - catalogPeak) > 0.08
-                    && abs(hookSrc - 48.0) > 0.5,
-                String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
-            )
-            let takeOutIDs = Set(plan.sfxEvents.filter {
-                !SoundEffectLibrary.isPulseLayer($0.assetID)
-            }.map(\.assetID))
-            check(
-                "mashup dump records festival take-out + drop ride on Drop 1",
-                plan.decisions.contains { $0.kind == .addedRiserIntoDrop }
-                    && takeOutIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"])
-                    && plan.decisions.contains {
-                        let s = $0.userFacingSentence.lowercased()
-                        return s.contains("festival") && (s.contains("drop-ride") || s.contains("drop ride"))
-                    },
-                "ids=\(takeOutIDs.sorted()) sentences=\(plan.decisions.filter { $0.kind == .addedRiserIntoDrop }.map(\.userFacingSentence))"
-            )
-            check(
                 "599dec4: dump placed startSeconds < lyric",
                 hookSrc < bedLyric - 0.05
                     && (bedDump.contains("lyric=50.38") || bedDump.contains("lyric=50.4"))
                     && !bedDump.contains("chosen=50.38"),
                 bedDump
             )
+            assertTitleHookLead(
+                onset: hookSrc,
+                lyric: bedLyric,
+                barSeconds: plan.barSeconds,
+                beats: 2,
+                label: "599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48"
+            )
+            check(
+                "599dec4: 2-beat pad never walks catalog 48",
+                abs(hookSrc - 48.0) > 0.5 && abs(hookSrc - catalogPeak) > 0.08,
+                String(format: "src=%.2f lyric=%.2f catalog=%.1f %@", hookSrc, bedLyric, catalogPeak, bedDump)
+            )
+            assertMashupFestivalStack(plan, label: "Oops×BOMT")
+            if let vocalID = plan.mashupVocalSongID {
+                assertMashupPivotFromIncomingGuest(
+                    plan: plan,
+                    guestID: vocalID,
+                    guestHookStart: guestSrc,
+                    joinTokenTime: guestJoinWord,
+                    label: "Oops×BOMT"
+                )
+            }
             check(
                 "599dec4: Drop 1 still lyric hook ~60s (not verse, not after lyric)",
                 guestSrc <= dropLyric + 0.02 && abs(guestSrc - dropLyric) < plan.barSeconds * 0.55 && abs(guestSrc - 40.0) > 4.0,
@@ -3905,9 +4129,9 @@ do {
             check("Stem mashup Drop 1 exists", false)
             break
         }
-        let grains = pivotGrains(in: plan, songID: bedID, before: drop0.timelineStart)
+        let grains = pivotGrains(in: plan, songID: vocalID, before: drop0.timelineStart)
         check(
-            "Mashup pivot grains use bed vocal stem",
+            "Mashup pivot grains use incoming guest vocal stem",
             !grains.isEmpty && grains.allSatisfy { $0.stemKind == AutoStemKind.vocals },
             "grains=\(grains.count)"
         )

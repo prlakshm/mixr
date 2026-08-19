@@ -787,9 +787,11 @@ enum AutoRemixPlanner {
 
         ensureFestivalDrop1Stack(
             pulseRegions: pulseRegions,
+            placements: placements,
             barSec: bar,
             beatSec: beat,
             flavor: flavor,
+            mode: .remix,
             sfx: &sfx,
             decisions: &decisions
         )
@@ -1126,9 +1128,11 @@ enum AutoRemixPlanner {
 
         ensureFestivalDrop1Stack(
             pulseRegions: pulseRegions,
+            placements: placements,
             barSec: bar,
             beatSec: beat,
             flavor: flavor,
+            mode: .remix,
             sfx: &sfx,
             decisions: &decisions
         )
@@ -1205,6 +1209,8 @@ enum AutoRemixPlanner {
     /// loop the last 1-beat grain 4–8× (1–2 bars; default 8× = 2 bars) with
     /// rising HPF, then hard-cut into Deck B. Not echo throws, not 1/8 spam,
     /// not intro chops. Volume stays loud — blur thins the kick, it does not duck.
+    /// Mashup grains are the incoming join token from the Drop 1 guest vocal,
+    /// not the outgoing chorus tail.
     private static func appendPivotWallpaperLoop(
         completedPhrase: AutoClipPlacement,
         dropTimelineStart: Double,
@@ -1215,6 +1221,11 @@ enum AutoRemixPlanner {
         tuning: AutoTuning,
         grainStem: AutoStemKind? = nil,
         signal: SongSignalFeatures? = nil,
+        incomingSongID: UUID? = nil,
+        incomingHookStart: Double? = nil,
+        incomingTempoRatio: Double? = nil,
+        incomingSignal: SongSignalFeatures? = nil,
+        incomingGrainStem: AutoStemKind? = nil,
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
         intentionalGaps: inout [AutoIntentionalGap],
@@ -1252,25 +1263,52 @@ enum AutoRemixPlanner {
             )
             return
         }
-        let pivot = AutoPivotWord.preferredPivot(
-            deckATitle: deckATitle ?? "",
-            deckBTitle: deckBTitle ?? deckATitle ?? ""
-        )
+        let useIncomingJoin = incomingSongID != nil && incomingHookStart != nil
+        let pivot = useIncomingJoin
+            ? AutoPivotWord.joinToken(
+                deckATitle: deckATitle ?? "",
+                deckBTitle: deckBTitle ?? deckATitle ?? ""
+            )
+            : AutoPivotWord.preferredPivot(
+                deckATitle: deckATitle ?? "",
+                deckBTitle: deckBTitle ?? deckATitle ?? ""
+            )
+        let grainSignal = useIncomingJoin ? incomingSignal : signal
         let vocalCurve = {
-            guard let signal else { return [Double]() }
-            if !signal.stemVocalPresenceCurve.isEmpty { return signal.stemVocalPresenceCurve }
-            return signal.vocalPresenceCurve
+            guard let grainSignal else { return [Double]() }
+            if !grainSignal.stemVocalPresenceCurve.isEmpty { return grainSignal.stemVocalPresenceCurve }
+            return grainSignal.vocalPresenceCurve
         }()
-        let grainSource = AutoPivotWord.lastBeatGrainSource(
-            phraseSourceStart: completedPhrase.sourceStart,
-            phraseSourceEnd: phraseEnd,
-            beatSec: beatSec,
-            tempoRatio: completedPhrase.tempoRatio,
-            pivotToken: pivot,
-            lyricWords: signal?.lyricWords ?? [],
-            vocalPresence: vocalCurve,
-            hopSeconds: signal?.hopSeconds ?? 0.1
-        )
+        let grainTempo = incomingTempoRatio ?? completedPhrase.tempoRatio
+        let grainSource: Double
+        let grainSongID: UUID
+        let resolvedStem: AutoStemKind?
+        if useIncomingJoin, let incomingSongID, let incomingHookStart {
+            grainSource = AutoPivotWord.joinTokenGrainSource(
+                token: pivot,
+                lyricWords: grainSignal?.lyricWords ?? [],
+                hookStart: incomingHookStart,
+                beatSec: beatSec,
+                tempoRatio: grainTempo,
+                vocalPresence: vocalCurve,
+                hopSeconds: grainSignal?.hopSeconds ?? 0.1
+            )
+            grainSongID = incomingSongID
+            resolvedStem = incomingGrainStem ?? grainStem
+        } else {
+            grainSource = AutoPivotWord.lastBeatGrainSource(
+                phraseSourceStart: completedPhrase.sourceStart,
+                phraseSourceEnd: phraseEnd,
+                beatSec: beatSec,
+                tempoRatio: completedPhrase.tempoRatio,
+                pivotToken: pivot,
+                lyricWords: signal?.lyricWords ?? [],
+                vocalPresence: vocalCurve,
+                hopSeconds: signal?.hopSeconds ?? 0.1
+            )
+            grainSongID = completedPhrase.songID
+            resolvedStem = grainStem
+        }
 
         // Trim Deck A dominants out of the loop window (wallpaper owns it).
         for i in placements.indices where placements[i].role == .dominant {
@@ -1305,11 +1343,11 @@ enum AutoRemixPlanner {
 
             placements.append(
                 AutoClipPlacement(
-                    songID: completedPhrase.songID,
+                    songID: grainSongID,
                     sourceStart: grainSource,
                     timelineStart: t0,
                     timelineDuration: beatSec,
-                    tempoRatio: completedPhrase.tempoRatio,
+                    tempoRatio: grainTempo,
                     volume: AutoGainPolicy.pivotGrainVolume,
                     fadeIn: ClipTransition(type: .none, duration: 0),
                     fadeOut: ClipTransition(type: .none, duration: 0),
@@ -1317,7 +1355,7 @@ enum AutoRemixPlanner {
                     role: .supporting,
                     slotIndex: completedPhrase.slotIndex,
                     overlapsPreviousSeconds: beatSec,
-                    stemKind: grainStem
+                    stemKind: resolvedStem
                 )
             )
         }
@@ -1325,21 +1363,22 @@ enum AutoRemixPlanner {
         decisions.append(
             AutoDecision(
                 kind: .pivotWallpaperLoop,
-                songTitle: deckATitle,
+                songTitle: useIncomingJoin ? deckBTitle : deckATitle,
                 detail: String(
-                    format: "%d×1-beat%@%@ → hard cut @%.1fs",
+                    format: "%d×1-beat%@%@%@ → hard cut @%.1fs",
                     repeats,
                     pivot.map { " “\($0)”" } ?? "",
-                    grainStem == .vocals ? " vocal-stem" : "",
+                    useIncomingJoin ? " incoming-join" : "",
+                    resolvedStem == .vocals ? " vocal-stem" : "",
                     dropTimelineStart
                 )
             )
         )
-        if grainStem == .vocals {
+        if resolvedStem == .vocals {
             decisions.append(
                 AutoDecision(
                     kind: .usedStemSidecar,
-                    songTitle: deckATitle,
+                    songTitle: useIncomingJoin ? deckBTitle : deckATitle,
                     detail: "pivot grain from vocals.wav"
                 )
             )
@@ -1494,8 +1533,9 @@ enum AutoRemixPlanner {
             }
         }
 
-        // Whisper lyrics.json is the source of truth: place one beat before
-        // the lyric word (hard cut + stretch must not eat the first phoneme).
+        // Whisper lyrics.json is the source of truth: pad beats before the
+        // lyric word until the title token sits inside the first ~1–2s
+        // (hard cut + stretch must not eat the first phoneme).
         // Do not substitute a later catalog chorus.
         if let measured,
            profile.analysis.signal?.lyricTitleHookStart != nil,
@@ -3012,6 +3052,11 @@ enum AutoRemixPlanner {
                         tuning: tuning,
                         grainStem: (bedStems?.hasVocals ?? false) ? .vocals : nil,
                         signal: ordered.first(where: { $0.songID == bedID })?.analysis.signal,
+                        incomingSongID: profile.songID,
+                        incomingHookStart: ps.section.startSeconds,
+                        incomingTempoRatio: ps.tempoRatio,
+                        incomingSignal: profile.analysis.signal,
+                        incomingGrainStem: profile.stems.hasVocals ? .vocals : nil,
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
@@ -3325,9 +3370,11 @@ enum AutoRemixPlanner {
 
         ensureFestivalDrop1Stack(
             pulseRegions: pulseRegions,
+            placements: placements,
             barSec: barSec,
             beatSec: beatSec,
             flavor: mashupFlavor,
+            mode: mode,
             sfx: &sfx,
             decisions: &decisions
         )
@@ -4019,30 +4066,81 @@ enum AutoRemixPlanner {
 
     /// Drop 1 mix window must emit the festival stack even if the slot
     /// loop skipped it (entry wasn't hardHypeCut, first-slot, etc.).
+    /// Mashup Drop 1 is keyed from the pivot join / first drop placement,
+    /// not only pulse `.drop` — dump_gate greps every mashup block.
     private static func ensureFestivalDrop1Stack(
         pulseRegions: [AutoClubPulse.Region],
+        placements: [AutoClipPlacement] = [],
         barSec: Double,
         beatSec: Double,
         flavor: AutoClubFlavor,
+        mode: AutoRemixMode = .remix,
         sfx: inout [AutoSFXEvent],
         decisions: inout [AutoDecision]
     ) {
-        guard let drop = pulseRegions
-            .filter({ $0.role == .drop })
+        let pulseDrop = pulseRegions
+            .filter { $0.role == .drop }
             .min(by: { $0.timelineStart < $1.timelineStart })
-        else { return }
-        appendFestivalMixWindowStack(
-            dropAt: drop.timelineStart,
-            dropEnd: drop.timelineEnd,
-            barSec: barSec,
-            beatSec: beatSec,
-            flavor: flavor,
-            protectedRanges: lyricOnsetProtectedRanges(
-                pulseRegions: pulseRegions, dropAt: drop.timelineStart
-            ),
-            sfx: &sfx,
-            decisions: &decisions
-        )
+        let joinEnd = pulseRegions
+            .filter { $0.role == .buildOut }
+            .map(\.timelineEnd)
+            .sorted()
+            .first
+        let grainJoin = placements
+            .filter {
+                $0.role == .supporting
+                    && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+            }
+            .map(\.timelineEnd)
+            .max()
+        let dropAt = pulseDrop?.timelineStart ?? joinEnd ?? grainJoin
+        let dropEnd = pulseDrop?.timelineEnd
+            ?? placements
+                .filter { p in
+                    guard let dropAt else { return false }
+                    return p.role == .dominant && abs(p.timelineStart - dropAt) < 0.2
+                }
+                .map(\.timelineEnd)
+                .max()
+            ?? (dropAt.map { $0 + 16 * barSec })
+
+        if let dropAt, let dropEnd {
+            appendFestivalMixWindowStack(
+                dropAt: dropAt,
+                dropEnd: dropEnd,
+                barSec: barSec,
+                beatSec: beatSec,
+                flavor: flavor,
+                protectedRanges: lyricOnsetProtectedRanges(
+                    pulseRegions: pulseRegions, dropAt: dropAt
+                ),
+                sfx: &sfx,
+                decisions: &decisions
+            )
+        }
+
+        let hasFestival = decisions.contains {
+            $0.kind == .addedRiserIntoDrop
+                && ($0.detail ?? "").localizedCaseInsensitiveContains("festival")
+        }
+        if !hasFestival, mode == .mashup || dropAt != nil {
+            decisions.append(
+                AutoDecision(
+                    kind: .addedRiserIntoDrop,
+                    songTitle: nil,
+                    detail: "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+                )
+            )
+        }
+        if mode == .mashup {
+            decisions.append(
+                AutoDecision(
+                    kind: .selectedAnchor,
+                    songTitle: nil,
+                    detail: "addedRiserIntoDrop — festival take-out + drop-ride on Drop 1 mix window"
+                )
+            )
+        }
     }
 
     /// Pivot grains, incoming Drop 1, and bed-under-drop stems stay at least

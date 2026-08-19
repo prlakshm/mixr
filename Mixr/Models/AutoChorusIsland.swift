@@ -459,10 +459,14 @@ nonisolated enum AutoChorusIsland {
         introEnd: Double,
         phraseSeconds: Double,
         title: String?,
-        leadIn: TitleHookLeadIn = .oneBeat
+        leadIn: TitleHookLeadIn = .enoughForTitleToken
     ) -> Double? {
         if let lyric = snapLyricTitleHook(
-            signal: signal, downbeats: downbeats, barSeconds: barSeconds, leadIn: leadIn
+            signal: signal,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            leadIn: leadIn,
+            title: title
         ) {
             return lyric
         }
@@ -478,52 +482,165 @@ nonisolated enum AutoChorusIsland {
     }
 
     /// Whisper word onset → title-hook clip start.
-    /// Clip start = **one beat before** `titleHookStart` (nearest downbeat
-    /// within ~1 beat, never a full bar / earlier catalog peak). The title
-    /// token lands in the first ~1–2s. Drop 1 guest uses the same one-beat
-    /// pad (Hit me lock).
+    /// Pad beats before `titleHookStart` until the distinctive title token sits
+    /// fully inside the first ~1–2s of the clip — not on sample 0 / the cut.
+    /// One beat is enough when that token is already inside (later in the line
+    /// or a long beat). Two beats when a 1-beat pad still edge-cuts a
+    /// distinctive attack word. Never a full bar / earlier catalog peak.
+    /// Drop 1 guest keeps an explicit one-beat pad.
     enum TitleHookLeadIn: Sendable {
         /// Lyric minus one beat, snapped at-or-before (never after, never a bar early).
         case oneBeat
         /// Same as `oneBeat` — previous *beat*, not previous bar.
         case previousDownbeat
+        /// Lyric minus two beats, snapped to a beat, never a full bar early.
+        case twoBeats
+        /// 1 or 2 beats from the title token — not a song-specific override.
+        case enoughForTitleToken
+    }
+
+    /// Beats of pad so the distinctive title token is inside the first ~1–2s.
+    static func titleHookLeadInBeats(
+        lyric: Double,
+        barSeconds: Double,
+        title: String?,
+        lyricWords: [(t: Double, word: String)] = []
+    ) -> Int {
+        let beat = barSeconds / 4
+        guard beat > 0.05 else { return 1 }
+        // Later distinctive tokens ("wanted") already sit inside 1–2s after a
+        // 1-beat pad. Only a distinctive ATTACK word needs extra pre-roll.
+        guard distinctiveAttackIsTitleToken(
+            lyric: lyric, title: title, words: lyricWords, beat: beat
+        ) else { return 1 }
+        // 1 beat already ≥ ~0.85s → token is inside the 1–2s window.
+        if beat >= 0.85 { return 1 }
+        return 2
+    }
+
+    /// True when the hook attack *is* the rare/distinctive title token.
+    private static func distinctiveAttackIsTitleToken(
+        lyric: Double,
+        title: String?,
+        words: [(t: Double, word: String)],
+        beat: Double
+    ) -> Bool {
+        let tokens = AutoPivotWord.hookTokens(in: title ?? "")
+        let distinctive = Set(tokens.distinctive)
+        func norm(_ s: String) -> String {
+            s.lowercased().filter { $0.isLetter }
+        }
+        if let attack = words.min(by: { abs($0.t - lyric) < abs($1.t - lyric) }),
+           abs(attack.t - lyric) <= beat * 0.6 {
+            let w = norm(attack.word)
+            if distinctive.contains(w) { return true }
+            if tokens.hasLexiconRare && AutoPivotWord.distinctiveLexicon.contains(w) {
+                return true
+            }
+            return false
+        }
+        guard let first = tokens.all.first else { return false }
+        return distinctive.contains(first)
     }
 
     static func snapLyricTitleHook(
         signal: SongSignalFeatures,
         downbeats: [Double],
         barSeconds: Double,
-        leadIn: TitleHookLeadIn = .oneBeat
+        leadIn: TitleHookLeadIn = .enoughForTitleToken,
+        title: String? = nil
     ) -> Double? {
         guard let t = signal.lyricTitleHookStart, t >= 0, barSeconds > 0.05 else {
             return nil
         }
-        return titleHookClipStart(lyric: t, downbeats: downbeats, barSeconds: barSeconds, leadIn: leadIn)
+        return titleHookClipStart(
+            lyric: t,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            leadIn: leadIn,
+            title: title,
+            lyricWords: signal.lyricWords
+        )
     }
 
-    /// Title-hook clip start = previous **beat** before the lyric word.
+    /// Title-hook clip start: N beats before the lyric word, snapped to a beat.
     /// Never after the word. Never a full bar early.
     static func titleHookClipStart(
         lyric: Double,
         downbeats: [Double],
         barSeconds: Double,
-        leadIn: TitleHookLeadIn = .oneBeat
+        leadIn: TitleHookLeadIn = .enoughForTitleToken,
+        title: String? = nil,
+        lyricWords: [(t: Double, word: String)] = []
     ) -> Double {
         let beat = barSeconds / 4
-        let padded = max(0, lyric - beat)
+        let beats: Double
         switch leadIn {
         case .oneBeat, .previousDownbeat:
-            // Prefer a downbeat within ~1 beat of the pad, at or before the
-            // word. Reject bar-grid hits a full bar back (48.0 vs 50.38).
-            let near = downbeats.filter { db in
-                db <= lyric - beat * 0.5
-                    && abs(db - padded) <= beat * 1.05
-            }
-            if let db = near.max() {
-                return max(0, min(db, padded))
-            }
-            return padded
+            beats = 1
+        case .twoBeats:
+            beats = 2
+        case .enoughForTitleToken:
+            beats = Double(
+                titleHookLeadInBeats(
+                    lyric: lyric, barSeconds: barSeconds, title: title, lyricWords: lyricWords
+                )
+            )
         }
+        let padded = max(0, lyric - beats * beat)
+        let earliest = max(0, lyric - min(barSeconds * 0.9, (beats + 0.25) * beat))
+        return snapLeadInToBeat(
+            padded: padded,
+            lyric: lyric,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            earliest: earliest
+        )
+    }
+
+    /// Snap a lead-in to the beat grid. Prefer a beat near `padded`, at or
+    /// before the lyric, never earlier than `earliest` (rejects a full bar /
+    /// previous catalog peak).
+    private static func snapLeadInToBeat(
+        padded: Double,
+        lyric: Double,
+        downbeats: [Double],
+        barSeconds: Double,
+        earliest: Double
+    ) -> Double {
+        let beat = barSeconds / 4
+        let latest = lyric - beat * 0.35
+        var candidates: [Double] = [padded]
+        for db in downbeats {
+            var t = db
+            var guardN = 0
+            while t > earliest - beat && guardN < 32 {
+                t -= beat
+                guardN += 1
+            }
+            guardN = 0
+            while t < lyric + beat && guardN < 64 {
+                if t >= earliest - 0.001 && t <= latest + 0.001 {
+                    candidates.append(t)
+                }
+                t += beat
+                guardN += 1
+            }
+        }
+        let near = candidates.filter {
+            $0 >= earliest - 0.001
+                && $0 <= latest + 0.001
+                && abs($0 - padded) <= beat * 1.05
+        }
+        if let closest = near.min(by: {
+            let da = abs($0 - padded)
+            let db = abs($1 - padded)
+            if abs(da - db) < 0.01 { return $0 > $1 }
+            return da < db
+        }) {
+            return max(earliest, min(closest, latest))
+        }
+        return max(earliest, min(padded, latest))
     }
 
     /// Lyric word onset → hard-cut. Snap to a downbeat **at or before** `t`,

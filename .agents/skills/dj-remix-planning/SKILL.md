@@ -37,14 +37,9 @@ stay one record.
 Never cut the best / most identifiable lines. Opening titles and hook lines
 **finish**. Do not chop the first “Oops”. Do not chop the first “baby”.
 
-- Pivot grain is the **LAST identifiable word** of a completed line, after it
-  has played once — never the first syllable of the title and never a silent
-  tail rest.
+- Pivot grain is the **incoming join token** — a distinctive hook word of the Drop 1 guest, taken from that vocal stem — never the outgoing chorus tail and never a silent rest. Shared generic fillers (“all”) are not join tokens.
 - Incoming hook starts on the **downbeat of a real line**, not mid-word.
-  Bed title-hook copies start **one beat before** `titleHookStart` (nearest
-  downbeat within ~1 beat — never a full bar / earlier catalog peak) so the
-  title token lands in the first ~1–2s. Drop 1 guest uses the same one-beat
-  pad. Hard cut, no fade-in.
+  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. Never a full bar / earlier catalog peak. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in.
 - If phrase confidence cannot support a last-word grain, **skip the loop**
   rather than slicing the title. Keep playing through the window so the join
   does not go quiet.
@@ -60,12 +55,7 @@ Future Auto Remix work copies this *grammar*, not 1/8 stutter spam or a quiet fa
    slice the first “Oops” or the first “baby”. The outgoing line finishes
    (e.g. “Oops I did it again / I played with your heart / Got lost in the
    game / Oh baby, baby”).
-2. **Pivot grain = last word of that completed line**, one quarter-note
-   (1 beat) on the downbeat. Loop it **8× = 2 bars** (4–8 repeats / 1–2 bars
-   is the general range). This is the **wallpaper chop**: one grain, steady,
-   predictable. **Not** 1/8 or 1/16 stutters, tape stops, echo throws, or chops
-   scattered on the drop or in verses. **Not** 16× / 4-bar wallpaper — that
-   is too long.
+2. **Pivot grain = distinctive join token of the incoming song** (Drop 1 guest vocal), one quarter-note (1 beat) on the grid. Loop it **8× = 2 bars** (4–8 repeats / 1–2 bars is the general range). This is the **wallpaper chop**: one grain, steady, predictable. **Not** the outgoing last line, **not** 1/8 or 1/16 stutters, tape stops, echo throws, or chops scattered on the drop or in verses. **Not** 16× / 4-bar wallpaper — that is too long.
 3. **Over those 1–2 bars:** high-pass / Sound Color (blur) the loop so kick
    and lows leave. Thin, tinny vocal stutter. Builds tension. Kick out on this
    window (`buildOut`). **Volume stays loud** (at least as loud as the bed
@@ -134,10 +124,12 @@ Typical:
   rows, grid-snapped, with HPF sweep / duck the bed kick on that window.
   Pivot **clip volume stays loud** — HPF/blur does the thin.
 - Incoming hook-replace on the next downbeat, same-word attack, **full clip
-  volume** (no fade-in). Bed title-hook copies start one beat before the
-  lyric word so ASR hears the title token in the first 1–2s.
-- Pivot grain is the last **identifiable** pivot token / vocal beat of the
-  completed line — not a silent tail rest.
+  volume** (no fade-in). Bed title-hook copies pad 1–2 beats before the
+  lyric so ASR hears the title token in the first 1–2s (never a full bar).
+- Pivot grain is the incoming join token from the guest vocal stem — not the
+  outgoing last line and not a silent tail rest.
+- Every mashup writes festival take-out + drop-ride on Drop 1 and dumps
+  `addedRiserIntoDrop` (festival / take-out / drop-ride) in plan.decisions.
 - Wallpaper chops are **this mix-window loop**, not verse decoration and not
   1/8 spam on the drop.
 - **Pulse Drop 1** = that hard cut after the loop — never a fake drop on the

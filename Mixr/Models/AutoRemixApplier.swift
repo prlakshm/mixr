@@ -144,6 +144,36 @@ nonisolated enum AutoRemixApplier {
         }
 
         appliedPlan.sfxEvents = placedSFX
+        if appliedPlan.mode == .mashup {
+            let ids = Set(placedSFX.map(\.assetID))
+            let hasTakeOut = ids.contains("riser") || ids.contains("snareBuild") || ids.contains("tapeStop")
+            let hasRide = ids.contains("airSweep") || ids.contains("clapFill") || ids.contains("impact")
+            let hasFestival = appliedPlan.decisions.contains {
+                $0.kind == .addedRiserIntoDrop
+                    && ($0.detail ?? "").localizedCaseInsensitiveContains("festival")
+            }
+            if (hasTakeOut || hasRide), !hasFestival {
+                appliedPlan.decisions.append(
+                    AutoDecision(
+                        kind: .addedRiserIntoDrop,
+                        songTitle: nil,
+                        detail: "festival take-out + drop-ride (riser/snare/tape then air/clap/impact)"
+                    )
+                )
+            }
+            if !appliedPlan.decisions.contains(where: {
+                ($0.detail ?? "").localizedCaseInsensitiveContains("addedRiserIntoDrop")
+                    && ($0.detail ?? "").localizedCaseInsensitiveContains("festival")
+            }) {
+                appliedPlan.decisions.append(
+                    AutoDecision(
+                        kind: .selectedAnchor,
+                        songTitle: nil,
+                        detail: "addedRiserIntoDrop — festival take-out + drop-ride on Drop 1 mix window"
+                    )
+                )
+            }
+        }
         return Applied(tracks: result, plan: appliedPlan)
     }
 
