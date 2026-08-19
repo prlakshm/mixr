@@ -231,12 +231,16 @@ nonisolated enum AutoMashupCompat {
             maxStretch: tuning.maxStretch
         )
         let stretchOK = fit.gridAligned && abs(fit.ratio - 1) <= tuning.maxStretch + 0.0001
-        let vocalRatio = stretchOK ? fit.ratio : 1.0
+        let liftRatio = AutoClubTempo.clubHouseLiftRatio(
+            songBPM: hook.analysis.bpm, targetBPM: targetBPM
+        )
+        let vocalRatio = liftRatio ?? (stretchOK ? fit.ratio : 1.0)
+        let tempoOK = stretchOK || liftRatio != nil
 
         if key.score < 0.40 {
             return Verdict(gate: .skip, keyScore: key.score, vocalRatio: 1, detail: "key clash beyond Camelot neighborhood / ±2 st")
         }
-        if !stretchOK {
+        if !tempoOK {
             // Far stretch — allow a short chop at native tempo only if key is OK.
             if key.score >= 0.5 {
                 return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: 1,
@@ -252,8 +256,14 @@ nonisolated enum AutoMashupCompat {
             return Verdict(gate: .cameoChop, keyScore: key.score, vocalRatio: vocalRatio,
                            detail: "vocal pitch would exceed ±2 st — cameo only")
         }
-        return Verdict(gate: .fullHook, keyScore: key.score, vocalRatio: vocalRatio,
-                       detail: "full hook over bed")
+        return Verdict(
+            gate: .fullHook,
+            keyScore: key.score,
+            vocalRatio: vocalRatio,
+            detail: liftRatio != nil
+                ? "full hook over bed (club-lift into house)"
+                : "full hook over bed"
+        )
     }
 
     /// True when a guest should land in the breakdown runway (ballad / low energy

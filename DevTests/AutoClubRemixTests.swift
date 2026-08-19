@@ -71,8 +71,14 @@ func makeFeatures(
 
 do {
     let mid = AutoClubTempo.remixDecision(songBPM: 93, vocalHeavy: true)
-    check("Britney-class midtempo keeps pocket", mid.pocket == .midtempoPop && abs(mid.targetBPM - 93) < 0.1,
-          "bpm=\(mid.targetBPM) \(mid.detail)")
+    check(
+        "Britney-class midtempo club-lifts into house (not a 94 ballad pocket)",
+        mid.pocket == .house
+            && AutoClubTempo.housePocketRange.contains(mid.targetBPM)
+            && mid.ratio > 1.15
+            && mid.detail.lowercased().contains("club-lift"),
+        "bpm=\(mid.targetBPM) ratio=\(mid.ratio) \(mid.detail)"
+    )
 
     let house = AutoClubTempo.remixDecision(songBPM: 126, vocalHeavy: false)
     check("House pocket kept", house.pocket == .house && abs(house.ratio - 1) < 0.001)
@@ -109,10 +115,19 @@ do {
 
 do {
     let pair = AutoClubTempo.mashupDecision(vocalBPM: 93, bedBPM: 95)
-    check("Britney mashup stays ~94", abs(pair.targetBPM - 94) < 1.5 && pair.ok,
-          pair.detail)
-    check("Britney mashup vocal stretch ≤ 8%", abs(pair.vocalRatio - 1) <= 0.08 + 0.001)
-    check("Britney mashup bed stretch ≤ 15%", abs(pair.bedRatio - 1) <= 0.15 + 0.001)
+    check(
+        "Britney mashup club-lifts into house 124–128 (not a polite 94 pocket)",
+        pair.ok
+            && AutoClubTempo.housePocketRange.contains(pair.targetBPM)
+            && pair.detail.lowercased().contains("club-lift"),
+        pair.detail
+    )
+    check(
+        "Britney mashup time-stretches both sides onto the house grid",
+        abs(pair.vocalRatio - pair.targetBPM / 93) < 0.02
+            && abs(pair.bedRatio - pair.targetBPM / 95) < 0.02,
+        String(format: "vocal=%.3f bed=%.3f target=%.1f", pair.vocalRatio, pair.bedRatio, pair.targetBPM)
+    )
 
     let festivalPair = AutoClubTempo.mashupDecision(vocalBPM: 98, bedBPM: 144)
     check("t.A.T.u / Paramore-class refuse illegal vocal stretch",
@@ -204,8 +219,11 @@ do {
             pivotBeforeDrop1 && !AutoRemixDiagnostics.pivotJoinHasQuietVoid(plan: plan),
             "voids=\(plan.intentionalGaps.count) pivot=\(pivotBeforeDrop1)"
         )
-        check("Kept midtempo pocket (not shoved to 128)",
-              plan.targetBPM < 110, "bpm=\(plan.targetBPM)")
+        check(
+            "Thin piano club-lifts into house (not a ballad-slow 94 pocket)",
+            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            "bpm=\(plan.targetBPM)"
+        )
     case .failure(let message):
         check("Thin piano club remix", false, message)
     }
@@ -248,13 +266,21 @@ do {
               "vocal=\(plan.mashupVocalSongID?.uuidString ?? "nil")")
         check("Assigned club bed role", plan.mashupBedSongID == bed.id,
               "bed=\(plan.mashupBedSongID?.uuidString ?? "nil")")
-        check("Tempo stays midtempo pocket", plan.targetBPM < 110, "bpm=\(plan.targetBPM)")
+        check(
+            "Tempo club-lifts into house (not a ballad-slow midtempo pocket)",
+            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            "bpm=\(plan.targetBPM)"
+        )
         let bedPlacements = plan.placements.filter { $0.songID == bed.id }
         let vocalPlacements = plan.placements.filter { $0.songID == vocal.id }
         check("Bed appears in arrangement", !bedPlacements.isEmpty)
         check("Vocal hook appears on drops", !vocalPlacements.isEmpty)
         let vocalStretch = vocalPlacements.map { abs($0.tempoRatio - 1) }.max() ?? 0
-        check("Vocal stretch ≤ 8%", vocalStretch <= 0.08 + 0.001, String(format: "%.3f", vocalStretch))
+        check(
+            "Vocal time-stretch is the house club-lift (pitch stays on the bed)",
+            vocalStretch > 0.15 && vocalStretch < 0.45,
+            String(format: "%.3f", vocalStretch)
+        )
         let bedPitch = bedPlacements.contains { $0.effects.pitchAmount > 0.005 }
         let vocalPitch = vocalPlacements.contains { $0.effects.pitchAmount > 0.005 }
         check("Pitch shifts the bed, not the star vocal", !vocalPitch,
@@ -2337,7 +2363,13 @@ do {
     ]
     switch AutoRemixRunner.runEntireProject(tracks: [bomt, oops], seed: 20260815, signals: signals) {
     case .success(_, let plan, _):
-        check("BOMT+Oops target ~94", abs(plan.targetBPM - 94) < 1.5, "bpm=\(plan.targetBPM)")
+        check(
+            "BOMT+Oops club-lifts into house 124–128 (not a polite 94 pocket)",
+            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            "bpm=\(plan.targetBPM)"
+        )
+        assertOpeningFadeIn(plan, label: "BOMT+Oops")
+        assertLaterJoinsStayHardCut(plan, label: "BOMT+Oops")
         check("BOMT+Oops bed is Oops (not raw drum winner)", plan.mashupBedSongID == oops.id,
               "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")")
         check("BOMT+Oops vocal is BOMT", plan.mashupVocalSongID == bomt.id,
@@ -2546,9 +2578,14 @@ do {
         if let bedID = plan.mashupBedSongID {
             let bedTrack = [bomt, oops, stupid, paramore, tatu].first { $0.id == bedID }
             let bedBPM = Double(bedTrack?.bpm ?? 0)
-            check("All-5 target stays near bed pocket",
-                  abs(plan.targetBPM - bedBPM) / max(bedBPM, 1) <= 0.12,
-                  "target=\(plan.targetBPM) bedNative=\(bedBPM)")
+            let midtempoBed = AutoClubTempo.classify(bedBPM) == .midtempoPop
+            check(
+                "All-5 target is house when the bed is midtempo, else near the bed pocket",
+                midtempoBed
+                    ? AutoClubTempo.housePocketRange.contains(plan.targetBPM)
+                    : abs(plan.targetBPM - bedBPM) / max(bedBPM, 1) <= 0.12,
+                "target=\(plan.targetBPM) bedNative=\(bedBPM) midtempoBed=\(midtempoBed)"
+            )
         }
     case .failure(let message):
         check("All-5 crate mashup", false, message)
@@ -2560,7 +2597,12 @@ do {
     let feat = crateFeatures(duration: 200, bpm: 93, drum: 1.00, bass: 0.37, vocal: 0.55, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 5, signals: [song.id: feat]) {
     case .success(_, let plan, _):
-        check("Britney solo keeps 93", abs(plan.targetBPM - 93) < 0.5, "bpm=\(plan.targetBPM)")
+        check(
+            "Britney solo club-lifts into house (not a 93 ballad pocket)",
+            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            "bpm=\(plan.targetBPM)"
+        )
+        assertOpeningFadeIn(plan, label: "Britney solo")
         check("Britney solo writesKick false", plan.pulsePolicy?.writesKick == false)
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         check("Britney first drop on downbeat",
@@ -3531,6 +3573,62 @@ func mashupDecisionDump(_ plan: AutoRemixPlan) -> String {
     plan.decisions.map { $0.userFacingSentence + " | " + ($0.detail ?? "") }.joined(separator: "\n")
 }
 
+func assertOpeningFadeIn(_ plan: AutoRemixPlan, label: String) {
+    let first = plan.placements
+        .filter { $0.role == .dominant }
+        .min { $0.timelineStart < $1.timelineStart }
+    check("\(label): mix has a first dominant clip", first != nil)
+    guard let first else { return }
+    let longFade = (first.fadeIn.type == .crossfade || first.fadeIn.type == .auto)
+        && first.fadeIn.duration > 8
+    check(
+        "\(label): first clip fades in over a long intro (longer than the UI 8-beat pill)",
+        longFade,
+        "fade=\(first.fadeIn.type.rawValue) dur=\(first.fadeIn.duration) t=\(String(format: "%.2f", first.timelineStart))"
+    )
+    let dump = plan.decisions.map { "\($0.kind) \($0.detail ?? "")" }.joined(separator: " | ").lowercased()
+    check(
+        "\(label): dump records the opening fade-in",
+        dump.contains("opening fade-in") && dump.contains("16"),
+        dump
+    )
+}
+
+func assertLaterJoinsStayHardCut(_ plan: AutoRemixPlan, label: String) {
+    guard let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) else {
+        check("\(label): Drop 1 exists for hard-cut check", false)
+        return
+    }
+    let incoming = plan.placements.filter {
+        $0.role == .dominant && abs($0.timelineStart - drop1) < 0.12
+    }
+    check(
+        "\(label): Drop 1 / later hook-replace stays a hard cut at full volume",
+        !incoming.isEmpty
+            && incoming.allSatisfy {
+                ($0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02)
+                    && $0.volume + 0.001 >= AutoGainPolicy.incomingDropVolume
+            },
+        incoming.map { "fade=\($0.fadeIn.type.rawValue) dur=\($0.fadeIn.duration) vol=\($0.volume)" }.joined(separator: ",")
+    )
+    let firstHook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)
+    if let hook = firstHook, abs(hook.timelineStart - drop1) > 0.25 {
+        let laterCopies = plan.placements.filter {
+            $0.role == .dominant
+                && $0.songID == hook.songID
+                && abs($0.sourceStart - hook.sourceStart) < 0.25
+                && $0.timelineStart > hook.timelineStart + 0.5
+                && $0.timelineStart < drop1 - 0.05
+                && $0.timelineDuration >= plan.barSeconds * 7.5
+        }
+        check(
+            "\(label): later title-hook copies stay hard-cut (only the opening fades in)",
+            laterCopies.allSatisfy { $0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02 },
+            laterCopies.map { "t=\(String(format: "%.1f", $0.timelineStart)) fade=\($0.fadeIn.type.rawValue)" }.joined(separator: ",")
+        )
+    }
+}
+
 /// dump_gate greps MASHUP `plan.decisions`: kind `addedRiserIntoDrop` whose
 /// **detail** names festival / take-out / drop-ride. A Drop-2-only
 /// `addedRiserIntoDrop` ("drop 2 flip impact") must fail — that was 6519cf6.
@@ -3567,6 +3665,12 @@ func assertMashupFestivalStack(
         "\(label): mashup writes festival take-out + drop-ride SFX",
         ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
         "ids=\(ids.sorted())"
+    )
+    check(
+        "\(label): mix window + drop ride is denser than take-out-only (existing SFX menu)",
+        ids.contains("sweepUp") && ids.contains("bassDrop")
+            && plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.count >= 10,
+        "ids=\(ids.sorted()) n=\(plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.count)"
     )
     assertDumpGatePrefix(plan, label: label)
     if let tracks {
@@ -4158,7 +4262,7 @@ do {
             assertTitleHookLead(
                 onset: hookSrc,
                 lyric: oopsHook,
-                barSeconds: plan.barSeconds,
+                barSeconds: 240.0 / 95.0,
                 beats: 2,
                 label: "lyrics sidecar: planner bed pads 2 beats for a distinctive attack"
             )
@@ -4266,22 +4370,23 @@ do {
                     && !bedDump.contains("chosen=50.38"),
                 bedDump
             )
+            let nativeBeat = 60.0 / 95.0
             assertTitleHookLead(
                 onset: hookSrc,
                 lyric: bedLyric,
-                barSeconds: plan.barSeconds,
+                barSeconds: 240.0 / 95.0,
                 beats: 2,
                 label: "599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48"
             )
             check(
-                "dump_gate: lyric 50.38 → src ≈ two beats (49.1), not 1-beat 49.75, not bar 48.01",
-                abs(hookSrc - (bedLyric - 2 * plan.beatSeconds)) < plan.beatSeconds * 0.45
-                    && abs(hookSrc - (bedLyric - plan.beatSeconds)) > plan.beatSeconds * 0.35
+                "dump_gate: lyric 50.38 → src ≈ two source beats (49.1), not 1-beat 49.75, not bar 48.01",
+                abs(hookSrc - (bedLyric - 2 * nativeBeat)) < nativeBeat * 0.45
+                    && abs(hookSrc - (bedLyric - nativeBeat)) > nativeBeat * 0.35
                     && abs(hookSrc - 48.01) > 0.5,
                 String(
-                    format: "src=%.2f lyric=%.2f beat=%.3f two=%.2f one=%.2f",
-                    hookSrc, bedLyric, plan.beatSeconds,
-                    bedLyric - 2 * plan.beatSeconds, bedLyric - plan.beatSeconds
+                    format: "src=%.2f lyric=%.2f beat=%.3f two=%.2f one=%.2f mixBeat=%.3f",
+                    hookSrc, bedLyric, nativeBeat,
+                    bedLyric - 2 * nativeBeat, bedLyric - nativeBeat, plan.beatSeconds
                 )
             )
             check(
@@ -4314,6 +4419,13 @@ do {
                 "599dec4: Drop 1 still lyric hook ~60s (not verse, not after lyric)",
                 guestSrc <= dropLyric + 0.02 && abs(guestSrc - dropLyric) < plan.barSeconds * 0.55 && abs(guestSrc - 40.0) > 4.0,
                 String(format: "src=%.2f lyric=%.2f %@", guestSrc, dropLyric, guestDump)
+            )
+            assertOpeningFadeIn(plan, label: "Oops×BOMT")
+            assertLaterJoinsStayHardCut(plan, label: "Oops×BOMT")
+            check(
+                "Oops×BOMT club-lifts into house (listen: not a 94 ballad)",
+                AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+                "bpm=\(plan.targetBPM)"
             )
         case .failure(let message):
             check("9843f9b lyrics bed snap planner", false, message)

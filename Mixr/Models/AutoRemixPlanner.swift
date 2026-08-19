@@ -804,6 +804,11 @@ enum AutoRemixPlanner {
             barSec: bar,
             profiles: [profile.songID: profile]
         )
+        applyOpeningFadeIn(
+            placements: &placements,
+            beatSec: beat,
+            decisions: &decisions
+        )
         return AutoRemixPlan(
             mode: .remix,
             targetBPM: targetBPM,
@@ -1143,6 +1148,11 @@ enum AutoRemixPlanner {
             beatSec: beat,
             barSec: bar,
             profiles: [profile.songID: profile]
+        )
+        applyOpeningFadeIn(
+            placements: &placements,
+            beatSec: beat,
+            decisions: &decisions
         )
         return AutoRemixPlan(
             mode: .remix,
@@ -2228,7 +2238,7 @@ enum AutoRemixPlanner {
             drumStrength: pulseSource.analysis.drumStrength,
             bassDensity: pulseSource.analysis.bassDensity,
             vocalDensity: vocalDensity,
-            bpm: targetBPM,
+            bpm: pulseSource.analysis.bpm,
             seed: seed ^ 0xD1_F10
         )
         // Mashup is a festival rewrite. Calvin is solo piano-ballad only.
@@ -2245,17 +2255,23 @@ enum AutoRemixPlanner {
             if mode == .remix {
                 fit = AutoTempo.Fit(ratio: 1.0, gridAligned: true, halfOrDoubleTime: false)
             } else if let bedID = mashupBedID, p.songID == bedID, let bedTempoRatio {
+                let lift = AutoClubTempo.clubHouseLiftRatio(
+                    songBPM: p.analysis.bpm, targetBPM: targetBPM
+                )
                 fit = AutoTempo.Fit(
                     ratio: bedTempoRatio,
-                    gridAligned: abs(bedTempoRatio - 1) <= tuning.maxInstrumentalStretch,
-                    halfOrDoubleTime: false
+                    gridAligned: abs(bedTempoRatio - 1) <= tuning.maxInstrumentalStretch || lift != nil,
+                    halfOrDoubleTime: lift != nil
                 )
             } else if let guestRatio = guestTempoRatios[p.songID] {
                 // Drop 1 / Drop 2 / cameo guests — gate-approved stretch only.
+                let lift = AutoClubTempo.clubHouseLiftRatio(
+                    songBPM: p.analysis.bpm, targetBPM: targetBPM
+                )
                 fit = AutoTempo.Fit(
                     ratio: guestRatio,
-                    gridAligned: abs(guestRatio - 1) <= tuning.maxStretch + 0.0001,
-                    halfOrDoubleTime: false
+                    gridAligned: abs(guestRatio - 1) <= tuning.maxStretch + 0.0001 || lift != nil,
+                    halfOrDoubleTime: lift != nil
                 )
             } else if let vocalID = mashupVocalID, p.songID == vocalID, let vocalTempoRatio {
                 fit = AutoTempo.Fit(
@@ -2569,11 +2585,32 @@ enum AutoRemixPlanner {
                 continue
             }
 
-            // Protect Deck A opening: intro always starts at the record head
-            // (never a mid-song teaser chop of the title).
+            // Protect Deck A opening: never a teaser chop of the *title*.
+            // Lead the intro into the first title-hook so the first identity
+            // word is not a hard cut from record-head silence. Fade-in is
+            // applied after placements exist.
             if slot.role == .intro {
-                let open = max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
-                if abs(section.startSeconds - open) > 0.05 || section.startSeconds > barSec * 2 {
+                let introSource = Double(slot.bars) * barSec * max(fit.ratio, 0.0001)
+                let phrase = profile.analysis.phraseBoundaries.count >= 2
+                    ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
+                    : barSec * 8
+                let hook = AutoChorusIsland.bestEntrance(
+                    signal: profile.analysis.signal,
+                    downbeats: profile.analysis.downbeats,
+                    barSeconds: profile.analysis.barSeconds,
+                    duration: profile.analysis.durationSeconds,
+                    introEnd: profile.analysis.introCandidate?.endSeconds ?? barSec * 8,
+                    phraseSeconds: phrase,
+                    title: profile.title
+                )?.startSeconds ?? profile.analysis.signal?.lyricTitleHookStart
+                let recordHead = max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
+                let open: Double
+                if let hook, hook > introSource + 0.25 {
+                    open = max(recordHead, hook - introSource)
+                } else {
+                    open = recordHead
+                }
+                if abs(section.startSeconds - open) > 0.05 {
                     section = AutoCandidateSection(
                         songID: section.songID,
                         label: .intro,
@@ -3427,6 +3464,11 @@ enum AutoRemixPlanner {
             beatSec: beatSec,
             barSec: barSec,
             profiles: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0) })
+        )
+        applyOpeningFadeIn(
+            placements: &placements,
+            beatSec: beatSec,
+            decisions: &decisions
         )
         var plan = AutoRemixPlan(
             mode: mode,
@@ -4301,6 +4343,45 @@ enum AutoRemixPlanner {
             pulseRegions: &pulseRegions,
             intentionalGaps: &intentionalGaps,
             decisions: &decisions
+        )
+    }
+
+    /// First clip of a mashup/remix: long fade-in from silence. Later
+    /// hook-replace joins stay hard-cut at full volume. Duration may exceed
+    /// the UI pill max (8 beats); the selected pill shows 8 as closest.
+    private static func applyOpeningFadeIn(
+        placements: inout [AutoClipPlacement],
+        beatSec: Double,
+        decisions: inout [AutoDecision]
+    ) {
+        let beats = AutoClubTempo.openingFadeInBeats
+        let firstStart = placements
+            .filter { $0.role == .dominant }
+            .map(\.timelineStart)
+            .min()
+        guard let firstStart else { return }
+        var faded = 0
+        for i in placements.indices {
+            let p = placements[i]
+            guard abs(p.timelineStart - firstStart) < 0.05 else { continue }
+            guard p.role == .dominant || p.role == .supporting else { continue }
+            if p.role == .supporting, abs(p.timelineDuration - beatSec) < beatSec * 0.4 {
+                continue
+            }
+            placements[i].fadeIn = ClipTransition(
+                type: .crossfade,
+                duration: beats,
+                curve: AutoTransitionEnvelope.equalPowerCurveName
+            )
+            faded += 1
+        }
+        guard faded > 0 else { return }
+        decisions.append(
+            AutoDecision(
+                kind: .selectedAnchor,
+                songTitle: nil,
+                detail: String(format: "opening fade-in %.0f beats (longer than UI 8)", beats)
+            )
         )
     }
 

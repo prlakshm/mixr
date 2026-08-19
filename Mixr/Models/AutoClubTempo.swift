@@ -2,10 +2,11 @@ import Foundation
 
 // MARK: - Club Tempo Pocket Decision
 //
-// Per-song / per-pair tempo for Auto Remix and mashup. Prefers keeping a
-// strong existing pocket (midtempo pop, house, festival) over shoving
-// everything to 128. Stretch gates protect vocals; half/double-time is
-// checked before any stretch.
+// Per-song / per-pair tempo for Auto Remix and mashup. House and festival
+// pockets stay. Midtempo pop is club-lifted into house so the rewrite is
+// Diplo/festival-fast, not a polite ballad at native ~94. Stretch gates
+// still protect non-lift vocals; half/double-time is checked before any
+// non-lift stretch.
 
 nonisolated enum AutoClubTempo {
 
@@ -31,10 +32,17 @@ nonisolated enum AutoClubTempo {
     }
 
     /// Default house pocket when the song has no strong identity tempo.
+    /// Midtempo pop (~90–100) is a *source* pocket, not the club-rewrite
+    /// target — Auto lifts those records into this range so the mix is not
+    /// a polite ballad at native BPM.
     static let housePocketRange: ClosedRange<Double> = 124...128
+    static let houseCenterBPM: Double = 126
     static let midtempoRange: ClosedRange<Double> = 90...100
     static let festivalRange: ClosedRange<Double> = 140...150
-    /// Vocal time-stretch before it sounds processed.
+    /// Opening clip fade-in in beats. Longer than the UI duration pills
+    /// (1/2/4/8); the selected pill shows 8 as the closest option.
+    static let openingFadeInBeats: Double = 16
+    /// Vocal time-stretch before it sounds processed (non-lift paths).
     static let maxVocalStretch = 0.08
     /// Instrumental / bed stretch preference.
     static let maxInstrumentalStretch = 0.15
@@ -45,6 +53,20 @@ nonisolated enum AutoClubTempo {
         if housePocketRange.contains(bpm) || (120...130).contains(bpm) { return .house }
         if festivalRange.contains(bpm) || (135...155).contains(bpm) { return .festival }
         return nil
+    }
+
+    /// Playback rate that lands a midtempo source on a house-grid target.
+    /// Pitch-preserving time-stretch (AVAudioUnitTimePitch.rate), not a
+    /// chipmunk. Nil when this is not a midtempo → house club-lift.
+    static func clubHouseLiftRatio(songBPM: Double, targetBPM: Double) -> Double? {
+        guard classify(songBPM) == .midtempoPop else { return nil }
+        let houseish = classify(targetBPM) == .house
+            || housePocketRange.contains(targetBPM)
+            || (120...130).contains(targetBPM)
+        guard houseish else { return nil }
+        let ratio = targetBPM / max(songBPM, 1)
+        guard ratio > 1.08, ratio < 1.5 else { return nil }
+        return ratio
     }
 
     /// One-song club remix tempo: keep a strong pocket; otherwise land in
@@ -58,6 +80,21 @@ nonisolated enum AutoClubTempo {
         let stretchCap = vocalHeavy ? maxVocalStretch : maxInstrumentalStretch
 
         if let pocket = classify(songBPM) {
+            if pocket == .midtempoPop {
+                let house = houseCenterBPM
+                let ratio = house / max(songBPM, 1)
+                return Decision(
+                    targetBPM: house,
+                    ratio: ratio,
+                    pocket: .house,
+                    halfOrDoubleTime: false,
+                    vocalStretchUnsafe: false,
+                    detail: String(
+                        format: "club-lift midtempo into house %d BPM (%d → %d, time-stretch keeps pitch)",
+                        Int(house.rounded()), Int(songBPM.rounded()), Int(house.rounded())
+                    )
+                )
+            }
             return Decision(
                 targetBPM: songBPM,
                 ratio: 1.0,
@@ -135,9 +172,26 @@ nonisolated enum AutoClubTempo {
         maxVocalStretch: Double = maxVocalStretch,
         maxInstrumentalStretch: Double = maxInstrumentalStretch
     ) -> (targetBPM: Double, vocalRatio: Double, bedRatio: Double, ok: Bool, detail: String) {
-        // Shared / near pocket: stay put (Britney-class ~93–95).
+        // Shared / near pocket. House and festival stay; midtempo pop is a
+        // ballad-slow listen at native BPM — club-lift into house instead.
         if abs(vocalBPM - bedBPM) / max(vocalBPM, 1) <= maxInstrumentalStretch {
-            let target = (vocalBPM + bedBPM) / 2
+            let native = (vocalBPM + bedBPM) / 2
+            if classify(native) == .midtempoPop {
+                let house = houseCenterBPM
+                let bedRatio = house / max(bedBPM, 1)
+                let vocalRatio = house / max(vocalBPM, 1)
+                return (
+                    house,
+                    vocalRatio,
+                    bedRatio,
+                    true,
+                    String(
+                        format: "club-lift midtempo into house %.0f BPM (bed stretch %+.0f%%, vocal %+.0f%%, pitch preserved)",
+                        house, (bedRatio - 1) * 100, (vocalRatio - 1) * 100
+                    )
+                )
+            }
+            let target = native
             let bedRatio = target / max(bedBPM, 1)
             let vocalRatio = target / max(vocalBPM, 1)
             if abs(vocalRatio - 1) <= maxVocalStretch,

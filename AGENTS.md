@@ -63,10 +63,11 @@ Target shape on the phrase grid (all structural cuts on phrase / downbeat bounda
 Decide per song / pair:
 
 - Default house pocket: 124–128 BPM when nothing else fits.
-- If the song already shares a strong pocket, **keep it** (midtempo pop ~90–100, festival/rock ~140–150, house ~124–130).
-- Prefer double-time only when 2× lands in a pocket; check half-time / double-time before stretching.
-- Vocal stretch max ~6–8%; instrumental / bed stretch prefer ≤15%.
-- If stretch would wreck the vocal, keep source BPM and club-ify with arrangement + energy.
+- If the song already sits in **house** (~124–130) or **festival/rock** (~140–150), keep that pocket.
+- Midtempo pop (~90–100) is a source identity, not the club-rewrite target. **Club-lift** it into house (126) with pitch-preserving time-stretch so the mix is Diplo/festival-fast, not a polite ballad at native BPM.
+- Prefer double-time only when 2× lands in a pocket; check half-time / double-time before stretching. Club-lift is the exception for midtempo → house.
+- Vocal stretch max ~6–8% on non-lift paths. Club-lift midtempo → house may exceed that (time-stretch keeps pitch).
+- If stretch would wreck the vocal and no lift applies, keep source BPM and club-ify with arrangement + energy.
 
 ## Mashup (2…5 songs)
 
@@ -80,7 +81,7 @@ N-song club mashups keep the same locked Drop 1 join. More songs mean more hooks
 - Club shape: intro → one complete A hook → 2-bar pivot → drop 1 → breakdown → build → drop 2 → outro. Drop 1 ~bar 16–24.
 - **Drop 1** = the single strongest familiar hook. **Drop 2** = a different song’s hook (the flip). On a duo, Drop 2 may be the bed’s own chorus flip.
 - Remaining songs get 8–16 bar cameos **after** Drop 1 (breakdown/outro), or skip if gates fail — not verse wallpaper chops.
-- Compatibility is **per added song**: Camelot same / ±1 / relative; vocal stretch ≤ 8%; pitch vocal ≤ 2 st; prefer pitching the bed. If song 4 or 5 fails the gate, skip it or use it only as a short chop — do not force a sour full-vocal overlay.
+- Compatibility is **per added song**: Camelot same / ±1 / relative; vocal stretch ≤ 8% except midtempo→house club-lift; pitch vocal ≤ 2 st; prefer pitching the bed. If song 4 or 5 fails the gate, skip it or use it only as a short chop — do not force a sour full-vocal overlay.
 - Energy matching still applies: a ballad on a peak-time bed needs a breakdown runway, not a slam.
 - Cap at 5 songs for a streaming-length club rewrite.
 - If key+tempo+energy cannot work without wrecking the vocal, refuse or degrade that guest. Do not force a bad mashup.
@@ -102,6 +103,7 @@ N-song club mashups keep the same locked Drop 1 join. More songs mean more hooks
 - Use equal-power gain curves for music **non-pivot** crossfades (verse/groove joins).
 - Never fade both adjacent clips toward silence at the same boundary (unless an intentional void owns the gap).
 - Pivot Drop 1 is a **hard cut at full gain** (no fade-in). A renderer anti-click microfade may exist; an audible volume ramp is a fail. See `dj-remix-planning`.
+- The **first clip** of a mashup/remix may fade in over a long intro (duration may exceed the UI 8-beat pill; the selected pill shows 8 as closest). Subsequent hook-replace joins stay hard-cut.
 - Do not insert **accidental** silence. Intentional 1-beat pre-drop voids are allowed only on **plain** (non-pivot) drops. Pivot joins must not go quiet.
 - A transition must conserve perceived energy unless the creative intent explicitly calls for a drop, pivot filter, or void.
 

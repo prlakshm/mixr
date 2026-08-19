@@ -39,7 +39,7 @@ Never cut the best / most identifiable lines. Opening titles and hook lines
 
 - Pivot grain is the **incoming join token** — a distinctive hook word of the Drop 1 guest, taken from that vocal stem — never the outgoing chorus tail and never a silent rest. Shared generic fillers (“all”) are not join tokens.
 - Incoming hook starts on the **downbeat of a real line**, not mid-word.
-  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. Never a full bar / earlier catalog peak. When a vocal stem exists, those copies play the **vocal stem** (ducked instrumental under the first word) so Whisper-small of the first 4s hears the token — a full-mix bed buries “Oops” under drums. Do not walk earlier than two beats to chase audibility. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in.
+  Bed title-hook copies pad **beats before** `titleHookStart` until the distinctive title token sits fully inside the first ~1–2s (not on sample 0 / the cut). Keep **one beat** when that already contains the token; use **two beats** when a 1-beat pad still edge-cuts a distinctive attack word. Never a full bar / earlier catalog peak. When a vocal stem exists, those copies play the **vocal stem** (ducked instrumental under the first word) so Whisper-small of the first 4s hears the token — a full-mix bed buries “Oops” under drums. Do not walk earlier than two beats to chase audibility. Drop 1 guest keeps a one-beat pad. Hard cut, no fade-in — except the **first clip of the mix**, which may fade in over a long intro (longer than the UI 8-beat pill; the selected pill shows 8 as closest). Subsequent hook-replace joins stay hard-cut at full volume.
 - If phrase confidence cannot support a last-word grain, **skip the loop**
   rather than slicing the title. Keep playing through the window so the join
   does not go quiet.
@@ -234,11 +234,11 @@ Sound sources: clip effects (reverb/echo/pitch/flanger/blur only) + SFX menu one
 
 **Keep this lock.**
 
-- Keep midtempo (~90–100), house (~124–130), festival (~140–150) pockets.
-- Double-time only when 2× lands in a pocket; check half/double before stretch.
-- Vocal stretch ≤ ~8%; bed/instrumental ≤ ~15%.
-- If stretch wrecks the vocal → keep BPM, club-ify with arrangement + energy.
-- Britney-class mashups stay ~94 (Oops bed / BOMT vocal). Paramore-class stays ~144.
+- Keep **house** (~124–130) and **festival** (~140–150) pockets.
+- Midtempo pop (~90–100) is club-lifted into house (126, pitch-preserving time-stretch) so Auto is not a polite 94-BPM ballad. Britney-class mashups land ~126, not ~94. Paramore-class stays ~144.
+- Double-time only when 2× lands in a pocket; check half/double before stretch. Club-lift is the midtempo → house exception.
+- Vocal stretch ≤ ~8% on non-lift paths; bed/instrumental ≤ ~15%. Club-lift may exceed that.
+- If stretch wrecks the vocal and no lift applies → keep BPM, club-ify with arrangement + energy.
 
 ## Mashup (2…5 songs)
 
