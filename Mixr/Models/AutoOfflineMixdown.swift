@@ -242,11 +242,16 @@ nonisolated enum AutoOfflineMixdown {
         let flangerAmt = p.effects.flangerAmount
         let beat = 60.0 / max(bpm, 40)
         let echoDelayFrames = max(1, Int(beat * sampleRate))
+        // Prime-spaced taps spread to ~230 ms so the tail reads as diffuse
+        // room, not a metallic slapback comb cluster.
         let reverbDelays = [
-            max(1, Int(0.029 * sampleRate)),
-            max(1, Int(0.037 * sampleRate)),
-            max(1, Int(0.053 * sampleRate)),
-            max(1, Int(0.079 * sampleRate)),
+            max(1, Int(0.031 * sampleRate)),
+            max(1, Int(0.047 * sampleRate)),
+            max(1, Int(0.071 * sampleRate)),
+            max(1, Int(0.103 * sampleRate)),
+            max(1, Int(0.149 * sampleRate)),
+            max(1, Int(0.191 * sampleRate)),
+            max(1, Int(0.229 * sampleRate)),
         ]
         var lpf: Float = 0
         let lpfCoeff = Float(0.15 + (1.0 - min(1, blurAmt)) * 0.75)
@@ -255,25 +260,39 @@ nonisolated enum AutoOfflineMixdown {
             let outIdx = startFrame + j
             guard outIdx >= 0, outIdx < bus.count else { continue }
             let t = Double(outIdx) / sampleRate
-            let sourceSeconds = p.sourceStart + (Double(j) / sampleRate) * p.tempoRatio
-            let srcPos = sourceSeconds * srcRate
-            let i0 = Int(srcPos)
-            guard i0 >= 0, i0 + 1 < source.samples.count else { continue }
-            let frac = Float(srcPos - Double(i0))
-            var sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
+            var sample: Float
+            if abs(p.tempoRatio - 1) < 0.02 {
+                let sourceSeconds = p.sourceStart + (Double(j) / sampleRate) * p.tempoRatio
+                let srcPos = sourceSeconds * srcRate
+                let i0 = Int(srcPos)
+                guard i0 >= 0, i0 + 1 < source.samples.count else { continue }
+                let frac = Float(srcPos - Double(i0))
+                sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
+            } else {
+                sample = wsolaSample(
+                    samples: source.samples,
+                    sourceStart: p.sourceStart,
+                    tempoRatio: p.tempoRatio,
+                    outputIndex: j,
+                    outputRate: sampleRate,
+                    sourceRate: srcRate
+                )
+            }
 
             // Blur ≈ low-pass (filter sweep / build-out).
             if blurAmt > 0.02 {
                 lpf += (sample - lpf) * lpfCoeff
                 sample = sample * Float(1 - blurAmt * 0.85) + lpf * Float(blurAmt * 0.85)
             }
-            // Flanger ≈ light modulated comb (cheap).
+            // Flanger ≈ light modulated comb (cheap). Slow, shallow, and a
+            // low wet mix — a 5.5 Hz 0.45-mix comb reads as metal, not motion.
             if flangerAmt > 0.02 {
-                let mod = 1.0 + 0.004 * sin(t * 5.5 * .pi * 2)
-                let delay = Int(mod * 0.0025 * sampleRate)
-                let di = i0 - delay
+                let mod = 1.0 + 0.003 * sin(t * 0.9 * .pi * 2)
+                let delay = Int(mod * 0.004 * sampleRate)
+                let approxI0 = Int(p.sourceStart * srcRate + Double(j) * p.tempoRatio * (srcRate / sampleRate))
+                let di = approxI0 - delay
                 if di >= 0, di < source.samples.count {
-                    sample += source.samples[di] * Float(flangerAmt * 0.45)
+                    sample += source.samples[di] * Float(flangerAmt * 0.22)
                 }
             }
 
@@ -299,13 +318,16 @@ nonisolated enum AutoOfflineMixdown {
                     echoGain *= 0.55
                 }
             }
-            // Reverb bloom ≈ short multi-tap tail (bounce WAVs hear atmosphere).
+            // Reverb bloom ≈ diffuse multi-tap tail (bounce WAVs hear
+            // atmosphere). Exponential decay across the taps, lower wet.
             if reverbAmt > 0.05 {
-                let wet = dry * Float(reverbAmt * 0.28)
-                for (ti, d) in reverbDelays.enumerated() {
-                    let idx = outIdx + d + ti * (echoDelayFrames / 4)
+                let wet = dry * Float(reverbAmt * 0.18)
+                var tapGain: Float = 0.6
+                for d in reverbDelays {
+                    let idx = outIdx + d
+                    tapGain *= 0.72
                     guard idx < bus.count else { continue }
-                    bus[idx] += wet * Float(0.55 / Double(ti + 1))
+                    bus[idx] += wet * tapGain
                 }
             }
         }
@@ -377,6 +399,40 @@ nonisolated enum AutoOfflineMixdown {
             out[i] = value
         }
         return out
+    }
+
+    /// Overlap-add grains at native pitch while hopping through the source
+    /// at `tempoRatio` — bounce WAVs match TimePitch.rate instead of chipmunking.
+    private static func wsolaSample(
+        samples: [Float],
+        sourceStart: Double,
+        tempoRatio: Double,
+        outputIndex: Int,
+        outputRate: Double,
+        sourceRate: Double
+    ) -> Float {
+        let grain = 1024
+        let hop = 512
+        let g1 = max(0, outputIndex / hop)
+        let g0 = max(0, g1 - 1)
+        func grainAt(_ g: Int) -> (Float, Float) {
+            let local = outputIndex - g * hop
+            guard local >= 0, local < grain else { return (0, 0) }
+            let src = sourceStart * sourceRate
+                + Double(g * hop) * tempoRatio * (sourceRate / max(outputRate, 1))
+                + Double(local) * (sourceRate / max(outputRate, 1))
+            let w = Float(0.5 - 0.5 * cos(2 * Double.pi * Double(local) / Double(grain - 1)))
+            let i0 = Int(src)
+            guard i0 >= 0, i0 + 1 < samples.count else { return (0, 0) }
+            let frac = Float(src - Double(i0))
+            let s = samples[i0] * (1 - frac) + samples[i0 + 1] * frac
+            return (s, w)
+        }
+        let a = grainAt(g0)
+        let b = grainAt(g1)
+        let wsum = a.1 + b.1
+        guard wsum > 1e-6 else { return 0 }
+        return (a.0 * a.1 + b.0 * b.1) / wsum
     }
 
     // MARK: Deterministic RNG (fixture use only — never for decisions)

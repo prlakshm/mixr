@@ -113,7 +113,7 @@ nonisolated enum AutoGainPolicy {
     /// clip volume above 1.0 as makeup so Drop 1 first-bar RMS matches
     /// the bed verse. Playback/export multiply this through; do not clamp
     /// to unity in the applier.
-    static let maxClipVolume = 3.5
+    static let maxClipVolume = 5.5
 
     /// Fallback makeup when a vocal stem has no RMS curve (~+4 dB).
     static let vocalStemMakeupDefault = 1.58
@@ -130,6 +130,18 @@ nonisolated enum AutoGainPolicy {
     /// of the distinctive token. Keep each stem well below the title vocal.
     /// Offline mixdown has no blur HPF, so this volume is the duck.
     static let titleInstrumentalDuckVolume = 0.18
+
+    /// The hard 0.18 duck only needs to hold while ASR reads the title
+    /// token — the first ~4 s of a title vocal window. After that the
+    /// instrumental stems open back up so inter-line vocal rests do not
+    /// collapse into near-silence holes (club energy stays up).
+    static let titleDuckProbeSeconds = 4.0
+
+    /// Per-stem instrumental volume for the rest of a title-hook window,
+    /// after the probe duck releases. Three stems at ~0.62 sit just under
+    /// the made-up title vocal while keeping the groove full through the
+    /// vocal's inter-line rests (0.5 still let rests dip below −15 dB).
+    static let titleInstrumentalOpenVolume = 0.62
 
     /// Role-based join staging — clip volume floors by placement role.
     /// Validated on rendered PCM in golden/render tiers, not clip fields alone.

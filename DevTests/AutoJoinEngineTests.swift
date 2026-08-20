@@ -122,6 +122,85 @@ do {
         abs(oopsKept - lateLyric) < 0.08,
         String(format: "got=%.2f want=%.2f", oopsKept, lateLyric)
     )
+    var lateOnly = makeFeatures(duration: 214, bpm: 90)
+    lateOnly.lyricTitleHookStart = 180.24
+    lateOnly.lyricWords = [(180.24, "all"), (180.46, "things"), (180.8, "said")]
+    let rejected = AutoChorusIsland.snapLyricTitleHook(
+        signal: lateOnly,
+        downbeats: [40, 48, 176, 180.2, 184],
+        barSeconds: 240.0 / 90.0,
+        title: "All The Things She Said"
+    )
+    check(
+        "Join: title lyric in the last 30% of the song is not the opening hook",
+        rejected == nil,
+        String(format: "got=%@", rejected.map { String(format: "%.1f", $0) } ?? "nil")
+    )
+    var withEarly = lateOnly
+    withEarly.lyricWords = [(48.1, "things"), (180.24, "all"), (180.46, "things")]
+    let early = AutoChorusIsland.snapLyricTitleHook(
+        signal: withEarly,
+        downbeats: [40, 48, 176, 180.2, 184],
+        barSeconds: 240.0 / 90.0,
+        title: "All The Things She Said"
+    )
+    check(
+        "Join: late sidecar still uses the first-half distinctive token when present",
+        early != nil && (early ?? 0) < 55,
+        String(format: "got=%@", early.map { String(format: "%.1f", $0) } ?? "nil")
+    )
+    var energyLate = makeFeatures(duration: 214, bpm: 90)
+    energyLate.lyricTitleHookStart = 180.24
+    energyLate.lyricWords = [(180.24, "all"), (180.46, "things")]
+    // First-half vocal plateau so energy entrance can own the opening title.
+    let hop = energyLate.hopSeconds
+    let island = 57.5
+    for i in energyLate.vocalPresenceCurve.indices {
+        let t = Double(i) * hop
+        if t >= island && t < island + 20 {
+            energyLate.vocalPresenceCurve[i] = 0.85
+            energyLate.energyCurve[i] = 0.8
+        } else if t >= 8 && t < island {
+            energyLate.vocalPresenceCurve[i] = 0.35
+            energyLate.energyCurve[i] = 0.4
+        }
+    }
+    let energyOnset = AutoChorusIsland.titleHookOnset(
+        signal: energyLate,
+        downbeats: stride(from: 0.0, through: 80, by: 240.0 / 90.0).map { $0 },
+        barSeconds: 240.0 / 90.0,
+        duration: 214,
+        introEnd: 16,
+        phraseSeconds: 240.0 / 90.0 * 8,
+        title: "All The Things She Said"
+    )
+    check(
+        "Join: rejected late lyric still lands the opening title island",
+        energyOnset != nil && (energyOnset ?? 999) < 214 * 0.55,
+        String(format: "got=%@", energyOnset.map { String(format: "%.1f", $0) } ?? "nil")
+    )
+    let liftedEnergy = AutoChorusIsland.titleHookOnset(
+        signal: energyLate,
+        downbeats: stride(from: 0.0, through: 80, by: 240.0 / 90.0).map { $0 },
+        barSeconds: 240.0 / 90.0,
+        duration: 214,
+        introEnd: 16,
+        phraseSeconds: 240.0 / 90.0 * 8,
+        title: "All The Things She Said",
+        tempoRatio: 1.40
+    )
+    if let native = energyOnset, let lifted = liftedEnergy {
+        let mixLead = AutoJoinEngine.mixTimeTitleLead(
+            lyric: native, clipStart: lifted, tempoRatio: 1.40
+        )
+        check(
+            "Join: club-lift energy island pads so the title token is after stretch settle",
+            mixLead >= 1.55 && mixLead <= 1.90 && lifted < native - 0.05,
+            String(format: "native=%.2f lifted=%.2f mixLead=%.2f", native, lifted, mixLead)
+        )
+    } else {
+        check("Join: club-lift energy island pads so the title token is after stretch settle", false, "missing onset")
+    }
     let festivalBar = 240.0 / 144.0
     let clip = AutoJoinEngine.titleHookClipStart(
         lyric: wanted,
@@ -281,6 +360,75 @@ do {
     var placements: [AutoClipPlacement] = [
         AutoClipPlacement(
             songID: bedID,
+            sourceStart: 51.64,
+            timelineStart: 11.25,
+            timelineDuration: barSec * 8,
+            tempoRatio: 1.0,
+            volume: 2.51,
+            fadeIn: .none,
+            fadeOut: .none,
+            effects: ClipEffectSettings(),
+            role: .dominant,
+            slotIndex: 0,
+            stemKind: .vocals
+        ),
+        AutoClipPlacement(
+            songID: guestID,
+            sourceStart: 60.05,
+            timelineStart: dropStart,
+            timelineDuration: barSec * 8,
+            tempoRatio: 1.0,
+            volume: 1.0,
+            fadeIn: .none,
+            fadeOut: .none,
+            effects: ClipEffectSettings(),
+            role: .dominant,
+            slotIndex: 1,
+            stemKind: .vocals
+        )
+    ]
+    let pulse = [AutoClubPulse.Region(role: .drop, timelineStart: dropStart, timelineEnd: dropStart + 16)]
+    var signal = makeFeatures(duration: 200, bpm: 128)
+    signal.stemVocalRMSCurveDB = [Double](repeating: -18.0, count: signal.hopCount)
+    var guestSignal = makeFeatures(duration: 200, bpm: 93)
+    guestSignal.stemVocalRMSCurveDB = [Double](repeating: -22.0, count: guestSignal.hopCount)
+    let bedTrack = MixrTrack(
+        id: bedID, title: "Bed", artist: "Fixture", duration: "3:00",
+        durationSeconds: 200, bpm: 128, key: "B", color: .purple,
+        volume: 1, isMuted: false, clips: []
+    )
+    let guestTrack = MixrTrack(
+        id: guestID, title: "Guest", artist: "Fixture", duration: "3:00",
+        durationSeconds: 200, bpm: 93, key: "Cm", color: .pink,
+        volume: 1, isMuted: false, clips: []
+    )
+    AutoJoinEngine.boostJoinClipVolumes(
+        placements: &placements,
+        pulseRegions: pulse,
+        beatSec: beatSec,
+        barSec: barSec,
+        profiles: [
+            bedID: AutoSectionCatalog.profile(track: bedTrack, signal: signal),
+            guestID: AutoSectionCatalog.profile(track: guestTrack, signal: guestSignal)
+        ]
+    )
+    let titleVol = placements.first { $0.songID == bedID && $0.stemKind == .vocals }?.volume ?? 0
+    let dropVol = placements.first { $0.songID == guestID && abs($0.timelineStart - dropStart) < 0.1 }?.volume ?? 0
+    let floor = titleVol * AutoGainPolicy.dropVsIsolatedTitleBoost
+    check(
+        "Join: hot title stem does not clamp Drop 1 below isolation boost",
+        dropVol + 0.001 >= floor && dropVol <= AutoGainPolicy.maxClipVolume,
+        String(format: "title=%.2f drop=%.2f floor=%.2f cap=%.2f", titleVol, dropVol, floor, AutoGainPolicy.maxClipVolume)
+    )
+}
+
+do {
+    let bedID = UUID()
+    let guestID = UUID()
+    let dropStart = 45.0
+    var placements: [AutoClipPlacement] = [
+        AutoClipPlacement(
+            songID: bedID,
             sourceStart: 50.32,
             timelineStart: 11.4,
             timelineDuration: barSec * 8,
@@ -399,15 +547,23 @@ do {
     let introHead = placements.first {
         $0.songID == bedID && $0.stemKind == nil && $0.timelineStart < 1
     }
+    // The intro may cross the title entrance ONLY as a short equal-power
+    // fade tail (≤1.25 beats) — trimming flush left a near-silent hole
+    // before the entrance. Anything longer is a duplicate full-mix bed.
     let introOverlap = placements.contains {
         $0.songID == bedID
             && $0.stemKind == nil
-            && min($0.timelineEnd, titleStart + 4) - max($0.timelineStart, titleStart) > 0.05
+            && min($0.timelineEnd, titleStart + 4) - max($0.timelineStart, titleStart) > beatSec * 1.25
     }
+    let introFades = introHead == nil
+        || introHead?.timelineEnd ?? 99 <= titleStart + 0.02
+        || introHead?.fadeOut.type == .crossfade
+        || introHead?.fadeOut.type == .fadeOut
     check(
         "Join: intro full-mix does not keep playing under the title vocal",
         introHead != nil
-            && (introHead?.timelineEnd ?? 99) <= titleStart + 0.02
+            && (introHead?.timelineEnd ?? 99) <= titleStart + beatSec * 1.25 + 0.02
+            && introFades
             && !introOverlap,
         String(format: "headEnd=%.2f overlap=%@ title=%.2f", introHead?.timelineEnd ?? -1, introOverlap ? "yes" : "no", titleStart)
     )
@@ -442,6 +598,86 @@ do {
         placements[0].fadeIn.type == .crossfade
             && placements[0].fadeIn.duration == AutoClubTempo.openingFadeInBeats,
         "fade=\(placements[0].fadeIn.type.rawValue) dur=\(placements[0].fadeIn.duration)"
+    )
+}
+
+do {
+    var prev = AutoClipPlacement(
+        songID: UUID(),
+        sourceStart: 0,
+        timelineStart: 0,
+        timelineDuration: 8,
+        tempoRatio: 1,
+        volume: 1,
+        fadeIn: .none,
+        fadeOut: .none,
+        effects: ClipEffectSettings(),
+        role: .dominant,
+        slotIndex: 0
+    )
+    var next = AutoClipPlacement(
+        songID: UUID(),
+        sourceStart: 40,
+        timelineStart: 8,
+        timelineDuration: 16,
+        tempoRatio: 1,
+        volume: 1,
+        fadeIn: .hardCut,
+        fadeOut: .none,
+        effects: ClipEffectSettings(),
+        role: .dominant,
+        slotIndex: 1
+    )
+    AutoJoinEngine.applyTakeoverJoin(prev: &prev, next: &next, beatSec: 0.5, beats: 4)
+    check(
+        "Join: takeover overlaps and incoming swells quiet → loud",
+        next.fadeIn.type == .crossfade
+            && next.fadeIn.duration == 4
+            && prev.fadeOut.type == .crossfade
+            && prev.timelineEnd >= next.timelineStart + 1.9
+            && next.overlapsPreviousSeconds >= 1.9,
+        String(format: "in=%@ dur=%.1f overlap=%.2f prevEnd=%.2f",
+               next.fadeIn.type.rawValue, next.fadeIn.duration, next.overlapsPreviousSeconds, prev.timelineEnd)
+    )
+}
+
+do {
+    var prev = AutoClipPlacement(
+        songID: UUID(),
+        sourceStart: 0,
+        timelineStart: 0,
+        timelineDuration: 12,
+        tempoRatio: 1,
+        volume: 1,
+        fadeIn: .none,
+        fadeOut: .none,
+        effects: ClipEffectSettings(),
+        role: .dominant,
+        slotIndex: 0
+    )
+    var next = AutoClipPlacement(
+        songID: prev.songID,
+        sourceStart: 50,
+        timelineStart: 8,
+        timelineDuration: 16,
+        tempoRatio: 1,
+        volume: 1,
+        fadeIn: .hardCut,
+        fadeOut: .none,
+        effects: ClipEffectSettings(),
+        role: .dominant,
+        slotIndex: 1
+    )
+    AutoJoinEngine.applyYieldJoin(prev: &prev, next: &next, beats: 4)
+    check(
+        "Join: yield fades the outgoing; incoming title stays at full",
+        prev.fadeOut.type == .crossfade
+            && prev.fadeOut.duration == 4
+            && next.fadeIn.type == .none
+            && next.fadeIn.duration < 0.25
+            && prev.timelineEnd <= next.timelineStart + 0.02,
+        String(format: "out=%@ in=%@ prevEnd=%.2f nextStart=%.2f",
+               prev.fadeOut.type.rawValue, next.fadeIn.type.rawValue, prev.timelineEnd, next.timelineStart)
     )
 }
 

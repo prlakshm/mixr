@@ -1,16 +1,42 @@
-# App Store assets
+# App Store media (landscape)
 
-Upload these in App Store Connect. Listing copy is in `listing.md`.
+## Why the original files failed
 
-## Required now
+| File | Actual | App Store wants |
+|---|---|---|
+| `build-now.mp4` etc. | **1900 × 874**, most **under 15s** | Previews: **1920 × 886**, **15–30s**, H.264 |
+| First Mixr screenshots | **1320 × 2868 portrait** | Screenshots: **2868 × 1320 landscape** (6.9") |
 
-| File | Use |
-|---|---|
-| `icon/AppIcon-1024.png` | 1024×1024, no transparency. Already in the Xcode `AppIcon.icon` as well. |
-| `screenshots/01-timeline-hero.png` | 6.9" iPhone (1320×2868). Timeline + clip edit. |
-| `screenshots/02-sfx-library.png` | SFX panel. |
-| `screenshots/03-auto-remix.png` | Auto Remix scope dialog. |
-| `demo-audio/*.wav` | Attach in App Review notes (copyright-free). |
-| `../PRIVACY.md` | Push to GitHub, then use as the privacy policy URL. |
+Connect rejects anything that is not an exact pixel size. 1900×874 is 20px short. 10s clips are too short.
 
-Store name in `listing.md` is **Clubcut** because Mixr is taken. Bundle ID stays `com.pranavi.Mixr`.
+## Upload these
+
+### Screenshots — iPhone 6.9" Display (landscape)
+
+Folder: `screenshots/`
+
+1. `01-build-now.png` — mashup timeline
+2. `02-clip-menu.png` — clip edit
+3. `03-effect-tray.png` — effects row
+4. `04-transition-beats.png` — arranged mix
+5. `05-sfx-library.png` — SFX panel
+
+All **2868 × 1320**, PNG, no transparency.
+
+Do **not** upload the old portrait files in `screenshots-portrait-unused/`.
+
+### App previews — iPhone 6.9" Display (landscape)
+
+Folder: `previews/`
+
+Apple allows **3 videos max**. Use:
+
+1. `01-build-now.mp4` (15s)
+2. `03-effect-tray.mp4` (24s)
+3. `02-clip-menu.mp4` (15s)
+
+Spare: `04-transition-beats.mp4`
+
+All **1920 × 886**, H.264 High, 30 fps, 15–30s.
+
+In Connect: drag the **video** into the App Preview slot (left of screenshots), not the screenshot well.

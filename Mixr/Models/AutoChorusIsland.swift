@@ -495,7 +495,8 @@ nonisolated enum AutoChorusIsland {
             duration: duration,
             introEnd: introEnd,
             phraseSeconds: phraseSeconds,
-            title: title
+            title: title,
+            tempoRatio: tempoRatio
         )
     }
 
@@ -572,8 +573,26 @@ nonisolated enum AutoChorusIsland {
         guard let t = signal.lyricTitleHookStart, t >= 0, barSeconds > 0.05 else {
             return nil
         }
+        var lyric = t
+        // A sidecar that first finds the title line in the last ~30% of the
+        // song is a chorus repeat or a bad transcript. Prefer the first
+        // distinctive title token in the front half; otherwise let energy
+        // entrance pick the opening title island.
+        if signal.durationSeconds > 30, t > signal.durationSeconds * 0.72 {
+            let distinctive = Set(AutoPivotWord.hookTokens(in: title ?? "").distinctive)
+            func norm(_ s: String) -> String { s.lowercased().filter { $0.isLetter } }
+            let hi = signal.durationSeconds * 0.55
+            let early = signal.lyricWords.filter {
+                distinctive.contains(norm($0.word)) && $0.t >= 8 && $0.t <= hi
+            }.min(by: { $0.t < $1.t })
+            if let early {
+                lyric = early.t
+            } else {
+                return nil
+            }
+        }
         let token = isolatedTitleTokenTime(
-            lyric: t,
+            lyric: lyric,
             title: title,
             words: signal.lyricWords,
             vocalPresence: hookVocalCurve(signal),
@@ -670,7 +689,7 @@ nonisolated enum AutoChorusIsland {
         // Club-lift TimePitch smears the first ~1.3s of mix. Put the title
         // token in mix-time [1.6, 1.8] so Whisper of the first 4s hears it —
         // never a full bar early, and never 94 BPM.
-        if leadIn == .enoughForTitleToken, ratio > 1.12, beat > 0.05 {
+        if leadIn == .enoughForTitleToken, ratio > 1.20, beat > 0.05 {
             let mixLead = sourcePad / ratio
             if mixLead < clubLiftTitleMixLeadMin || mixLead > clubLiftTitleMixLeadMax {
                 sourcePad = min(barSeconds * 0.92, clubLiftTitleMixLead * ratio)
@@ -718,7 +737,7 @@ nonisolated enum AutoChorusIsland {
         let remaining = lyric - after
         // Keep a tiny mix-time settle after club-lift without pulling the
         // previous lyric back into the first identifiable word.
-        let minMix = tempoRatio > 1.12 ? 0.13 : 0.06
+        let minMix = tempoRatio > 1.06 ? 0.13 : 0.06
         let minSource = minMix * max(tempoRatio, 1)
         if remaining >= minSource {
             return min(sourcePad, remaining)
@@ -803,7 +822,8 @@ nonisolated enum AutoChorusIsland {
         duration: Double,
         introEnd: Double,
         phraseSeconds: Double,
-        title: String?
+        title: String?,
+        tempoRatio: Double = 1
     ) -> Double? {
         let tokens = AutoPivotWord.hookTokens(in: title ?? "")
         let vocal = hookVocalCurve(signal)
@@ -989,11 +1009,28 @@ nonisolated enum AutoChorusIsland {
         let wordHi = island + min(0.90, barSeconds * 0.38)
         let peaks = onsetPeaks(curve: vocal, hop: hop, lo: island, hi: wordHi)
         let raw = peaks.min(by: { $0.t < $1.t })?.t ?? island
-        return snapForwardOrKeep(
+        let kept = snapForwardOrKeep(
             raw,
             downbeats: downbeats,
             barSeconds: barSeconds,
             minSeconds: island
+        )
+        // Club-lift smear eats a generic title opener ("All the…") in the
+        // first ~1.3s of mix. Distinctive attack words ("Oops") already sit
+        // on the island; extra pad there pulls the previous line.
+        let first = tokens.all.first
+        let firstIsGenericOpener = first.map {
+            AutoPivotWord.genericFillers.contains($0) && !tokens.distinctive.contains($0)
+        } ?? false
+        guard tempoRatio > 1.20, firstIsGenericOpener else { return kept }
+        return titleHookClipStart(
+            lyric: kept,
+            downbeats: downbeats,
+            barSeconds: barSeconds,
+            leadIn: .enoughForTitleToken,
+            title: title,
+            lyricWords: signal.lyricWords,
+            tempoRatio: tempoRatio
         )
     }
 

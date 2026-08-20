@@ -267,7 +267,7 @@ enum AutoRemixPlanner {
         // wallpaper → Drop 1 hard cut. Cut earlier (~bar 18): no long groove
         // runway after the hook is already done.
         let shape: [(role: AutoCandidateSection.Label, bars: Int, energy: Double, pulse: AutoClubPulse.RegionRole, entry: AutoTransitionRecipe)] = [
-            (.intro, 8, 0.45, .introTease, .none),
+            (.intro, 16, 0.42, .introTease, .none),
             (.chorus, 8, 0.88, .groove, .none),                 // title hook (hard cut, no fade-in)
             (.build, 2, 0.70, .buildOut, .flangerBuild),      // pivot wallpaper window
             (.chorus, 16, 1.0, .drop, .hardHypeCut),          // Drop 1
@@ -511,35 +511,35 @@ enum AutoRemixPlanner {
                     // Two-deck: intros stay the record — light HPF only.
                     fx.setLevel(28, for: MixrEffect.blur.rawValue)
                 case .build:
-                    fx.flangerAmount = seg.pulse == .buildOut ? 0.36 : (slot.energy > 0.78 ? 0.30 : 0.22)
-                    fx.setLevel(seg.pulse == .buildOut ? 42 : 18, for: MixrEffect.echo.rawValue)
+                    // Tension comes from the HPF sweep + arrangement, not a
+                    // wet comb stack — heavy flanger/ping-pong reads metallic.
+                    fx.flangerAmount = seg.pulse == .buildOut ? 0.12 : (slot.energy > 0.78 ? 0.10 : 0.06)
+                    fx.setLevel(seg.pulse == .buildOut ? 20 : 8, for: MixrEffect.echo.rawValue)
                     fx.echoPreset = .pingPong
                     if seg.pulse == .buildOut {
                         // Filter sweep into the void/drop — mix window only.
                         fx.setLevel(58, for: MixrEffect.blur.rawValue)
-                        fx.setLevel(20, for: MixrEffect.reverb.rawValue)
-                        fx.reverbPreset = .hall
                     } else {
                         fx.setLevel(18, for: MixrEffect.blur.rawValue)
                     }
                 case .chorus:
                     // Filter opens on the downbeat — Diplo energy lives here.
+                    // Drops stay dry and punchy: no reverb/echo wash on Drop 1.
                     fx.setLevel(dropIndex == 0 ? 6 : 10, for: MixrEffect.blur.rawValue)
-                    fx.setLevel(dropIndex == 0 ? 12 : 16, for: MixrEffect.reverb.rawValue)
-                    fx.reverbPreset = dropIndex == 0 ? .hall : .ambient
-                    fx.setLevel(dropIndex == 0 ? 8 : 12, for: MixrEffect.echo.rawValue)
-                    if dropIndex >= 1, flavor.bias.drop2AiryLayer {
-                        fx.setLevel(14, for: MixrEffect.reverb.rawValue)
+                    if dropIndex >= 1 {
+                        fx.setLevel(8, for: MixrEffect.reverb.rawValue)
+                        fx.reverbPreset = .ambient
+                        fx.setLevel(6, for: MixrEffect.echo.rawValue)
                     }
-                    if flavor.bias.aggressiveLowEnd {
-                        fx.flangerAmount = max(fx.flangerAmount, 0.12)
+                    if dropIndex >= 1, flavor.bias.drop2AiryLayer {
+                        fx.setLevel(12, for: MixrEffect.reverb.rawValue)
                     }
                 case .breakdown:
-                    fx.setLevel(28 + flavor.bias.breakdownVocalClarity * 22, for: MixrEffect.reverb.rawValue)
+                    fx.setLevel(16 + flavor.bias.breakdownVocalClarity * 10, for: MixrEffect.reverb.rawValue)
                     fx.reverbPreset = .ambient
                     fx.setLevel(12, for: MixrEffect.blur.rawValue)
                 case .ending:
-                    fx.setLevel(22, for: MixrEffect.reverb.rawValue)
+                    fx.setLevel(14, for: MixrEffect.reverb.rawValue)
                     fx.reverbPreset = .ambient
                 case .groove:
                     // One deck: the record, maybe light HPF — no echo wallpaper.
@@ -866,7 +866,7 @@ enum AutoRemixPlanner {
             var energy: Double
         }
         let shape: [Seg] = [
-            .init(role: .introTease, bars: 8, energy: 0.42),
+            .init(role: .introTease, bars: 16, energy: 0.42),
             .init(role: .groove, bars: 8, energy: 0.80), // first complete hook listen-through
             .init(role: .buildOut, bars: 2, energy: 0.50), // pivot wallpaper window
             .init(role: .drop, bars: 16, energy: 1.00),
@@ -913,30 +913,28 @@ enum AutoRemixPlanner {
             }
             if role == .breakdown {
                 fx.setLevel(36, for: MixrEffect.blur.rawValue)
-                fx.setLevel(28, for: MixrEffect.reverb.rawValue)
+                fx.setLevel(18, for: MixrEffect.reverb.rawValue)
                 fx.reverbPreset = .ambient
             }
             if role == .groove {
                 fx.setLevel(12, for: MixrEffect.blur.rawValue)
             }
             if role == .build {
-                fx.flangerAmount = 0.26
-                fx.setLevel(18, for: MixrEffect.echo.rawValue)
+                // Light modulation only — the HPF sweep carries the build.
+                fx.flangerAmount = 0.10
+                fx.setLevel(8, for: MixrEffect.echo.rawValue)
                 fx.echoPreset = .pingPong
                 fx.setLevel(18, for: MixrEffect.blur.rawValue)
             }
             if role == .buildOut {
-                fx.flangerAmount = 0.34
+                fx.flangerAmount = 0.12
                 fx.setLevel(56, for: MixrEffect.blur.rawValue)
-                fx.setLevel(36, for: MixrEffect.echo.rawValue)
+                fx.setLevel(20, for: MixrEffect.echo.rawValue)
                 fx.echoPreset = .pingPong
-                fx.setLevel(18, for: MixrEffect.reverb.rawValue)
             }
             if role == .drop {
+                // Dry, full-frequency slam — no reverb/echo wash on the drop.
                 fx.setLevel(8, for: MixrEffect.blur.rawValue)
-                fx.setLevel(14, for: MixrEffect.reverb.rawValue)
-                fx.reverbPreset = .hall
-                fx.setLevel(8, for: MixrEffect.echo.rawValue)
             }
             if pulse.duckSourceLowEnd, role == .drop || role == .groove {
                 fx.setLevel(max(fx.level(for: MixrEffect.blur.rawValue), 24), for: MixrEffect.blur.rawValue)
@@ -1760,7 +1758,7 @@ enum AutoRemixPlanner {
         outroCameoIdx: Int?
     ) -> [Slot] {
         var slots: [Slot] = [
-            Slot(songIdx: 0, role: .intro, bars: 6, entry: .none, energy: 0.45, shrinkPriority: 2),
+            Slot(songIdx: 0, role: .intro, bars: 16, entry: .none, energy: 0.42, shrinkPriority: 1),
         ]
         // Complete Deck A title chorus BEFORE pivot: 8 bars + 8-bar HOLD of
         // the same island (16 timeline bars). Do not linearly walk 16 source
@@ -1794,15 +1792,38 @@ enum AutoRemixPlanner {
         }
 
         slots.append(Slot(songIdx: 0, role: .build, bars: 8, entry: .flangerBuild, energy: 0.82, isReturn: true))
+        // Drop 2 = 16 bars, but as TWO 8-bar chorus slots: a chorus island
+        // is typically ~8 bars, and one linear 16-bar walk runs the source
+        // past the hook into whatever follows (e.g. a quiet spoken bridge).
+        // The second slot replays a chorus island instead of walking on.
+        // On a bed flip, ride the bed's TITLE chorus island (the Xirex
+        // reference: Oops chorus returns as Drop 2) — the picker's unused
+        // late-chorus island can be a weak tail that decays into the bridge.
+        let drop2Return = drop2IsBedFlip || (drop1Idx.map { $0 == drop2Idx } ?? false)
         slots.append(
             Slot(
                 songIdx: drop2Idx,
                 role: .chorus,
-                bars: 16,
+                bars: 8,
                 entry: .hardHypeCut,
                 energy: 1.0,
                 isFinalPeak: true,
-                isReturn: drop2IsBedFlip || (drop1Idx.map { $0 == drop2Idx } ?? false)
+                isReturn: drop2Return,
+                shrinkPriority: 0,
+                holdTitleChorus: drop2IsBedFlip
+            )
+        )
+        slots.append(
+            Slot(
+                songIdx: drop2Idx,
+                role: .chorus,
+                bars: 8,
+                entry: .none,
+                energy: 1.0,
+                isFinalPeak: true,
+                isReturn: true,
+                shrinkPriority: 0,
+                holdTitleChorus: drop2IsBedFlip
             )
         )
 
@@ -2024,12 +2045,21 @@ enum AutoRemixPlanner {
 
             // Title-chorus hold: replay the same 8-bar island (not verse 2).
             if mode == .mashup, slot.holdTitleChorus, slot.role == .chorus {
-                if let prior = placed.last(where: {
+                // Prefer the original (non-hold) chorus island; fall back to
+                // an earlier hold — it carries the same title island, which
+                // is exactly what a Drop 2 bed flip should replay.
+                let prior = placed.last(where: {
                     $0.slot.songIdx == slot.songIdx
                         && $0.slot.role == .chorus
                         && !$0.slot.holdTitleChorus
                         && $0.slot.entry != .hardHypeCut
-                }) {
+                }) ?? placed.last(where: {
+                    $0.slot.songIdx == slot.songIdx
+                        && $0.slot.role == .chorus
+                        && $0.slot.holdTitleChorus
+                        && $0.timelineStart < (placed.last?.timelineStart ?? .infinity)
+                })
+                if let prior {
                     section = AutoCandidateSection(
                         songID: prior.section.songID,
                         label: .chorus,
@@ -2235,31 +2265,14 @@ enum AutoRemixPlanner {
             // word is not a hard cut from record-head silence. Fade-in is
             // applied after placements exist.
             if slot.role == .intro {
-                let introSource = Double(slot.bars) * barSec * max(fit.ratio, 0.0001)
-                let phrase = profile.analysis.phraseBoundaries.count >= 2
-                    ? max(barSec * 4, profile.analysis.phraseBoundaries[1] - profile.analysis.phraseBoundaries[0])
-                    : barSec * 8
-                let hook = AutoChorusIsland.bestEntrance(
-                    signal: profile.analysis.signal,
-                    downbeats: profile.analysis.downbeats,
-                    barSeconds: profile.analysis.barSeconds,
-                    duration: profile.analysis.durationSeconds,
-                    introEnd: profile.analysis.introCandidate?.endSeconds ?? barSec * 8,
-                    phraseSeconds: phrase,
-                    title: profile.title
-                )?.startSeconds ?? profile.analysis.signal?.lyricTitleHookStart
                 let recordHead = max(0, profile.analysis.introCandidate?.startSeconds ?? 0)
-                let open: Double
-                if let hook, hook > introSource + 0.25 {
-                    open = max(recordHead, hook - introSource)
-                } else {
-                    open = recordHead
-                }
-                if abs(section.startSeconds - open) > 0.05 {
+                // Play the actual opening of the record. Do not skip ahead to
+                // (title-hook − introLength) — that chops the intro music.
+                if abs(section.startSeconds - recordHead) > 0.05 {
                     section = AutoCandidateSection(
                         songID: section.songID,
                         label: .intro,
-                        startSeconds: open,
+                        startSeconds: recordHead,
                         barCount: section.barCount,
                         barSeconds: section.barSeconds,
                         hook: section.hook,
@@ -2503,33 +2516,34 @@ enum AutoRemixPlanner {
 
             var bodyFX = ClipEffectSettings()
             switch ps.slot.role {
+            // Wet-FX restraint: heavy flanger/echo/reverb combs read metallic
+            // in the mix. The HPF sweep + arrangement carry the tension;
+            // choruses/drops stay dry and punchy.
             case .teaser:
                 bodyFX.setLevel(34, for: MixrEffect.blur.rawValue)
-                bodyFX.setLevel(20, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(10, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .reverse
             case .build:
                 if !profile.lowConfidence {
-                    bodyFX.flangerAmount = ps.slot.energy > 0.75 ? 0.34 : 0.24
-                    bodyFX.setLevel(28, for: MixrEffect.echo.rawValue)
+                    bodyFX.flangerAmount = ps.slot.energy > 0.75 ? 0.12 : 0.08
+                    bodyFX.setLevel(12, for: MixrEffect.echo.rawValue)
                     bodyFX.echoPreset = .pingPong
                     bodyFX.setLevel(22, for: MixrEffect.blur.rawValue)
                 }
             case .chorus:
-                bodyFX.setLevel(12, for: MixrEffect.reverb.rawValue)
-                bodyFX.reverbPreset = .hall
-                bodyFX.setLevel(14, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(6, for: MixrEffect.echo.rawValue)
             case .breakdown:
-                bodyFX.setLevel(28, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(18, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .ambient
-                bodyFX.setLevel(24, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(12, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .classic
             case .ending:
-                bodyFX.setLevel(30, for: MixrEffect.reverb.rawValue)
+                bodyFX.setLevel(18, for: MixrEffect.reverb.rawValue)
                 bodyFX.reverbPreset = .ambient
-                bodyFX.setLevel(28, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(14, for: MixrEffect.echo.rawValue)
                 bodyFX.echoPreset = .classic
             case .groove, .intro:
-                bodyFX.setLevel(12, for: MixrEffect.echo.rawValue)
+                bodyFX.setLevel(6, for: MixrEffect.echo.rawValue)
             }
             bodyFX = AutoSupportedEffects.sanitize(bodyFX)
 
@@ -2580,8 +2594,7 @@ enum AutoRemixPlanner {
             }
             // Title-hook chorus (first complete A hook + 8+8 hold): hard cut.
             // A crossfade on this slot eats the identifiable opening word.
-            let isTitleHookSlot = mode == .mashup
-                && ps.slot.role == .chorus
+            let isTitleHookSlot = ps.slot.role == .chorus
                 && entry != .hardHypeCut
                 && !ps.slot.isFinalPeak
                 && (ps.slot.holdTitleChorus || (ps.slot.songIdx == 0 && !ps.slot.isReturn))
@@ -2601,6 +2614,13 @@ enum AutoRemixPlanner {
             // Song-switch into a hard cut: outgoing stays at full clip volume
             // through the join (no fade-to-silence just to change records).
             if nextIsHandoff, nextEntry == .hardHypeCut, tailSeconds == 0 {
+                bodyFadeOut = .none
+            }
+            // Same-song hook repeat (8+8 final-peak island hold): hard
+            // splice — an equal-power fade to zero against the repeat's
+            // hard entrance puts a quiet dip in the middle of Drop 2.
+            if let next, !nextIsHandoff, next.slot.role == .chorus,
+               nextEntry == AutoTransitionRecipe.none, next.slot.isFinalPeak {
                 bodyFadeOut = .none
             }
             if ps.slot.isEnding {
@@ -2675,17 +2695,17 @@ enum AutoRemixPlanner {
                 var tailFadeOut = ClipTransition(type: .fadeOut, duration: 8)
                 switch nextEntry {
                 case .vocalEchoOut:
-                    tailFX.setLevel(28, for: MixrEffect.echo.rawValue)
+                    tailFX.setLevel(18, for: MixrEffect.echo.rawValue)
                     tailFX.echoPreset = .classic
-                    tailFX.setLevel(12, for: MixrEffect.reverb.rawValue)
+                    tailFX.setLevel(8, for: MixrEffect.reverb.rawValue)
                     tailFX.reverbPreset = .hall
                     tailFadeOut = ClipTransition(type: .echoOut, duration: 6)
                 case .flangerBuild:
-                    tailFX.flangerAmount = 0.32
+                    tailFX.flangerAmount = 0.12
                     tailVolume = baseVolume * 0.95
                 case .atmosphericHandoff:
                     tailFX.setLevel(32, for: MixrEffect.blur.rawValue)
-                    tailFX.setLevel(22, for: MixrEffect.reverb.rawValue)
+                    tailFX.setLevel(14, for: MixrEffect.reverb.rawValue)
                     tailFX.reverbPreset = .ambient
                 default:
                     break
@@ -2702,12 +2722,11 @@ enum AutoRemixPlanner {
             }
 
             for seg in segments where seg.duration > 0.01 {
-                let hookVocalStem = mode == .mashup
-                    && ps.slot.role == .chorus
+                let hookVocalStem = ps.slot.role == .chorus
                     && profile.stems.hasVocals
                     && (
                         isTitleHookSlot
-                            || (entry == .hardHypeCut && mashupBedID != profile.songID)
+                            || (mode == .mashup && entry == .hardHypeCut && mashupBedID != profile.songID)
                     )
                 placements.append(
                     AutoClipPlacement(
@@ -3581,10 +3600,27 @@ enum AutoRemixPlanner {
                 allowReuse: true
             )
             if let island, let base = section {
+                // Energy-gate the island start by its WORST bar over 8 bars:
+                // a mashability island whose back half decays into a quiet
+                // bridge leaves the looped bed stems silent under the drop.
+                var bedStart = island.bedStart
+                if let signal = bed.analysis.signal {
+                    func minBarRMS(_ start: Double) -> Double {
+                        var worst = 0.0
+                        for b in 0..<8 {
+                            let s = start + Double(b) * base.barSeconds
+                            worst = min(worst, signal.meanRMSDB(from: s, to: s + base.barSeconds))
+                        }
+                        return worst
+                    }
+                    if minBarRMS(base.startSeconds) > minBarRMS(island.bedStart) + 3 {
+                        bedStart = base.startSeconds
+                    }
+                }
                 section = AutoCandidateSection(
                     songID: base.songID,
                     label: base.label,
-                    startSeconds: island.bedStart,
+                    startSeconds: bedStart,
                     barCount: base.barCount,
                     barSeconds: base.barSeconds,
                     hook: base.hook,
@@ -3612,6 +3648,12 @@ enum AutoRemixPlanner {
                         )
                     )
                 } else if bed.stems.hasInstrumental {
+                    // Loop the bed's strong 8-bar island under the whole
+                    // drop instead of walking the source linearly — a long
+                    // walk drifts from the chorus instrumental into thin
+                    // verse material and the drop sags partway through.
+                    let loopBars = 8.0
+                    let loopSec = loopBars * barSec
                     for kind in bed.stems.instrumentalKinds {
                         let vol: Double
                         switch kind {
@@ -3619,23 +3661,28 @@ enum AutoRemixPlanner {
                         case .bass: vol = AutoGainPolicy.incomingDropVolume
                         default: vol = max(0.90, AutoGainPolicy.preservationSongVolume)
                         }
-                        placements.append(
-                            AutoClipPlacement(
-                                songID: bed.songID,
-                                sourceStart: section.startSeconds,
-                                timelineStart: lead.timelineStart,
-                                timelineDuration: lead.timelineDuration,
-                                tempoRatio: bedFit.ratio,
-                                volume: vol,
-                                fadeIn: ClipTransition(type: .none, duration: 0),
-                                fadeOut: ClipTransition(type: .none, duration: 0),
-                                effects: AutoSupportedEffects.sanitize(ClipEffectSettings()),
-                                role: .supporting,
-                                slotIndex: leadSlotIndex,
-                                overlapsPreviousSeconds: lead.timelineDuration,
-                                stemKind: kind
+                        var offset = 0.0
+                        while offset < lead.timelineDuration - 0.05 {
+                            let segDur = min(loopSec, lead.timelineDuration - offset)
+                            placements.append(
+                                AutoClipPlacement(
+                                    songID: bed.songID,
+                                    sourceStart: section.startSeconds,
+                                    timelineStart: lead.timelineStart + offset,
+                                    timelineDuration: segDur,
+                                    tempoRatio: bedFit.ratio,
+                                    volume: vol,
+                                    fadeIn: ClipTransition(type: .none, duration: 0),
+                                    fadeOut: ClipTransition(type: .none, duration: 0),
+                                    effects: AutoSupportedEffects.sanitize(ClipEffectSettings()),
+                                    role: .supporting,
+                                    slotIndex: leadSlotIndex,
+                                    overlapsPreviousSeconds: segDur,
+                                    stemKind: kind
+                                )
                             )
-                        )
+                            offset += segDur
+                        }
                     }
                     usedRanges[bed.songID, default: []].append(
                         (section.startSeconds, section.startSeconds + lead.timelineDuration * bedFit.ratio)

@@ -983,7 +983,7 @@ do {
               musical.contains { $0.assetID == "impact" })
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
-            check("Low confidence: Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
+            check("Low confidence: Drop 1 by bar 16–36", bar >= 16.5 && bar <= 36.5,
                   String(format: "bar=%.1f", bar))
         }
         let cymbals = musical.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }

@@ -30,10 +30,10 @@ Mashup algorithms (reimplemented in Swift — no Demucs/PyTorch/Mixxx **runtime*
 
 Target shape on the phrase grid (all structural cuts on phrase / downbeat boundaries; a drop that lands on bar 3 of a phrase is a fail):
 
-1. Intro 8: filtered identity / kick tease (opening title uncut)
+1. Intro 16: opening of the record (filtered identity / kick tease) — do not skip to the title hook
 2. First complete hook 8: still the record
 3. Pivot wallpaper 2: 1-beat last-word loop ×4–8 (default 8× = 2 bars), HPF, kick out; loud clip volume
-4. Drop 1 = 16: familiar hook, hard cut at full gain (~bar 16–24)
+4. Drop 1 = 16: familiar hook, hard cut at full gain (~bar 24–36 after a real intro)
 5. Breakdown 8–16: kick/sub out, vocal or piano breathe
 6. Build 2: denser than the pivot window
 7. Drop 2 = 16: drop 1 + exactly one extra layer (flip). 1-beat void OK if no pivot
@@ -62,11 +62,11 @@ Target shape on the phrase grid (all structural cuts on phrase / downbeat bounda
 
 Decide per song / pair:
 
-- Default house pocket: 124–128 BPM when nothing else fits.
+- Default house pocket: 124–128 BPM when the song already sits there, or a small stretch (≤8%) reaches it.
 - If the song already sits in **house** (~124–130) or **festival/rock** (~140–150), keep that pocket.
-- Midtempo pop (~90–100) is a source identity, not the club-rewrite target. **Club-lift** it into house (126) with pitch-preserving time-stretch so the mix is Diplo/festival-fast, not a polite ballad at native BPM.
-- Prefer double-time only when 2× lands in a pocket; check half-time / double-time before stretching. Club-lift is the exception for midtempo → house.
-- Vocal stretch max ~6–8% on non-lift paths. Club-lift midtempo → house may exceed that (time-stretch keeps pitch).
+- Midtempo pop (~90–100): **gentle club-lift ≤12%**, pitch preserved (TimePitch.rate / offline WSOLA). Do **not** yank to 126 — that chipmunks the vocal and rushes the record. A slight dance push is enough.
+- Prefer double-time only when 2× lands in a pocket; check half-time / double-time before stretching.
+- Vocal stretch max ~6–8% on non-lift paths. Gentle midtempo lift may be ~12% (pitch stays).
 - If stretch would wreck the vocal and no lift applies, keep source BPM and club-ify with arrangement + energy.
 
 ## Mashup (2…5 songs)
@@ -100,7 +100,8 @@ N-song club mashups keep the same locked Drop 1 join. More songs mean more hooks
 ## Transitions
 
 - A crossfade must contain actual temporal overlap.
-- Use equal-power gain curves for music **non-pivot** crossfades (verse/groove joins).
+- Use equal-power gain curves for music **non-pivot** crossfades (verse/groove joins). Different-song non-drop joins **take over** with overlap: outgoing yields while incoming swells quiet → loud.
+- Title-hook incoming stays at **full** (no fade-in). An incoming swell eats the distinctive token. Outgoing intro/verse fades out into that cut.
 - Never fade both adjacent clips toward silence at the same boundary (unless an intentional void owns the gap).
 - Pivot Drop 1 is a **hard cut at full gain** (no fade-in). A renderer anti-click microfade may exist; an audible volume ramp is a fail. See `dj-remix-planning`.
 - The **first clip** of a mashup/remix may fade in over a long intro (duration may exceed the UI 8-beat pill; the selected pill shows 8 as closest). Subsequent hook-replace joins stay hard-cut.

@@ -178,8 +178,8 @@ do {
         ) {
         case .success(_, let plan, _):
             check(
-                "Golden Oops×BOMT: club-lifts into house",
-                AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+                "Golden Oops×BOMT: gentle club-lift (not house 126 chipmunk)",
+                plan.targetBPM > 98 && plan.targetBPM < 118,
                 "bpm=\(plan.targetBPM)"
             )
             guard let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) else {
@@ -189,8 +189,8 @@ do {
                 lyric: bedLyric, clipStart: hook.sourceStart, tempoRatio: hook.tempoRatio
             )
             check(
-                "Golden Oops×BOMT: title token mixLead after stretch settle",
-                mixLead >= 1.60 && mixLead <= 1.80,
+                "Golden Oops×BOMT: title token mixLead after a 1–2 beat pad",
+                mixLead >= 0.70 && mixLead <= 1.50,
                 String(format: "mixLead=%.2f ratio=%.2f", mixLead, hook.tempoRatio)
             )
             guard let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) else {

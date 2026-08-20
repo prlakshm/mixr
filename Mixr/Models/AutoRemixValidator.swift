@@ -242,6 +242,12 @@ nonisolated enum AutoRemixValidator {
             decisions: &decisions
         )
 
+        // ── 4c. No placement may WALK its source into near-silence: a long
+        // groove/build/drop clip whose source tail collapses (bridge, spoken
+        // break, instrumental drop-out) is rewound to its own strong head on
+        // a bar boundary. Dead air mid-mix is a defect, not the record.
+        repairQuietSourceTails(&plan, profiles: profiles, decisions: &decisions)
+
         // Intentional silence is ONLY the pre-drop void (hype = subtraction).
         plan.intentionalGaps.removeAll { gap in
             !gap.reason.localizedCaseInsensitiveContains("void")
@@ -556,6 +562,180 @@ nonisolated enum AutoRemixValidator {
         )
     }
 
+    /// Rewind quiet source tails: a long dominant clip whose source decays
+    /// into near-silence (spoken bridge, instrumental drop-out, breakdown
+    /// tail) keeps playing dead air on the timeline. Split at the last loud
+    /// bar boundary and loop the clip's own strong head under the remainder.
+    /// Vocal stems keep their natural rests; the final (outro) placement may
+    /// decay by design.
+    private static func repairQuietSourceTails(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        decisions: inout [AutoDecision]
+    ) {
+        let barSec = plan.barSeconds
+        let dbgRepair = ProcessInfo.processInfo.environment["MIXR_DEBUG_REPAIR"] == "1"
+        if dbgRepair { print("REPAIR enter barSec=\(barSec) bed=\(plan.mashupBedSongID?.uuidString.prefix(8) ?? "nil") placements=\(plan.placements.count)") }
+        guard barSec > 0.1 else { return }
+        let lastDominantStart = plan.placements
+            .filter { $0.role == .dominant }
+            .map(\.timelineStart)
+            .max() ?? .infinity
+        var tails: [AutoClipPlacement] = []
+        for i in plan.placements.indices {
+            let p = plan.placements[i]
+            // Dominant clips AND supporting instrumental stems (bed loops
+            // under a drop): a quiet source tail in either leaves dead air.
+            let eligibleRole = p.role == .dominant
+                || (p.role == .supporting && p.stemKind != nil)
+            guard eligibleRole, p.stemKind != .vocals else { continue }
+            guard p.timelineStart < lastDominantStart - 0.05 else { continue }
+            guard p.timelineDuration >= barSec * 4 else { continue }
+            guard let signal = profiles[p.songID]?.analysis.signal else { continue }
+
+            let step = 0.5
+            var head = -160.0
+            let headEnd = min(p.sourceEnd, p.sourceStart + barSec * 8 * p.tempoRatio)
+            var t = p.sourceStart
+            while t < headEnd - step {
+                head = max(head, signal.meanRMSDB(from: t, to: t + step))
+                t += step
+            }
+            guard head > -60 else { continue }
+            if dbgRepair {
+                var tailMin = 0.0
+                var tt = p.sourceStart + (p.sourceEnd - p.sourceStart) * 0.4
+                while tt < p.sourceEnd - 0.5 {
+                    tailMin = min(tailMin, signal.meanRMSDB(from: tt, to: tt + 0.5) - head)
+                    tt += 0.5
+                }
+                print(String(format: "REPAIR tail? t=%.1f-%.1f src=%.1f ratio=%.2f head=%.1f tailMinRel=%.1f", p.timelineStart, p.timelineEnd, p.sourceStart, p.tempoRatio, head, tailMin))
+            }
+
+            // Longest quiet run in the clip's back half (>15 dB below the
+            // head). The run need not reach the clip edge — dead air often
+            // ends in one loud flick before the next section.
+            let halfway = p.sourceStart + (p.sourceEnd - p.sourceStart) * 0.4
+            var quietFrom: Double? = nil
+            var runStart: Double? = nil
+            t = halfway
+            while t < p.sourceEnd - step {
+                let quiet = signal.meanRMSDB(from: t, to: t + step) < head - 15
+                if quiet {
+                    if runStart == nil { runStart = t }
+                    let runDur = (t + step - (runStart ?? t)) / max(p.tempoRatio, 0.001)
+                    if runDur >= 1.2 { quietFrom = runStart; break }
+                } else {
+                    runStart = nil
+                }
+                t += step
+            }
+            guard let quietFrom else { continue }
+
+            let quietTimeline = p.timelineStart
+                + (quietFrom - p.sourceStart) / max(p.tempoRatio, 0.001)
+            let keepBars = ((quietTimeline - p.timelineStart) / barSec).rounded(.down)
+            guard keepBars >= 1 else { continue }
+            let splitAt = p.timelineStart + keepBars * barSec
+            let tailDur = p.timelineEnd - splitAt
+            guard tailDur >= barSec * 0.9 else { continue }
+
+            var tail = p
+            tail.timelineStart = splitAt
+            tail.timelineDuration = tailDur
+            tail.sourceStart = p.sourceStart   // loop back to the strong head
+            tail.continuesPrevious = false
+            tail.fadeIn = .hardCut
+            tails.append(tail)
+
+            plan.placements[i].timelineDuration = splitAt - p.timelineStart
+            plan.placements[i].fadeOut = .none
+            decisions.append(
+                AutoDecision(
+                    kind: .shortenedLowEnergySection,
+                    songTitle: profiles[p.songID]?.title,
+                    detail: String(
+                        format: "rewound quiet source tail @%.1fs to clip head (%.1fs of dead air)",
+                        splitAt, tailDur
+                    )
+                )
+            )
+        }
+        plan.placements.append(contentsOf: tails)
+
+        // Whole-clip-quiet cameos (sparse verse of a guest over nothing):
+        // rewinding their own head cannot help — keep the BED's drums+bass
+        // looping underneath instead, like a DJ holding the groove under a
+        // sparse vocal cameo. Reuse the drop's validated bed-stem island.
+        guard let bedID = plan.mashupBedSongID else { return }
+        let bedStemRefs = plan.placements.filter {
+            $0.songID == bedID && $0.role == .supporting
+                && ($0.stemKind == .drums || $0.stemKind == .bass)
+        }
+        guard !bedStemRefs.isEmpty else { return }
+        var mixRef = -160.0
+        for p in plan.placements where p.role == .dominant && p.stemKind == nil {
+            if let signal = profiles[p.songID]?.analysis.signal {
+                mixRef = max(mixRef, signal.meanRMSDB(from: p.sourceStart, to: p.sourceStart + 4))
+            }
+        }
+        guard mixRef > -60 else { return }
+        var backing: [AutoClipPlacement] = []
+        for p in plan.placements {
+            guard p.role == .dominant, p.stemKind == nil, p.songID != bedID else { continue }
+            guard p.timelineStart < lastDominantStart - 0.05 else { continue }
+            guard p.timelineDuration >= barSec * 4 else { continue }
+            guard let signal = profiles[p.songID]?.analysis.signal else { continue }
+            var clipMax = -160.0
+            var t = p.sourceStart
+            while t < p.sourceEnd - 0.5 {
+                clipMax = max(clipMax, signal.meanRMSDB(from: t, to: t + 0.5))
+                t += 0.5
+            }
+            if dbgRepair {
+                print(String(format: "REPAIR cameo? t=%.1f-%.1f src=%.1f clipMax=%.1f mixRef=%.1f", p.timelineStart, p.timelineEnd, p.sourceStart, clipMax, mixRef))
+            }
+            guard clipMax < mixRef - 8 else { continue }
+            // Already covered by bed stems (e.g. hook-replace)? Skip.
+            let covered = bedStemRefs.contains {
+                min($0.timelineEnd, p.timelineEnd) - max($0.timelineStart, p.timelineStart)
+                    > p.timelineDuration * 0.5
+            }
+            guard !covered else { continue }
+            let loopSec = barSec * 8
+            for kind in [AutoStemKind.drums, AutoStemKind.bass] {
+                guard let ref = bedStemRefs.first(where: { $0.stemKind == kind }) else { continue }
+                var offset = 0.0
+                while offset < p.timelineDuration - 0.05 {
+                    let segDur = min(loopSec, p.timelineDuration - offset)
+                    var seg = ref
+                    seg.timelineStart = p.timelineStart + offset
+                    seg.timelineDuration = segDur
+                    seg.sourceStart = ref.sourceStart
+                    seg.volume = 0.7
+                    seg.fadeIn = .hardCut
+                    seg.fadeOut = .none
+                    seg.continuesPrevious = false
+                    seg.overlapsPreviousSeconds = segDur
+                    seg.slotIndex = p.slotIndex
+                    backing.append(seg)
+                    offset += segDur
+                }
+            }
+            decisions.append(
+                AutoDecision(
+                    kind: .shortenedLowEnergySection,
+                    songTitle: profiles[p.songID]?.title,
+                    detail: String(
+                        format: "bed drums+bass loop under quiet cameo @%.1fs (%.1f dB below mix)",
+                        p.timelineStart, clipMax - mixRef
+                    )
+                )
+            )
+        }
+        plan.placements.append(contentsOf: backing)
+    }
+
     /// Dominant joins need real temporal overlap + equal-power fades, unless
     /// they are a club drop hard cut (pivot / hook-return slam) or already
     /// SFX-covered butts.
@@ -626,24 +806,18 @@ nonisolated enum AutoRemixValidator {
                 continue
             }
 
-            // Isolated title/hook vocal: equal-power fade-in eats the
-            // distinctive token; extending the previous full-mix under it
-            // buries the word in drums.
+            // Isolated title vocal / intro → title hook: outgoing yields
+            // (quiet); incoming stays at full so the title token is not eaten.
             if next.stemKind == .vocals, prev.stemKind != .vocals,
                next.timelineDuration > beatSec * 8 {
-                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
-                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
-                    if trimmed >= 0.05 {
-                        plan.placements[prevIdx].timelineDuration = trimmed
-                    }
-                }
-                plan.placements[prevIdx].fadeOut = .hardCut
-                plan.placements[nextIdx].fadeIn = .hardCut
+                var prevP = plan.placements[prevIdx]
+                var nextP = plan.placements[nextIdx]
+                AutoJoinEngine.applyYieldJoin(prev: &prevP, next: &nextP)
+                plan.placements[prevIdx] = prevP
+                plan.placements[nextIdx] = nextP
                 continue
             }
 
-            // Title-hook island (intro/verse → first complete chorus, or 8+8 hold):
-            // hard cut. Equal-power fade-in eats the opening title word.
             let titleHookJoin = prev.songID == next.songID
                 && next.timelineDuration >= plan.barSeconds * 7.5
                 && (
@@ -652,15 +826,32 @@ nonisolated enum AutoRemixValidator {
                     || (next.sourceStart < prev.sourceEnd - 0.05
                         && abs(next.sourceStart - prev.sourceStart) < plan.barSeconds * 0.75)
                 )
-            if titleHookJoin {
-                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
-                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
-                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
-                        plan.placements[prevIdx].timelineDuration = trimmed
-                    }
+            // A hook-island rewind INSIDE a drop (8+8 final-peak repeat) is a
+            // hard splice — a yield fade to zero there dips the drop.
+            func inDropRegion(_ t: Double) -> Bool {
+                plan.pulseRegions.contains {
+                    $0.role == .drop && t > $0.timelineStart + 0.1 && t < $0.timelineEnd - 0.1
                 }
-                plan.placements[prevIdx].fadeOut = .hardCut
-                plan.placements[nextIdx].fadeIn = .hardCut
+            }
+            // A same-source rewind next to the timeline head is the pre-drop
+            // title hold (yield fade OK). The same rewind deep in the mix is
+            // a Drop 2 hook repeat — hard splice, never a fade toward zero.
+            let sourceRewind = prev.songID == next.songID
+                && abs(next.sourceStart - prev.sourceStart) < plan.barSeconds * 0.75
+            let joinInsideDrop = (inDropRegion(prev.timelineStart + prev.timelineDuration / 2)
+                && inDropRegion(next.timelineStart + next.timelineDuration / 2))
+                || (sourceRewind && prev.timelineStart > plan.barSeconds * 12)
+            if titleHookJoin, !joinInsideDrop {
+                var prevP = plan.placements[prevIdx]
+                var nextP = plan.placements[nextIdx]
+                AutoJoinEngine.applyYieldJoin(prev: &prevP, next: &nextP)
+                plan.placements[prevIdx] = prevP
+                plan.placements[nextIdx] = nextP
+                continue
+            }
+            if titleHookJoin, joinInsideDrop {
+                plan.placements[prevIdx].fadeOut = .none
+                plan.placements[nextIdx].fadeIn = .none
                 continue
             }
 
@@ -676,21 +867,15 @@ nonisolated enum AutoRemixValidator {
                 continue
             }
 
-            // Different songs: never extend two dominants into each other.
-            // Switch by hard cut at full clip volume — no fade-in from silence.
+            // Different songs: incoming swells in and takes over (overlap).
+            // Pivot Drop 1 stays a hard cut (handled above).
             if prev.songID != next.songID {
-                if plan.placements[prevIdx].timelineEnd > next.timelineStart + 0.05 {
-                    let trimmed = next.timelineStart - plan.placements[prevIdx].timelineStart
-                    if trimmed >= tuning.minSegmentSeconds * 0.5 {
-                        plan.placements[prevIdx].timelineDuration = trimmed
-                    }
-                }
-                plan.placements[prevIdx].fadeOut = .hardCut
-                plan.placements[nextIdx].fadeIn = .hardCut
-                plan.placements[nextIdx].volume = max(
-                    plan.placements[nextIdx].volume,
-                    AutoGainPolicy.incomingDropVolume
-                )
+                var prevP = plan.placements[prevIdx]
+                var nextP = plan.placements[nextIdx]
+                AutoJoinEngine.applyTakeoverJoin(prev: &prevP, next: &nextP, beatSec: beatSec)
+                nextP.volume = max(nextP.volume, AutoGainPolicy.incomingDropVolume)
+                plan.placements[prevIdx] = prevP
+                plan.placements[nextIdx] = nextP
                 continue
             }
 

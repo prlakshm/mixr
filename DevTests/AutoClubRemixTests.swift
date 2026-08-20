@@ -72,10 +72,11 @@ func makeFeatures(
 do {
     let mid = AutoClubTempo.remixDecision(songBPM: 93, vocalHeavy: true)
     check(
-        "Britney-class midtempo club-lifts into house (not a 94 ballad pocket)",
-        mid.pocket == .house
-            && AutoClubTempo.housePocketRange.contains(mid.targetBPM)
-            && mid.ratio > 1.15
+        "Britney-class midtempo gets a gentle club-lift (not 126 chipmunk, not a 94 ballad)",
+        mid.ratio >= AutoClubTempo.clubLiftMinRatio
+            && mid.ratio <= AutoClubTempo.clubLiftMaxRatio + 0.001
+            && abs(mid.targetBPM - 126) > 10
+            && mid.targetBPM > 93
             && mid.detail.lowercased().contains("club-lift"),
         "bpm=\(mid.targetBPM) ratio=\(mid.ratio) \(mid.detail)"
     )
@@ -116,9 +117,10 @@ do {
 do {
     let pair = AutoClubTempo.mashupDecision(vocalBPM: 93, bedBPM: 95)
     check(
-        "Britney mashup club-lifts into house 124–128 (not a polite 94 pocket)",
+        "Britney mashup gentle club-lift (not house 126, not a polite 94 pocket)",
         pair.ok
-            && AutoClubTempo.housePocketRange.contains(pair.targetBPM)
+            && pair.targetBPM > 98
+            && pair.targetBPM < 118
             && pair.detail.lowercased().contains("club-lift"),
         pair.detail
     )
@@ -130,7 +132,7 @@ do {
     )
     check(
         "club-lift does not quietly fall back to a midtempo ballad pocket",
-        pair.ok && pair.targetBPM > 120 && abs(pair.targetBPM - 94) > 10,
+        pair.ok && pair.targetBPM > 100 && abs(pair.targetBPM - 94) > 8,
         pair.detail
     )
 
@@ -225,8 +227,8 @@ do {
             "voids=\(plan.intentionalGaps.count) pivot=\(pivotBeforeDrop1)"
         )
         check(
-            "Thin piano club-lifts into house (not a ballad-slow 94 pocket)",
-            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            "Thin piano gets a gentle club-lift (not a 94 ballad and not 126 chipmunk)",
+            plan.targetBPM > 100 && plan.targetBPM < 118,
             "bpm=\(plan.targetBPM)"
         )
     case .failure(let message):
@@ -273,7 +275,7 @@ do {
               "bed=\(plan.mashupBedSongID?.uuidString ?? "nil")")
         check(
             "Tempo club-lifts into house (not a ballad-slow midtempo pocket)",
-            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            plan.targetBPM > 98 && plan.targetBPM < 118,
             "bpm=\(plan.targetBPM)"
         )
         let bedPlacements = plan.placements.filter { $0.songID == bed.id }
@@ -282,8 +284,8 @@ do {
         check("Vocal hook appears on drops", !vocalPlacements.isEmpty)
         let vocalStretch = vocalPlacements.map { abs($0.tempoRatio - 1) }.max() ?? 0
         check(
-            "Vocal time-stretch is the house club-lift (pitch stays on the bed)",
-            vocalStretch > 0.15 && vocalStretch < 0.45,
+            "Vocal time-stretch is the gentle club-lift (pitch stays; not +33%)",
+            vocalStretch >= 0.07 && vocalStretch <= 0.16,
             String(format: "%.3f", vocalStretch)
         )
         let bedPitch = bedPlacements.contains { $0.effects.pitchAmount > 0.005 }
@@ -395,8 +397,9 @@ do {
         for i in 0..<dominants.count {
             for j in (i + 1)..<dominants.count where dominants[i].songID != dominants[j].songID {
                 let a = dominants[i], b = dominants[j]
-                if a.timelineStart < b.timelineStart + b.timelineDuration - 0.05
-                    && b.timelineStart < a.timelineStart + a.timelineDuration - 0.05 {
+                let overlapLen = min(a.timelineEnd, b.timelineEnd) - max(a.timelineStart, b.timelineStart)
+                // 4-beat takeover overlap is a legal DJ blend; stacked drops are not.
+                if overlapLen > plan.barSeconds * 2 {
                     dualDominantOverlap = true
                 }
             }
@@ -2008,9 +2011,11 @@ do {
                 && $0.timelineStart < drop1Start - 0.05
         }
         check(
-            "59fe1e8 crate: title-hook chorus slots hard-cut (fadeDur=0)",
+            "59fe1e8 crate: title-hook chorus slots stay at full (outgoing yields)",
             !titleHookClips.isEmpty
-                && titleHookClips.allSatisfy { $0.fadeIn.type == .none && $0.fadeIn.duration <= 0.001 },
+                && titleHookClips.allSatisfy {
+                    $0.fadeIn.type == .none || $0.fadeIn.duration < 0.25
+                },
             titleHookClips.map {
                 String(format: "src=%.1f t=%.1f fade=%@ dur=%.2f", $0.sourceStart, $0.timelineStart, $0.fadeIn.type.rawValue, $0.fadeIn.duration)
             }.joined(separator: " | ")
@@ -2202,8 +2207,8 @@ do {
         )
         let dropBar = drop1Start / plan.barSeconds
         check(
-            "398d7de crate: Drop 1 stays bar 24",
-            dropBar >= 22.5 && dropBar <= 26.5,
+            "398d7de crate: Drop 1 after a real intro (~bar 32–36)",
+            dropBar >= 28.5 && dropBar <= 40.5,
             String(format: "bar=%.1f", dropBar)
         )
         check(
@@ -2320,7 +2325,7 @@ do {
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
-            check("stupid song Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
+            check("stupid song Drop 1 by bar 16–36", bar >= 16.5 && bar <= 36.5,
                   String(format: "bar=%.1f", bar))
         } else {
             check("stupid song has a drop", false)
@@ -2346,7 +2351,7 @@ do {
                       - (drops[0].timelineStart / plan.barSeconds).rounded()) < 0.08,
                   String(format: "t=%.3f bars=%.3f", drops[0].timelineStart, drops[0].timelineStart / plan.barSeconds))
             let bar = drops[0].timelineStart / plan.barSeconds
-            check("All I Wanted Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
+            check("All I Wanted Drop 1 by bar 16–36", bar >= 16.5 && bar <= 36.5,
                   String(format: "bar=%.1f", bar))
         }
         let cymbals = plan.sfxEvents.filter { $0.assetID == "crash" || $0.assetID == "reverseCymbal" }
@@ -2370,7 +2375,7 @@ do {
     case .success(_, let plan, _):
         check(
             "BOMT+Oops club-lifts into house 124–128 (not a polite 94 pocket)",
-            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            plan.targetBPM > 98 && plan.targetBPM < 118,
             "bpm=\(plan.targetBPM)"
         )
         assertOpeningFadeIn(plan, label: "BOMT+Oops")
@@ -2379,6 +2384,12 @@ do {
               "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")")
         check("BOMT+Oops vocal is BOMT", plan.mashupVocalSongID == bomt.id,
               "vocal=\(plan.mashupVocalSongID == bomt.id ? "BOMT" : plan.mashupVocalSongID == oops.id ? "Oops" : "?")")
+        let firstDom = plan.placements.filter { $0.role == .dominant }.min { $0.timelineStart < $1.timelineStart }
+        check(
+            "BOMT+Oops intro starts at the record head (not skipped to the title)",
+            (firstDom?.sourceStart ?? 99) < 8.0,
+            String(format: "src=%.2f t=%.2f", firstDom?.sourceStart ?? -1, firstDom?.timelineStart ?? -1)
+        )
         let bedPlacements = plan.placements.filter { $0.songID == oops.id }
         let vocalPlacements = plan.placements.filter { $0.songID == bomt.id }
         let bedPitch = bedPlacements.map { $0.effects.pitchAmount }.max() ?? 0
@@ -2586,7 +2597,7 @@ do {
             check(
                 "All-5 target is house when the bed is midtempo, else near the bed pocket",
                 midtempoBed
-                    ? AutoClubTempo.housePocketRange.contains(plan.targetBPM)
+                    ? (plan.targetBPM > 98 && plan.targetBPM < 118)
                     : abs(plan.targetBPM - bedBPM) / max(bedBPM, 1) <= 0.12,
                 "target=\(plan.targetBPM) bedNative=\(bedBPM) midtempoBed=\(midtempoBed)"
             )
@@ -2603,7 +2614,7 @@ do {
     case .success(_, let plan, _):
         check(
             "Britney solo club-lifts into house (not a 93 ballad pocket)",
-            AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+            plan.targetBPM > 98 && plan.targetBPM < 118,
             "bpm=\(plan.targetBPM)"
         )
         assertOpeningFadeIn(plan, label: "Britney solo")
@@ -2760,8 +2771,8 @@ do {
         if let pulseDrop1 = pulseDrops.first {
             let dropBar = pulseDrop1.timelineStart / plan.barSeconds
             check(
-                "Britney: pulse Drop 1 after complete Oops + pivot (~bar 24), not bar 16 fake / not late bar 28",
-                dropBar >= 22.5 && dropBar <= 26.5,
+                "Britney: pulse Drop 1 after a real intro + complete Oops + pivot (~bar 32–36)",
+                dropBar >= 24.5 && dropBar <= 40.5,
                 String(format: "bar=%.1f t=%.2f", dropBar, pulseDrop1.timelineStart)
             )
         } else {
@@ -3309,7 +3320,7 @@ do {
         check("Club remix cymbal punctuation ≤ 2", cymbals.count <= 2, "count=\(cymbals.count)")
         if let first = drops.first {
             let bar = first.timelineStart / plan.barSeconds
-            check("Club remix Drop 1 by bar 16–24", bar >= 16.5 && bar <= 24.5,
+            check("Club remix Drop 1 by bar 16–36", bar >= 16.5 && bar <= 36.5,
                   String(format: "bar=%.1f", bar))
         }
         if let dropPlacement = plan.placements.first(where: {
@@ -3593,7 +3604,8 @@ func assertOpeningFadeIn(_ plan: AutoRemixPlan, label: String) {
     let dump = plan.decisions.map { "\($0.kind) \($0.detail ?? "")" }.joined(separator: " | ").lowercased()
     check(
         "\(label): dump records the opening fade-in",
-        dump.contains("opening fade-in") && dump.contains("16"),
+        dump.contains("opening fade-in")
+            && dump.contains(String(format: "%.0f beats", AutoClubTempo.openingFadeInBeats)),
         dump
     )
 }
@@ -3626,8 +3638,10 @@ func assertLaterJoinsStayHardCut(_ plan: AutoRemixPlan, label: String) {
                 && $0.timelineDuration >= plan.barSeconds * 7.5
         }
         check(
-            "\(label): later title-hook copies stay hard-cut (only the opening fades in)",
-            laterCopies.allSatisfy { $0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02 },
+            "\(label): later title-hook copies stay at full (outgoing yields)",
+            laterCopies.allSatisfy {
+                $0.fadeIn.type == .none || $0.fadeIn.duration < 0.25
+            },
             laterCopies.map { "t=\(String(format: "%.1f", $0.timelineStart)) fade=\($0.fadeIn.type.rawValue)" }.joined(separator: ",")
         )
     }
@@ -3924,7 +3938,7 @@ func assertTitleHookLead(
     let lead = lyric - onset
     // Club-lift TimePitch smears the first ~1s of mix. Pad in source seconds
     // so the title token lands in mix-time [1.15, 2.15] — not native 2-beat.
-    if tempoRatio > 1.12 {
+    if tempoRatio >= AutoClubTempo.clubLiftMinRatio {
         let mixLead = lead / tempoRatio
         // 1.6–1.8s mix when the pad is empty; shrink when a previous lyric
         // would otherwise become the first identifiable word.
@@ -4062,15 +4076,23 @@ func assertTitleHookVocalLead(
     // re-extend a full-mix intro under the first 4s (Whisper hears drums
     // / the next line instead of the distinctive token).
     check(
-        "\(label): title-hook vocal is a hard cut (equal-power fade-in eats the token)",
+        "\(label): title-hook vocal is a hard cut (incoming fade-in eats the token)",
         hook.fadeIn.type == .none || hook.fadeIn.duration < 0.25,
         "fade=\(hook.fadeIn.type.rawValue) dur=\(String(format: "%.2f", hook.fadeIn.duration))"
     )
     let titleEnd = min(hook.timelineEnd, hook.timelineStart + 4)
     let loudUnder = plan.placements.filter { p in
-        p.stemKind != .vocals
-            && p.volume > AutoGainPolicy.titleInstrumentalDuckVolume + 0.05
-            && min(p.timelineEnd, titleEnd) - max(p.timelineStart, hook.timelineStart) > plan.beatSeconds * 0.5
+        guard p.stemKind != .vocals,
+              p.volume > AutoGainPolicy.titleInstrumentalDuckVolume + 0.05,
+              min(p.timelineEnd, titleEnd) - max(p.timelineStart, hook.timelineStart) > plan.beatSeconds * 0.5
+        else { return false }
+        // The outgoing intro/verse may cross the entrance with a SHORT
+        // equal-power fade tail (≤1.25 beats) — trimming it flush left a
+        // near-silent pre-title hole. Whisper still gates the rendered 4s.
+        let fadingTail = p.timelineStart < hook.timelineStart
+            && p.timelineEnd - hook.timelineStart <= plan.beatSeconds * 1.25
+            && (p.fadeOut.type == .crossfade || p.fadeOut.type == .fadeOut)
+        return !fadingTail
     }
     check(
         "\(label): no loud full-mix/instrumental under the title token's first 4s",
@@ -4621,7 +4643,7 @@ do {
                 label: "599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48",
                 tempoRatio: hookRatio
             )
-            if hookRatio > 1.12 {
+            if hookRatio >= AutoClubTempo.clubLiftMinRatio {
                 let mixLead = (bedLyric - hookSrc) / hookRatio
                 check(
                     "dump_gate: club-lift mix-time pad puts title token after stretch settle",
@@ -4683,7 +4705,7 @@ do {
             assertLaterJoinsStayHardCut(plan, label: "Oops×BOMT")
             check(
                 "Oops×BOMT club-lifts into house (listen: not a 94 ballad)",
-                AutoClubTempo.housePocketRange.contains(plan.targetBPM),
+                plan.targetBPM > 98 && plan.targetBPM < 118,
                 "bpm=\(plan.targetBPM)"
             )
         case .failure(let message):

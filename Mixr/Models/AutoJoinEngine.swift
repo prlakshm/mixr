@@ -408,6 +408,45 @@ nonisolated enum AutoJoinEngine {
 
     // MARK: Opening fade + mix staging
 
+    /// Incoming clip swells from quiet to full while the outgoing yields.
+    /// Real overlap — not both sides fading to a hole.
+    static let takeoverBeats: Double = 4
+
+    static func applyTakeoverJoin(
+        prev: inout AutoClipPlacement,
+        next: inout AutoClipPlacement,
+        beatSec: Double,
+        beats: Double = takeoverBeats
+    ) {
+        let overlapSec = max(beatSec, beats * beatSec)
+        let needEnd = next.timelineStart + overlapSec
+        if prev.timelineEnd < needEnd - 0.01 {
+            prev.timelineDuration = max(prev.timelineDuration, needEnd - prev.timelineStart)
+        }
+        let curve = AutoTransitionEnvelope.equalPowerCurveName
+        prev.fadeOut = ClipTransition(type: .crossfade, duration: beats, curve: curve)
+        next.fadeIn = ClipTransition(type: .crossfade, duration: beats, curve: curve)
+        next.overlapsPreviousSeconds = max(next.overlapsPreviousSeconds, overlapSec)
+    }
+
+    /// Outgoing fades down into the cut; incoming stays at full.
+    /// Title-hook tokens must not sit inside an incoming swell.
+    static func applyYieldJoin(
+        prev: inout AutoClipPlacement,
+        next: inout AutoClipPlacement,
+        beats: Double = takeoverBeats
+    ) {
+        if prev.timelineEnd > next.timelineStart + 0.05 {
+            let trimmed = next.timelineStart - prev.timelineStart
+            if trimmed >= 0.05 {
+                prev.timelineDuration = trimmed
+            }
+        }
+        let curve = AutoTransitionEnvelope.equalPowerCurveName
+        prev.fadeOut = ClipTransition(type: .crossfade, duration: beats, curve: curve)
+        next.fadeIn = .hardCut
+    }
+
     static func applyOpeningFadeIn(
         placements: inout [AutoClipPlacement],
         beatSec: Double,
@@ -545,50 +584,108 @@ nonisolated enum AutoJoinEngine {
                 && $0.timelineDuration > beatSec * 2
         }
         // Intro / verse full-mix must not keep playing under the isolated
-        // title vocal. Trim at the title start — do not leave a ducked
-        // full-mix tail (that still has drums + a second vocal).
+        // title vocal. Trim just past the title start with an equal-power
+        // fade that OVERLAPS the entrance by one beat — trimming flush at
+        // the title start leaves a near-silent hole while the fade finishes
+        // before the ducked stems arrive. One fading beat of full-mix tail
+        // under the first word keeps energy continuous without burying ASR.
         if let hookStart = titleVocalWindows.map(\.timelineStart).min() {
             for i in placements.indices {
                 let p = placements[i]
                 guard p.role == .dominant, p.stemKind != .vocals else { continue }
-                guard p.timelineStart < hookStart - 0.05, p.timelineEnd > hookStart + 0.05 else { continue }
-                placements[i].timelineDuration = max(0.05, hookStart - p.timelineStart)
-                placements[i].fadeOut = .hardCut
+                // A clip spanning the entrance is trimmed to one beat past
+                // it; a clip ending flush at the entrance is EXTENDED one
+                // beat past it. Either way the equal-power fade-out crosses
+                // the title start instead of completing before it (which
+                // left a near-silent pre-title hole).
+                let spans = p.timelineStart < hookStart - 0.05 && p.timelineEnd > hookStart + 0.05
+                let endsFlush = p.timelineStart < hookStart - 0.05
+                    && abs(p.timelineEnd - hookStart) <= max(0.1, beatSec * 0.6)
+                guard spans || endsFlush else { continue }
+                placements[i].timelineDuration = max(0.05, hookStart + beatSec - p.timelineStart)
+                placements[i].overlapsPreviousSeconds = 0
+                placements[i].fadeOut = ClipTransition(
+                    type: .crossfade,
+                    duration: 2,
+                    curve: AutoTransitionEnvelope.equalPowerCurveName
+                )
+            }
+            for i in placements.indices where isTitleHookCopy(placements[i])
+                && abs(placements[i].timelineStart - hookStart) < 0.05 {
+                placements[i].overlapsPreviousSeconds = max(
+                    placements[i].overlapsPreviousSeconds, beatSec
+                )
             }
         }
         // Stacked drums+bass+other at planner duck (~0.62 each) bury the
         // isolated title token. Offline mixdown has no blur DSP, so volume
         // must carry the duck. Cap overlapping supporting stems and any
         // full-mix duplicate under the title; never the vocal.
+        //
+        // The hard duck is TIME-LIMITED: it holds for the ASR probe window
+        // (first ~4 s of each title vocal window) and then releases to
+        // `titleInstrumentalOpenVolume`, so rests between vocal lines keep
+        // the groove instead of collapsing into near-silence holes.
+        // Placements spanning the release point are split sample-continuously.
+        let duckVol = AutoGainPolicy.roleStagingVolume(role: .titleBed)
+        let openVol = AutoGainPolicy.titleInstrumentalOpenVolume
+        let probeIntervals: [(Double, Double)] = titleVocalWindows.map {
+            ($0.timelineStart, $0.timelineStart + AutoGainPolicy.titleDuckProbeSeconds)
+        }
+        func inProbe(_ t: Double) -> Bool {
+            probeIntervals.contains { t >= $0.0 - 0.01 && t < $0.1 - 0.01 }
+        }
+        var splitTail: [AutoClipPlacement] = []
         for i in placements.indices {
             let p = placements[i]
             if p.stemKind == .vocals { continue }
             if isPivotGrain(p) { continue }
-            let underTitle = titleVocalWindows.contains { v in
-                let overlap = min(v.timelineEnd, p.timelineEnd) - max(v.timelineStart, p.timelineStart)
-                return overlap > beatSec * 0.5
-            }
-            guard underTitle else { continue }
+            let maxOverlap = titleVocalWindows.map { v in
+                min(v.timelineEnd, p.timelineEnd) - max(v.timelineStart, p.timelineStart)
+            }.max() ?? 0
+            guard maxOverlap > beatSec * 0.5 else { continue }
             if p.stemKind == nil {
-                placements[i].volume = 0
+                // A full-mix duplicate RUNNING under the title gets muted —
+                // but a one-beat equal-power fade tail crossing the entrance
+                // is the handoff overlap, not a duplicate. Muting it re-opens
+                // the pre-title hole.
+                if maxOverlap > beatSec * 1.25 {
+                    placements[i].volume = 0
+                }
                 continue
             }
-            placements[i].volume = min(
-                p.volume,
-                AutoGainPolicy.roleStagingVolume(role: .titleBed)
-            )
-        }
-        for i in placements.indices {
-            let p = placements[i]
-            let isTitleVocal = titleVocalWindows.contains {
-                $0.songID == p.songID
-                    && $0.stemKind == .vocals
-                    && abs($0.timelineStart - p.timelineStart) < 0.05
+            // Boundaries where the duck state flips inside this placement.
+            var cuts: [Double] = []
+            for (s, e) in probeIntervals {
+                for b in [s, e] where b > p.timelineStart + 0.05 && b < p.timelineEnd - 0.05 {
+                    cuts.append(b)
+                }
             }
-            if isTitleVocal {
-                placements[i].fadeIn = .hardCut
+            cuts.sort()
+            let edges = [p.timelineStart] + cuts + [p.timelineEnd]
+            var segments: [AutoClipPlacement] = []
+            for k in 0..<(edges.count - 1) {
+                let segStart = edges[k]
+                let segEnd = edges[k + 1]
+                guard segEnd - segStart > 0.01 else { continue }
+                var seg = p
+                seg.timelineStart = segStart
+                seg.timelineDuration = segEnd - segStart
+                seg.sourceStart = p.sourceStart + (segStart - p.timelineStart) * p.tempoRatio
+                let mid = (segStart + segEnd) / 2
+                seg.volume = min(p.volume, inProbe(mid) ? duckVol : openVol)
+                seg.continuesPrevious = k > 0 || p.continuesPrevious
+                if k > 0 { seg.fadeIn = .hardCut }
+                if k < edges.count - 2 { seg.fadeOut = .hardCut }
+                segments.append(seg)
             }
+            guard var first = segments.first else { continue }
+            first.continuesPrevious = p.continuesPrevious
+            placements[i] = first
+            splitTail.append(contentsOf: segments.dropFirst())
         }
+        placements.append(contentsOf: splitTail)
+        placements.sort { $0.timelineStart < $1.timelineStart }
         guard let titleHook = (titleVocals.min(by: { $0.timelineStart < $1.timelineStart })
                 ?? titleVocalWindows.min(by: { $0.timelineStart < $1.timelineStart }))
                 ?? titleVocals.first else { return }
