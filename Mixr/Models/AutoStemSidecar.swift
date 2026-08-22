@@ -24,11 +24,15 @@ struct AutoStemSet: Sendable, Equatable {
     var other: URL? = nil
     /// Whisper word timestamps next to Demucs stems (`lyrics.json`).
     var lyrics: URL? = nil
+    /// Offline loudness measurements next to the stems (`analysis.json`,
+    /// written by Scripts-side `make_sidecars.py`). Absent on older crates.
+    var analysis: URL? = nil
 
     static let empty = AutoStemSet()
 
     var isEmpty: Bool {
-        vocals == nil && drums == nil && bass == nil && other == nil && lyrics == nil
+        vocals == nil && drums == nil && bass == nil && other == nil
+            && lyrics == nil && analysis == nil
     }
 
     var hasVocals: Bool { vocals != nil }
@@ -142,7 +146,94 @@ enum AutoStemResolver {
         if fileExists(lyrics) {
             set.lyrics = lyrics
         }
+        let analysis = directory.appendingPathComponent("analysis.json")
+        if fileExists(analysis) {
+            set.analysis = analysis
+        }
         return set
+    }
+}
+
+// MARK: - analysis.json (offline loudness beside the stems)
+
+/// ITU-R BS.1770-4 measurements produced offline by `make_sidecars.py`.
+///
+/// Auto used to invent stem makeup gain from hardcoded constants because
+/// nothing on device could measure loudness — `vocalStemMakeupDefault`
+/// assumes every vocal stem sits 4.0 dB under its mix, but the real crate
+/// ranges 3.6…5.8 dB, so the constant is ~2 dB wrong on most songs. When
+/// this sidecar is present the engine uses the measured value instead.
+struct AutoLoudnessSidecar: Sendable, Equatable {
+    struct Measurement: Sendable, Equatable {
+        var lufs: Double
+        var truePeakDB: Double
+        /// Linear gain that lifts this stem to the full mix's loudness.
+        var makeupToMixGain: Double?
+    }
+
+    var fullMixLUFS: Double?
+    var stems: [AutoStemKind: Measurement] = [:]
+    /// beat_this downbeats (schema 2). The measured bar grid — downbeat
+    /// PHASE is the input every phrase decision depends on.
+    var downbeats: [Double] = []
+    /// Chorus-island candidates measured from the isolated vocal stem
+    /// (schema 2): sustained top-band vocal energy on the bar grid.
+    struct VocalSection: Sendable, Equatable {
+        var startSeconds: Double
+        var endSeconds: Double
+        var bars: Int
+        var vocalScore: Double
+    }
+    var vocalSections: [VocalSection] = []
+
+    /// Measured makeup for a stem, or nil when unmeasured (caller falls
+    /// back to the policy default).
+    func makeupGain(for kind: AutoStemKind) -> Double? {
+        stems[kind]?.makeupToMixGain
+    }
+
+    static func load(url: URL) -> AutoLoudnessSidecar? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return parse(data)
+    }
+
+    static func parse(_ data: Data) -> AutoLoudnessSidecar? {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return nil
+        }
+        var out = AutoLoudnessSidecar()
+        if let mix = root["fullMix"] as? [String: Any] {
+            out.fullMixLUFS = (mix["lufs"] as? NSNumber)?.doubleValue
+        }
+        if let beats = root["beats"] as? [String: Any],
+           let dbs = beats["downbeats"] as? [NSNumber] {
+            out.downbeats = dbs.map(\.doubleValue)
+        }
+        if let secs = root["vocalSections"] as? [[String: Any]] {
+            out.vocalSections = secs.compactMap { raw in
+                guard let a = (raw["startSeconds"] as? NSNumber)?.doubleValue,
+                      let b = (raw["endSeconds"] as? NSNumber)?.doubleValue
+                else { return nil }
+                return VocalSection(
+                    startSeconds: a,
+                    endSeconds: b,
+                    bars: (raw["bars"] as? NSNumber)?.intValue ?? 0,
+                    vocalScore: (raw["vocalScore"] as? NSNumber)?.doubleValue ?? 0
+                )
+            }
+        }
+        guard let stems = root["stems"] as? [String: Any] else { return out }
+        for kind in AutoStemKind.allCases {
+            guard let raw = stems[kind.rawValue] as? [String: Any],
+                  let lufs = (raw["lufs"] as? NSNumber)?.doubleValue
+            else { continue }
+            out.stems[kind] = Measurement(
+                lufs: lufs,
+                truePeakDB: (raw["truePeakDb"] as? NSNumber)?.doubleValue ?? 0,
+                makeupToMixGain: (raw["makeupToMixGain"] as? NSNumber)?.doubleValue
+            )
+        }
+        return out
     }
 }
 

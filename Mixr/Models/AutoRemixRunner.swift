@@ -39,7 +39,9 @@ enum AutoRemixRunner {
         tuning: AutoTuning = .standard,
         seed: UInt64 = UInt64(Date().timeIntervalSince1970),
         signals: [UUID: SongSignalFeatures] = [:],
-        stemsRoot: URL? = nil
+        stemsRoot: URL? = nil,
+        pcmSources: [UUID: AutoOfflineMixdown.Source]? = nil,
+        pcmStemSources: [UUID: [AutoStemKind: AutoOfflineMixdown.Source]] = [:]
     ) -> Outcome {
         var tuning = tuning
         if let stemsRoot {
@@ -59,7 +61,7 @@ enum AutoRemixRunner {
             return .failure(message: "Auto couldn’t build an arrangement from the current songs.")
         }
 
-        let validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+        var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
         var staged = validated
         AutoJoinEngine.boostJoinClipVolumes(
             placements: &staged.placements,
@@ -68,6 +70,34 @@ enum AutoRemixRunner {
             barSec: staged.barSeconds,
             profiles: profiles
         )
+        // The engine LISTENS before handing over: when decoded PCM is
+        // available (test harnesses, offline bounce; the app can pass it for
+        // export), render the plan, measure the perceptual invariants, and
+        // run one repair round. Residuals surface as plan warnings.
+        // The app passes no PCM: decode it here (lean 11 kHz mono) so the
+        // same loop that gates the harness also gates every in-app run.
+        var listenSources = pcmSources ?? [:]
+        var listenStems = pcmStemSources
+        if listenSources.isEmpty, ProcessInfo.processInfo.environment["MIXR_NO_LISTEN_REPAIR"] != "1" {
+            listenSources = AutoPCMLoader.sources(for: songTracks)
+            if listenStems.isEmpty, !listenSources.isEmpty {
+                listenStems = AutoPCMLoader.stemSources(for: songTracks, tuning: tuning)
+            }
+        }
+        if !listenSources.isEmpty,
+           ProcessInfo.processInfo.environment["MIXR_NO_LISTEN_REPAIR"] != "1" {
+            var listenDecisions = staged.decisions
+            _ = AutoListenLoop.verifyAndRepair(
+                plan: &staged,
+                profiles: profiles,
+                tuning: tuning,
+                sources: listenSources,
+                stemSources: listenStems,
+                decisions: &listenDecisions
+            )
+            staged.decisions = listenDecisions
+        }
+
         guard !staged.placements.isEmpty else {
             return .failure(message: "Auto couldn’t produce a valid arrangement. Try songs with clearer structure or longer clips.")
         }

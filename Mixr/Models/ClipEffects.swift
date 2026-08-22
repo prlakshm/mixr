@@ -135,9 +135,35 @@ nonisolated struct ClipEffectSettings: Equatable, Sendable, Codable {
     }
 
     /// Pitch intensity 0…1 — backed by `levels["pitchUp"]` (0…100).
+    ///
+    /// This is a UI INTENSITY, not a musical interval: 1.0 means
+    /// `pitchFullScaleSemitones`, not one semitone. Code that wants a
+    /// specific interval must go through `setPitch(semitones:)` /
+    /// `pitchSemitones` — writing this directly is how a −1 st bed
+    /// transpose shipped as −4 st.
     var pitchAmount: Double {
         get { level(for: "pitchUp") / 100.0 }
         set { setLevel(newValue * 100.0, for: "pitchUp") }
+    }
+
+    /// Full-scale pitch range: `pitchAmount` 1.0 == one octave. SINGLE
+    /// SOURCE OF TRUTH for the intensity→interval mapping — ClipEffectDSP's
+    /// cents conversion and every planner call site derive from this
+    /// constant instead of hardcoding their own (they disagreed: the DSP
+    /// used 1200 cents while the mashup planner assumed 3 semitones).
+    static let pitchFullScaleSemitones = 12.0
+
+    /// Musical interval this clip actually renders, in semitones
+    /// (negative = down). Derived from `pitchAmount` + `pitchDirection`.
+    var pitchSemitones: Double {
+        get { pitchAmount * Self.pitchFullScaleSemitones * pitchDirection.centsSign }
+        set { setPitch(semitones: newValue) }
+    }
+
+    /// Request a specific musical interval. Clamps to the full-scale range.
+    mutating func setPitch(semitones: Double) {
+        pitchDirection = semitones < 0 ? .down : .up
+        pitchAmount = min(1.0, abs(semitones) / Self.pitchFullScaleSemitones)
     }
 
     /// Flanger intensity 0…1 — backed by `levels["flanger"]` (0…100).

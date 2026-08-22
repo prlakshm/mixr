@@ -46,6 +46,27 @@ Never cut the best / most identifiable lines. Opening titles and hook lines
 
 A first Deck A hook that is a 2–4 bar teaser of the opening title is a fail.
 
+## SUPERSEDED (2026-08-20): sweep join replaces the grain wallpaper
+
+Product decision (owner, 2026-08-20): the 1-beat grain loop and verbatim
+section repeats "sound like a broken record" — **removed**. The Xirex
+wallpaper section below is retained for history only; the join grammar is now:
+
+1. **Sweep join**: outgoing material plays STRAIGHT THROUGH the 2-bar window
+   under a rising low-pass (per-bar sample-continuous segments), the outgoing
+   lead tapering ~35% so it never competes.
+2. **One decaying echo throw** of the outgoing last beat marks the window
+   start — repeats decay, never loop.
+3. **Vocal ride-in**: the incoming vocal stem teases (its run-up line, ~0.62×
+   the lead) over the outgoing music, ending at the window.
+4. Take-out SFX + **hard cut at full volume** on the drop downbeat (unchanged).
+5. **Repetition only appears TRANSFORMED**: held sections play pass 1
+   stripped / pass 2 full (before a drop) or pass 2 sweeping down (after);
+   never two verbatim passes; never constant-rate token loops.
+
+Enforced by golden gates "no grain stutter loops" and "no verbatim repeated
+passes", plus the sweep-join assertions in the club/join harnesses.
+
 ## Locked gold-standard join (DJ Xirex)
 
 Reference mix: **Oops I Did It Again → …Baby One More Time** (Instagram reel).
@@ -112,7 +133,8 @@ Typical:
   (hard cut; no fade-in). If the clip is a quieter stem, apply RMS makeup
   (clip volume may exceed 1.0). Matching clip volume 1:1 is not enough —
   isolated title vocals read ~2–3 dB hotter in the mix. Raise Drop 1; do not duck or remove vocal-stem title copies.
-- Trim **every** non-grain song clip out of the wallpaper window — no leftover-bed floor. A short outgoing chorus tail playing through `[loopStart, drop)` is a failed pivot.
+- Trim the outgoing **LEAD** out of the wallpaper window: full-mix and bed-vocal clips are cut at `loopStart`. A short outgoing chorus tail playing through `[loopStart, drop)` is a failed pivot — a second lead under the join is mud.
+- **Keep a ducked instrumental blend floor.** The bed's `other` stem rides `[loopStart, drop)` at `AutoGainPolicy.pivotBedFloorVolume` and hands over on the Drop 1 downbeat. Drums and bass still drop out, so the kick/sub subtraction that builds tension is unchanged (measured −28.7 dB at the seam — that step is intended). **Revised 2026-08-20 on listening feedback:** cutting *every* layer at `loopStart` made the mix step from full band to one isolated stuttering vocal in a single sample, heard as "the switch comes from nowhere / not a soft blend". Two decks genuinely overlapping is what makes a join read as a blend. One authority implements this: `AutoJoinEngine.clearPivotWindow` — the planner must call it, never re-implement it.
 - bed under hook: audible (don’t mute) with HPF/blur carving the bed vocal
 - never fade both sides toward silence at a pivot join
 
@@ -189,6 +211,19 @@ and not an equal-power fade-in on the same-song hook return. Do not emit
   - kick ownership / pulse gating may read the **drums** stem (one kick).
   If absent, keep today’s proxies: last 1-beat of the completed phrase +
   HPF/blur for hook-replace. Never block planning on missing stems.
+- **Loudness sidecar** `…/Stems/htdemucs_ft/<basename>/analysis.json`, written
+  offline by `Mixr/make_sidecars.py` (pyloudnorm, MIT). Carries ITU-R BS.1770-4
+  integrated LUFS + true peak per stem and for the full mix, plus
+  `makeupToMixGain` — the linear gain that lifts a stem to its mix's loudness.
+  Gain staging MUST prefer this over the hardcoded fallbacks: measured vocal
+  makeup across the crate is 3.6…5.8 dB while `vocalStemMakeupDefault` assumes
+  a flat 4.0 dB, so the constant is ~2 dB wrong on most songs. Read via
+  `AutoLoudnessSidecar`; absent → fall back to the constant.
+- **Python stays offline.** Analysis/ML runs on the Mac and leaves measurements
+  next to the audio; the app remains Swift/AVFoundation with no Python, Demucs,
+  or PyTorch runtime. Deliberately NOT used: `allin1`/`madmom` — its model
+  weights are CC BY-NC-SA (non-commercial), which does not fit a shipping
+  App Store build.
 
 ## Planning hierarchy
 

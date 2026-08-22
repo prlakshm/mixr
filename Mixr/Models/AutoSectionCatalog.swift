@@ -69,6 +69,9 @@ struct AutoSongProfile: Sendable {
     /// Bed/hook scoring keeps full-mix `drumStrength`. Pulse reads
     /// `pulseDrumStrength` — thin full-mix is never overridden by a loud stem.
     var stemDrumStrength: Double? = nil
+    /// Offline BS.1770-4 loudness from `analysis.json` (nil when absent).
+    /// Lets gain staging use MEASURED stem makeup instead of a constant.
+    var loudness: AutoLoudnessSidecar? = nil
 
     var lowConfidence: Bool { analysis.analysisConfidence < AutoTuning.standard.lowConfidenceThreshold }
 
@@ -140,8 +143,22 @@ enum AutoSectionCatalog {
             lyricsURL: stems.lyrics,
             title: track.title
         ) ?? withVocals
-        let analysis = SongAnalyzer.analyze(track: track, signal: enrichedSignal)
+        var analysis = SongAnalyzer.analyze(track: track, signal: enrichedSignal)
         let stemDrumStrength = AutoStemKickEnergy.drumStrength(from: stems.drums)
+        let loudness = stems.analysis.flatMap { AutoLoudnessSidecar.load(url: $0) }
+        // Measured bar grid beats an estimated one: beat_this downbeats from
+        // the sidecar replace the onset-regularity guess when present and
+        // plausibly spaced. A wrong downbeat PHASE shifts every join half a
+        // bar — this is the single highest-leverage sidecar field.
+        if ProcessInfo.processInfo.environment["MIXR_NO_SIDECAR_GRID"] != "1",
+           let grid = loudness?.downbeats, grid.count >= 8 {
+            let spacing = zip(grid, grid.dropFirst()).map(-)
+            let med = spacing.sorted()[spacing.count / 2]
+            let expected = -analysis.barSeconds
+            if abs(med - expected) < analysis.barSeconds * 0.12 {
+                analysis.downbeats = grid
+            }
+        }
         // Do not overwrite analysis.drumStrength — bed/hook scoring and the
         // Britney title/groove lock must keep full-mix curves. Pulse reads
         // stemDrumStrength separately.
@@ -267,7 +284,8 @@ enum AutoSectionCatalog {
             anchorScore: anchorScore,
             featureScore: featureScore,
             stems: stems,
-            stemDrumStrength: stemDrumStrength
+            stemDrumStrength: stemDrumStrength,
+            loudness: loudness
         )
     }
 }

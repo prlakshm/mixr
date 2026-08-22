@@ -226,6 +226,10 @@ struct AutoClipPlacement: Sendable {
     /// split made only to change effects). Continuous edges get no fades
     /// of any kind — the audio underneath is continuous.
     var continuesPrevious: Bool = false
+    /// Sweep-join segments only: this segment's planner volume relative to
+    /// the head clip it continues. Staging re-levels the head; the segment
+    /// follows as head × shape (AutoJoinEngine.carryStagingIntoContinuations).
+    var continuationShape: Double? = nil
     /// > 0 when this placement deliberately OVERLAPS another placement of
     /// the same song — equal-power crossfade, or a short supporting DJ
     /// echo / stutter layer under the lead. The validator only permits
@@ -385,6 +389,33 @@ struct AutoIntentionalGap: Sendable, Equatable {
 
 // MARK: - Plan
 
+// MARK: - Join Contract
+//
+// SINGLE AUTHORITY for join geometry. The planner/join engine WRITES one
+// contract per join; every downstream pass READS the contract instead of
+// re-deriving the join from structural signatures ("a 1-beat clip near a
+// drop"). Three duplicated detectors caused three separate bugs when the
+// grammar changed (a stale-index trap, a re-floored taper, a re-cleared
+// window) — signatures drift, contracts don't.
+struct AutoJoinContract: Sendable, Equatable {
+    enum Kind: String, Sendable {
+        case sweepJoin   // window rides under a closing filter → hard cut
+        case hardCut     // plain drop entrance at full volume
+        case takeover    // different-song equal-power overlap
+    }
+    var kind: Kind
+    /// Window start (sweepJoin) or the boundary itself.
+    var windowStart: Double
+    /// The entrance downbeat — the hard cut / handoff moment.
+    var cutAt: Double
+    var outgoingSongID: UUID?
+    var incomingSongID: UUID?
+
+    nonisolated func containsWindow(_ t: Double) -> Bool {
+        t >= windowStart - 0.05 && t < cutAt - 0.02
+    }
+}
+
 struct AutoRemixPlan: Sendable {
     var id = UUID()
     var mode: AutoRemixMode
@@ -407,6 +438,9 @@ struct AutoRemixPlan: Sendable {
     var pulsePolicy: AutoClubPulse.Policy? = nil
     /// Pulse regions on the timeline (mute kick in build-out / void / break).
     var pulseRegions: [AutoClubPulse.Region] = []
+    /// Join geometry written by the join engine; passes read this, never
+    /// re-derive joins from clip shapes.
+    var joinContracts: [AutoJoinContract] = []
     /// Recipe flavor bias (Calvin / Guetta / … instincts).
     var clubFlavor: AutoClubFlavor? = nil
     /// Mashup: song chosen as Drop 1 sung hook (nil for one-song remix).

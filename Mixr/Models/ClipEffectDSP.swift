@@ -80,8 +80,10 @@ nonisolated enum ClipEffectDSP {
         let timePitchOverlap: Float = abs(playbackSpeed - 1.0) > 0.08 ? 32 : 8
 
         // ── PITCH ──
-        // pitchInCents = amount * 1200 * (±1). Duration preserved.
-        let pitchCents = Float(pitchAmount * 1200.0 * settings.pitchDirection.centsSign)
+        // Interval comes from ClipEffectSettings.pitchSemitones (the single
+        // authority for the intensity→interval mapping); 100 cents per
+        // semitone. Duration preserved.
+        let pitchCents = Float(settings.pitchSemitones * 100.0)
         let timePitchBypass = pitchAmount <= 0.001 && abs(playbackSpeed - 1.0) < 0.001
 
         // ── BLUR (low-pass) ──

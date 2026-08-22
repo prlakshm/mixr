@@ -2520,8 +2520,8 @@ do {
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             let wanted = bedLyric + 0.42
             check(
-                "pair B: title clip starts on distinctive token, not phrase-start filler",
-                hookSrc > bedLyric && hookSrc < wanted && (wanted - hookSrc) <= 0.35,
+                "pair B: title clip keeps the title's first word",
+                hookSrc <= bedLyric + 0.02 && (wanted - hookSrc) <= 1.8,
                 String(format: "src=%.2f all=%.2f wanted=%.2f", hookSrc, bedLyric, wanted)
             )
             if let bedID = plan.mashupBedSongID {
@@ -2630,16 +2630,13 @@ do {
                 $0.reason.contains("void") && abs($0.end - drop.timelineStart) < 0.05
             }
             let beat = plan.beatSeconds
-            let grains = plan.placements.filter {
-                $0.role == .supporting
-                    && abs($0.timelineDuration - beat) < beat * 0.35
-                    && $0.timelineStart >= drop.timelineStart - plan.barSeconds * 2.5
-                    && $0.timelineStart < drop.timelineStart - 0.02
+            let sweepWindow = plan.pulseRegions.contains {
+                $0.role == .buildOut && abs($0.timelineEnd - drop.timelineStart) < beat * 0.75
             }
             check(
-                "Britney void or Xirex pivot wallpaper before drop",
-                voidOK || grains.count >= 4,
-                "void=\(voidOK) grains=\(grains.count)"
+                "Britney void or sweep-join window before drop",
+                voidOK || sweepWindow,
+                "void=\(voidOK) sweepWindow=\(sweepWindow)"
             )
             check(
                 "Britney solo: pivot join has no quiet void",
@@ -2912,53 +2909,15 @@ do {
                 "earlyChops=\(earlyChops.count)"
             )
 
-            // Pivot wallpaper: 1-beat incoming join-token grains, 4–8× (~1–2 bars), immediately before Drop 1.
-            let beat = plan.beatSeconds
-            let grains = plan.placements.filter { p in
-                p.role == .supporting
-                    && p.songID == vocalID
-                    && abs(p.timelineDuration - beat) < beat * 0.35
-                    && p.timelineStart >= drop1Start - plan.barSeconds * 2.5
-                    && p.timelineStart < drop1Start - 0.02
-            }.sorted { $0.timelineStart < $1.timelineStart }
-            check(
-                "Britney: pivot wallpaper is 4–8× of a 1-beat grain (~1–2 bars)",
-                grains.count >= 4 && grains.count <= 8,
-                "count=\(grains.count)"
-            )
-            if let g0 = grains.first {
-                let sameGrain = grains.allSatisfy { abs($0.sourceStart - g0.sourceStart) < 0.08 }
-                check("Britney: wallpaper chops share one pivot grain source", sameGrain)
+            // Sweep join (2026-08-20, supersedes the grain wallpaper): the
+            // shared assertions cover window coverage, sweep, taper, throw,
+            // and ride-in; here keep only the scorer-consistency check.
+            if let pulseDrop1 = pulseDrops.first {
                 check(
-                    "Britney: pivot loop is HPF/thinned (blur)",
-                    grains.allSatisfy { $0.effects.level(for: MixrEffect.blur.rawValue) >= 36 }
+                    "Britney: pivot hard cut matches pulse Drop 1 (not an earlier fake drop)",
+                    abs(pulseDrop1.timelineStart - drop1Start) < plan.beatSeconds * 0.6,
+                    String(format: "pulseDrop=%.2f guestDrop=%.2f", pulseDrop1.timelineStart, drop1Start)
                 )
-                check(
-                    "Britney: pivot grains stay loud (HPF thins; volume does not duck)",
-                    grains.allSatisfy { $0.volume >= 0.90 },
-                    "vols=\(grains.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
-                )
-                check(
-                    "Britney: pivot grains have no fade-in",
-                    grains.allSatisfy { $0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02 }
-                )
-                if let last = grains.last {
-                    check(
-                        "Britney: Baby hook-replace lands on downbeat after pivot loop",
-                        abs(last.timelineEnd - drop1Start) < plan.beatSeconds * 0.6
-                            || (drop1Start - last.timelineEnd) < plan.beatSeconds * 0.6
-                                && drop1Start >= last.timelineEnd - 0.05,
-                        String(format: "loopEnd=%.2f drop=%.2f", last.timelineEnd, drop1Start)
-                    )
-                    // Scorer consistency: pivot hard-cut time == pulse Drop 1 time.
-                    if let pulseDrop1 = pulseDrops.first {
-                        check(
-                            "Britney: pivot hard cut matches pulse Drop 1 (not an earlier fake drop)",
-                            abs(pulseDrop1.timelineStart - drop1Start) < plan.beatSeconds * 0.6,
-                            String(format: "pulseDrop=%.2f guestDrop=%.2f", pulseDrop1.timelineStart, drop1Start)
-                        )
-                    }
-                }
             }
 
             // Xirex hard cut: incoming Drop 1 is full level, not a fade-in from silence.
@@ -3037,8 +2996,8 @@ do {
                     && $0.timelineDuration > plan.beatSeconds * 1.5
             }
             check(
-                "Britney: no echo-throw wallpaper (pivot loop instead)",
-                echoSpam.isEmpty,
+                "Britney: no echo-throw spam (one sweep-join throw allowed)",
+                echoSpam.count <= 1,
                 "echoes=\(echoSpam.count)"
             )
             check(
@@ -3061,29 +3020,18 @@ do {
                 !unityOnly,
                 "vols=\(Set(songClips.map { String(format: "%.2f", $0.volume) }).sorted().joined(separator: ","))"
             )
-            let beatUnits = MixrTimeline.units(fromSeconds: beat)
+            // Sweep join: the window is applied as riding clips, not grains.
             let drop1Unit = MixrTimeline.units(fromSeconds: drop1Start)
-            let lookbackUnits = MixrTimeline.units(fromSeconds: plan.barSeconds * 2.5)
-            let grainClips = songClips.filter { clip in
-                abs(clip.length - beatUnits) < beatUnits * 0.4
-                    && clip.start >= drop1Unit - lookbackUnits
-                    && clip.start < drop1Unit - MixrTimeline.units(fromSeconds: 0.02)
+            let windowStartUnit = drop1Unit - MixrTimeline.units(fromSeconds: plan.barSeconds * 2)
+            let windowClipsApplied = songClips.filter { clip in
+                clip.start < drop1Unit - MixrTimeline.units(fromSeconds: 0.02)
+                    && clip.start + clip.length > windowStartUnit
             }
             check(
-                "Britney: applied pivot clips stay loud (not a quiet wallpaper hole)",
-                !grainClips.isEmpty && grainClips.allSatisfy { $0.volume >= 0.90 },
-                "n=\(grainClips.count) vols=\(grainClips.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
+                "Britney: applied sweep-window clips exist and stay audible (no wallpaper hole)",
+                !windowClipsApplied.isEmpty && windowClipsApplied.contains { $0.volume >= 0.30 },
+                "n=\(windowClipsApplied.count) vols=\(windowClipsApplied.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
             )
-            if let g0 = grains.first {
-                let g0Start = MixrTimeline.units(fromSeconds: g0.timelineStart)
-                if let appliedGrain = grainClips.min(by: { abs($0.start - g0Start) < abs($1.start - g0Start) }) {
-                    check(
-                        "Britney: applier copies pivot placement volume onto MixrClip",
-                        abs(appliedGrain.volume - g0.volume) < 0.02,
-                        String(format: "clip=%.2f placement=%.2f", appliedGrain.volume, g0.volume)
-                    )
-                }
-            }
             if let drop1 = dropLeads.min(by: { $0.timelineStart < $1.timelineStart }) {
                 let dStart = MixrTimeline.units(fromSeconds: drop1.timelineStart)
                 let dropClips = songClips.filter { abs($0.start - dStart) < MixrTimeline.units(fromSeconds: 0.08) }
@@ -3114,7 +3062,7 @@ do {
                     && ($0.stemKind == .drums || $0.stemKind == .bass || $0.stemKind == nil)
                     && $0.timelineDuration >= plan.barSeconds * 4
             }.map(\.volume)
-            let joinVols = grains.map(\.volume) + drop1Vols + bedKickVols
+            let joinVols = drop1Vols + bedKickVols
             check(
                 "Britney: pivot and Drop 1 clips are at least as loud as the bed verse",
                 !joinVols.isEmpty && verseVol > 0 && joinVols.allSatisfy { $0 + 0.001 >= verseVol },
@@ -3383,16 +3331,16 @@ do {
               plan.clubFlavor?.bias.maximalistStacks == true)
         check("Diplo flavor allows half-time drop",
               plan.clubFlavor?.bias.halfTimeDrop == true)
-        // Pivot wallpaper (1-beat grains) may sit in the mix window; no echo-throw spam.
+        // Sweep join: exactly ONE decaying echo throw per join is the
+        // grammar; only throw SPAM is banned.
         let echoes = plan.placements.filter { p in
             p.role == .supporting
                 && p.songID == song.id
                 && p.fadeOut.type == .echoOut
-                && p.timelineDuration > plan.beatSeconds * 1.5
         }
         check(
-            "No echo-throw wallpaper (pivot loop replaces it)",
-            echoes.isEmpty,
+            "No echo-throw spam (one decaying throw per join)",
+            echoes.count <= 2,
             "echoes=\(echoes.count)"
         )
         let grains = plan.placements.filter { p in
@@ -3522,23 +3470,25 @@ do {
                 String(format: "sourceStart=%.2f", first.sourceStart)
             )
         }
-        let grains = plan.placements.filter { p in
-            p.role == .supporting
-                && p.songID == song.id
-                && abs(p.timelineDuration - beat) < beat * 0.35
-                && p.timelineStart >= drop0.timelineStart - bar * 2.5
-                && p.timelineStart < drop0.timelineStart - 0.02
+        let sweepWindow = plan.pulseRegions.first {
+            $0.role == .buildOut && abs($0.timelineEnd - drop0.timelineStart) < beat * 0.75
         }
         check(
-            "Solo remix: pivot wallpaper 4–8× before Drop 1",
-            grains.count >= 4 && grains.count <= 8,
-            "count=\(grains.count)"
+            "Solo remix: sweep-join window before Drop 1",
+            sweepWindow != nil,
+            String(format: "drop=%.2f", drop0.timelineStart)
         )
-        check(
-            "Solo remix: pivot grains stay loud",
-            grains.allSatisfy { $0.volume >= 0.90 },
-            "vols=\(grains.map { String(format: "%.2f", $0.volume) }.joined(separator: ","))"
-        )
+        if let w = sweepWindow {
+            let segs = plan.placements.filter {
+                $0.continuesPrevious && $0.timelineStart >= w.timelineStart - 0.1
+                    && $0.timelineEnd <= drop0.timelineStart + 0.1
+            }
+            check(
+                "Solo remix: sweep segments ride the window (no stutter loop)",
+                segs.count >= 2 && segs.contains { $0.volume >= 0.30 },
+                "segs=\(segs.count)"
+            )
+        }
         check(
             "Solo remix records pivotWallpaperLoop",
             plan.decisions.contains { $0.kind == .pivotWallpaperLoop }
@@ -3553,7 +3503,7 @@ do {
                     && abs($0.timelineStart - d2.timelineStart) <= bar * 0.75
             }.count
         }()
-        check("No echo-throw wallpaper on Drop 2", drop2Echoes == 0, "count=\(drop2Echoes)")
+        check("No echo-throw spam on Drop 2 (one sweep-join throw allowed)", drop2Echoes <= 1, "count=\(drop2Echoes)")
     case .failure(let message):
         check("Pivot wallpaper solo remix", false, message)
     }
@@ -3809,118 +3759,148 @@ func assertMashupPivotFromIncomingGuest(
     outgoingTokenTime: Double? = nil,
     label: String
 ) {
-    let grains = drop1JoinGrains(in: plan)
+    _ = guestHookStart
+    _ = joinTokenTime
+    _ = outgoingTokenTime
+    // Sweep-join grammar (2026-08-20, supersedes the Xirex grain wallpaper —
+    // "they sound like a broken record"): the window before Drop 1 keeps the
+    // OUTGOING material playing under a rising low-pass with the lead
+    // tapering, one decaying echo throw marks the join, the incoming guest
+    // teases via the vocal ride-in, and Drop 1 stays a hard cut.
+    guard let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) else {
+        check("\(label): sweep join has a Drop 1", false)
+        return
+    }
+    let beatSec = plan.beatSeconds
+    let window = plan.pulseRegions.first {
+        $0.role == .buildOut && abs($0.timelineEnd - drop1) < beatSec * 0.75
+    }
     check(
-        "\(label): pivot wallpaper is 4–8× of a 1-beat grain",
-        grains.count >= 4 && grains.count <= 8,
-        "count=\(grains.count)"
+        "\(label): sweep window (buildOut) ends on Drop 1",
+        window != nil,
+        String(format: "drop=%.2f", drop1)
     )
+    let loopStart = window?.timelineStart ?? (drop1 - plan.barSeconds * 2)
+
+    // 1) No grain stutter: at most one short supporting clip in the window,
+    //    and it must be the decaying echo throw.
+    let shorts = plan.placements.filter { p in
+        p.role == .supporting
+            && (p.stemKind == .vocals || p.stemKind == nil)
+            && !p.continuesPrevious
+            && p.timelineDuration <= beatSec * 1.4
+            && p.timelineStart >= loopStart - 0.1
+            && p.timelineStart < drop1 - 0.02
+    }
+    let throwClips = shorts.filter {
+        $0.fadeOut.type == .echoOut || $0.effects.level(for: MixrEffect.echo.rawValue) >= 40
+    }
     check(
-        "\(label): pivot grains are the incoming guest, not the outgoing bed tail",
-        !grains.isEmpty && grains.allSatisfy { $0.songID == guestID },
-        "n=\(grains.count) guest=\(grains.filter { $0.songID == guestID }.count)"
+        "\(label): no grain loop — one decaying echo throw at most",
+        shorts.count <= 1 && throwClips.count == shorts.count,
+        "shorts=\(shorts.count) throws=\(throwClips.count)"
     )
+    let skippedLoop = plan.decisions.contains { $0.kind == .skippedPivotWallpaper }
+    if !skippedLoop {
+        check(
+            "\(label): echo throw marks the window start",
+            throwClips.contains { abs($0.timelineStart - loopStart) < beatSec },
+            throwClips.map { String(format: "t=%.2f", $0.timelineStart) }.joined(separator: ",")
+        )
+    }
+
+    // 2) Window coverage: material rides through — no hole, no bare stutter.
+    var covered = 0.0
+    var t = loopStart + 0.05
+    let step = beatSec * 0.25
+    while t < drop1 - 0.05 {
+        let has = plan.placements.contains {
+            $0.timelineStart <= t && $0.timelineEnd >= t && $0.volume > 0.15
+        }
+        if has { covered += step }
+        t += step
+    }
+    let windowDur = drop1 - loopStart - 0.1
+    check(
+        "\(label): sweep window is covered by riding material (no hole)",
+        covered >= windowDur * 0.9,
+        String(format: "covered=%.2f of %.2f", covered, windowDur)
+    )
+
+    // 3) The filter SWEEPS shut: blur rises across the outgoing material.
+    let sweepSegs = plan.placements
+        .filter { $0.continuesPrevious && $0.timelineStart >= loopStart - 0.1 && $0.timelineEnd <= drop1 + 0.1 }
+        .sorted { $0.timelineStart < $1.timelineStart }
+    if sweepSegs.count >= 2 {
+        // Parallel stem layers share timestamps, so compare the window's
+        // first beat against its last beat by MAX blur, not by sort order.
+        let bStart = sweepSegs.filter { $0.timelineStart < loopStart + beatSec }
+            .map { $0.effects.level(for: MixrEffect.blur.rawValue) }.min() ?? 0
+        let bEnd = sweepSegs.filter { $0.timelineEnd > drop1 - beatSec }
+            .map { $0.effects.level(for: MixrEffect.blur.rawValue) }.max() ?? 0
+        check(
+            "\(label): low-pass sweeps shut across the window",
+            bEnd > bStart + 8 && bEnd >= 40,
+            String(format: "blur %.0f -> %.0f", bStart, bEnd)
+        )
+    } else {
+        check("\(label): low-pass sweeps shut across the window", false, "segments=\(sweepSegs.count)")
+    }
+
+    // 4) The outgoing LEAD may ride the window ONLY tapered — by the final
+    //    segment it is filtered and reduced, so the ride-in owns the ear.
+    let leadSegs = sweepSegs.filter { $0.stemKind == .vocals || ($0.stemKind == nil && $0.role == .dominant) }
+    if let lastLead = leadSegs.max(by: { $0.timelineStart < $1.timelineStart }) {
+        let preLead = plan.placements
+            .filter { ($0.stemKind == .vocals || ($0.stemKind == nil && $0.role == .dominant))
+                && $0.songID == lastLead.songID && $0.timelineEnd <= loopStart + 0.1 }
+            .map(\.volume).max() ?? lastLead.volume
+        check(
+            "\(label): outgoing lead tapers under the sweep (no competing chorus tail)",
+            lastLead.volume <= preLead * 0.78 + 0.001
+                && lastLead.effects.level(for: MixrEffect.blur.rawValue) >= 40,
+            String(format: "lead end vol=%.2f pre=%.2f blur=%.0f stem=%@ role=%@ t=%.2f src=%.2f",
+                   lastLead.volume, preLead, lastLead.effects.level(for: MixrEffect.blur.rawValue),
+                   lastLead.stemKind?.rawValue ?? "mix", lastLead.role.rawValue,
+                   lastLead.timelineStart, lastLead.sourceStart)
+        )
+    }
+
+    // 5) Incoming tease = the vocal ride-in, ending at the window.
+    let guestHasVocalStem = plan.placements.contains {
+        $0.songID == guestID && $0.stemKind == .vocals
+    }
+    if guestHasVocalStem {
+        let ride = plan.placements.filter {
+            $0.songID == guestID && $0.stemKind == .vocals && $0.role == .supporting
+                && $0.timelineEnd <= loopStart + 0.15
+                && $0.timelineEnd > loopStart - beatSec
+                && $0.timelineDuration >= plan.barSeconds * 0.9
+        }
+        check(
+            "\(label): incoming guest teases via vocal ride-in before the window",
+            !ride.isEmpty,
+            String(format: "loopStart=%.2f rides=%d", loopStart, ride.count)
+        )
+    }
+
+    // 6) Decision dump: sweep join named, with the join token and hard cut.
     let loopDump = plan.decisions
         .filter { $0.kind == .pivotWallpaperLoop }
         .map { $0.detail ?? "" }
         .joined(separator: " | ")
         .lowercased()
+    check(
+        "\(label): dump records the sweep join with a hard cut",
+        loopDump.contains("sweep join") && loopDump.contains("hard cut"),
+        loopDump
+    )
     if let joinTokenLabel {
         check(
-            "\(label): pivot dump is the incoming join token, not the outgoing last line",
-            loopDump.contains(joinTokenLabel.lowercased())
-                && loopDump.contains("incoming-join")
-                && !loopDump.contains("innocent"),
+            "\(label): dump names the join token",
+            loopDump.contains(joinTokenLabel.lowercased()),
             loopDump
         )
-    }
-    if let g0 = grains.first, let joinTokenTime {
-        check(
-            "\(label): pivot grain source is the incoming join token",
-            abs(g0.sourceStart - joinTokenTime) < plan.barSeconds * 1.2,
-            String(format: "src=%.2f token=%.2f", g0.sourceStart, joinTokenTime)
-        )
-    } else if let g0 = grains.first, let guestHookStart {
-        check(
-            "\(label): pivot grain source is on the incoming hook",
-            abs(g0.sourceStart - guestHookStart) < plan.barSeconds * 4,
-            String(format: "src=%.2f hook=%.2f", g0.sourceStart, guestHookStart)
-        )
-    }
-    if let g0 = grains.first, let outgoingTokenTime {
-        check(
-            "\(label): pivot grain is not the outgoing last line",
-            abs(g0.sourceStart - outgoingTokenTime) > plan.barSeconds,
-            String(format: "src=%.2f outgoing=%.2f", g0.sourceStart, outgoingTokenTime)
-        )
-    }
-    if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan) {
-        let loopStart = drop1 - plan.barSeconds * 2
-        let bedID = plan.mashupBedSongID
-        let bedInWallpaper = plan.placements.filter { p in
-            guard p.songID == bedID else { return false }
-            let isGrain = p.role == .supporting
-                && abs(p.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
-            if isGrain { return false }
-            return p.timelineStart < drop1 - 0.02 && p.timelineEnd > loopStart + 0.08
-        }
-        check(
-            "\(label): wallpaper window has no outgoing bed (isolated incoming grains)",
-            bedInWallpaper.isEmpty,
-            bedInWallpaper.map {
-                "\($0.stemKind?.rawValue ?? "mix") t=\(String(format: "%.2f", $0.timelineStart))–\(String(format: "%.2f", $0.timelineEnd)) src=\(String(format: "%.2f", $0.sourceStart))"
-            }.joined(separator: ",")
-        )
-    }
-    if let g0 = grains.first {
-        check(
-            "\(label): pivot dump names grain src= so crate bounce can see the join token",
-            loopDump.contains("src="),
-            loopDump
-        )
-        check(
-            "\(label): pivot grains are loud (RMS makeup), not quieter than the title-hook / verse floor",
-            g0.volume + 0.001 >= AutoGainPolicy.vocalStemMakeupDefault,
-            String(format: "grainVol=%.2f", g0.volume)
-        )
-        let firstBlur = g0.effects.level(for: MixrEffect.blur.rawValue)
-        check(
-            "\(label): first pivot grains stay intelligible (blur starts below a 40 HPF wall)",
-            firstBlur < 40,
-            String(format: "blur=%.0f", firstBlur)
-        )
-    }
-    if let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan), let g0 = grains.first {
-        check(
-            "\(label): pivot grains are the join INTO Drop 1, not chops on the drop",
-            grains.allSatisfy { $0.timelineStart < drop1 - 0.02 && $0.timelineEnd <= drop1 + 0.08 },
-            String(
-                format: "drop=%.2f grain0=%.2f–%.2f last=%.2f",
-                drop1, g0.timelineStart, g0.timelineEnd, grains.last?.timelineEnd ?? -1
-            )
-        )
-        let loopStart = drop1 - plan.barSeconds * 2
-        check(
-            "\(label): wallpaper starts ~2 mix bars before Drop 1 (not empty air, not 4-bar void)",
-            abs(g0.timelineStart - loopStart) < plan.beatSeconds * 0.6,
-            String(format: "grain0=%.2f loopStart=%.2f drop=%.2f", g0.timelineStart, loopStart, drop1)
-        )
-        let bedTail = plan.placements.filter { p in
-            guard p.songID == plan.mashupBedSongID else { return false }
-            let isGrain = p.role == .supporting
-                && abs(p.timelineDuration - plan.beatSeconds) < plan.beatSeconds * 0.4
-            return !isGrain && p.timelineEnd <= loopStart + 0.08
-        }.max(by: { $0.timelineEnd < $1.timelineEnd })
-        if let bedTail {
-            check(
-                "\(label): bed plays through until wallpaper (no multi-bar hole before the grains)",
-                g0.timelineStart - bedTail.timelineEnd < plan.beatSeconds * 0.75,
-                String(
-                    format: "bedEnd=%.2f grain0=%.2f gap=%.2f",
-                    bedTail.timelineEnd, g0.timelineStart, g0.timelineStart - bedTail.timelineEnd
-                )
-            )
-        }
     }
 }
 
@@ -4338,10 +4318,13 @@ do {
         vocalPresence: [Double](repeating: 0.5, count: 32),
         hop: 0.1
     )
+    // "all" is generic as a word but it IS the title's first word, so the
+    // anchor stays on the phrase start. Advancing to "wanted" rendered the
+    // hook as "...I wanted was you" — the title beheaded.
     check(
-        "isolated token prefers distinctive wanted over phrase-start all",
-        abs(isolatedWanted - wantedLyric) < 0.08,
-        String(format: "got=%.2f want=%.2f", isolatedWanted, wantedLyric)
+        "isolated token keeps a title-owned first word as the anchor",
+        abs(isolatedWanted - festivalLyric) < 0.08,
+        String(format: "got=%.2f want=%.2f", isolatedWanted, festivalLyric)
     )
     let laterTokenStart = AutoChorusIsland.titleHookClipStart(
         lyric: isolatedWanted,
@@ -4351,11 +4334,30 @@ do {
         lyricWords: festivalWords
     )
     check(
-        "title-hook starts on distinctive token, not the filler before it",
-        laterTokenStart > festivalLyric
-            && laterTokenStart < wantedLyric
-            && (wantedLyric - laterTokenStart) <= 0.35,
+        "title-hook clip opens before the title's first word",
+        laterTokenStart <= festivalLyric + 0.02
+            && (wantedLyric - laterTokenStart) <= 1.8,
         String(format: "start=%.2f all=%.2f wanted=%.2f", laterTokenStart, festivalLyric, wantedLyric)
+    )
+
+    // The original protection still stands for filler FOREIGN to the title:
+    // a sidecar landing on the tail of the previous line must still advance
+    // to the title token rather than opening on a stray word.
+    let foreignWords: [(Double, String)] = [
+        (festivalLyric, "and"), (festivalLyric + 0.2, "so"),
+        (wantedLyric, "wanted"), (festivalLyric + 0.7, "was")
+    ]
+    let foreignAnchor = AutoChorusIsland.isolatedTitleTokenTime(
+        lyric: festivalLyric,
+        title: "All I Wanted",
+        words: foreignWords,
+        vocalPresence: [Double](repeating: 0.5, count: 32),
+        hop: 0.1
+    )
+    check(
+        "isolated token still skips filler that is NOT part of the title",
+        abs(foreignAnchor - wantedLyric) < 0.08,
+        String(format: "got=%.2f want=%.2f", foreignAnchor, wantedLyric)
     )
 
     // Club-lift: pad in mix-seconds so the title token survives TimePitch
@@ -4736,13 +4738,11 @@ do {
             check("Stem pivot: Drop 1 exists", false)
             break
         }
-        let grains = pivotGrains(in: plan, songID: song.id, before: drop0.timelineStart)
-        let grainKinds = grains.compactMap { $0.stemKind?.rawValue }.joined(separator: ",")
-        let allVocal = grains.allSatisfy { $0.stemKind == AutoStemKind.vocals }
+        let joinShorts = pivotGrains(in: plan, songID: song.id, before: drop0.timelineStart)
         check(
-            "Solo remix: pivot grains use vocal stem",
-            !grains.isEmpty && allVocal,
-            "grains=\(grains.count) kinds=\(grainKinds)"
+            "Solo remix: join throw uses vocal stem when sidecars exist",
+            joinShorts.allSatisfy { $0.stemKind == AutoStemKind.vocals },
+            "shorts=\(joinShorts.count) kinds=\(joinShorts.compactMap { $0.stemKind?.rawValue }.joined(separator: ","))"
         )
         var dropClips: [AutoClipPlacement] = []
         for p in plan.placements where p.role == .dominant {
@@ -4799,11 +4799,15 @@ do {
             check("Stem mashup Drop 1 exists", false)
             break
         }
-        let grains = pivotGrains(in: plan, songID: vocalID, before: drop0.timelineStart)
+        let guestTease = plan.placements.filter {
+            $0.songID == vocalID && $0.stemKind == AutoStemKind.vocals
+                && $0.role == .supporting
+                && $0.timelineStart < drop0.timelineStart - 0.02
+        }
         check(
-            "Mashup pivot grains use incoming guest vocal stem",
-            !grains.isEmpty && grains.allSatisfy { $0.stemKind == AutoStemKind.vocals },
-            "grains=\(grains.count)"
+            "Mashup incoming tease uses guest vocal stem (ride-in)",
+            !guestTease.isEmpty,
+            "tease=\(guestTease.count)"
         )
         var guestDrop: [AutoClipPlacement] = []
         for p in plan.placements where p.songID == vocalID && p.role == .dominant {

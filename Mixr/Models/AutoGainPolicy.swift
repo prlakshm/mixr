@@ -18,7 +18,36 @@ nonisolated enum AutoGainPolicy {
     /// Mix-bus headroom reserved BEFORE SFX join the sum, dB.
     static let mixBusHeadroomDB = 6.0
     /// Sustained limiter gain reduction above this is a failed mix, dB.
-    static let maxSustainedLimiterReductionDB = 3.0
+    static let maxSustainedLimiterReductionDB = 1.5
+    /// Master bus (AutoMasterBus): club-competitive integrated loudness
+    /// with the limiter kept as safety. Makeup stops where the SUSTAINED
+    /// reduction over the loudest passages would exceed
+    /// `maxSustainedLimiterReductionDB` — drops are never crushed.
+    static let masterTargetLUFS = -10.0
+    static let masterMaxMakeupDB = 20.0
+    static let masterMaxCutDB = 12.0
+    /// App export: the engine-graph AU peak limiter sits BEFORE capture.
+    /// Stacked drops peak ~10 dB over full scale, so without headroom that
+    /// limiter crushes the drop while the sparse title vocal passes (real
+    /// render: title 2.6 dB ABOVE drop 1 on paramore×tatu). The mix is
+    /// trimmed ahead of it so it is a pure safety net; the bounded master
+    /// solver — the same one the offline path uses — sets the final gain.
+    static let exportPreMasterTrimDB = -12.0
+    /// Sweep-join window: non-lead (groove) segments gain this much extra
+    /// linear makeup at full filter ramp (+0.6 → ×1.85 ≈ +3.4 dB over the
+    /// flat ×1.25), so the low-passed approach keeps rising into the drop.
+    /// 0: the 7 dB "dip" this was added for was a staging cliff on the
+    /// continuation segments (fixed at the root in
+    /// `carryStagingIntoContinuations`), not missing low end.
+    static let sweepSwellPerRamp = 0.0
+    /// Club truth enforced by the listen loop on the MASTERED render: the
+    /// first drop's 8 s must out-level the 4 s title probe by this margin;
+    /// the title window is ducked (bounded) when it does not.
+    static let dropOverTitleMarginDB = 1.0
+    static let titleDuckRepairMaxDB = 6.0
+    static let masterTruePeakMarginDB = 0.3
+    static let masterLimiterLookaheadSeconds = 0.005
+    static let masterLimiterReleaseSeconds = 0.08
 
     // MARK: Export tail
 
@@ -142,6 +171,36 @@ nonisolated enum AutoGainPolicy {
     /// the made-up title vocal while keeping the groove full through the
     /// vocal's inter-line rests (0.5 still let rests dip below −15 dB).
     static let titleInstrumentalOpenVolume = 0.62
+
+    /// Loudness normalisation: how far a plain song section may be nudged to
+    /// match the mix's reference programme level, in dB. Clip volume is a
+    /// KNOB, not a loudness — two sections set to the same volume still
+    /// render at different levels whenever their source material differs,
+    /// which is what makes a mix lurch between sections. Correcting for the
+    /// source lets the volume knob mean what it says.
+    ///
+    /// Bounded so the correction never becomes a compressor: a section that
+    /// is genuinely quiet at the source stays relatively quiet.
+    static let loudnessMatchMaxBoostDB = 5.0
+    static let loudnessMatchMaxCutDB = 4.0
+
+    /// Incoming vocal preview level, as a fraction of the outgoing lead, for
+    /// the bars before the switch. Loud enough that the ear registers the new
+    /// voice arriving over the old track's music; quiet enough that it teases
+    /// rather than duets (the dual-lead failure). One voice still owns the
+    /// drop itself.
+    static let incomingVocalPreviewScale = 0.62
+
+    /// How long the incoming voice rides the outgoing instrumental before the
+    /// pivot chop, in bars. Two bars is a phrase — enough to be accepted,
+    /// short enough to stay inside the call-and-response allowance.
+    static let incomingVocalPreviewBars = 2.0
+
+    /// Bed instrumental level under the pivot wallpaper. Loud enough to
+    /// carry spectral continuity across the seam (so the join reads as a
+    /// blend, not a cut) but well under the grains, which stay the
+    /// foreground. The bed VOCAL never rides here — only drums/other.
+    static let pivotBedFloorVolume = 0.42
 
     /// Role-based join staging — clip volume floors by placement role.
     /// Validated on rendered PCM in golden/render tiers, not clip fields alone.

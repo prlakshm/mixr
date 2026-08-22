@@ -48,6 +48,9 @@ SOURCES=(
   "$ROOT/Mixr/Models/AutoGainPolicy.swift"
   "$ROOT/Mixr/Models/AutoRemixDiagnostics.swift"
   "$ROOT/Mixr/Models/AutoOfflineMixdown.swift"
+  "$ROOT/Mixr/Models/AutoListenLoop.swift"
+  "$ROOT/Mixr/Models/AutoMasterBus.swift"
+  "$ROOT/Mixr/Models/AutoPCMLoader.swift"
   "$ROOT/DevTests/AutoRemixTestStubs.swift"
 )
 

@@ -171,7 +171,8 @@ nonisolated enum AutoJoinEngine {
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
         intentionalGaps: inout [AutoIntentionalGap],
-        decisions: inout [AutoDecision]
+        decisions: inout [AutoDecision],
+        joinContracts: inout [AutoJoinContract]
     ) {
         let repeats = tuning.pivotWallpaperBeats
         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
@@ -246,32 +247,27 @@ nonisolated enum AutoJoinEngine {
             resolvedStem = grainStem
         }
 
-        for i in placements.indices {
-            let p = placements[i]
-            let isGrain = p.role == .supporting
-                && abs(p.timelineDuration - beatSec) < beatSec * 0.4
-            if isGrain { continue }
-            guard p.timelineEnd > loopStart + 0.01,
-                  p.timelineStart < dropTimelineStart - 0.01 else { continue }
-            if p.timelineStart >= loopStart - 0.01 {
-                placements[i].timelineDuration = 0
-            } else {
-                let newDur = loopStart - p.timelineStart
-                if newDur >= 0.05 {
-                    placements[i].timelineDuration = newDur
-                    placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
-                } else {
-                    placements[i].timelineDuration = 0
-                }
-            }
-        }
-        placements.removeAll { $0.timelineDuration < 0.05 }
+        clearPivotWindow(
+            placements: &placements,
+            loopStart: loopStart,
+            dropTimelineStart: dropTimelineStart,
+            beatSec: beatSec
+        )
 
         pulseRegions.removeAll {
             $0.timelineEnd > loopStart + 0.01 && $0.timelineStart < dropTimelineStart - 0.01
         }
         pulseRegions.append(
             AutoClubPulse.Region(role: .buildOut, timelineStart: loopStart, timelineEnd: dropTimelineStart)
+        )
+        joinContracts.append(
+            AutoJoinContract(
+                kind: .sweepJoin,
+                windowStart: loopStart,
+                cutAt: dropTimelineStart,
+                outgoingSongID: completedPhrase.songID,
+                incomingSongID: incomingSongID
+            )
         )
 
         let grainVol = AutoGainPolicy.roleStagingVolume(
@@ -281,43 +277,115 @@ nonisolated enum AutoJoinEngine {
             useIncomingJoin: useIncomingJoin,
             stemKind: resolvedStem
         )
-        for i in 0..<repeats {
-            let t0 = loopStart + Double(i) * beatSec
-            let blur = 36.0 + (22.0 * Double(i) / Double(max(repeats - 1, 1)))
-            var fx = ClipEffectSettings()
-            fx.setLevel(blur, for: MixrEffect.blur.rawValue)
-            fx = AutoSupportedEffects.sanitize(fx)
+        // ── Sweep join (no stutter loop) ──
+        // Product decision 2026-08-20, supersedes the Xirex wallpaper lock:
+        // repetition may only appear TRANSFORMED, so the constant-rate
+        // 1-beat grain loop is gone. The window instead keeps the outgoing
+        // material playing straight through under a rising low-pass sweep
+        // (split into per-bar sample-continuous segments so live, export,
+        // and offline render the same ramp), with the take-out SFX and the
+        // incoming vocal ride-in on top, into the same hard cut. One
+        // decaying ECHO THROW of the outgoing last beat marks the join —
+        // each repeat quieter and more distant, the classic any-song move.
+        var sweepSegments: [AutoClipPlacement] = []
+        for i in placements.indices {
+            let p = placements[i]
+            // Outgoing deck only — the incoming song's ride-in ends at the
+            // window on purpose (extending it would pre-play the hook).
+            guard p.songID == completedPhrase.songID else { continue }
+            guard p.timelineEnd > loopStart - 0.08,
+                  p.timelineEnd < dropTimelineStart + 0.05,
+                  p.timelineStart < loopStart - 0.05,
+                  abs(p.timelineEnd - loopStart) <= 0.35 || p.timelineEnd > loopStart
+            else { continue }
+            // Extend through the window; the sweep does the leaving.
+            placements[i].timelineDuration = dropTimelineStart - p.timelineStart
+            placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
 
-            placements.append(
-                AutoClipPlacement(
-                    songID: grainSongID,
-                    sourceStart: grainSource,
-                    timelineStart: t0,
-                    timelineDuration: beatSec,
-                    tempoRatio: grainTempo,
-                    volume: grainVol,
-                    fadeIn: ClipTransition(type: .none, duration: 0),
-                    fadeOut: ClipTransition(type: .none, duration: 0),
-                    effects: fx,
-                    role: .supporting,
-                    slotIndex: completedPhrase.slotIndex,
-                    overlapsPreviousSeconds: beatSec,
-                    stemKind: resolvedStem
+            // Split the window span into per-bar segments with rising blur.
+            let src = placements[i]
+            let bars = max(1, Int((loopDur / barSec).rounded()))
+            let segDur = loopDur / Double(bars)
+            // Head keeps everything before the window.
+            placements[i].timelineDuration = loopStart - src.timelineStart
+            for b in 0..<bars {
+                var seg = src
+                seg.timelineStart = loopStart + Double(b) * segDur
+                seg.timelineDuration = segDur
+                seg.sourceStart = src.sourceStart
+                    + (seg.timelineStart - src.timelineStart) * src.tempoRatio
+                seg.continuesPrevious = true
+                seg.fadeIn = ClipTransition(type: .none, duration: 0)
+                seg.fadeOut = ClipTransition(type: .none, duration: 0)
+                var fx = seg.effects
+                let ramp = Double(b + 1) / Double(bars)
+                // Cap the ramp: the sweep THINS the window, it must not dig
+                // an energy hole (Paramore's approach fell 11 dB when a 54
+                // low-pass compounded with the lead taper — the gate allows
+                // 5). Makeup on the non-lead layers pays for the LPF loss.
+                fx.setLevel(
+                    max(fx.level(for: MixrEffect.blur.rawValue), 14 + 32 * ramp),
+                    for: MixrEffect.blur.rawValue
                 )
-            )
+                seg.effects = AutoSupportedEffects.sanitize(fx)
+                if seg.stemKind == .vocals || seg.role == .dominant {
+                    // The lead tapers so the incoming ride-in owns the ear.
+                    seg.volume = src.volume * (1.0 - 0.25 * ramp)
+                } else {
+                    // Groove stems SWELL under the filter into the drop: the
+                    // real DSP low-pass removes HF energy the offline meter
+                    // never sees (real render dipped 7 dB vs the run-up with
+                    // the old flat ×1.25), so makeup grows with the ramp and
+                    // the remaining lows carry the approach — the DJ move.
+                    seg.volume = min(
+                        AutoGainPolicy.maxClipVolume,
+                        src.volume * (1.25 + AutoGainPolicy.sweepSwellPerRamp * ramp)
+                    )
+                }
+                seg.continuationShape = seg.volume / max(src.volume, 0.01)
+                sweepSegments.append(seg)
+            }
         }
+        placements.append(contentsOf: sweepSegments)
+
+        // One decaying echo throw of the OUTGOING last beat at the window
+        // start. Echo taps decay ~0.55× each, so it reads as a throw into
+        // the distance — never a loop.
+        let throwSource = max(completedPhrase.sourceStart, phraseEnd - beatSec * completedPhrase.tempoRatio)
+        var throwFX = ClipEffectSettings()
+        throwFX.setLevel(55, for: MixrEffect.echo.rawValue)
+        throwFX.echoPreset = .classic
+        throwFX.setLevel(20, for: MixrEffect.blur.rawValue)
+        throwFX = AutoSupportedEffects.sanitize(throwFX)
+        placements.append(
+            AutoClipPlacement(
+                songID: completedPhrase.songID,
+                sourceStart: throwSource,
+                timelineStart: loopStart,
+                timelineDuration: beatSec,
+                tempoRatio: completedPhrase.tempoRatio,
+                volume: grainVol * 0.8,
+                fadeIn: ClipTransition(type: .none, duration: 0),
+                fadeOut: ClipTransition(type: .echoOut, duration: 2),
+                effects: throwFX,
+                role: .supporting,
+                slotIndex: completedPhrase.slotIndex,
+                overlapsPreviousSeconds: beatSec,
+                stemKind: grainStem
+            )
+        )
+        _ = grainSource
+        _ = grainSongID
+        _ = resolvedStem
+        _ = grainTempo
 
         decisions.append(
             AutoDecision(
                 kind: .pivotWallpaperLoop,
                 songTitle: useIncomingJoin ? deckBTitle : deckATitle,
                 detail: String(
-                    format: "%d×1-beat%@%@%@ src=%.2f → hard cut @%.1fs",
-                    repeats,
+                    format: "sweep join%@ (filter ramp + echo throw, no loop) → hard cut @%.1fs",
                     pivot.map { " “\($0)”" } ?? "",
-                    useIncomingJoin ? " incoming-join" : "",
-                    resolvedStem == .vocals ? " vocal-stem" : "",
-                    grainSource,
                     dropTimelineStart
                 )
             )
@@ -434,17 +502,79 @@ nonisolated enum AutoJoinEngine {
     static func applyYieldJoin(
         prev: inout AutoClipPlacement,
         next: inout AutoClipPlacement,
-        beats: Double = takeoverBeats
+        beats: Double = takeoverBeats,
+        overhangSeconds: Double = 0
     ) {
-        if prev.timelineEnd > next.timelineStart + 0.05 {
-            let trimmed = next.timelineStart - prev.timelineStart
+        // Yield = fade ACROSS the entrance, not before it. With an overhang
+        // the outgoing clip holds until `overhangSeconds` past the incoming
+        // start, so the equal-power fade-out is mid-slope at the entrance.
+        // A flush trim finishes the fade BEFORE the incoming vocal arrives —
+        // a near-silent pre-title sliver that every re-validate re-created
+        // after staging had extended the tail.
+        let target = next.timelineStart + overhangSeconds
+        if prev.timelineEnd > target + 0.05
+            || (overhangSeconds > 0 && prev.timelineEnd < target - 0.05
+                && prev.timelineEnd > next.timelineStart - 0.05) {
+            let trimmed = target - prev.timelineStart
             if trimmed >= 0.05 {
                 prev.timelineDuration = trimmed
             }
         }
+        if overhangSeconds > 0 {
+            next.overlapsPreviousSeconds = max(next.overlapsPreviousSeconds, overhangSeconds)
+        }
         let curve = AutoTransitionEnvelope.equalPowerCurveName
         prev.fadeOut = ClipTransition(type: .crossfade, duration: beats, curve: curve)
         next.fadeIn = .hardCut
+    }
+
+    /// Clear the pivot wallpaper window and leave the blend floor under it.
+    ///
+    /// SINGLE SOURCE OF TRUTH for what survives `[loopStart, drop)`. The
+    /// planner used to carry its own copy of this rule, so a change here was
+    /// silently undone there — the same duplicated-constant failure that
+    /// shipped a −4 st bed transpose.
+    ///
+    /// Removed: the outgoing VOCAL (a competing lead under the join is the
+    /// "leftover chorus tail" failure) and drums/bass, so the kick and sub
+    /// still drop out and the window keeps building tension.
+    ///
+    /// Kept: the bed's harmonic layer ("other"), ducked and handing over on
+    /// the Drop 1 downbeat. Two decks genuinely overlapping is what makes a
+    /// join read as a blend; cutting everything at `loopStart` stepped the
+    /// mix from full band to one isolated stuttering vocal in a single
+    /// sample, with nothing carrying through.
+    static func clearPivotWindow(
+        placements: inout [AutoClipPlacement],
+        loopStart: Double,
+        dropTimelineStart: Double,
+        beatSec: Double
+    ) {
+        for i in placements.indices {
+            let p = placements[i]
+            let isGrain = p.role == .supporting
+                && abs(p.timelineDuration - beatSec) < beatSec * 0.4
+            if isGrain { continue }
+            guard p.timelineEnd > loopStart + 0.01,
+                  p.timelineStart < dropTimelineStart - 0.01 else { continue }
+            if p.timelineStart >= loopStart - 0.01 {
+                placements[i].timelineDuration = 0
+            } else {
+                let newDur = loopStart - p.timelineStart
+                if newDur >= 0.05 {
+                    placements[i].timelineDuration = newDur
+                    placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
+                } else {
+                    placements[i].timelineDuration = 0
+                }
+            }
+        }
+        placements.removeAll { $0.timelineDuration < 0.05 }
+
+        // NOTE: the blend floor is NOT added here. Bed stem clips do not exist
+        // yet at this point in planning, so a pass here sees nothing to carry
+        // through. AutoRemixValidator.addPivotBlendFloor does it on the
+        // finished plan.
     }
 
     static func applyOpeningFadeIn(
@@ -579,6 +709,11 @@ nonisolated enum AutoJoinEngine {
         let titleVocalWindows = placements.filter {
             $0.role == .dominant
                 && $0.stemKind == .vocals
+                // Sample-continuous segment splits (the pivot sweep's ramp
+                // pieces) are NOT title copies — treating them as such put
+                // the ASR duck (0.18) under the whole pivot window and dug
+                // an 11 dB hole into the drop approach.
+                && !$0.continuesPrevious
                 && !nearDrop($0.timelineStart)
                 && $0.timelineStart < (dropStarts.min() ?? .infinity) - barSec * 0.25
                 && $0.timelineDuration > beatSec * 2
@@ -627,10 +762,65 @@ nonisolated enum AutoJoinEngine {
         // `titleInstrumentalOpenVolume`, so rests between vocal lines keep
         // the groove instead of collapsing into near-silence holes.
         // Placements spanning the release point are split sample-continuously.
+        // dB TARGETS, not constants: each instrumental stem sits a fixed
+        // distance under the title vocal, solved from measured stem LUFS
+        // (analysis.json). The linear constants remain the no-sidecar
+        // fallback — they were tuned for one recording and are exactly why
+        // "loudness feels unnatural" tracked source changes.
+        func targetVol(under targetDB: Double, stem kind: AutoStemKind,
+                       songID: UUID, vocalVol: Double, fallback: Double) -> Double {
+            if ProcessInfo.processInfo.environment["MIXR_NO_DBTARGETS"] == "1" { return fallback }
+            guard let loud = profiles[songID]?.loudness,
+                  let stemL = loud.stems[kind]?.lufs,
+                  let vocalL = loud.stems[.vocals]?.lufs
+            else { return fallback }
+            let v = vocalVol * pow(10.0, (vocalL - stemL + targetDB) / 20.0)
+            return min(max(v, fallback * 0.5), fallback * 2.2)
+        }
         let duckVol = AutoGainPolicy.roleStagingVolume(role: .titleBed)
-        let openVol = AutoGainPolicy.titleInstrumentalOpenVolume
-        let probeIntervals: [(Double, Double)] = titleVocalWindows.map {
-            ($0.timelineStart, $0.timelineStart + AutoGainPolicy.titleDuckProbeSeconds)
+        // The duck is a RATIO, not an absolute level. Vocal makeup is now
+        // measured per song (analysis.json), so an isolated title vocal can
+        // land 1–2 dB hotter on one track than another; a fixed floor then
+        // widens the vocal-to-bed contrast on exactly those songs and the
+        // vocal's own inter-line rests read as dead air. Scaling the floor
+        // with the vocal keeps the contrast invariant to makeup gain.
+        let titleVocalVolume = titleVocalWindows
+            .filter { $0.stemKind == .vocals }
+            .map(\.volume)
+            .max() ?? AutoGainPolicy.vocalStemMakeupDefault
+        let openRatio = AutoGainPolicy.titleInstrumentalOpenVolume
+            / max(AutoGainPolicy.vocalStemMakeupDefault, 0.01)
+        let openFallback = min(
+            AutoGainPolicy.maxClipVolume,
+            max(AutoGainPolicy.titleInstrumentalOpenVolume, titleVocalVolume * openRatio)
+        )
+        // The hard 0.18 duck exists so ASR hears the title WORD — so it
+        // starts at the vocal ONSET, not the clip edge. Title clips pad
+        // beats before the word, and the vocal stem is silent through that
+        // pad; ducking the instrumentals under stem silence carved a ~1.3 s
+        // −30 dB hole at every title entrance ("dead air @26.85/@40.0" in
+        // paramore-x-tatu the moment the anchor moved ahead of "All"). The
+        // pad rides at open volume; the duck begins with the voice.
+        let probeIntervals: [(Double, Double)] = titleVocalWindows.map { v in
+            var onset = v.timelineStart
+            if let signal = profiles[v.songID]?.analysis.signal {
+                let ratio = max(v.tempoRatio, 0.0001)
+                let limit = min(1.6, v.timelineDuration * 0.5)
+                var probe = 0.0
+                while probe < limit {
+                    let src = v.sourceStart + probe * ratio
+                    // −35, not −45: the duck must engage when the voice is
+                    // properly SOUNDING, not on its first faint pre-attack —
+                    // ducking a beat early left a 0.35 s sliver of ducked
+                    // bed under no voice at every pad→probe seam.
+                    if signal.meanStemVocalRMSDB(from: src, to: src + 0.12) > -35 { break }
+                    probe += 0.1
+                }
+                if probe > 0.05, probe < limit {
+                    onset = v.timelineStart + max(0, probe - 0.02)
+                }
+            }
+            return (onset, onset + AutoGainPolicy.titleDuckProbeSeconds)
         }
         func inProbe(_ t: Double) -> Bool {
             probeIntervals.contains { t >= $0.0 - 0.01 && t < $0.1 - 0.01 }
@@ -673,7 +863,39 @@ nonisolated enum AutoJoinEngine {
                 seg.timelineDuration = segEnd - segStart
                 seg.sourceStart = p.sourceStart + (segStart - p.timelineStart) * p.tempoRatio
                 let mid = (segStart + segEnd) / 2
-                seg.volume = min(p.volume, inProbe(mid) ? duckVol : openVol)
+                let duckHere = targetVol(
+                    under: -9.0, stem: p.stemKind ?? .other, songID: p.songID,
+                    vocalVol: titleVocalVolume, fallback: duckVol
+                )
+                let openHere = targetVol(
+                    under: -3.5, stem: p.stemKind ?? .other, songID: p.songID,
+                    vocalVol: titleVocalVolume, fallback: openFallback
+                )
+                // Hold variation lives HERE, where levels are final: when
+                // the title hold plays the same source twice, pass 1's
+                // backing opens STRIPPED (×0.55) and pass 2 full — staging
+                // used to re-raise the validator's thinning and the two
+                // passes came out identical again (backing 1.86 vs 1.86).
+                var passScale = 1.0
+                let myWindow = titleVocalWindows.first {
+                    p.timelineStart >= $0.timelineStart - 0.1 && p.timelineStart < $0.timelineEnd
+                }
+                if let myWindow {
+                    let twins = titleVocalWindows.filter {
+                        abs($0.sourceStart - myWindow.sourceStart) < 0.1
+                    }.sorted { $0.timelineStart < $1.timelineStart }
+                    if twins.count >= 2, abs(twins[0].timelineStart - myWindow.timelineStart) < 0.1 {
+                        passScale = 0.55
+                    }
+                }
+                // Probe caps DOWN (min); the open region ASSIGNS its level.
+                // Stems can arrive here already capped to the 0.18 title-bed
+                // duck by the earlier overlap cap, and min() can never
+                // re-open — every post-probe segment then sat at duck level
+                // and the whole title window rendered as a −34 dB pit.
+                seg.volume = inProbe(mid)
+                    ? min(p.volume, duckHere)
+                    : min(max(p.volume, openHere * passScale), AutoGainPolicy.maxClipVolume)
                 seg.continuesPrevious = k > 0 || p.continuesPrevious
                 if k > 0 { seg.fadeIn = .hardCut }
                 if k < edges.count - 2 { seg.fadeOut = .hardCut }
@@ -718,12 +940,56 @@ nonisolated enum AutoJoinEngine {
             }
             placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
         }
-        let isolation = titleVol * AutoGainPolicy.dropVsIsolatedTitleBoost
+        // Grains need to be "at least as loud as the bed verse and the
+        // title-hook vocal copy" — NOT louder. `dropVsIsolatedTitleBoost` is
+        // Drop 1's floor, so that it out-punches an isolated title vocal;
+        // applying it here too put the chop +6.4 dB above the vocal that
+        // preceded it, and the mix's most salient element jumping that far in
+        // one sample is heard as the chop slamming in from nowhere. The
+        // wallpaper still cannot go quiet — the floor is the title vocal.
         for i in placements.indices where isPivotGrain(placements[i]) {
             placements[i].volume = min(
                 AutoGainPolicy.maxClipVolume,
-                max(placements[i].volume, isolation)
+                max(placements[i].volume, titleVol)
             )
+        }
+        carryStagingIntoContinuations(placements: &placements)
+    }
+
+    /// Sample-continuous segments (the sweep join's per-bar pieces) are
+    /// continuations of the clip they follow, not new clips — staging
+    /// raises the head (title-window open, vocal makeup) but skipped them,
+    /// so the window started with a −7…−9 dB cliff the listen loop could
+    /// only report (dropDip residual on every sweep join). Each segment
+    /// now carries the staged level of the placement it continues, keeping
+    /// the planner's relative shaping (lead taper, bed makeup) on top.
+    static func carryStagingIntoContinuations(placements: inout [AutoClipPlacement]) {
+        func predecessor(of i: Int) -> Int? {
+            let seg = placements[i]
+            return placements.indices.first { k in
+                k != i
+                    && placements[k].songID == seg.songID
+                    && placements[k].stemKind == seg.stemKind
+                    && placements[k].role == seg.role
+                    && abs(placements[k].timelineEnd - seg.timelineStart) < 0.03
+            }
+        }
+        let order = placements.indices.sorted { placements[$0].timelineStart < placements[$1].timelineStart }
+        for i in order {
+            guard placements[i].continuesPrevious, let shape = placements[i].continuationShape else { continue }
+            // Walk back through sweep segments to the clip the window
+            // continues: the FIRST predecessor that is not a sweep segment.
+            // (Staging's own probe/open split is sample-continuous too —
+            // walking past the open piece landed on the 0.40 probe duck.)
+            var head = i
+            var hops = 0
+            while placements[head].continuationShape != nil, hops < 16,
+                  let j = predecessor(of: head) {
+                head = j
+                hops += 1
+            }
+            guard head != i, placements[head].continuationShape == nil else { continue }
+            placements[i].volume = min(AutoGainPolicy.maxClipVolume, placements[head].volume * shape)
         }
     }
 
@@ -757,6 +1023,14 @@ nonisolated enum AutoJoinEngine {
                     return min(AutoGainPolicy.maxClipVolume, mixE / stemE)
                 }
             }
+        }
+        // Offline BS.1770-4 measurement beats the constant. The default
+        // assumes every vocal stem sits 4.0 dB under its mix; measured across
+        // the crate it ranges 3.6…5.8 dB, so the constant is ~2 dB low on most
+        // songs. Only used when an analysis.json sidecar exists.
+        if let measured = profiles[p.songID]?.loudness?.makeupGain(for: .vocals),
+           measured.isFinite, measured > 0.05 {
+            return min(AutoGainPolicy.maxClipVolume, measured)
         }
         return AutoGainPolicy.vocalStemMakeupDefault
     }

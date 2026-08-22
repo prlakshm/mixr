@@ -311,6 +311,7 @@ enum AutoRemixPlanner {
         var cutRecords: [AutoCutRecord] = []
         var intentionalGaps: [AutoIntentionalGap] = []
         var pulseRegions: [AutoClubPulse.Region] = []
+        var joinContracts: [AutoJoinContract] = []
         var sfx: [AutoSFXEvent] = []
         var transitionsUsed: [AutoTransitionRecipe] = []
         var usedRanges: [(Double, Double)] = []
@@ -713,7 +714,8 @@ enum AutoRemixPlanner {
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
-                        decisions: &decisions
+                        decisions: &decisions,
+                        joinContracts: &joinContracts
                     )
                 }
                 dropIndex += 1
@@ -809,7 +811,7 @@ enum AutoRemixPlanner {
             beatSec: beat,
             decisions: &decisions
         )
-        return AutoRemixPlan(
+        var plan__ = AutoRemixPlan(
             mode: .remix,
             targetBPM: targetBPM,
             targetDuration: totalDuration,
@@ -836,6 +838,8 @@ enum AutoRemixPlanner {
             randomSeed: seed,
             stemsBySongID: [profile.songID: profile.stems]
         )
+        plan__.joinContracts = joinContracts
+        return plan__
     }
 
     /// Low-confidence club path: still uses the compact phrase-grid TIMELINE
@@ -890,6 +894,7 @@ enum AutoRemixPlanner {
 
         var placements: [AutoClipPlacement] = []
         var pulseRegions: [AutoClubPulse.Region] = []
+        var joinContracts: [AutoJoinContract] = []
         var intentionalGaps: [AutoIntentionalGap] = []
         var cutRecords: [AutoCutRecord] = []
         var sfx: [AutoSFXEvent] = []
@@ -1083,7 +1088,8 @@ enum AutoRemixPlanner {
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
-                        decisions: &decisions
+                        decisions: &decisions,
+                        joinContracts: &joinContracts
                     )
                 }
                 dropIndex += 1
@@ -1152,7 +1158,7 @@ enum AutoRemixPlanner {
             beatSec: beat,
             decisions: &decisions
         )
-        return AutoRemixPlan(
+        var plan__ = AutoRemixPlan(
             mode: .remix,
             targetBPM: targetBPM,
             targetDuration: timelineDur,
@@ -1179,6 +1185,8 @@ enum AutoRemixPlanner {
             randomSeed: seed,
             stemsBySongID: [profile.songID: profile.stems]
         )
+        plan__.joinContracts = joinContracts
+        return plan__
     }
 
     /// Carve a pre-drop void from the end of the previous bar so the drop
@@ -1796,10 +1804,12 @@ enum AutoRemixPlanner {
         // is typically ~8 bars, and one linear 16-bar walk runs the source
         // past the hook into whatever follows (e.g. a quiet spoken bridge).
         // The second slot replays a chorus island instead of walking on.
-        // On a bed flip, ride the bed's TITLE chorus island (the Xirex
-        // reference: Oops chorus returns as Drop 2) — the picker's unused
-        // late-chorus island can be a weak tail that decays into the bridge.
-        let drop2Return = drop2IsBedFlip || (drop1Idx.map { $0 == drop2Idx } ?? false)
+        // Drop 2 brings FRESH material (owner feedback 2026-08-21: "you
+        // already did that once — don't keep doing the same loops at the
+        // middle at the end"). One 8-bar pass of a chorus island the mix has
+        // NOT already played (isReturn stays false so the picker prefers
+        // unused islands; the quiet-tail and pre-drop repairs guard a weak
+        // pick). No second verbatim/varied pass — the outro trails off after.
         slots.append(
             Slot(
                 songIdx: drop2Idx,
@@ -1808,24 +1818,12 @@ enum AutoRemixPlanner {
                 entry: .hardHypeCut,
                 energy: 1.0,
                 isFinalPeak: true,
-                isReturn: drop2Return,
+                isReturn: false,
                 shrinkPriority: 0,
-                holdTitleChorus: drop2IsBedFlip
+                holdTitleChorus: false
             )
         )
-        slots.append(
-            Slot(
-                songIdx: drop2Idx,
-                role: .chorus,
-                bars: 8,
-                entry: .none,
-                energy: 1.0,
-                isFinalPeak: true,
-                isReturn: true,
-                shrinkPriority: 0,
-                holdTitleChorus: drop2IsBedFlip
-            )
-        )
+        _ = drop2IsBedFlip
 
         if let o = outroCameoIdx {
             slots.append(Slot(songIdx: o, role: .teaser, bars: 8, entry: .vocalEchoOut, energy: 0.5, isEnding: true, shrinkPriority: 0))
@@ -1864,6 +1862,7 @@ enum AutoRemixPlanner {
         var warnings: [String] = []
         var intentionalGaps: [AutoIntentionalGap] = []
         var pulseRegions: [AutoClubPulse.Region] = []
+        var joinContracts: [AutoJoinContract] = []
 
         let letters = ordered.enumerated().reduce(into: [UUID: String]()) { dict, item in
             dict[item.element.songID] = String(UnicodeScalar(UInt8(65 + min(item.offset, 25))))
@@ -2789,7 +2788,8 @@ enum AutoRemixPlanner {
                         placements: &placements,
                         pulseRegions: &pulseRegions,
                         intentionalGaps: &intentionalGaps,
-                        decisions: &decisions
+                        decisions: &decisions,
+                        joinContracts: &joinContracts
                     )
                 }
                 appendMashupDropStacks(
@@ -2890,8 +2890,7 @@ enum AutoRemixPlanner {
                         let mayPitchSupport = mashupBedID == nil
                             || prevProfile.songID == mashupBedID
                         if mayPitchSupport, compat.pitchCorrectionSemitones != 0 {
-                            supportFX.pitchDirection = compat.pitchCorrectionSemitones > 0 ? .up : .down
-                            supportFX.pitchAmount = Double(abs(compat.pitchCorrectionSemitones)) / 12.0
+                            supportFX.setPitch(semitones: Double(compat.pitchCorrectionSemitones))
                         }
                         supportFX = AutoSupportedEffects.sanitize(supportFX)
                         placements.append(
@@ -3044,10 +3043,8 @@ enum AutoRemixPlanner {
 
         // Pitch the BED only (never the star vocal) when a small Camelot fix helps.
         if bedPitchSemitones != 0, let bedID = mashupBedID {
-            let amount = min(1.0, Double(abs(bedPitchSemitones)) / 3.0)
             for i in placements.indices where placements[i].songID == bedID {
-                placements[i].effects.pitchDirection = bedPitchSemitones > 0 ? .up : .down
-                placements[i].effects.pitchAmount = amount
+                placements[i].effects.setPitch(semitones: Double(bedPitchSemitones))
                 placements[i].effects = AutoSupportedEffects.sanitize(placements[i].effects)
             }
             if let bedTitle = ordered.first(where: { $0.songID == bedID })?.title {
@@ -3099,7 +3096,8 @@ enum AutoRemixPlanner {
             placements: &placements,
             pulseRegions: &pulseRegions,
             intentionalGaps: &intentionalGaps,
-            decisions: &decisions
+            decisions: &decisions,
+            joinContracts: &joinContracts
         )
 
         AutoJoinEngine.stripVoidsWhenDrop1HasPivot(
@@ -3161,6 +3159,7 @@ enum AutoRemixPlanner {
             randomSeed: seed,
             stemsBySongID: Dictionary(uniqueKeysWithValues: ordered.map { ($0.songID, $0.stems) })
         )
+        plan.joinContracts = joinContracts
         plan.promoteMixWindowDump()
         return plan
     }
@@ -3196,16 +3195,20 @@ enum AutoRemixPlanner {
             let voidBeforeNext = intentionalGaps.contains { abs($0.end - next.timelineStart) < 0.05 }
             if voidBeforeNext { continue }
 
-            // Xirex pivot hard cut: 1-beat grains fill the window before the
-            // drop — do NOT invent an equal-power fade-in (quiet → gradual).
-            let lookback = tuning.pivotLookbackSeconds(barSec: barSec)
-            let pivotWindow = tuning.pivotWindowSeconds(barSec: barSec)
-            let pivotBeforeNext = placements.contains { g in
-                g.role == .supporting
-                    && abs(g.timelineDuration - beatSec) < beatSec * 0.4
-                    && g.timelineStart >= next.timelineStart - lookback
-                    && g.timelineStart < next.timelineStart - 0.02
-                    && g.timelineEnd <= next.timelineStart + 0.08
+            // Sweep-join pivot hard cut: the join engine already prepared
+            // the window (extended outgoing material under a rising filter +
+            // one echo throw), so this pass only enforces the hard cut.
+            //
+            // Two bugs lived here. It detected the pivot by "1-beat
+            // supporting clip before the drop" — the grain-loop signature —
+            // which the new echo throw ALSO matches; and it then re-called
+            // clearPivotWindow, whose removeAll invalidated dominantIdxs and
+            // trapped on the next iteration (stale index into a shrunk
+            // array) while destroying the sweep segments it re-trimmed. The
+            // pivot marker is the buildOut pulse region ending on the drop —
+            // the same key the validator uses — and there is no re-clear.
+            let pivotBeforeNext = pulseRegions.contains { r in
+                r.role == .buildOut && abs(r.timelineEnd - next.timelineStart) < beatSec * 0.75
             }
             if pivotBeforeNext {
                 placements[nextIdx].fadeIn = .none
@@ -3213,26 +3216,6 @@ enum AutoRemixPlanner {
                     placements[nextIdx].volume,
                     AutoGainPolicy.incomingDropVolume
                 )
-                let loopStart = next.timelineStart - pivotWindow
-                for i in placements.indices {
-                    let p = placements[i]
-                    let isGrain = p.role == .supporting
-                        && abs(p.timelineDuration - beatSec) < beatSec * 0.4
-                    if isGrain { continue }
-                    guard p.timelineEnd > loopStart + 0.01,
-                          p.timelineStart < next.timelineStart - 0.01 else { continue }
-                    if p.timelineStart >= loopStart - 0.01 {
-                        placements[i].timelineDuration = 0
-                    } else {
-                        let newDur = loopStart - p.timelineStart
-                        if newDur >= 0.05 {
-                            placements[i].timelineDuration = newDur
-                            placements[i].fadeOut = .none
-                        } else {
-                            placements[i].timelineDuration = 0
-                        }
-                    }
-                }
                 continue
             }
 
@@ -3654,6 +3637,27 @@ enum AutoRemixPlanner {
                     // verse material and the drop sags partway through.
                     let loopBars = 8.0
                     let loopSec = loopBars * barSec
+                    // Rewind snap (Class 3): the island's literal start can
+                    // sit on a vocal-forward pickup where the instrumentals
+                    // breathe — every loop rewind then stamps a −41 dB notch
+                    // into the drop. Nudge the loop source to the strongest
+                    // beat inside the island's first bar.
+                    var loopSrc = section.startSeconds
+                    if let signal = bed.analysis.signal {
+                        let beatSrc = barSec / 4 * bedFit.ratio
+                        var bestDB = -160.0
+                        var bestOff = 0.0
+                        var off = 0.0
+                        while off < barSec * bedFit.ratio - 0.01 {
+                            let db = signal.meanRMSDB(
+                                from: section.startSeconds + off,
+                                to: section.startSeconds + off + beatSrc * 2
+                            )
+                            if db > bestDB + 0.8 { bestDB = db; bestOff = off }
+                            off += beatSrc
+                        }
+                        loopSrc = section.startSeconds + bestOff
+                    }
                     for kind in bed.stems.instrumentalKinds {
                         let vol: Double
                         switch kind {
@@ -3667,7 +3671,7 @@ enum AutoRemixPlanner {
                             placements.append(
                                 AutoClipPlacement(
                                     songID: bed.songID,
-                                    sourceStart: section.startSeconds,
+                                    sourceStart: loopSrc,
                                     timelineStart: lead.timelineStart + offset,
                                     timelineDuration: segDur,
                                     tempoRatio: bedFit.ratio,
@@ -3995,7 +3999,8 @@ enum AutoRemixPlanner {
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
         intentionalGaps: inout [AutoIntentionalGap],
-        decisions: inout [AutoDecision]
+        decisions: inout [AutoDecision],
+        joinContracts: inout [AutoJoinContract]
     ) {
         guard mode == .mashup else { return }
         if decisions.contains(where: { $0.kind == .pivotWallpaperLoop }) { return }
@@ -4047,7 +4052,8 @@ enum AutoRemixPlanner {
             placements: &placements,
             pulseRegions: &pulseRegions,
             intentionalGaps: &intentionalGaps,
-            decisions: &decisions
+            decisions: &decisions,
+                        joinContracts: &joinContracts
         )
     }
 

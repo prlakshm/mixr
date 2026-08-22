@@ -633,8 +633,13 @@ nonisolated enum AutoChorusIsland {
                 guard let first = tokens.all.first else { return false }
                 return tokens.generic.contains(first) && !distinctive.contains(first)
             }()
-            if atIsDistinctive {
-                t = atLyric!.t
+            // "all" in "All I Wanted" is generic as a word but it is the
+            // TITLE's first word — advancing past it beheads the hook
+            // ("...I wanted was you"). Only skip filler that is foreign to
+            // the title, e.g. the tail of the previous line.
+            let atIsTitleWord = !atWord.isEmpty && Set(tokens.all).contains(atWord)
+            if atIsDistinctive || atIsTitleWord {
+                t = atLyric?.t ?? t
             } else if atIsFiller || (atLyric == nil && titleStartsOnFiller) {
                 let hi = lyric + distinctiveTokenLineWindow
                 let hits = words.filter {
@@ -724,13 +729,19 @@ nonisolated enum AutoChorusIsland {
         lyricWords: [(t: Double, word: String)],
         tempoRatio: Double
     ) -> Double {
-        let distinctive = Set(AutoPivotWord.hookTokens(in: title ?? "").distinctive)
+        // A word that BELONGS TO THE TITLE is never a lead-in filler, even
+        // when it is generic on its own. Blocking on `distinctive` alone
+        // started "All I Wanted" after "All", so the hook rendered as
+        // "...I wanted was you" — the song's title, beheaded. Only words
+        // foreign to the title (the tail of the previous line) may shrink
+        // the pad.
+        let titleTokens = Set(AutoPivotWord.hookTokens(in: title ?? "").all)
         func norm(_ s: String) -> String { s.lowercased().filter { $0.isLetter } }
         let padStart = lyric - sourcePad
         let blockers = lyricWords.filter { w in
             w.t >= padStart - 0.02
                 && w.t < lyric - 0.12
-                && !distinctive.contains(norm(w.word))
+                && !titleTokens.contains(norm(w.word))
         }
         guard let last = blockers.max(by: { $0.t < $1.t }) else { return sourcePad }
         let after = last.t + 0.30

@@ -1083,5 +1083,200 @@ if let plan = confidentPlan, let song = confidentSong {
     print("\n" + report.text)
 }
 
+// MARK: - 12. Listen loop fills genuine SOURCE silence (Class 1+5)
+
+do {
+    // A song whose recording has a real 2.5 s silence mid-groove (the
+    // "stupid song" class): the plan walks straight across it. The listen
+    // loop must HEAR the hole, verify the source itself is silent there
+    // (so no repair of the plan can help), and lay fill material across
+    // exactly that span — the DJ answer: the groove never stops.
+    let song = makeSong(title: "Sparse Demo", durationSeconds: 120)
+    let profiles = [song.id: AutoSectionCatalog.profile(track: song)]
+    let bpm = 124.0
+    let silence = (40.0, 42.5)
+    let samples = syntheticSong(
+        durationSeconds: 120, bpm: bpm,
+        quietRegions: [silence],
+        flatAmplitude: 0.5
+    )
+    var plan = AutoRemixPlan(
+        mode: .remix,
+        targetBPM: bpm,
+        targetDuration: 60,
+        anchorSongIDs: [song.id],
+        selectedSections: [],
+        placements: [
+            AutoClipPlacement(
+                songID: song.id, sourceStart: 20, timelineStart: 0, timelineDuration: 60,
+                tempoRatio: 1, volume: 0.9,
+                fadeIn: .none, fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 0
+            ),
+        ],
+        sfxEvents: [],
+        handoffCount: 0,
+        songLetters: [song.id: "A"],
+        sequence: ["A"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let sources = [song.id: AutoOfflineMixdown.Source(samples: samples, sampleRate: SR)]
+    var decisions: [AutoDecision] = []
+    let residual = AutoListenLoop.verifyAndRepair(
+        plan: &plan,
+        profiles: profiles,
+        tuning: .standard,
+        sources: sources,
+        stemSources: [:],
+        decisions: &decisions
+    )
+    let residualHoles = residual.filter { $0.kind == .hole }
+    check(
+        "Listen loop: genuine source silence is filled (no residual hole)",
+        residualHoles.isEmpty,
+        residualHoles.map { String(format: "@%.1f %@", $0.t, $0.detail) }.joined(separator: ", ")
+    )
+    // The fill is real material placed across the silent span (mix time
+    // 20–22.5), not a warning.
+    let span = (silence.0 - 20.0, silence.1 - 20.0)
+    let fill = plan.placements.filter {
+        $0.timelineStart < span.1 + 0.5 && $0.timelineEnd > span.0 - 0.5
+            && $0.role == .supporting && $0.volume > 0.2
+    }
+    check(
+        "Listen loop: fill placements cover the silent span",
+        !fill.isEmpty,
+        String(format: "span=%.1f–%.1f fills=%d", span.0, span.1, fill.count)
+    )
+}
+
+// MARK: - 13. Breaths are not defects (Class 2)
+
+do {
+    // A singer's breath — a short gap INSIDE a continuous vocal phrase —
+    // must not be flagged or filled. Flattening it with fill is how mixes
+    // go lifeless. Only gaps too long to be a breath get treated as holes.
+    let song = makeSong(title: "Breathy Ballad", durationSeconds: 120)
+    let profiles = [song.id: AutoSectionCatalog.profile(track: song)]
+    func vocalWithGap(_ gap: (Double, Double)) -> [Float] {
+        syntheticSong(
+            durationSeconds: 120, bpm: 124,
+            quietRegions: [(gap.0, gap.1)],
+            flatAmplitude: 0.5
+        )
+    }
+    func planFor() -> AutoRemixPlan {
+        AutoRemixPlan(
+            mode: .remix, targetBPM: 124, targetDuration: 60,
+            anchorSongIDs: [song.id], selectedSections: [],
+            placements: [
+                AutoClipPlacement(
+                    songID: song.id, sourceStart: 20, timelineStart: 0, timelineDuration: 60,
+                    tempoRatio: 1, volume: 0.9,
+                    fadeIn: .none, fadeOut: .none,
+                    effects: ClipEffectSettings(), role: .dominant, slotIndex: 0,
+                    stemKind: .vocals
+                ),
+            ],
+            sfxEvents: [], handoffCount: 0,
+            songLetters: [song.id: "A"], sequence: ["A"],
+            transitionsUsed: [], decisions: [], warnings: [],
+            confidence: 0.9, randomSeed: 1
+        )
+    }
+    // 0.6 s gap at source 40 → mix 20: a breath. Vocal active both sides.
+    var breathPlan = planFor()
+    var d1: [AutoDecision] = []
+    let breathGap = vocalWithGap((40.0, 40.6))
+    let r1 = AutoListenLoop.verifyAndRepair(
+        plan: &breathPlan, profiles: profiles, tuning: .standard,
+        sources: [song.id: AutoOfflineMixdown.Source(samples: breathGap, sampleRate: SR)],
+        stemSources: [song.id: [.vocals: AutoOfflineMixdown.Source(samples: breathGap, sampleRate: SR)]],
+        decisions: &d1
+    )
+    let breathFills = breathPlan.placements.filter { $0.role == .supporting }
+    check(
+        "Listen loop: a 0.6s breath inside a vocal phrase is exempt (no hole, no fill)",
+        r1.filter { $0.kind == .hole }.isEmpty && breathFills.isEmpty,
+        "residualHoles=\(r1.filter { $0.kind == .hole }.count) fills=\(breathFills.count)"
+    )
+    // 2.5 s gap: too long for a breath — still a hole, still filled.
+    var holePlan = planFor()
+    var d2: [AutoDecision] = []
+    let realGap = vocalWithGap((40.0, 42.5))
+    let r2 = AutoListenLoop.verifyAndRepair(
+        plan: &holePlan, profiles: profiles, tuning: .standard,
+        sources: [song.id: AutoOfflineMixdown.Source(samples: realGap, sampleRate: SR)],
+        stemSources: [song.id: [.vocals: AutoOfflineMixdown.Source(samples: realGap, sampleRate: SR)]],
+        decisions: &d2
+    )
+    check(
+        "Listen loop: a 2.5s gap is NOT a breath — filled as before",
+        r2.filter { $0.kind == .hole }.isEmpty
+            && holePlan.placements.contains { $0.role == .supporting },
+        "residual=\(r2.count)"
+    )
+}
+
+
+// MARK: - 14. Master bus (BS.1770 meter, makeup solver, glue guard)
+
+do {
+    func sine(_ hz: Double, amp: Double, seconds: Double) -> [Float] {
+        (0..<Int(seconds * SR)).map { Float(amp * sin(2 * .pi * hz * Double($0) / SR)) }
+    }
+    // Meter calibration: ITU-R BS.1770 — a 0 dBFS 1 kHz sine reads −3.01 LKFS.
+    let ref = AutoMasterBus.integratedLUFS(channels: [sine(1000, amp: 1.0, seconds: 5)], sampleRate: SR)
+    check("Master: BS.1770 meter calibration (0 dBFS 1 kHz sine = −3.01 LKFS)",
+          abs(ref - (-3.01)) < 0.2, String(format: "%.2f LKFS", ref))
+
+    // Sparse transients must not block makeup: −18 LUFS program with 8
+    // single clicks at −1 dBFS. Expect makeup toward the target, peaks
+    // under the ceiling, negligible sustained reduction.
+    var program = sine(220, amp: 0.2, seconds: 40)
+    for k in 0..<8 {
+        let at = Int((3.0 + Double(k) * 4.5) * SR)
+        for j in 0..<20 where at + j < program.count { program[at + j] = 0.89 }
+    }
+    let m1 = AutoMasterBus.masterize(channels: [program], sampleRate: SR)
+    let ceiling = Float(pow(10.0, (AutoGainPolicy.truePeakCeilingDB - AutoGainPolicy.masterTruePeakMarginDB) / 20.0))
+    let p1 = m1.channels[0].map { abs($0) }.max() ?? 0
+    check("Master: rare transients do not block makeup (≥ 6 dB)",
+          m1.makeupDB >= 6, String(format: "makeup=%.1f dB in=%.1f LUFS", m1.makeupDB, m1.measuredLUFS))
+    check("Master: delivered loudness within 1 LU of target",
+          abs(m1.outputLUFS - AutoGainPolicy.masterTargetLUFS) <= 1.0,
+          String(format: "out=%.1f LUFS", m1.outputLUFS))
+    check("Master: sample peak never exceeds the limiter ceiling",
+          p1 <= ceiling * 1.002, String(format: "peak=%.3f ceiling=%.3f", p1, ceiling))
+    check("Master: sustained reduction under policy on a sparse-transient program",
+          m1.sustainedReductionDB <= AutoGainPolicy.maxSustainedLimiterReductionDB,
+          String(format: "sustained=%.2f dB", m1.sustainedReductionDB))
+
+    // Glue guard: a dense impulse train (peaks at the ceiling in EVERY
+    // block, low loudness) cannot be made loud without crushing it — the
+    // solver must stop at the sustained-reduction cap.
+    var dense = [Float](repeating: 0, count: Int(30 * SR))
+    let period = Int(0.1 * SR), burst = Int(0.005 * SR)
+    var at = 0
+    while at + burst < dense.count {
+        for j in 0..<burst { dense[at + j] = 0.86 * Float(sin(.pi * Double(j) / Double(burst))) }
+        at += period
+    }
+    let m2 = AutoMasterBus.masterize(channels: [dense], sampleRate: SR)
+    let p2 = m2.channels[0].map { abs($0) }.max() ?? 0
+    let wanted2 = AutoGainPolicy.masterTargetLUFS - m2.measuredLUFS
+    check("Master: glue guard — makeup stops where sustained reduction hits policy",
+          m2.sustainedReductionDB <= AutoGainPolicy.maxSustainedLimiterReductionDB + 0.05
+            && m2.makeupDB < wanted2 - 1.0,
+          String(format: "makeup=%.1f (wanted %.1f) sustained=%.2f p90=%.1f",
+                 m2.makeupDB, wanted2, m2.sustainedReductionDB, m2.reductionP90DB))
+    check("Master: glue guard — ceiling still honored",
+          p2 <= ceiling * 1.002, String(format: "peak=%.3f", p2))
+}
+
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")
 exit(failures == 0 ? 0 : 1)

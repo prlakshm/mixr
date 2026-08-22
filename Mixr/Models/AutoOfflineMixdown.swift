@@ -37,6 +37,10 @@ nonisolated enum AutoOfflineMixdown {
         /// Peak gain reduction a ceiling-limiter would have applied, dB.
         var limiterGainReductionDB: Double
         var sampleRate: Double
+        /// Master-bus makeup applied toward `AutoGainPolicy.masterTargetLUFS`.
+        var masterMakeupDB: Double = 0
+        /// Integrated loudness of the delivered mix (BS.1770-4).
+        var masterOutputLUFS: Double = -120
     }
 
     /// Renders a plan against per-song sources. `trackVolume` mirrors the
@@ -188,15 +192,22 @@ nonisolated enum AutoOfflineMixdown {
         // limiter would need; apply a hard ceiling so downstream metrics
         // see post-limiter PCM. The policy treats sustained reduction
         // beyond its threshold as a failed mix — tests read this value.
-        let ceiling = Float(pow(10.0, AutoGainPolicy.truePeakCeilingDB / 20.0))
-        var peak: Float = 0
-        for v in mix { peak = max(peak, abs(v)) }
-        var reductionDB = 0.0
-        if peak > ceiling {
-            reductionDB = Double(20 * log10(peak / ceiling))
-            let scale = ceiling / peak
-            for i in 0..<frames { mix[i] *= scale }
-            for i in 0..<frames { songBus[i] *= scale }
+        // ── Master bus: BS.1770 makeup toward the club target under a
+        // lookahead brickwall at the ceiling. `limiterGainReductionDB`
+        // is the SUSTAINED reduction over the loudest passages (what the
+        // drops feel), capped by policy inside the solver; rare impacts
+        // are reported separately as peak reduction.
+        let master = AutoMasterBus.masterize(
+            channels: [mix], companions: [songBus], sampleRate: sampleRate
+        )
+        mix = master.channels[0]
+        songBus = master.companions[0]
+        let reductionDB = master.sustainedReductionDB
+        if ProcessInfo.processInfo.environment["MIXR_DEBUG_MASTER"] == "1" {
+            print(String(format: "MASTER in=%.1f LUFS makeup=%+.1f dB sustainedGR=%.1f p90=%.1f limited=%.0f%% peakGR=%.1f out=%.1f LUFS",
+                         master.measuredLUFS, master.makeupDB, master.sustainedReductionDB,
+                         master.reductionP90DB, master.limitedFraction * 100,
+                         master.peakReductionDB, master.outputLUFS))
         }
 
         // ── Tail policy (baseline: keep everything) ──
@@ -214,7 +225,9 @@ nonisolated enum AutoOfflineMixdown {
             mix: mix,
             songBus: songBus,
             limiterGainReductionDB: reductionDB,
-            sampleRate: sampleRate
+            sampleRate: sampleRate,
+            masterMakeupDB: master.makeupDB,
+            masterOutputLUFS: master.outputLUFS
         )
     }
 

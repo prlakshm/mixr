@@ -235,10 +235,21 @@ nonisolated enum MixrExportRenderer {
         let totalFrames = AVAudioFramePosition(totalSeconds * outputSR)
         let blockFrames: AVAudioFrameCount = 1024
         var rendered: AVAudioFramePosition = 0
-        let silenceLinear = Float(pow(10.0, AutoGainPolicy.silentTailThresholdDB / 20.0))
+        // Headroom ahead of the AU peak limiter (see
+        // AutoGainPolicy.exportPreMasterTrimDB); the master bus restores
+        // level after capture. The tail threshold follows the trim.
+        let preMasterTrim = Float(pow(10.0, AutoGainPolicy.exportPreMasterTrimDB / 20.0))
+        engine.mainMixerNode.outputVolume = preMasterTrim
+        let silenceLinear = Float(pow(10.0, AutoGainPolicy.silentTailThresholdDB / 20.0)) * preMasterTrim
         let maxHeldFrames = AVAudioFramePosition(AutoGainPolicy.silentTailWindowSeconds * outputSR)
         var heldTail: [AVAudioPCMBuffer] = []
         var heldFrames: AVAudioFramePosition = 0
+        // Blocks are collected, not streamed: the master bus needs the whole
+        // program to meter BS.1770 loudness before it can solve makeup.
+        var collected: [[Float]] = Array(
+            repeating: [], count: Int(engine.manualRenderingFormat.channelCount)
+        )
+        for c in collected.indices { collected[c].reserveCapacity(Int(totalFrames)) }
 
         renderLoop: while rendered < totalFrames {
             let t = Double(rendered) / outputSR
@@ -250,12 +261,12 @@ nonisolated enum MixrExportRenderer {
                 switch status {
                 case .success:
                     if rendered < contentFrames {
-                        try outFile.write(from: block)
+                        appendBlock(block, into: &collected)
                     } else if blockRMS(block) >= silenceLinear {
-                        for held in heldTail { try outFile.write(from: held) }
+                        for held in heldTail { appendBlock(held, into: &collected) }
                         heldTail.removeAll()
                         heldFrames = 0
-                        try outFile.write(from: block)
+                        appendBlock(block, into: &collected)
                     } else {
                         if let copy = copyBuffer(block) {
                             heldTail.append(copy)
@@ -287,9 +298,53 @@ nonisolated enum MixrExportRenderer {
             progress?(Double(rendered) / Double(totalFrames))
         }
 
-        progress?(1.0)
         engine.stop()
+
+        // ── Master bus: club-target makeup under a lookahead brickwall,
+        // then encode. Same DSP as the offline mixdown so the crate
+        // scoreboard and the app export deliver the same loudness.
+        let master = AutoMasterBus.masterize(channels: collected, sampleRate: outputSR)
+        if ProcessInfo.processInfo.environment["MIXR_DEBUG_MASTER"] == "1" {
+            print(String(format: "MASTER export in=%.1f LUFS makeup=%+.1f dB sustainedGR=%.1f p90=%.1f limited=%.0f%% peakGR=%.1f out=%.1f LUFS",
+                         master.measuredLUFS, master.makeupDB, master.sustainedReductionDB,
+                         master.reductionP90DB, master.limitedFraction * 100,
+                         master.peakReductionDB, master.outputLUFS))
+        }
+        try writeChannels(master.channels, to: outFile, format: engine.manualRenderingFormat)
+        progress?(1.0)
         return outURL
+    }
+
+    // MARK: - Master-bus helpers
+
+    private static func appendBlock(_ buffer: AVAudioPCMBuffer, into collected: inout [[Float]]) {
+        guard let data = buffer.floatChannelData else { return }
+        let frames = Int(buffer.frameLength)
+        for c in 0..<min(collected.count, Int(buffer.format.channelCount)) {
+            collected[c].append(contentsOf: UnsafeBufferPointer(start: data[c], count: frames))
+        }
+    }
+
+    private static func writeChannels(_ channels: [[Float]], to file: AVAudioFile,
+                                      format: AVAudioFormat) throws {
+        guard let total = channels.first?.count, total > 0 else { return }
+        let chunk = 4096
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(chunk)),
+              let data = buf.floatChannelData else {
+            throw ExportError.renderFailed("could not allocate encode buffer")
+        }
+        var pos = 0
+        while pos < total {
+            let n = min(chunk, total - pos)
+            for c in 0..<min(channels.count, Int(format.channelCount)) {
+                channels[c].withUnsafeBufferPointer { src in
+                    data[c].update(from: src.baseAddress! + pos, count: n)
+                }
+            }
+            buf.frameLength = AVAudioFrameCount(n)
+            try file.write(from: buf)
+            pos += n
+        }
     }
 
     // MARK: - Block helpers (tail policy)

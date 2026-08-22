@@ -105,10 +105,26 @@ do {
         vocalPresence: emptyVocal,
         hop: 0.1
     )
+    // Anchoring on the distinctive token beheaded the title: "All I Wanted"
+    // rendered as "...I wanted was you". A leading word that belongs to the
+    // title holds the anchor, however far the distinctive token sits after
+    // it — the token only has to be heard early, not be heard FIRST.
     check(
-        "Join: isolated token walks past generic phrase-start filler to distinctive",
-        abs(isolated - wanted) < 0.08,
-        String(format: "got=%.2f want=%.2f (phrase=%.2f)", isolated, wanted, phrase)
+        "Join: isolated token keeps a title-owned first word as the anchor",
+        abs(isolated - phrase) < 0.08,
+        String(format: "got=%.2f want=%.2f (distinctive=%.2f)", isolated, phrase, wanted)
+    )
+    let foreignLead = AutoChorusIsland.isolatedTitleTokenTime(
+        lyric: phrase,
+        title: "All I Wanted",
+        words: [(phrase, "and"), (41.24, "so"), (wanted, "wanted"), (42.26, "was")],
+        vocalPresence: emptyVocal,
+        hop: 0.1
+    )
+    check(
+        "Join: isolated token still walks past filler foreign to the title",
+        abs(foreignLead - wanted) < 0.08,
+        String(format: "got=%.2f want=%.2f", foreignLead, wanted)
     )
     let oopsKept = AutoChorusIsland.isolatedTitleTokenTime(
         lyric: lateLyric,
@@ -246,6 +262,7 @@ do {
     var decisions: [AutoDecision] = []
     var guestSignal = makeFeatures(duration: 200, bpm: 93)
     guestSignal.lyricWords = [(60.7, "baby"), (60.26, "hit")]
+    var joinContracts: [AutoJoinContract] = []
     AutoJoinEngine.appendPivotWallpaperLoop(
         completedPhrase: placements[0],
         dropTimelineStart: dropStart,
@@ -262,19 +279,31 @@ do {
         placements: &placements,
         pulseRegions: &pulse,
         intentionalGaps: &gaps,
-        decisions: &decisions
+        decisions: &decisions,
+        joinContracts: &joinContracts
     )
-    let grains = placements.filter {
-        $0.role == .supporting && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+    // Sweep join (2026-08-20): no grain loop. The window gets sample-
+    // continuous ramp segments plus exactly one decaying echo throw.
+    let segs = placements.filter { $0.continuesPrevious }
+    check("Join: sweep join emits ramp segments (no grain loop)", segs.count >= 2, "segs=\(segs.count)")
+    let throws_ = placements.filter {
+        $0.role == .supporting && $0.fadeOut.type == .echoOut
+            && $0.timelineDuration <= beatSec * 1.4
     }
-    check("Join: pivot wallpaper emits grains", grains.count >= 4)
-    if let g0 = grains.first {
+    check("Join: sweep join emits one decaying echo throw", throws_.count == 1, "throws=\(throws_.count)")
+    if let t0 = throws_.first {
         check(
-            "Join: pivot window starts ~2 bars before Drop 1",
-            abs(g0.timelineStart - loopStart) < beatSec * 0.6,
-            String(format: "grain0=%.2f loop=%.2f", g0.timelineStart, loopStart)
+            "Join: echo throw marks the window start (~2 bars before Drop 1)",
+            abs(t0.timelineStart - loopStart) < beatSec * 0.6,
+            String(format: "throw=%.2f loop=%.2f", t0.timelineStart, loopStart)
         )
     }
+    let shortRepeats = placements.filter {
+        $0.role == .supporting && !$0.continuesPrevious
+            && abs($0.timelineDuration - beatSec) < beatSec * 0.4
+            && $0.fadeOut.type != .echoOut
+    }
+    check("Join: no stutter grains remain", shortRepeats.isEmpty, "grains=\(shortRepeats.count)")
     check(
         "Join: pre-drop void stripped on pivot join",
         !gaps.contains { $0.reason.localizedCaseInsensitiveContains("void") }
