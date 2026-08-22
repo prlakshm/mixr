@@ -226,6 +226,40 @@ do {
                 String(format: "coverage=%@ throws=%d", sweepCoverage ? "yes" : "NO", throwClips.count)
             )
 
+            // Continuation staging: every sweep segment must sit at HEAD ×
+            // its planner shape after staging. Segments used to inherit
+            // planner-time volumes while their head clips were staged up
+            // (2.51 / 2.17) — a −7…−9 dB cliff into the drop on both
+            // renderers that the design-quiet exemption hid.
+            var continuityBreaks: [String] = []
+            var entryLevels: [String] = []
+            for seg in plan.placements where seg.continuationShape != nil {
+                func predecessor(of p: AutoClipPlacement) -> AutoClipPlacement? {
+                    plan.placements.first {
+                        $0.songID == p.songID && $0.stemKind == p.stemKind && $0.role == p.role
+                            && abs($0.timelineEnd - p.timelineStart) < 0.03
+                            && !($0.timelineStart == p.timelineStart && $0.timelineDuration == p.timelineDuration)
+                    }
+                }
+                var head = seg
+                var hops = 0
+                while head.continuationShape != nil, hops < 16, let j = predecessor(of: head) { head = j; hops += 1 }
+                guard head.continuationShape == nil, let shape = seg.continuationShape else { continue }
+                let want = min(AutoGainPolicy.maxClipVolume, head.volume * shape)
+                if abs(seg.volume - want) > max(0.02, want * 0.02) {
+                    continuityBreaks.append(String(format: "%@@%.1f vol=%.2f want=%.2f", seg.stemKind?.rawValue ?? "mix", seg.timelineStart, seg.volume, want))
+                }
+                if abs(seg.timelineStart - preDropStart) < 0.1 {
+                    let entryDB = 20 * log10(max(seg.volume, 1e-3) / max(head.volume, 1e-3))
+                    if entryDB < -3 { entryLevels.append(String(format: "%@ %.1f dB", seg.stemKind?.rawValue ?? "mix", entryDB)) }
+                }
+            }
+            check(
+                "Golden Oops×BOMT: sweep segments carry their head's staged level (× planner shape)",
+                continuityBreaks.isEmpty && entryLevels.isEmpty,
+                "breaks=\(continuityBreaks) entry=\(entryLevels)"
+            )
+
             // The chop must not SLAM in. Grains only need to be "at least as
             // loud as the title-hook vocal copy"; the extra
             // dropVsIsolatedTitleBoost belongs to Drop 1 alone. Applying it to
