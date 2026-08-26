@@ -168,6 +168,7 @@ nonisolated enum AutoJoinEngine {
         incomingTempoRatio: Double? = nil,
         incomingSignal: SongSignalFeatures? = nil,
         incomingGrainStem: AutoStemKind? = nil,
+        bedHasOtherStem: Bool = false,
         placements: inout [AutoClipPlacement],
         pulseRegions: inout [AutoClubPulse.Region],
         intentionalGaps: inout [AutoIntentionalGap],
@@ -266,7 +267,8 @@ nonisolated enum AutoJoinEngine {
                 windowStart: loopStart,
                 cutAt: dropTimelineStart,
                 outgoingSongID: completedPhrase.songID,
-                incomingSongID: incomingSongID
+                incomingSongID: incomingSongID,
+                coverage: bedHasOtherStem ? .bedOther : .duckedFullMix
             )
         )
 

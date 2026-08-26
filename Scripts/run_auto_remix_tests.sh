@@ -38,6 +38,7 @@ SOURCES=(
   "$ROOT/Mixr/Models/AutoStemSidecar.swift"
   "$ROOT/Mixr/Models/AutoSectionCatalog.swift"
   "$ROOT/Mixr/Models/AutoRemixPlan.swift"
+  "$ROOT/Mixr/Models/AutoJoinManifest.swift"
   "$ROOT/Mixr/Models/AutoRemixPlanner.swift"
   "$ROOT/Mixr/Models/AutoJoinEngine.swift"
   "$ROOT/Mixr/Models/AutoRemixValidator.swift"

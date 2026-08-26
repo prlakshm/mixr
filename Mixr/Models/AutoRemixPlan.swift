@@ -85,7 +85,9 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case hookEchoThrow
     /// Guest hook replaced the bed vocal on a drop (one melody).
     case hookReplace
-    /// Xirex-style pivot: 1-beat last-word of a completed phrase, looped 2–4 bars.
+    /// Compatibility dump_gate / golden label for the Drop 1 mix window.
+    /// The join grammar is sweep join (`AutoJoinContract.kind == .sweepJoin`);
+    /// this decision kind remains until dump_gate migrates.
     case pivotWallpaperLoop
     /// Phrase too short / low confidence for a last-word grain — skip the
     /// loop rather than slicing the title.
@@ -403,6 +405,14 @@ struct AutoJoinContract: Sendable, Equatable {
         case hardCut     // plain drop entrance at full volume
         case takeover    // different-song equal-power overlap
     }
+    /// Required blend-floor source for a sweep window. Never optional — nil
+    /// would collide with an unset field. `.noneRequired` is the explicit
+    /// “no eligible stem and no valid alternative” case.
+    enum Coverage: String, Sendable {
+        case bedOther
+        case duckedFullMix
+        case noneRequired
+    }
     var kind: Kind
     /// Window start (sweepJoin) or the boundary itself.
     var windowStart: Double
@@ -410,10 +420,50 @@ struct AutoJoinContract: Sendable, Equatable {
     var cutAt: Double
     var outgoingSongID: UUID?
     var incomingSongID: UUID?
+    var coverage: Coverage = .noneRequired
 
     nonisolated func containsWindow(_ t: Double) -> Bool {
         t >= windowStart - 0.05 && t < cutAt - 0.02
     }
+}
+
+/// Gate A lexicographic score. Lower is better. Whisper/token ASR is Gate B
+/// only — never a field here.
+struct AutoPreApplyScore: Sendable, Equatable, Comparable {
+    var criticalContractViolations: Int = 0
+    var missingRequiredCoverage: Int = 0
+    /// dB the labeled sweep window sits below the acceptable-sweep allowance.
+    var worstTroughDeficit: Double = 0
+    var dropApproachDeficit: Double = 0
+
+    var isClean: Bool {
+        criticalContractViolations == 0
+            && missingRequiredCoverage == 0
+            && worstTroughDeficit <= 0.01
+            && dropApproachDeficit <= 0.01
+    }
+
+    static func < (lhs: AutoPreApplyScore, rhs: AutoPreApplyScore) -> Bool {
+        if lhs.criticalContractViolations != rhs.criticalContractViolations {
+            return lhs.criticalContractViolations < rhs.criticalContractViolations
+        }
+        if lhs.missingRequiredCoverage != rhs.missingRequiredCoverage {
+            return lhs.missingRequiredCoverage < rhs.missingRequiredCoverage
+        }
+        if abs(lhs.worstTroughDeficit - rhs.worstTroughDeficit) > 0.05 {
+            return lhs.worstTroughDeficit < rhs.worstTroughDeficit
+        }
+        if abs(lhs.dropApproachDeficit - rhs.dropApproachDeficit) > 0.05 {
+            return lhs.dropApproachDeficit < rhs.dropApproachDeficit
+        }
+        return false
+    }
+}
+
+struct AutoPreApplyRecord: Sendable, Equatable {
+    var original: AutoPreApplyScore
+    var candidate: AutoPreApplyScore
+    var repairKept: Bool
 }
 
 struct AutoRemixPlan: Sendable {
@@ -441,6 +491,8 @@ struct AutoRemixPlan: Sendable {
     /// Join geometry written by the join engine; passes read this, never
     /// re-derive joins from clip shapes.
     var joinContracts: [AutoJoinContract] = []
+    /// Gate A original/candidate 4-tuples from AutoListenLoop (nil if skipped).
+    var preApplyRecord: AutoPreApplyRecord? = nil
     /// Recipe flavor bias (Calvin / Guetta / … instincts).
     var clubFlavor: AutoClubFlavor? = nil
     /// Mashup: song chosen as Drop 1 sung hook (nil for one-song remix).

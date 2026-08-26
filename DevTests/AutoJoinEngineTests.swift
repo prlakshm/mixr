@@ -710,6 +710,163 @@ do {
     )
 }
 
+// MARK: - Sweep contract creates required floor + seam (observable)
+
+func joinFixtureTrack(title: String, id: UUID, duration: Double = 180) -> MixrTrack {
+    let length = MixrTimeline.units(fromSeconds: min(duration, 180))
+    return MixrTrack(
+        id: id,
+        title: title,
+        artist: "Fixture",
+        duration: "--:--",
+        durationSeconds: duration,
+        bpm: 124,
+        bpmConfidence: nil,
+        key: "Am",
+        keyConfidence: nil,
+        color: .pink,
+        volume: 1.0,
+        isMuted: false,
+        url: nil,
+        artworkData: nil,
+        clips: [MixrClip(id: UUID(), start: 0, length: length)]
+    )
+}
+
+func sweepPlan(
+    coverage: AutoJoinContract.Coverage,
+    includeOtherStem: Bool
+) -> (AutoRemixPlan, [UUID: AutoSongProfile]) {
+    let bedID = UUID()
+    let guestID = UUID()
+    let bpm = 124.0
+    let beat = 60.0 / bpm
+    let bar = beat * 4
+    let cutAt = bar * 10
+    let windowStart = cutAt - bar * 2
+    var placements: [AutoClipPlacement] = [
+        AutoClipPlacement(
+            songID: bedID, sourceStart: 8, timelineStart: 0,
+            timelineDuration: windowStart, tempoRatio: 1, volume: 1,
+            fadeIn: .none, fadeOut: .hardCut, effects: ClipEffectSettings(),
+            role: .dominant, slotIndex: 0
+        ),
+        AutoClipPlacement(
+            songID: guestID, sourceStart: 40, timelineStart: cutAt,
+            timelineDuration: bar * 8, tempoRatio: 1, volume: 1,
+            fadeIn: .hardCut, fadeOut: .none, effects: ClipEffectSettings(),
+            role: .dominant, slotIndex: 1, stemKind: .vocals
+        ),
+    ]
+    if includeOtherStem {
+        placements.append(
+            AutoClipPlacement(
+                songID: bedID, sourceStart: 8, timelineStart: 0,
+                timelineDuration: windowStart, tempoRatio: 1, volume: 0.8,
+                fadeIn: .none, fadeOut: .hardCut, effects: ClipEffectSettings(),
+                role: .supporting, slotIndex: 0, stemKind: .other
+            )
+        )
+    }
+    var plan = AutoRemixPlan(
+        mode: .mashup,
+        targetBPM: bpm,
+        targetDuration: cutAt + bar * 8,
+        anchorSongIDs: [bedID],
+        selectedSections: [],
+        placements: placements,
+        sfxEvents: [],
+        pulseRegions: [
+            AutoClubPulse.Region(role: .drop, timelineStart: cutAt, timelineEnd: cutAt + bar * 8)
+        ],
+        joinContracts: [
+            AutoJoinContract(
+                kind: .sweepJoin,
+                windowStart: windowStart,
+                cutAt: cutAt,
+                outgoingSongID: bedID,
+                incomingSongID: guestID,
+                coverage: coverage
+            )
+        ],
+        mashupVocalSongID: guestID,
+        mashupBedSongID: bedID,
+        handoffCount: 1,
+        songLetters: [bedID: "A", guestID: "B"],
+        sequence: ["A", "B"],
+        transitionsUsed: [.hardHypeCut],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let bed = joinFixtureTrack(title: "Bed", id: bedID)
+    let guest = joinFixtureTrack(title: "Guest", id: guestID)
+    let profiles = [
+        bedID: AutoSectionCatalog.profile(track: bed),
+        guestID: AutoSectionCatalog.profile(track: guest),
+    ]
+    return (plan, profiles)
+}
+
+func hasFloor(_ plan: AutoRemixPlan, coverage: AutoJoinContract.Coverage) -> Bool {
+    guard let c = plan.joinContracts.first(where: { $0.kind == .sweepJoin }) else { return false }
+    return plan.placements.contains { p in
+        let kindOK: Bool = {
+            switch coverage {
+            case .bedOther: return p.stemKind == .other
+            case .duckedFullMix: return p.stemKind == nil
+            case .noneRequired: return false
+            }
+        }()
+        return kindOK
+            && p.songID == c.outgoingSongID
+            && p.timelineStart <= c.windowStart + 0.08
+            && p.timelineEnd >= c.cutAt - 0.08
+    }
+}
+
+func hasSeamCover(_ plan: AutoRemixPlan) -> Bool {
+    guard let c = plan.joinContracts.first(where: { $0.kind == .sweepJoin }) else { return false }
+    let beat = plan.beatSeconds
+    return plan.sfxEvents.contains {
+        $0.timelineEnd > c.cutAt - beat && $0.timelineStart < c.cutAt - 0.02
+    }
+}
+
+do {
+    let (draft, profiles) = sweepPlan(coverage: .bedOther, includeOtherStem: true)
+    let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: .standard)
+    check(
+        "Join: sweep contract with bedOther creates a floor spanning the window",
+        hasFloor(plan, coverage: .bedOther),
+        "floor missing — grain detector likely no-op'd"
+    )
+    check(
+        "Join: sweep contract places seam SFX on the last beat before the cut",
+        hasSeamCover(plan),
+        "sfx=\(plan.sfxEvents.map { $0.assetID + String(format: "@%.2f", $0.timelineStart) }.joined(separator: ","))"
+    )
+}
+
+do {
+    let (draft, profiles) = sweepPlan(coverage: .noneRequired, includeOtherStem: false)
+    let before = draft.placements.count
+    let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: .standard)
+    let inventedFloor = plan.placements.contains {
+        $0.stemKind == .other && $0.timelineStart >= (plan.joinContracts.first?.windowStart ?? 0) - 0.01
+    }
+    check(
+        "Join: noneRequired does not invent a blend floor",
+        !inventedFloor,
+        "placements \(before)→\(plan.placements.count)"
+    )
+    check(
+        "Join: noneRequired still gets last-beat seam cover",
+        hasSeamCover(plan)
+    )
+}
+
 if failures > 0 {
     print("\nFAILED: \(failures)")
     exit(1)

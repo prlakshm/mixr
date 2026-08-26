@@ -87,7 +87,7 @@ enum AutoRemixRunner {
         if !listenSources.isEmpty,
            ProcessInfo.processInfo.environment["MIXR_NO_LISTEN_REPAIR"] != "1" {
             var listenDecisions = staged.decisions
-            _ = AutoListenLoop.verifyAndRepair(
+            let gateA = AutoListenLoop.verifyAndRepair(
                 plan: &staged,
                 profiles: profiles,
                 tuning: tuning,
@@ -96,6 +96,15 @@ enum AutoRemixRunner {
                 decisions: &listenDecisions
             )
             staged.decisions = listenDecisions
+            if gateA.blocksApply {
+                let s = gateA.keptScore
+                return .failure(message: String(
+                    format: "Auto join failed Gate A (critical structural residual). contracts=%d coverage=%d trough=%.1f dB approach=%.1f dB. Repair %@.",
+                    s.criticalContractViolations, s.missingRequiredCoverage,
+                    s.worstTroughDeficit, s.dropApproachDeficit,
+                    gateA.repairKept ? "kept" : "rolled back"
+                ))
+            }
         }
 
         guard !staged.placements.isEmpty else {

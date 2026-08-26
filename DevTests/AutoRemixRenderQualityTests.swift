@@ -1134,7 +1134,7 @@ do {
         stemSources: [:],
         decisions: &decisions
     )
-    let residualHoles = residual.filter { $0.kind == .hole }
+    let residualHoles = residual.residuals.filter { $0.kind == .hole }
     check(
         "Listen loop: genuine source silence is filled (no residual hole)",
         residualHoles.isEmpty,
@@ -1201,8 +1201,8 @@ do {
     let breathFills = breathPlan.placements.filter { $0.role == .supporting }
     check(
         "Listen loop: a 0.6s breath inside a vocal phrase is exempt (no hole, no fill)",
-        r1.filter { $0.kind == .hole }.isEmpty && breathFills.isEmpty,
-        "residualHoles=\(r1.filter { $0.kind == .hole }.count) fills=\(breathFills.count)"
+        r1.residuals.filter { $0.kind == .hole }.isEmpty && breathFills.isEmpty,
+        "residualHoles=\(r1.residuals.filter { $0.kind == .hole }.count) fills=\(breathFills.count)"
     )
     // 2.5 s gap: too long for a breath — still a hole, still filled.
     var holePlan = planFor()
@@ -1216,9 +1216,9 @@ do {
     )
     check(
         "Listen loop: a 2.5s gap is NOT a breath — filled as before",
-        r2.filter { $0.kind == .hole }.isEmpty
+        r2.residuals.filter { $0.kind == .hole }.isEmpty
             && holePlan.placements.contains { $0.role == .supporting },
-        "residual=\(r2.count)"
+        "residual=\(r2.residuals.count)"
     )
 }
 
@@ -1276,6 +1276,103 @@ do {
                  m2.makeupDB, wanted2, m2.sustainedReductionDB, m2.reductionP90DB))
     check("Master: glue guard — ceiling still honored",
           p2 <= ceiling * 1.002, String(format: "peak=%.3f", p2))
+}
+
+// MARK: - 15. Gate A preApplyScore (join-local, not global −8 dB)
+
+do {
+    let a = AutoPreApplyScore(
+        criticalContractViolations: 0, missingRequiredCoverage: 1,
+        worstTroughDeficit: 0, dropApproachDeficit: 0
+    )
+    let b = AutoPreApplyScore(
+        criticalContractViolations: 1, missingRequiredCoverage: 0,
+        worstTroughDeficit: 0, dropApproachDeficit: 0
+    )
+    let c = AutoPreApplyScore(
+        criticalContractViolations: 0, missingRequiredCoverage: 0,
+        worstTroughDeficit: 0, dropApproachDeficit: 0
+    )
+    check("Gate A: worse contract count is not kept", !AutoListenLoop.keepCandidate(original: a, candidate: b))
+    check("Gate A: equal tuple is not kept (no churn)", !AutoListenLoop.keepCandidate(original: a, candidate: a))
+    check("Gate A: strictly better coverage is kept", AutoListenLoop.keepCandidate(original: a, candidate: c))
+    check(
+        "Gate A: equal join tuple keeps a candidate that drops body residuals",
+        AutoListenLoop.keepCandidate(
+            original: a, candidate: a,
+            originalResidualCount: 3, candidateResidualCount: 1
+        )
+    )
+    check("Gate A: leftover critical score blocks apply",
+          AutoListenLoop.GateAResult(
+            residuals: [], originalScore: a, candidateScore: b, repairKept: false
+          ).blocksApply)
+    check("Gate A: clean kept score does not block apply",
+          !AutoListenLoop.GateAResult(
+            residuals: [], originalScore: c, candidateScore: c, repairKept: false
+          ).blocksApply)
+}
+
+do {
+    let bpm = 124.0
+    let beat = 60.0 / bpm
+    let bar = beat * 4
+    let cutAt = 40.0
+    let windowStart = cutAt - 2 * bar
+    let song = makeSong(title: "Trough", durationSeconds: 80)
+    func mix(windowScale: Float) -> [Float] {
+        let n = Int(80 * SR)
+        var y = [Float](repeating: 0, count: n)
+        let w0 = Int(windowStart * SR), w1 = Int(cutAt * SR)
+        for i in 0..<n {
+            let s = Float(0.4 * sin(2 * .pi * 1000 * Double(i) / SR))
+            y[i] = (i >= w0 && i < w1) ? s * windowScale : s
+        }
+        return y
+    }
+    var plan = AutoRemixPlan(
+        mode: .remix, targetBPM: bpm, targetDuration: 80,
+        anchorSongIDs: [song.id], selectedSections: [],
+        placements: [
+            AutoClipPlacement(
+                songID: song.id, sourceStart: 0, timelineStart: 0, timelineDuration: windowStart,
+                tempoRatio: 1, volume: 1, fadeIn: .none, fadeOut: .hardCut,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 0
+            ),
+            AutoClipPlacement(
+                songID: song.id, sourceStart: 40, timelineStart: cutAt, timelineDuration: 20,
+                tempoRatio: 1, volume: 1, fadeIn: .hardCut, fadeOut: .none,
+                effects: ClipEffectSettings(), role: .dominant, slotIndex: 1
+            ),
+        ],
+        sfxEvents: [
+            AutoSFXEvent(assetID: "airSweep", timelineStart: cutAt - 2.0, purpose: "seam")
+        ],
+        pulseRegions: [
+            AutoClubPulse.Region(role: .drop, timelineStart: cutAt, timelineEnd: cutAt + 16)
+        ],
+        joinContracts: [
+            AutoJoinContract(
+                kind: .sweepJoin, windowStart: windowStart, cutAt: cutAt,
+                outgoingSongID: song.id, incomingSongID: song.id, coverage: .noneRequired
+            )
+        ],
+        handoffCount: 0, songLetters: [song.id: "A"], sequence: ["A"],
+        transitionsUsed: [], decisions: [], warnings: [], confidence: 0.9, randomSeed: 1
+    )
+    // 9 dB amplitude drop ≈ 0.355 linear.
+    let bad = AutoListenLoop.score(plan: plan, mix: mix(windowScale: 0.355), sampleRate: SR)
+    check(
+        "Gate A: 9 dB trough inside a labeled sweep window scores a deficit",
+        bad.worstTroughDeficit > 0.5,
+        String(format: "deficit=%.2f", bad.worstTroughDeficit)
+    )
+    let ok = AutoListenLoop.score(plan: plan, mix: mix(windowScale: 0.75), sampleRate: SR)
+    check(
+        "Gate A: filtered-but-continuous sweep (~2.5 dB) is within allowance",
+        ok.worstTroughDeficit <= 0.01,
+        String(format: "deficit=%.2f", ok.worstTroughDeficit)
+    )
 }
 
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")

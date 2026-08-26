@@ -43,6 +43,34 @@ nonisolated enum AutoListenLoop {
     static let maxStepDB = 6.5
     /// The 2 bars into a drop may not sit more than this under the run-up.
     static let maxDropDipDB = 5.0
+    /// Labeled sweep window may sit this far below the high-passed run-up
+    /// (filter subtraction). A 9 dB trough exceeds this and scores a deficit.
+    static let maxJoinTroughDB = 6.0
+
+    struct GateAResult: Sendable {
+        var residuals: [Violation]
+        var originalScore: AutoPreApplyScore
+        var candidateScore: AutoPreApplyScore
+        var repairKept: Bool
+        var keptScore: AutoPreApplyScore {
+            repairKept ? candidateScore : originalScore
+        }
+        var blocksApply: Bool { !keptScore.isClean }
+    }
+
+    /// Keep the candidate when the 4-tuple strictly improves, or when the
+    /// tuple is unchanged and body residual count strictly drops. A worse
+    /// join tuple always rolls back — even if body residuals fell.
+    static func keepCandidate(
+        original: AutoPreApplyScore,
+        candidate: AutoPreApplyScore,
+        originalResidualCount: Int = 0,
+        candidateResidualCount: Int = 0
+    ) -> Bool {
+        if candidate < original { return true }
+        if original < candidate { return false }
+        return candidateResidualCount < originalResidualCount
+    }
     /// Ignore the opening fade-in and the trailing outro decay.
     static let edgeSkipSeconds = 10.0
     static let tailSkipSeconds = 16.0
@@ -215,10 +243,107 @@ nonisolated enum AutoListenLoop {
         return out
     }
 
+    // MARK: Gate A score
+
+    static func score(
+        plan: AutoRemixPlan,
+        mix: [Float],
+        sampleRate: Double
+    ) -> AutoPreApplyScore {
+        var s = AutoPreApplyScore()
+        let beat = plan.beatSeconds
+        let bar = plan.barSeconds
+        for c in plan.joinContracts where c.kind == .sweepJoin {
+            let incoming = plan.placements.filter {
+                $0.role == .dominant && abs($0.timelineStart - c.cutAt) < beat * 0.75
+            }
+            if incoming.isEmpty {
+                s.criticalContractViolations += 1
+            } else if incoming.contains(where: {
+                $0.fadeIn.type == .crossfade && $0.fadeIn.duration > 0.2
+            }) {
+                s.criticalContractViolations += 1
+            }
+
+            let wantFloor: Bool
+            switch c.coverage {
+            case .noneRequired: wantFloor = false
+            case .bedOther, .duckedFullMix: wantFloor = true
+            }
+            if wantFloor {
+                let bedID = c.outgoingSongID ?? plan.mashupBedSongID
+                let hasFloor = bedID.map { bid in
+                    plan.placements.contains { p in
+                        p.songID == bid
+                            && (c.coverage == .bedOther ? p.stemKind == .other : true)
+                            && p.timelineStart <= c.windowStart + 0.08
+                            && p.timelineEnd >= c.cutAt - 0.08
+                    }
+                } ?? false
+                if !hasFloor { s.missingRequiredCoverage += 1 }
+            }
+            let seam = plan.sfxEvents.contains {
+                $0.timelineEnd > c.cutAt - beat && $0.timelineStart < c.cutAt - 0.02
+            }
+            if !seam { s.missingRequiredCoverage += 1 }
+
+            if !mix.isEmpty, sampleRate > 1 {
+                let runUp = highpassRMSDB(
+                    mix, sampleRate: sampleRate,
+                    from: max(0, c.windowStart - 2 * bar), to: c.windowStart
+                )
+                let window = highpassRMSDB(
+                    mix, sampleRate: sampleRate,
+                    from: c.windowStart, to: c.cutAt
+                )
+                let dip = runUp - window
+                s.worstTroughDeficit = max(s.worstTroughDeficit, max(0, dip - maxJoinTroughDB))
+            }
+        }
+        if !mix.isEmpty, sampleRate > 1, bar > 0.05 {
+            let drops = plan.pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
+            let dur = Double(mix.count) / sampleRate
+            for d in drops where d > 8 * bar && d < dur - 2 * bar {
+                let runUp = broadbandRMSDB(mix, sampleRate: sampleRate, from: d - 6 * bar, to: d - 2 * bar)
+                let last2 = broadbandRMSDB(mix, sampleRate: sampleRate, from: d - 2 * bar, to: d)
+                s.dropApproachDeficit = max(s.dropApproachDeficit, max(0, runUp - last2 - maxDropDipDB))
+            }
+        }
+        return s
+    }
+
+    private static func broadbandRMSDB(
+        _ mix: [Float], sampleRate: Double, from: Double, to: Double
+    ) -> Double {
+        let a = max(0, Int(from * sampleRate))
+        let b = min(mix.count, Int(to * sampleRate))
+        guard b > a + 8 else { return -120 }
+        var acc = 0.0
+        for i in a..<b { acc += Double(mix[i]) * Double(mix[i]) }
+        return 10 * log10(max(acc / Double(b - a), 1e-12))
+    }
+
+    /// First-difference RMS — a cheap high-pass so kick/sub leaving the
+    /// sweep window is not scored as a trough.
+    static func highpassRMSDB(
+        _ mix: [Float], sampleRate: Double, from: Double, to: Double
+    ) -> Double {
+        let a = max(1, Int(from * sampleRate))
+        let b = min(mix.count, Int(to * sampleRate))
+        guard b > a + 8 else { return -120 }
+        var acc = 0.0
+        for i in a..<b {
+            let d = Double(mix[i] - mix[i - 1])
+            acc += d * d
+        }
+        return 10 * log10(max(acc / Double(b - a), 1e-12))
+    }
+
     // MARK: Verify + repair
 
-    /// Render → measure → (targeted repair + re-render once) → residuals.
-    /// Residual violations land in `plan.warnings` — visible, never silent.
+    /// Render → score → one repair candidate → keep only if preApplyScore
+    /// strictly improves. Body residuals of the kept plan stay warnings.
+    /// Critical structural leftovers block apply via `GateAResult.blocksApply`.
     static func verifyAndRepair(
         plan: inout AutoRemixPlan,
         profiles: [UUID: AutoSongProfile],
@@ -226,32 +351,46 @@ nonisolated enum AutoListenLoop {
         sources: [UUID: AutoOfflineMixdown.Source],
         stemSources: [UUID: [AutoStemKind: AutoOfflineMixdown.Source]],
         decisions: inout [AutoDecision]
-    ) -> [Violation] {
-        let first = renderAndMeasure(plan: plan, sources: sources, stemSources: stemSources)
+    ) -> GateAResult {
+        let rendered0 = AutoOfflineMixdown.render(
+            plan: plan, sources: sources, stemSources: stemSources,
+            sampleRate: 22_050, includeTail: false
+        )
+        let originalScore = score(plan: plan, mix: rendered0.mix, sampleRate: 22_050)
+        var first = measure(mix: rendered0.mix, sampleRate: 22_050, plan: plan)
+        if let d = titleOverDropDeficit(mix: rendered0.mix, sampleRate: 22_050, plan: plan) {
+            first.append(Violation(
+                kind: .titleOverDrop, t: d.titleT,
+                detail: String(format: "title probe %.1f dB vs drop 1 %.1f dB — drop must win by %.1f dB",
+                               d.titleDB, d.dropDB, AutoGainPolicy.dropOverTitleMarginDB),
+                durSeconds: 4, depthDB: d.deficitDB
+            ))
+        }
+        first = withoutBreaths(first, plan: plan, sources: sources, stemSources: stemSources)
         if ProcessInfo.processInfo.environment["MIXR_DEBUG_LISTEN"] == "1" {
             for v in first {
                 print(String(format: "  LISTEN first %@ @%.2f dur=%.2f depth=%.1f",
                              v.kind.rawValue, v.t, v.durSeconds, v.depthDB))
             }
         }
-        guard !first.isEmpty else {
+        if first.isEmpty && originalScore.isClean {
+            plan.preApplyRecord = AutoPreApplyRecord(
+                original: originalScore, candidate: originalScore, repairKept: false
+            )
             decisions.append(AutoDecision(
                 kind: .imposedClubEnergyCurve,
                 songTitle: nil,
                 detail: "listen loop: rendered mix passed all invariants first try"
             ))
-            return []
+            return GateAResult(
+                residuals: [], originalScore: originalScore,
+                candidateScore: originalScore, repairKept: false
+            )
         }
-        // One repair round: the validator's measured repairs, re-run against
-        // the plan (they are idempotent and threshold-gated).
+
+        let original = plan
         var repaired = AutoRemixValidator.validate(plan, profiles: profiles, tuning: tuning)
         var residual = renderAndMeasure(plan: repaired, sources: sources, stemSources: stemSources)
-
-        // Targeted Class-1 repair: a hole whose SOURCE is itself silent
-        // cannot be fixed by any plan surgery — the recording has a gap
-        // (sparse demos, breakdown stops). The DJ answer: the groove never
-        // stops — lay fill from the same song's strongest material across
-        // exactly that span, level-matched to the neighborhood.
         residual = withoutBreaths(residual, plan: repaired, sources: sources, stemSources: stemSources)
         let holes = residual.filter { $0.kind == .hole }
         if !holes.isEmpty {
@@ -269,9 +408,6 @@ nonisolated enum AutoListenLoop {
                 )
             }
         }
-        // Club truth: drop 1 must out-level the title probe. Measured on
-        // the mastered render (limiter cost included); repaired by ducking
-        // the title window, never by touching the drop.
         for _ in 0..<2 {
             guard let over = residual.first(where: { $0.kind == .titleOverDrop }) else { break }
             guard duckTitleUnderDrop(plan: &repaired, titleT: over.t, deficitDB: over.depthDB,
@@ -281,6 +417,26 @@ nonisolated enum AutoListenLoop {
                 plan: repaired, sources: sources, stemSources: stemSources
             )
         }
+        let rendered1 = AutoOfflineMixdown.render(
+            plan: repaired, sources: sources, stemSources: stemSources,
+            sampleRate: 22_050, includeTail: false
+        )
+        let candidateScore = score(plan: repaired, mix: rendered1.mix, sampleRate: 22_050)
+        let kept = keepCandidate(
+            original: originalScore,
+            candidate: candidateScore,
+            originalResidualCount: first.count,
+            candidateResidualCount: residual.count
+        )
+        if kept {
+            plan = repaired
+        } else {
+            plan = original
+            residual = first
+        }
+        plan.preApplyRecord = AutoPreApplyRecord(
+            original: originalScore, candidate: candidateScore, repairKept: kept
+        )
         if ProcessInfo.processInfo.environment["MIXR_DEBUG_LISTEN"] == "1" {
             for v in residual {
                 print(String(format: "  LISTEN residual %@ @%.2f dur=%.2f depth=%.1f — %@",
@@ -291,18 +447,26 @@ nonisolated enum AutoListenLoop {
             kind: .imposedClubEnergyCurve,
             songTitle: nil,
             detail: String(
-                format: "listen loop: %d violation(s) heard, %d after repair%@",
-                first.count, residual.count,
-                residual.isEmpty ? "" : " — residuals kept as warnings"
+                format: "listen loop: %d violation(s) heard, candidate %@ (orig %d/%d/%.1f/%.1f → cand %d/%d/%.1f/%.1f)",
+                first.count,
+                kept ? "kept" : "rolled back",
+                originalScore.criticalContractViolations, originalScore.missingRequiredCoverage,
+                originalScore.worstTroughDeficit, originalScore.dropApproachDeficit,
+                candidateScore.criticalContractViolations, candidateScore.missingRequiredCoverage,
+                candidateScore.worstTroughDeficit, candidateScore.dropApproachDeficit
             )
         ))
         for v in residual {
-            repaired.warnings.append(
+            plan.warnings.append(
                 String(format: "Listen loop: %@ @%.1fs — %@", v.kind.rawValue, v.t, v.detail)
             )
         }
-        plan = repaired
-        return residual
+        return GateAResult(
+            residuals: residual,
+            originalScore: originalScore,
+            candidateScore: candidateScore,
+            repairKept: kept
+        )
     }
 
     /// A BREATH is not a defect: a short gap (≤ ~0.85 s) inside a

@@ -1326,56 +1326,58 @@ nonisolated enum AutoRemixValidator {
         )
     }
 
-    /// Carry the bed's harmonic layer under the pivot wallpaper so the two
-    /// decks genuinely OVERLAP — that is what makes a join read as a blend
-    /// rather than an edit. With every layer cut at `loopStart` the mix
-    /// stepped from full band to one isolated stuttering vocal in a single
-    /// sample and nothing carried through.
+    /// Carry the bed's harmonic layer under the sweep window so the two
+    /// decks genuinely OVERLAP. Authority is `joinContracts.kind == .sweepJoin`
+    /// plus `coverage` — never a grain-count signature.
     ///
-    /// Runs on the FINISHED plan: bed stem clips are placed after the pivot
-    /// window is cleared, so an equivalent pass inside AutoJoinEngine sees
-    /// nothing to extend.
-    ///
-    /// Appends a separate ducked clip instead of re-gaining the incoming one —
-    /// re-gaining in place also ducked the seconds BEFORE the pivot, dropping
-    /// 9 s of a title-hook window by 3.4 dB (caught as fresh dead air on four
-    /// crates). Only `other` rides: the bed VOCAL would be a competing lead,
-    /// and drums/bass stay out so the kick/sub subtraction still builds tension.
+    /// `.bedOther` / `.duckedFullMix` require a floor spanning the window.
+    /// `.noneRequired` does not invent one.
     private static func addPivotBlendFloor(
         _ plan: inout AutoRemixPlan,
         decisions: inout [AutoDecision]
     ) {
         let beatSec = plan.beatSeconds
-        guard beatSec > 0.01, let bedID = plan.mashupBedSongID else { return }
-        let dropStarts = plan.pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
+        guard beatSec > 0.01 else { return }
         var floors: [AutoClipPlacement] = []
 
-        for drop in dropStarts.sorted() {
-            let grains = plan.placements.filter {
-                $0.role == .supporting
-                    && abs($0.timelineDuration - beatSec) < beatSec * 0.4
-                    && $0.timelineStart >= drop - plan.barSeconds * 3
-                    && $0.timelineStart < drop - 0.02
+        for contract in plan.joinContracts where contract.kind == .sweepJoin {
+            let loopStart = contract.windowStart
+            let drop = contract.cutAt
+            let bedID = contract.outgoingSongID ?? plan.mashupBedSongID
+            switch contract.coverage {
+            case .noneRequired:
+                continue
+            case .bedOther, .duckedFullMix:
+                break
             }
-            guard grains.count >= 4, let loopStart = grains.map(\.timelineStart).min() else { continue }
+            guard let bedID else { continue }
 
-            // Already covered by material that spans the window?
+            let wantOther = contract.coverage == .bedOther
             let covered = plan.placements.contains {
-                $0.songID == bedID && $0.stemKind == .other
+                $0.songID == bedID
+                    && (wantOther ? $0.stemKind == .other : $0.stemKind == nil)
                     && $0.timelineStart < loopStart + 0.05 && $0.timelineEnd > drop - 0.08
             }
             if covered { continue }
 
-            // The bed's harmonic layer running INTO the seam.
-            guard let source = plan.placements
+            let source = plan.placements
                 .filter({
-                    $0.songID == bedID && $0.stemKind == .other && $0.role == .supporting
+                    $0.songID == bedID
+                        && (wantOther ? $0.stemKind == .other : ($0.stemKind == nil || $0.stemKind == .other))
+                        && $0.role == .supporting
                         && $0.timelineStart < loopStart - 0.01
-                        && $0.timelineEnd > loopStart - beatSec
+                        && $0.timelineEnd > loopStart - beatSec * 4
                         && $0.timelineEnd < drop - 0.01
                 })
                 .max(by: { $0.timelineEnd < $1.timelineEnd })
-            else { continue }
+                ?? plan.placements
+                    .filter({
+                        $0.songID == bedID
+                            && $0.timelineStart < loopStart - 0.01
+                            && $0.timelineEnd > loopStart - beatSec * 8
+                    })
+                    .max(by: { $0.timelineEnd < $1.timelineEnd })
+            guard let source else { continue }
 
             var floor = source
             floor.timelineStart = loopStart
@@ -1383,6 +1385,8 @@ nonisolated enum AutoRemixValidator {
             floor.sourceStart = source.sourceStart
                 + (loopStart - source.timelineStart) * source.tempoRatio
             floor.volume = min(source.volume, AutoGainPolicy.pivotBedFloorVolume)
+            floor.role = .supporting
+            if wantOther { floor.stemKind = .other }
             floor.continuesPrevious = false
             floor.fadeIn = .hardCut
             floor.fadeOut = ClipTransition(
@@ -1396,7 +1400,8 @@ nonisolated enum AutoRemixValidator {
                 AutoDecision(
                     kind: .hookReplace,
                     songTitle: nil,
-                    detail: String(format: "pivot blend floor (bed other @%.2f vol=%.2f)",
+                    detail: String(format: "pivot blend floor (%@ @%.2f vol=%.2f)",
+                                   wantOther ? "bed other" : "ducked full-mix",
                                    loopStart, floor.volume)
                 )
             )
@@ -1404,50 +1409,39 @@ nonisolated enum AutoRemixValidator {
         plan.placements.append(contentsOf: floors)
     }
 
-    /// Place a broadband swell ON the pivot wallpaper downbeat when nothing
-    /// already covers that seam, so the chop reads as a deliberate move
-    /// instead of an edit glitch. Grains are the 1-beat supporting clips
-    /// immediately before a drop (see AutoJoinEngine.appendPivotWallpaperLoop).
+    /// Place a broadband swell covering the last beat into the hard cut when
+    /// nothing already covers that seam. Reads `joinContracts.kind == .sweepJoin`.
     private static func coverPivotWallpaperSeam(
         _ plan: inout AutoRemixPlan,
         decisions: inout [AutoDecision]
     ) {
         let beatSec = plan.beatSeconds
         guard beatSec > 0.01 else { return }
-        let dropStarts = plan.pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
-        guard !dropStarts.isEmpty else { return }
 
-        for drop in dropStarts.sorted() {
-            let grains = plan.placements.filter {
-                $0.role == .supporting
-                    && abs($0.timelineDuration - beatSec) < beatSec * 0.4
-                    && $0.timelineStart >= drop - plan.barSeconds * 3
-                    && $0.timelineStart < drop - 0.02
-            }
-            guard grains.count >= 4, let loopStart = grains.map(\.timelineStart).min() else { continue }
-
+        for contract in plan.joinContracts where contract.kind == .sweepJoin {
+            let drop = contract.cutAt
+            let lastBeatStart = drop - beatSec
             let covered = plan.sfxEvents.contains {
-                $0.timelineStart <= loopStart + beatSec * 0.25 && $0.timelineEnd > loopStart + 0.05
+                $0.timelineEnd > lastBeatStart + 0.02 && $0.timelineStart < drop - 0.02
             }
             if covered { continue }
 
-            // Protect the incoming hook's own attack — a swell must never
-            // start on top of Drop 1's first syllable.
-            guard loopStart < drop - beatSec else { continue }
             for id in ["airSweep", "reverseCymbal", "sweepUp"] {
-                guard SoundEffectLibrary.definition(for: id) != nil else { continue }
+                guard let def = SoundEffectLibrary.definition(for: id) else { continue }
+                let start = drop - def.durationSeconds
+                guard start < drop - beatSec * 0.5 else { continue }
                 plan.sfxEvents.append(
                     AutoSFXEvent(
                         assetID: id,
-                        timelineStart: loopStart,
-                        purpose: "wallpaper seam cover on the pivot downbeat"
+                        timelineStart: start,
+                        purpose: "sweep seam cover on the last beat before the cut"
                     )
                 )
                 decisions.append(
                     AutoDecision(
                         kind: .addedRiserIntoDrop,
                         songTitle: nil,
-                        detail: String(format: "seam cover %@ @%.2fs (wallpaper entry)", id, loopStart)
+                        detail: String(format: "seam cover %@ @%.2fs (last beat into cut)", id, start)
                     )
                 )
                 break
