@@ -58,6 +58,20 @@ struct SongSignalFeatures: Sendable {
     /// 0…1 overall trust in these measurements.
     var overallConfidence: Double
 
+    /// Measured beat / bar / phrase / section structure (nil when the
+    /// audio was too short or had no trackable pulse).
+    var structure: SongStructure? = nil
+
+    /// Loudness of the song body, dBFS: mean power of the loudest 60% of
+    /// 100 ms hops (edge silence and quiet passages excluded). Used for
+    /// loudness matching between songs.
+    nonisolated var bodyLoudnessDB: Double {
+        let powers = rmsCurveDB.map { pow(10, $0 / 10) }.sorted(by: >)
+        guard !powers.isEmpty else { return -120 }
+        let n = max(1, Int(Double(powers.count) * 0.6))
+        return 10 * log10(max(powers.prefix(n).reduce(0, +) / Double(n), 1e-12))
+    }
+
     nonisolated var hopCount: Int { rmsCurveDB.count }
 
     /// Mean short-time RMS (power domain) over a source range, dBFS.
@@ -268,7 +282,25 @@ enum SongSignalAnalyzer {
         }
 
         let durationFactor = min(1.0, duration / 30.0)
-        let overall = min(1.0, max(0.0, 0.25 + 0.55 * beatConfidence + 0.2 * durationFactor))
+        var overall = min(1.0, max(0.0, 0.25 + 0.55 * beatConfidence + 0.2 * durationFactor))
+
+        // ── Measured structure (beats, bars, phrases, sections) ──
+        // When it succeeds it supersedes the coarse phase search above:
+        // float tempo, real downbeats, and section evidence.
+        let structure = SongStructureAnalyzer.analyze(samples: samples, sampleRate: sampleRate, bpmHint: bpmHint)
+        if let structure {
+            beatConfidence = max(beatConfidence * 0.5, structure.beatConfidence)
+            // Only a CONFIDENT bar phase may replace the first-beat estimate;
+            // with no bar-level evidence (identical beats) "beat one" is unknown.
+            if structure.downbeatConfidence >= 0.3,
+               let first = structure.downbeats.first(where: { $0 >= leadingSilence - 0.05 }) {
+                downbeatOffset = first
+            }
+            overall = min(1.0, max(0.0,
+                0.15 + 0.4 * structure.structureConfidence
+                    + 0.3 * min(1, structure.beatConfidence * 1.5)
+                    + 0.15 * structure.downbeatConfidence))
+        }
 
         return SongSignalFeatures(
             sampleRate: sampleRate,
@@ -286,7 +318,8 @@ enum SongSignalAnalyzer {
             vocalPresenceCurve: vocalCurve,
             noveltyCurve: noveltyCurve,
             drumConfidence: drumConfidence,
-            overallConfidence: overall
+            overallConfidence: overall,
+            structure: structure
         )
     }
 

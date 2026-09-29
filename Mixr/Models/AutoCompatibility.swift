@@ -99,17 +99,41 @@ nonisolated enum AutoTempo {
         return Fit(ratio: 1.0, gridAligned: false, halfOrDoubleTime: false)
     }
 
-    /// Target BPM: the anchor's tempo when most songs can lock to it,
-    /// otherwise the median of the songs' tempos — always favoring
-    /// minimal total stretching.
+    /// Target BPM: the tempo that lets the MOST songs lock within the
+    /// stretch window (half/double time counts), then the smallest total
+    /// stretch, then closeness to the anchor. Two songs 10–16% apart meet
+    /// in the middle (each ≤ ±8%) instead of one being left unmatched.
     static func targetBPM(profiles: [AutoSongProfile], anchorID: UUID, maxStretch: Double) -> Double {
         let bpms = profiles.map(\.analysis.bpm)
         guard let anchorBPM = profiles.first(where: { $0.songID == anchorID })?.analysis.bpm else {
             return bpms.sorted()[bpms.count / 2]
         }
-        let locked = bpms.filter { fit(songBPM: $0, targetBPM: anchorBPM, maxStretch: maxStretch).gridAligned }
-        if Double(locked.count) >= Double(bpms.count) * 0.5 { return anchorBPM }
-        return bpms.sorted()[bpms.count / 2]
+        // Candidates: every song tempo (and folds into the anchor's octave)
+        // plus pairwise geometric midpoints.
+        func fold(_ b: Double) -> Double {
+            var x = b
+            while x > anchorBPM * 1.414 { x /= 2 }
+            while x < anchorBPM / 1.414 { x *= 2 }
+            return x
+        }
+        let folded = bpms.map(fold)
+        var candidates = folded
+        for i in folded.indices { for j in folded.indices where j > i { candidates.append((folded[i] * folded[j]).squareRoot()) } }
+        func cost(_ target: Double) -> (Int, Double, Double) {
+            var locked = 0
+            var stretch = 0.0
+            for b in bpms {
+                let f = fit(songBPM: b, targetBPM: target, maxStretch: maxStretch)
+                if f.gridAligned { locked += 1; stretch += abs(f.ratio - 1) }
+            }
+            return (locked, stretch, abs(target - anchorBPM) / anchorBPM)
+        }
+        return candidates.min { a, b in
+            let ca = cost(a), cb = cost(b)
+            if ca.0 != cb.0 { return ca.0 > cb.0 }
+            if abs(ca.1 - cb.1) > 0.01 { return ca.1 < cb.1 }
+            return ca.2 < cb.2
+        } ?? anchorBPM
     }
 }
 

@@ -178,3 +178,24 @@ nonisolated struct ClipEffectSettings: Equatable, Sendable, Codable {
         levels.values.contains { $0 > 0.5 }
     }
 }
+
+// MARK: - Pure slider → parameter mapping (shared)
+
+/// The slider→parameter curves that must be identical in live playback,
+/// export (ClipEffectDSP, AVFoundation), and the portable offline mixdown
+/// (pure Swift). ClipEffectDSP.targets delegates here.
+nonisolated enum ClipEffectMapping {
+    /// Blur level 0…100 → low-pass cutoff (Hz). 0 = open (20 kHz).
+    static func blurLowPassHz(level: Double) -> Double {
+        let amount = min(1, max(0, level / 100))
+        guard amount > 0.001 else { return 20_000 }
+        return 20_000 * pow(650.0 / 20_000.0, pow(amount, 1.3))
+    }
+
+    /// Echo amount 0…1 → AVAudioUnitDelay wetDryMix (percent, before the
+    /// transient echo-out boost).
+    static func echoWetPercent(amount: Double) -> Double {
+        let a = min(1, max(0, amount))
+        return 50.0 * pow(a, 0.9)
+    }
+}

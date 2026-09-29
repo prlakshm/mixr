@@ -201,7 +201,9 @@ do {
             Double(rp.sfxEvents.count) / rMinutes <= 3.0 + 0.0001,
             String(format: "%.2f events/min", Double(rp.sfxEvents.count) / rMinutes)
         )
-        check("Mashup still coordinates SFX moments", !mp.sfxEvents.isEmpty)
+        // Metadata-only songs are LOW confidence (sections are guesses):
+        // the ladder keeps SFX minimal instead of decorating guesses.
+        check("Low-confidence mashup keeps SFX minimal (≤ 1)", mp.sfxEvents.count <= 1, "got \(mp.sfxEvents.count)")
     default:
         check("Remix vs Mashup SFX comparison runs", false)
     }
@@ -224,13 +226,17 @@ do {
         if dominants.count >= 2 {
             let secondIdx = dominants[1].offset
             let threshold = dominants[1].element.timelineStart
-            broken.placements[secondIdx].timelineStart += 1.0
+            // Handoffs now OVERLAP (real crossfades), so the shift must
+            // clear the overlap before it opens a 1-second hole.
+            let overlap = max(0, dominants[0].element.timelineEnd - threshold)
+            let shift = overlap + 1.0
+            broken.placements[secondIdx].timelineStart += shift
             for i in broken.placements.indices where i != secondIdx
                 && broken.placements[i].timelineStart >= threshold - 0.001 {
-                broken.placements[i].timelineStart += 1.0
+                broken.placements[i].timelineStart += shift
             }
             for i in broken.sfxEvents.indices where broken.sfxEvents[i].timelineStart >= threshold - 0.001 {
-                broken.sfxEvents[i].timelineStart += 1.0
+                broken.sfxEvents[i].timelineStart += shift
             }
 
             let repaired = AutoRemixValidator.validate(broken, profiles: profiles, tuning: .standard)

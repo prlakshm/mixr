@@ -5,6 +5,7 @@
 #   Scripts/run_auto_remix_tests.sh            # run all harnesses
 #   Scripts/run_auto_remix_tests.sh pipeline   # plan-legality tests only
 #   Scripts/run_auto_remix_tests.sh render     # rendered-PCM quality tests only
+#   Scripts/run_auto_remix_tests.sh dj         # measured-structure DJ quality gates
 #
 # Works on macOS (xcrun swiftc) and Linux (swiftc on PATH or $SWIFT_BIN).
 set -euo pipefail
@@ -26,6 +27,7 @@ SOURCES=(
   "$ROOT/Mixr/Models/MixrTrack.swift"
   "$ROOT/Mixr/Models/SongAnalysis.swift"
   "$ROOT/Mixr/Models/SongSignalAnalysis.swift"
+  "$ROOT/Mixr/Models/SongStructureAnalysis.swift"
   "$ROOT/Mixr/Models/SoundEffects.swift"
   "$ROOT/Mixr/Models/AutoCompatibility.swift"
   "$ROOT/Mixr/Models/AutoSectionCatalog.swift"
@@ -65,4 +67,8 @@ fi
 
 if [[ "$WHICH" == "render" || "$WHICH" == "all" ]]; then
   run_harness "$ROOT/DevTests/AutoRemixRenderQualityTests.swift" /tmp/mixr_auto_render_tests
+fi
+
+if [[ "$WHICH" == "dj" || "$WHICH" == "all" ]]; then
+  run_harness "$ROOT/DevTests/AutoRemixDJQualityTests.swift" /tmp/mixr_auto_dj_tests
 fi

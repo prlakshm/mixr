@@ -169,6 +169,9 @@ enum SongAnalyzer {
     /// when the audio has been measured, and deterministic heuristics
     /// only where no measurement exists.
     static func analyze(track: MixrTrack, signal: SongSignalFeatures? = nil) -> SongAnalysis {
+        if let signal, let structure = signal.structure {
+            return measured(track: track, signal: signal, structure: structure)
+        }
         let bpm = track.bpm.map(Double.init) ?? defaultBPM
         let duration = track.durationSeconds
             ?? track.clips.first.map { MixrTimeline.seconds(fromUnits: $0.length) * $0.playbackSpeed }
@@ -307,11 +310,15 @@ enum SongAnalyzer {
         let metadataConfidence = min(1, max(0, bpmTrust * 0.55 + keyTrust * 0.20 + durationTrust * 0.25))
         // Real measurements raise (or lower) trust; metadata alone never
         // reaches the certainty of an analyzed waveform.
+        // Sections here are HEURISTIC (fractions of the duration), so trust
+        // is capped below the low-confidence threshold: guessed structure
+        // must never drive cuts or arrangement edits.
+        let heuristicCap = 0.45
         let confidence: Double
         if let signal {
-            confidence = min(1, max(0, metadataConfidence * 0.4 + signal.overallConfidence * 0.6))
+            confidence = min(heuristicCap, max(0, metadataConfidence * 0.4 + signal.overallConfidence * 0.6))
         } else {
-            confidence = metadataConfidence
+            confidence = min(heuristicCap, metadataConfidence)
         }
 
         // Texture: MEASURED transient/low-band values when available.
@@ -353,6 +360,85 @@ enum SongAnalyzer {
             hookMoments: [chorus1.startSeconds, chorus2.startSeconds],
             drumStrength: drumStrength,
             bassDensity: bassDensity,
+            analysisConfidence: confidence,
+            signal: signal
+        )
+    }
+
+    // MARK: Measured build (signal structure available)
+
+    /// Analysis built entirely from measured structure: tracked beats,
+    /// Viterbi downbeats, phrase grid, and SSM sections.
+    private static func measured(
+        track: MixrTrack,
+        signal: SongSignalFeatures,
+        structure st: SongStructure
+    ) -> SongAnalysis {
+        let duration = track.durationSeconds ?? signal.durationSeconds
+        func kind(_ label: MeasuredSection.Label) -> SongSection.Kind {
+            switch label {
+            case .intro: .intro
+            case .verse: .verse
+            case .build: .build
+            case .chorus: .chorus
+            case .bridge: .bridge
+            case .breakdown: .instrumental
+            case .outro: .outro
+            }
+        }
+        let sections = st.sections.map {
+            SongSection(kind: kind($0.label), startSeconds: $0.start, endSeconds: min(duration, $0.end))
+        }
+        let phrases = st.downbeats.enumerated()
+            .filter { ($0.offset - st.phraseOffsetBars) % 4 == 0 }
+            .map(\.element)
+        let choruses = sections.filter { $0.kind == .chorus }
+        let lowVocal = st.sections.filter { $0.vocal < 0.35 }.map {
+            SongSection(kind: .instrumental, startSeconds: $0.start, endSeconds: min(duration, $0.end))
+        }
+
+        let energy = resample(signal.energyCurve, to: curveSamples)
+        let vocals = resample(st.bars.map(\.vocal), to: curveSamples)
+        func vocalAt(_ t: Double) -> Double {
+            guard let i = st.barIndex(at: t), i < st.bars.count else { return 0.5 }
+            return st.bars[i].vocal
+        }
+        var mixIn = phrases.filter { $0 <= duration * 0.4 && vocalAt($0) < 0.5 }
+        if mixIn.isEmpty { mixIn = [phrases.first ?? 0] }
+        var mixOut = phrases.filter { $0 >= duration * 0.55 && vocalAt($0) < 0.5 }
+        if mixOut.isEmpty { mixOut = [phrases.last ?? max(0, duration - st.barSeconds * 8)] }
+
+        let bpmTrust: Double = track.bpm == nil ? 0.5 : (track.bpmConfidence ?? 1.0)
+        let metadata = min(1, bpmTrust * 0.6 + (track.key == nil ? 0.2 : 0.4))
+        let confidence = min(1, max(0, 0.1 * metadata + 0.9 * signal.overallConfidence))
+
+        return SongAnalysis(
+            bpm: st.bpm,
+            bpmIsReal: true,
+            bpmConfidence: st.beatConfidence,
+            key: track.key ?? st.key,
+            keyConfidence: track.key != nil ? track.keyConfidence : st.keyConfidence,
+            durationSeconds: duration,
+            beatGrid: st.beatTimes,
+            downbeats: st.downbeats,
+            phraseBoundaries: phrases,
+            sectionCandidates: sections,
+            introCandidate: sections.first { $0.kind == .intro },
+            verseCandidates: sections.filter { $0.kind == .verse },
+            chorusOrDropCandidates: choruses,
+            buildCandidates: sections.filter { $0.kind == .build },
+            bridgeCandidate: sections.first { $0.kind == .bridge || $0.kind == .instrumental },
+            outroCandidate: sections.last { $0.kind == .outro },
+            instrumentalCandidates: lowVocal,
+            energyCurve: energy,
+            vocalDensityCurve: vocals,
+            mixInPoints: mixIn,
+            mixOutPoints: mixOut,
+            lyricOrVocalMoments: [],
+            hookMoments: choruses.map(\.startSeconds),
+            drumStrength: signal.drumConfidence,
+            bassDensity: signal.bassEnergyCurve.isEmpty
+                ? 0.5 : signal.bassEnergyCurve.reduce(0, +) / Double(signal.bassEnergyCurve.count),
             analysisConfidence: confidence,
             signal: signal
         )

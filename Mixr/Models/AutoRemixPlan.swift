@@ -37,6 +37,12 @@ enum AutoTransitionRecipe: String, Sendable, CaseIterable {
     case flangerBuild = "Flanger Build"
     case atmosphericHandoff = "Atmospheric Handoff"
     case hardHypeCut = "Hard Hype Cut"
+    /// Beatmatched, phrase-aligned overlap with an EQ bass swap.
+    case beatmatchedBlend = "Beatmatched Blend"
+    /// High-pass build (+ riser) released on the next drop's downbeat.
+    case filterBuildDrop = "Filter Build Drop"
+    /// Echo throw on the outgoing downbeat; incoming lands on the one.
+    case echoSlam = "Echo Slam"
     case cleanCrossfade = "Clean Crossfade"
     case none = "None"
 }
@@ -65,6 +71,15 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case savedStrongestForPeak
     case duoAlternationFallback
     case excludedLowConfidenceSong
+    case extendedBuild
+    case removedRedundantRepeat
+    case hookPreview
+    case bassSwapBlend
+    case loudnessMatched
+    case trimmedIntro
+    case shortenedOutro
+    case echoOutEnding
+    case fewerEditsExplained
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -116,6 +131,24 @@ struct AutoDecision: Sendable, Equatable {
                 ?? "Could not reach the full A → B → A → B alternation without incomplete sections."
         case .excludedLowConfidenceSong:
             return "Excluded \(song): \(detail ?? "not enough timeline for a recognizable phrase")."
+        case .extendedBuild:
+            return "Extended \(song)'s build\(detail.map { " (\($0))" } ?? "") with a filter sweep into the drop."
+        case .removedRedundantRepeat:
+            return "Removed a repeated phrase from \(song)\(detail.map { " (\($0))" } ?? "")."
+        case .hookPreview:
+            return "Opened with a filtered preview of \(song)'s hook."
+        case .bassSwapBlend:
+            return "Blended into \(song) on the beat with a bass swap\(detail.map { " (\($0))" } ?? "")."
+        case .loudnessMatched:
+            return "Matched \(song)'s loudness\(detail.map { " (\($0))" } ?? "")."
+        case .trimmedIntro:
+            return "Trimmed \(song)'s intro\(detail.map { " (\($0))" } ?? "")."
+        case .shortenedOutro:
+            return "Shortened \(song)'s outro\(detail.map { " (\($0))" } ?? "")."
+        case .echoOutEnding:
+            return "Ended on an echo-out\(detail.map { " (\($0))" } ?? "")."
+        case .fewerEditsExplained:
+            return detail ?? "Kept more of \(song) intact."
         }
     }
 }
@@ -168,6 +201,10 @@ struct AutoClipPlacement: Sendable {
     /// true equal-power crossfade. The validator only permits same-song
     /// overlap that is declared here.
     var overlapsPreviousSeconds: Double = 0
+    /// Tempo (BPM) the engines use to convert this placement's fade beats
+    /// to seconds: AutoTransitionEnvelope.timelineBPM(track BPM, rate).
+    /// 0 = use the plan's target BPM (legacy / fixtures).
+    var envelopeBPM: Double = 0
 
     nonisolated var timelineEnd: Double { timelineStart + timelineDuration }
     nonisolated var sourceDuration: Double { timelineDuration * tempoRatio }
@@ -185,6 +222,12 @@ enum AutoCutReason: String, Sendable, Equatable {
     case edgeTrim
     /// An explicitly requested return to the hook for a final peak.
     case hookReturn
+    /// A filtered preview of the hook before the song's own start
+    /// (source rewinds to the intro afterwards).
+    case hookPreview
+    /// The build phrase before a drop is played twice (second pass
+    /// filtered) — a source rewind of one phrase.
+    case extendedBuild
 }
 
 /// How a cut's transition is audibly covered.
@@ -264,6 +307,16 @@ struct AutoRemixPlan: Sendable {
     var usableSourceRange: ClosedRange<Double>? = nil
     /// Deliberate micro-pauses / intentional silence the validator preserves.
     var intentionalGaps: [AutoIntentionalGap] = []
+    /// Timeline seconds of drop / hook-arrival downbeats (payoffs). Build
+    /// SFX must land on one of these or on a placement start.
+    var payoffTimes: [Double] = []
+    /// Timeline seconds of every bar downbeat the plan's placements carry
+    /// (source downbeats mapped through each placement). Impacts snap here.
+    var timelineDownbeats: [Double] = []
+    /// Measured BPM for songs whose track had none. The applier writes it
+    /// to the track so live playback and export convert fade beats with
+    /// exactly the tempo the planner used.
+    var measuredTrackBPMs: [UUID: Int] = [:]
     /// Song-change count between consecutive dominant slots.
     var handoffCount: Int
     /// Arrangement letter per song (anchor = "A").

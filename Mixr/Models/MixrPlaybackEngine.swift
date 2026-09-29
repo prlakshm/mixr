@@ -80,8 +80,8 @@ final class MixrPlaybackEngine: ObservableObject {
         let playerB = AVAudioPlayerNode()
         let head = AVAudioMixerNode()
         let timePitch = AVAudioUnitTimePitch()
-        /// Single band: Blur low-pass.
-        let eq = AVAudioUnitEQ(numberOfBands: 1)
+        /// Band 0: Blur / transition low-pass. Band 1: transition high-pass.
+        let eq = AVAudioUnitEQ(numberOfBands: 2)
         /// Custom modulated fractional-delay flanger (nil if instantiation failed).
         let flangerNode: AVAudioUnit?
         let flangerKernel: FlangerKernel?
@@ -101,6 +101,7 @@ final class MixrPlaybackEngine: ObservableObject {
         var smoothedVolumeB: Float = 0
         var smoothedPitch: Float = 0
         var smoothedLowPassFreq: Float = 20000
+        var smoothedHighPassFreq: Float = 20
         var smoothedDelayWet: Float = 0
         var smoothedDelayFeedback: Float = 0
         var smoothedReverbWet: Float = 0
@@ -561,7 +562,10 @@ final class MixrPlaybackEngine: ObservableObject {
         for track in snapshot where !track.isSFXTrack {
             guard let chain = chains[track.id] else { continue }
             let audible = TrackLibrary.isAudible(track, in: soloAware)
-            let bpm = Double(track.bpm ?? Int(projectBPM))
+            // Fade beats and the echo are measured at each clip's TIMELINE
+            // tempo (native BPM × rate) — the same model the planner, the
+            // exporter, and the offline mixdown use.
+            let trackBPM = track.bpm ?? Int(projectBPM.rounded())
 
             let songClips = track.clips.filter { !$0.isSoundEffect }
             let lanes = AutoTransitionEnvelope.playerLanes(for: songClips)
@@ -574,12 +578,14 @@ final class MixrPlaybackEngine: ObservableObject {
             // its own player, each with its own (equal-power) envelope.
             var laneTargets: [Float] = [0, 0]
             var effectsClip: MixrClip?
-            var effectsBoost = 0.0
+            var effectsEnvelope = AutoTransitionEnvelope.Value(gain: 1, echoBoost: 0)
             if audible {
                 for clip in active {
                     let continuity = AutoTransitionEnvelope.continuity(for: clip, in: songClips)
                     let envelope = ClipEffectDSP.transitionEnvelope(
-                        for: clip, at: t, bpm: bpm, continuity: continuity
+                        for: clip, at: t,
+                        bpm: AutoTransitionEnvelope.timelineBPM(trackBPM: trackBPM, playbackSpeed: clip.playbackSpeed),
+                        continuity: continuity
                     )
                     let volume = Float(track.volume * clip.volume * envelope.gain * duckGain)
                     let lane = lanes[clip.id] ?? 0
@@ -587,13 +593,17 @@ final class MixrPlaybackEngine: ObservableObject {
                     // Effects follow the incoming clip during an overlap.
                     if effectsClip == nil || clip.start > effectsClip!.start {
                         effectsClip = clip
-                        effectsBoost = envelope.echoBoost
+                        effectsEnvelope = envelope
                     }
                 }
             }
 
             if let clip = effectsClip, audible {
-                applyEffects(clip: clip, chain: chain, at: t, bpm: bpm, echoBoost: effectsBoost, force: force)
+                applyEffects(
+                    clip: clip, chain: chain, at: t,
+                    bpm: AutoTransitionEnvelope.timelineBPM(trackBPM: trackBPM, playbackSpeed: clip.playbackSpeed),
+                    envelope: effectsEnvelope, force: force
+                )
             } else if audible {
                 // Between clips: silent input, but let delay/reverb tails ring.
                 // The flanger has no tail — release it so it never stays
@@ -639,16 +649,18 @@ final class MixrPlaybackEngine: ObservableObject {
         chain: TrackChain,
         at timelineSeconds: Double,
         bpm: Double,
-        echoBoost: Double,
+        envelope: AutoTransitionEnvelope.Value,
         force: Bool
     ) {
         let t = ClipEffectDSP.targets(
             for: clip.effects,
             playbackSpeed: clip.playbackSpeed,
             bpm: bpm,
-            echoBoost: echoBoost
+            echoBoost: envelope.echoBoost,
+            transitionHighPassHz: envelope.highPassHz,
+            transitionLowPassHz: envelope.lowPassHz
         )
-        let coeff: Float = force ? 1.0 : 0.28
+        let coeff: Float = force ? 1.0 : ClipEffectDSP.smoothingCoefficient(dt: 1.0 / 60.0)
 
         // ── Pitch (AVAudioUnitTimePitch) ──
         // Pitch ramps in cents → smooth glide between slider values and
@@ -679,6 +691,15 @@ final class MixrPlaybackEngine: ObservableObject {
         }
         lowPass.frequency = chain.smoothedLowPassFreq
         lowPass.bypass = t.lowPassBypass && chain.smoothedLowPassFreq >= 19_999
+
+        // ── Transition high-pass (bass swap / build) — log-domain ramp ──
+        let highPass = chain.eq.bands[1]
+        chain.smoothedHighPassFreq *= pow(t.highPassFrequency / max(chain.smoothedHighPassFreq, 1), coeff)
+        if abs(t.highPassFrequency - chain.smoothedHighPassFreq) < 0.5 {
+            chain.smoothedHighPassFreq = t.highPassFrequency
+        }
+        highPass.frequency = chain.smoothedHighPassFreq
+        highPass.bypass = t.highPassBypass && chain.smoothedHighPassFreq <= 20.5
 
         // ── Flanger (custom modulated fractional delay) ──
         // Targets go straight to the kernel — it ramps wet/feedback/depth

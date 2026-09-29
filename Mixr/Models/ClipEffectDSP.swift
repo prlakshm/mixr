@@ -38,9 +38,12 @@ nonisolated enum ClipEffectDSP {
         /// True bypass when Pitch is 0 and the clip plays at normal speed.
         var timePitchBypass: Bool
 
-        // Blur → AVAudioUnitEQ band 0 (low-pass)
+        // Blur ∧ transition low-pass → AVAudioUnitEQ band 0 (low-pass)
         var lowPassFrequency: Float
         var lowPassBypass: Bool
+        // Transition high-pass (bass swap / build) → AVAudioUnitEQ band 1
+        var highPassFrequency: Float
+        var highPassBypass: Bool
 
         // Flanger → FlangerKernel (custom AU)
         var flangerWet: Float
@@ -62,12 +65,17 @@ nonisolated enum ClipEffectDSP {
         var reverbWetDryMix: Float
     }
 
-    /// Maps a clip's slider levels + presets to audio-unit parameters.
+    /// Maps a clip's slider levels + presets (plus the transition
+    /// envelope's DJ filter cutoffs) to audio-unit parameters. `bpm` is the
+    /// clip's TIMELINE tempo (AutoTransitionEnvelope.timelineBPM) so the
+    /// echo stays locked to the beats the listener hears.
     static func targets(
         for settings: ClipEffectSettings,
         playbackSpeed: Double,
         bpm: Double,
-        echoBoost: Double
+        echoBoost: Double,
+        transitionHighPassHz: Double = AutoTransitionEnvelope.openHighPassHz,
+        transitionLowPassHz: Double = AutoTransitionEnvelope.openLowPassHz
     ) -> ChainTargets {
         let reverbAmount = settings.level(for: MixrEffect.reverb.rawValue) / 100.0
         let echoAmount = settings.level(for: MixrEffect.echo.rawValue) / 100.0
@@ -81,9 +89,11 @@ nonisolated enum ClipEffectDSP {
         let timePitchBypass = pitchAmount <= 0.001 && abs(playbackSpeed - 1.0) < 0.001
 
         // ── BLUR (low-pass) ──
-        let lowPassBypass = blurAmount <= 0.001
-        let eased = pow(blurAmount, 1.3)
-        let lowPassFrequency = Float(20000.0 * pow(650.0 / 20000.0, eased))
+        let transitionLP = transitionLowPassHz < AutoTransitionEnvelope.openLowPassHz - 1
+        let lowPassBypass = blurAmount <= 0.001 && !transitionLP
+        let lowPassFrequency = Float(min(ClipEffectMapping.blurLowPassHz(level: blurAmount * 100), transitionLowPassHz))
+        let highPassBypass = transitionHighPassHz <= AutoTransitionEnvelope.openHighPassHz + 1
+        let highPassFrequency = Float(max(AutoTransitionEnvelope.openHighPassHz, transitionHighPassHz))
 
         // ── FLANGER ──
         // The slider drives a coordinated group — wet mix, feedback,
@@ -124,7 +134,7 @@ nonisolated enum ClipEffectDSP {
             delayLowPass = 7500
         }
         let delayFeedback = Float(echoAmount <= 0.001 ? 0 : feedbackBase + feedbackSpan * echoAmount)
-        let delayWet = Float(min(70.0, 50.0 * pow(echoAmount, 0.9) + echoBoost))
+        let delayWet = Float(min(70.0, ClipEffectMapping.echoWetPercent(amount: echoAmount) + echoBoost))
 
         // ── REVERB ──
         let reverbCeiling: Double
@@ -141,6 +151,8 @@ nonisolated enum ClipEffectDSP {
             timePitchBypass: timePitchBypass,
             lowPassFrequency: lowPassFrequency,
             lowPassBypass: lowPassBypass,
+            highPassFrequency: highPassFrequency,
+            highPassBypass: highPassBypass,
             flangerWet: flangerWet,
             flangerFeedback: flangerFeedback,
             flangerDepthSeconds: flangerDepth,
@@ -208,12 +220,20 @@ nonisolated enum ClipEffectDSP {
         timePitch.rate = 1
         timePitch.bypass = true
 
-        // Single band: Blur low-pass.
+        // Band 0: Blur / transition low-pass.
         let lowPass = eq.bands[0]
         lowPass.filterType = .lowPass
         lowPass.frequency = 20000
         lowPass.bandwidth = 0.7
         lowPass.bypass = true
+        // Band 1: transition high-pass (bass swap / high-pass build).
+        if eq.bands.count > 1 {
+            let highPass = eq.bands[1]
+            highPass.filterType = .highPass
+            highPass.frequency = Float(AutoTransitionEnvelope.openHighPassHz)
+            highPass.bandwidth = 0.7
+            highPass.bypass = true
+        }
 
         delay.wetDryMix = 0
         delay.feedback = 0
@@ -245,6 +265,10 @@ nonisolated enum ClipEffectDSP {
         let lowPass = eq.bands[0]
         lowPass.frequency = t.lowPassFrequency
         lowPass.bypass = t.lowPassBypass
+        if eq.bands.count > 1 {
+            eq.bands[1].frequency = t.highPassFrequency
+            eq.bands[1].bypass = t.highPassBypass
+        }
 
         applyFlanger(t, kernel: flanger, timelineSeconds: timelineSeconds)
 
@@ -286,8 +310,8 @@ nonisolated enum ClipEffectDSP {
         at t: Double,
         bpm: Double,
         continuity: AutoTransitionEnvelope.Continuity = .isolated
-    ) -> (gain: Double, echoBoost: Double) {
-        let value = AutoTransitionEnvelope.envelope(
+    ) -> AutoTransitionEnvelope.Value {
+        AutoTransitionEnvelope.envelope(
             transitionIn: clip.transitionIn,
             transitionOut: clip.transitionOut,
             clipStart: MixrTimeline.seconds(fromUnits: clip.start),
@@ -296,7 +320,19 @@ nonisolated enum ClipEffectDSP {
             bpm: bpm,
             continuity: continuity
         )
-        return (value.gain, value.echoBoost)
+    }
+
+    // MARK: - Parameter smoothing (shared live / export time constant)
+
+    /// One-pole smoothing time constant for every ramped parameter
+    /// (volume, pitch, filters, delay, reverb). Live ticks (≈16.7 ms) and
+    /// export blocks (≈23 ms) both derive their per-step coefficient from
+    /// it, so automation moves at the same speed in both.
+    static let smoothingTimeConstant = 0.05
+
+    /// Per-step smoothing coefficient for a step of `dt` seconds.
+    static func smoothingCoefficient(dt: Double) -> Float {
+        Float(1 - exp(-max(dt, 0) / smoothingTimeConstant))
     }
 
     // MARK: - Master output protection
