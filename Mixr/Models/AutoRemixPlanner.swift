@@ -176,15 +176,29 @@ enum AutoRemixPlanner {
                   signal.overallConfidence >= 0.4
             else { return .low }
             let overall = profile.analysis.analysisConfidence
-            if overall >= 0.58, st.tempoStability >= 0.5, st.downbeatConfidence >= 0.3,
+            // Beat evidence gates every tier on its own: a strong bar/section
+            // map on top of a beat grid that may sit half a beat off
+            // (on/off-beat ratio near 1) must not drive cuts or blends.
+            let beat = min(1, st.beatConfidence * 1.5)
+            if overall >= 0.58, beat >= 0.35, st.tempoStability >= 0.5, st.downbeatConfidence >= 0.3,
                st.structureConfidence >= 0.5, profile.analysis.durationSeconds >= 150 {
                 return .high
             }
-            if overall >= tuning.lowConfidenceThreshold, st.structureConfidence >= 0.45 {
+            if overall >= tuning.lowConfidenceThreshold, beat >= 0.2, st.structureConfidence >= 0.45 {
                 return .medium
             }
             return .low
         }
+
+        /// Beat grid trustworthy enough to lay another song's beats on top.
+        var beatLockable: Bool {
+            guard let st = structure else { return false }
+            return min(1, st.beatConfidence * 1.5) >= 0.35 && st.tempoStability >= 0.5
+        }
+
+        /// Downbeats trustworthy enough to cut on (AGENTS.md: every internal
+        /// cut needs phrase/downbeat-aligned boundaries).
+        var downbeatsCuttable: Bool { (structure?.downbeatConfidence ?? 0) >= 0.5 }
 
         /// Source seconds of bar `i` (grid-extrapolated past the ends).
         func barTime(_ i: Int) -> Double {
@@ -248,8 +262,12 @@ enum AutoRemixPlanner {
         var loudEndBar: Int {
             guard let bars = structure?.bars, !bars.isEmpty else { return musicEndBar }
             let end = min(musicEndBar, bars.count)
+            // A fade-out or thin tail is not mid-mix material: stop at the
+            // last bar still near the song's typical level.
+            let sorted = bars.map(\.energy).sorted()
+            let threshold = max(0.35, 0.6 * sorted[sorted.count / 2])
             var i = end
-            while i > 1, bars[i - 1].energy < 0.25 { i -= 1 }
+            while i > 1, bars[i - 1].energy < threshold { i -= 1 }
             return max(1, i)
         }
 
@@ -438,7 +456,11 @@ enum AutoRemixPlanner {
 
         let choruses = st.sections(.chorus).filter { $0.barCount >= 4 && $0.endBar <= n }
         let firstChorus = choruses.first
-        let finalChorus = choruses.last { $0.startBar >= max(first + 16, (firstChorus?.endBar ?? 0) + 8) }
+        // The last chorus that leaves room for a build — the only chorus of
+        // a short song qualifies too.
+        let finalChorus = choruses.count > 1
+            ? choruses.last { $0.startBar >= max(first + 16, (firstChorus?.endBar ?? 0) + 8) }
+            : choruses.last { $0.startBar >= first + 16 }
 
         // ── Zone A (opening): intro trim or hook preview ──
         var startBar = first
@@ -453,7 +475,7 @@ enum AutoRemixPlanner {
                 kind: .trimmedIntro, songTitle: song.title,
                 detail: String(format: "%d low-energy bars (energy %.2f) → 8", intro.endBar - first, song.energy(first, intro.endBar))
             ))
-        } else if song.tier == .high, let c = firstChorus, c.confidence >= 0.5,
+        } else if song.tier == .high, song.downbeatsCuttable, let c = firstChorus, c.confidence >= 0.5,
                   c.startBar - first >= 8, song.energy(c.startBar, c.startBar + 4) >= 0.6 {
             preview = c
         }
@@ -462,10 +484,10 @@ enum AutoRemixPlanner {
         // first phrase opens from a low-pass (DJ intro) — safe on any
         // song with a confident bar grid.
         var filteredIntroBars = 0
-        if preview == nil, startBar == first, song.tier == .high {
+        if preview == nil, startBar == first, song.tier >= .medium {
             filteredIntroBars = 8
             while filteredIntroBars > 4, !song.isPhraseStart(first + filteredIntroBars) { filteredIntroBars -= 1 }
-            if n - first < 48 { filteredIntroBars = 0 }
+            if n - first < 32 { filteredIntroBars = 0 }
         }
 
         // ── Zone D (ending): shorten a long low-energy outro ──
@@ -493,7 +515,7 @@ enum AutoRemixPlanner {
             }
         }
         let repeatBuild: Bool = {
-            guard let b = buildBar, song.tier == .high else { return false }
+            guard let b = buildBar, song.tier == .high, song.downbeatsCuttable else { return false }
             return song.energy(b, b + 4) - song.energy(b - 4, b) >= 0.12
         }()
 
@@ -521,14 +543,17 @@ enum AutoRemixPlanner {
             }
         }
         var cuts: [Cut] = []
-        let maxCuts = song.tier == .high ? 1 : (cutCandidates.first.map { $0.join >= pct(0.95) } == true ? 1 : 0)
+        // Cuts need confident bar lines (AGENTS.md); medium confidence allows
+        // one only with near-identical bars on both sides of the jump.
+        let maxCuts = !song.downbeatsCuttable ? 0
+            : song.tier == .high ? 1 : (cutCandidates.first.map { $0.join >= pct(0.95) } == true ? 1 : 0)
         for c in cutCandidates.sorted(by: { $0.score > $1.score }) where cuts.count < maxCuts {
             cuts.append(c)
         }
 
         // ── Zone B′ (breakdown): filter-opening breakdown ──
         var breakdown: MeasuredSection?
-        if song.tier == .high {
+        if song.tier >= .medium {
             breakdown = st.sections.first { s in
                 (s.label == .bridge || s.label == .breakdown)
                     && s.barCount >= 4
@@ -547,7 +572,7 @@ enum AutoRemixPlanner {
         }
         var trimmedForBudget = false
         for c in cutCandidates.sorted(by: { $0.score > $1.score })
-        where Double(plannedBars()) * barSec > tuning.maxTimelineSeconds {
+        where song.downbeatsCuttable && Double(plannedBars()) * barSec > tuning.maxTimelineSeconds {
             if !cuts.contains(where: { $0.from < c.to && $0.to > c.from }) { cuts.append(c) }
         }
         while Double(plannedBars()) * barSec > tuning.maxTimelineSeconds, endBar - 8 > startBar + 16 {
@@ -909,7 +934,9 @@ enum AutoRemixPlanner {
             let isLastForSong = !sequence[(k + 1)...].contains(si)
             let bars = airtimeBars(si)
             let previous = apps.last.map { (songs[$0.song], $0.payoffEndBar) }
-            guard let a = appearance(for: s, index: si, used: used[si] ?? [], preferLate: isLastForSong && k > 0,
+            let onlyOnce = sequence.filter { $0 == si }.count == 1
+            guard let a = appearance(for: s, index: si, used: used[si] ?? [], preferLate: isLastForSong && k > 0 && !onlyOnce,
+                                     strongest: onlyOnce,
                                      payoffBars: bars >= 22 ? 16 : 8, airtimeBars: bars, isFirst: k == 0,
                                      previous: previous)
             else {
@@ -927,18 +954,104 @@ enum AutoRemixPlanner {
         for k in 1..<apps.count {
             let x = songs[apps[k - 1].song], y = songs[apps[k].song]
             let fx = fits[apps[k - 1].song], fy = fits[apps[k].song]
-            let lockable = fx.gridAligned && fy.gridAligned && !fx.halfOrDoubleTime && !fy.halfOrDoubleTime
-                && x.tier > .low && y.tier > .low && x.structure != nil && y.structure != nil
             let tempoFits = fx.gridAligned && fy.gridAligned && !fx.halfOrDoubleTime && !fy.halfOrDoubleTime
+            let lockable = tempoFits && x.tier > .low && y.tier > .low && x.beatLockable && y.beatLockable
+            let structured = x.tier > .low && y.tier > .low && x.structure != nil && y.structure != nil
             if !lockable {
-                // Low confidence: no filter tricks — a clean, short
-                // equal-power overlap when tempos fit, else an echo slam.
-                recipes.append(tempoFits ? .cleanCrossfade : .echoSlam)
+                if structured {
+                    // Tempos (or a beat grid) that can't lock: nothing may
+                    // overlap, but a high-pass build into the next drop
+                    // needs no beatmatch — alternate it with echo slams so
+                    // handoffs don't all sound the same.
+                    recipes.append(k == apps.count - 1 || k % 2 == 0 ? .filterBuildDrop : .echoSlam)
+                } else {
+                    // Low confidence: no filter tricks — a clean, short
+                    // equal-power overlap when tempos fit, else an echo slam.
+                    recipes.append(tempoFits && x.beatLockable && y.beatLockable ? .cleanCrossfade : .echoSlam)
+                }
             } else if k == apps.count - 1 || k % 3 == 0 {
                 recipes.append(.filterBuildDrop)     // tension into the final peak / variety
             } else {
                 recipes.append(.beatmatchedBlend)
             }
+        }
+
+        // ── Landing points (before airtime is balanced) ──
+        for k in 1..<apps.count {
+            switch recipes[k - 1] {
+            case .filterBuildDrop:
+                apps[k].startsAtPayoff = true
+            case .echoSlam:
+                // The outgoing throws its last beats into an echo; the
+                // incoming lands where its level matches what just stopped:
+                // its drop when the outgoing ended hot, otherwise the
+                // lead-in phrase closest in energy — never a near-silent
+                // intro after a loud section.
+                let x = songs[apps[k - 1].song], y = songs[apps[k].song]
+                guard y.structure != nil else { continue }
+                let outE = x.energy(apps[k - 1].payoffEndBar - 4, apps[k - 1].payoffEndBar)
+                let pay = apps[k].payoffBar
+                var best = pay
+                var bestGap = abs(y.energy(pay, pay + 4) - outE) - 0.05
+                var b = apps[k].entryBar
+                while b + 4 <= pay {
+                    if y.isPhraseStart(b) {
+                        let gap = abs(y.energy(b, b + 4) - outE)
+                        if gap < bestGap { best = b; bestGap = gap }
+                    }
+                    b += 1
+                }
+                if best == pay { apps[k].startsAtPayoff = true } else { apps[k].entryBar = best }
+            default:
+                break
+            }
+        }
+
+        // ── Even airtime ──
+        // Balance seconds per song by moving lead-in phrases 4 bars at a
+        // time (appearances entered by a filter-build drop start ON their
+        // drop, so only their payoff counts).
+        func timelineBar(_ si: Int) -> Double {
+            let rate = fits[si].gridAligned ? fits[si].ratio : 1
+            return (songs[si].structure?.barSeconds ?? targetBar) / rate
+        }
+        func effectiveStart(_ k: Int) -> Int {
+            apps[k].startsAtPayoff ? apps[k].payoffBar : apps[k].entryBar
+        }
+        for _ in 0..<8 {
+            var total: [Int: Double] = [:]
+            for (k, a) in apps.enumerated() {
+                total[a.song, default: 0] += Double(a.payoffEndBar - effectiveStart(k)) * timelineBar(a.song)
+            }
+            let mean = total.values.reduce(0, +) / Double(max(total.count, 1))
+            var changed = false
+            for k in apps.indices {
+                let si = apps[k].song
+                let bar = timelineBar(si)
+                if apps[k].startsAtPayoff {
+                    // Lands on its drop: balance by how long the payoff runs
+                    // (keeping 4 bars of full-level room for the handoff).
+                    let limit = songs[si].loudEndBar - (k == apps.count - 1 ? 0 : 4)
+                    if total[si]! < mean * 0.92, apps[k].payoffEndBar + 4 <= limit {
+                        apps[k].payoffEndBar += 4; total[si]! += 4 * bar; changed = true
+                    } else if total[si]! > mean * 1.08, apps[k].payoffEndBar - 4 >= apps[k].payoffBar + 8 {
+                        apps[k].payoffEndBar -= 4; total[si]! -= 4 * bar; changed = true
+                    }
+                    continue
+                }
+                if total[si]! < mean * 0.92 {
+                    let e = apps[k].entryBar - 4
+                    if e >= songs[si].firstMusicBar, apps[k].payoffBar - e <= 24 {
+                        apps[k].entryBar = e; total[si]! += 4 * bar; changed = true
+                    }
+                } else if total[si]! > mean * 1.08 {
+                    let e = apps[k].entryBar + 4
+                    if e <= apps[k].payoffBar - 4 {
+                        apps[k].entryBar = e; total[si]! -= 4 * bar; changed = true
+                    }
+                }
+            }
+            if !changed { break }
         }
 
         // Tail lengths (bars played past each payoff) and entry shapes.
@@ -999,14 +1112,8 @@ enum AutoRemixPlanner {
                 apps[k].tailBars = min(2, available)
                 if apps[k].tailBars < 1 { recipes[k] = .echoSlam; apps[k].tailBars = 0 }
             default:
-                // Echo slam: the outgoing throws its last beats into an echo;
-                // the incoming lands on its DROP when the outgoing ends hot
-                // (energy continuity), else on its lead-in downbeat.
+                // Echo slam: landing point chosen in the pre-pass above.
                 apps[k].tailBars = 0
-                let outE = s.energy(apps[k].payoffEndBar - 4, apps[k].payoffEndBar)
-                if outE >= 0.7, y.structure != nil {
-                    apps[k + 1].startsAtPayoff = true
-                }
             }
         }
 
@@ -1218,7 +1325,7 @@ enum AutoRemixPlanner {
 
     /// Chooses lead-in + payoff bars for one appearance of `s`.
     private static func appearance(
-        for s: SongContext, index: Int, used: [Int], preferLate: Bool,
+        for s: SongContext, index: Int, used: [Int], preferLate: Bool, strongest: Bool = false,
         payoffBars: Int, airtimeBars: Int, isFirst: Bool,
         previous: (song: SongContext, tailBar: Int)?
     ) -> Appearance? {
@@ -1241,11 +1348,25 @@ enum AutoRemixPlanner {
                 payoffs = [(bar, c.barCount)]
             }
         }
-        payoffs = payoffs.filter { $0.start > first + (isFirst ? 0 : 2) && $0.start + 4 <= n }
+        // A payoff needs room: at least 8 bars (or its full length) of
+        // full-level music after it starts — never a chorus in the fade-out.
+        payoffs = payoffs.filter { $0.start > first + (isFirst ? 0 : 2) && $0.start + min(8, max(4, $0.bars)) <= n }
         guard !payoffs.isEmpty else { return nil }
         let fresh = payoffs.filter { p in !used.contains(p.start) }
-        let pool = fresh.isEmpty ? payoffs : fresh
-        let chosen = preferLate ? pool.last! : pool.first!
+        var pool = fresh.isEmpty ? payoffs : fresh
+        // Prefer a substantial hook (≥ 8 bars) over a leftover fragment.
+        let substantial = pool.filter { $0.bars >= 8 }
+        if !substantial.isEmpty { pool = substantial }
+        let chosen: (start: Int, bars: Int)
+        if strongest {
+            // A song heard once gets its best moment: loudest, fullest hook.
+            chosen = pool.max { a, b in
+                s.energy(a.start, a.start + 8) + 0.1 * Double(min(a.bars, 16)) / 16
+                    < s.energy(b.start, b.start + 8) + 0.1 * Double(min(b.bars, 16)) / 16
+            }!
+        } else {
+            chosen = preferLate ? pool.last! : pool.first!
+        }
         let natural = chosen.bars >= 12 ? 16 : 8
         let payoffLen = min(min(natural, payoffBars), n - chosen.start)
         let entryBars = min(16, max(4, (airtimeBars - payoffLen - 4) / 4 * 4))
