@@ -430,6 +430,36 @@ do {
     check("Mashup render: sample peak ≤ −1 dBFS", dB(samplePeak(mix)) <= -0.99, String(format: "%.2f", dB(samplePeak(mix))))
 }
 
+// MARK: - 4b. Grid discontinuities never sit inside a beatmatched overlap
+
+do {
+    // Splice a 150 ms phase jump into song B at bar 60 (an edit / a live
+    // drummer's push): everything after it is off the earlier grid.
+    var spliced = songB
+    let cut = Int(songB.barTime(60) * SR)
+    spliced.samples.removeSubrange(cut..<(cut + Int(0.15 * SR)))
+    let fx = SongSignalAnalyzer.extract(samples: spliced.samples, sampleRate: SR)
+    let splice = songB.barTime(60)
+    let found = fx.structure?.gridBreaks.contains { abs($0 - splice) < songB.barSeconds * 1.5 } ?? false
+    check("Grid: a spliced phase jump is detected as a grid break", found,
+          fx.structure.map { $0.gridBreaks.map { String(format: "%.1f", $0) }.joined(separator: ",") } ?? "no structure")
+    let tb = track("Spliced B", spliced)
+    let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [trackA, tb], seed: 1,
+                                                      signals: [trackA.id: featuresA, tb.id: fx])!
+    let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: .standard)
+    let breaks = fx.structure?.gridBreaks ?? []
+    var spanning = 0
+    let dom = plan.placements.sorted { $0.timelineStart < $1.timelineStart }
+    for (x, y) in zip(dom, dom.dropFirst()) where x.timelineEnd - y.timelineStart > 1 {
+        for p in [x, y] where p.songID == tb.id {
+            let a = p.sourceStart + (y.timelineStart - p.timelineStart) * p.tempoRatio
+            let b = p.sourceStart + (x.timelineEnd - p.timelineStart) * p.tempoRatio
+            if breaks.contains(where: { $0 > a && $0 < b }) { spanning += 1 }
+        }
+    }
+    check("Grid: no beatmatched overlap spans a grid break", spanning == 0, "\(spanning)")
+}
+
 // MARK: - 5. Tempo target, echo throw, SFX lane
 
 do {

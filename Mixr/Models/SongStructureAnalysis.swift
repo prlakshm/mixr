@@ -74,8 +74,12 @@ nonisolated struct SongStructure: Sendable {
     var downbeats: [Double]
     var beatConfidence: Double
     var downbeatConfidence: Double
-    /// 0…1 — fraction of tracked beats within 50 ms of a constant grid.
+    /// 0…1 — share of beats in the longest constant-tempo run.
     var tempoStability: Double
+    /// Source times where the beat grid is discontinuous (a new constant-
+    /// tempo run starts: tempo drift, an edit, or a stitched section).
+    /// Beatmatched overlaps must not span one.
+    var gridBreaks: [Double] = []
     /// Phrase grid phase: phrases start at bars ≡ offset (mod 4).
     var phraseOffsetBars: Int
     var bars: [BarFeatures]
@@ -179,15 +183,23 @@ nonisolated enum SongStructureAnalyzer {
         // Sub-frame refinement: DP beats are quantized to 23 ms frames;
         // snap each to the strongest transient within ±30 ms so frame
         // jitter never reads as a tempo change.
-        beats = beats.map { refineBeat($0, transient: transient.values, hop: transient.hop) }
-        let runs = gridRuns(beats)
+        let beatPeriod = linearFit(beats).slope
+        let refineWindow = min(0.08, 0.15 * beatPeriod)     // < a 16th note at any tempo
+        beats = beats.map { refineBeat($0, transient: transient.values, hop: transient.hop, window: refineWindow) }
+        // Quantized productions: one robust constant-tempo line explains
+        // (almost) every beat. Only when it doesn't are runs split.
+        let global = robustLinearFit(beats)
+        let inliers = beats.enumerated().filter {
+            abs($0.element - (global.intercept + global.slope * Double($0.offset))) < 0.04
+        }.count
+        let runs = Double(inliers) / Double(beats.count) >= 0.85 ? [0..<beats.count] : gridRuns(beats)
         var gridBeats: [Double] = []
         var runStarts: [Int] = []
         for run in runs {
             let slice = Array(beats[run])
             runStarts.append(gridBeats.count)
             guard slice.count >= 8 else { gridBeats += slice; continue }
-            let fit = linearFit(slice)
+            let fit = robustLinearFit(slice)
             let shift = refinePhase(transient: transient.values, hop: transient.hop,
                                     t0: fit.intercept, period: fit.slope, count: slice.count)
             gridBeats += (0..<slice.count).map { fit.intercept + shift + fit.slope * Double($0) }
@@ -197,6 +209,7 @@ nonisolated enum SongStructureAnalyzer {
         let stability = Double(longest) / Double(max(beats.count, 1))
         let ibis = zip(beats.dropFirst(), beats).map { $0 - $1 }.sorted()
         let bpm = 60.0 / ibis[ibis.count / 2]
+        let gridBreaks = runStarts.dropFirst().filter { $0 < beats.count }.map { beats[$0] }
 
         let beatConfidence = beatStrengthConfidence(onset: onset, beats: beats, frameRate: frameRate,
                                                     frameOffset: frameOffset) * (0.6 + 0.4 * stability)
@@ -260,6 +273,7 @@ nonisolated enum SongStructureAnalyzer {
             beatConfidence: beatConfidence,
             downbeatConfidence: downbeat.confidence,
             tempoStability: stability,
+            gridBreaks: gridBreaks,
             phraseOffsetBars: phraseOffset,
             bars: bars,
             sections: sections,
@@ -529,6 +543,26 @@ nonisolated enum SongStructureAnalyzer {
         return (slope, my - slope * mx)
     }
 
+    /// Iteratively reweighted (Huber, 20 ms) line fit — outlier beats from
+    /// fills or breaks do not tilt the tempo.
+    static func robustLinearFit(_ ys: [Double]) -> (slope: Double, intercept: Double) {
+        var fit = linearFit(ys)
+        for _ in 0..<6 {
+            var sw = 0.0, sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0
+            for (i, y) in ys.enumerated() {
+                let x = Double(i)
+                let r = abs(y - (fit.intercept + fit.slope * x))
+                let w = r <= 0.02 ? 1.0 : 0.02 / r
+                sw += w; sx += w * x; sy += w * y; sxx += w * x * x; sxy += w * x * y
+            }
+            let d = sw * sxx - sx * sx
+            guard abs(d) > 1e-12 else { break }
+            let slope = (sw * sxy - sx * sy) / d
+            fit = (slope, (sy - slope * sx) / sw)
+        }
+        return fit
+    }
+
     /// Time-domain transient envelope (first-difference RMS, 2 ms hop).
     static func transientEnvelope(_ x: [Float], sampleRate: Double) -> (values: [Double], hop: Double) {
         let h = max(1, Int(sampleRate * 0.002))
@@ -627,10 +661,10 @@ nonisolated enum SongStructureAnalyzer {
         return norm > 0 ? c.map { $0 / norm } : c
     }
 
-    /// Strongest transient within ±30 ms of `t` (parabolic sub-hop peak).
-    static func refineBeat(_ t: Double, transient: [Double], hop: Double) -> Double {
+    /// Strongest transient within ±`window` of `t` (parabolic sub-hop peak).
+    static func refineBeat(_ t: Double, transient: [Double], hop: Double, window: Double = 0.035) -> Double {
         let c = Int((t / hop).rounded())
-        let w = Int(0.035 / hop)
+        let w = Int(window / hop)
         let lo = max(1, c - w), hi = min(transient.count - 2, c + w)
         guard hi > lo else { return t }
         var best = lo

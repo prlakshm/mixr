@@ -29,11 +29,19 @@ nonisolated enum AutoRemixValidator {
             if p.sourceStart < 0 { p.sourceStart = 0 }
             let overrun = p.sourceEnd - (duration - 0.05)
             if overrun > 0 {
-                let slide = min(overrun, p.sourceStart)
-                p.sourceStart -= slide
-                let remaining = overrun - slide
-                if remaining > 0 {
-                    p.timelineDuration -= remaining / max(p.tempoRatio, 0.0001)
+                // Trim the END: sliding the source start would shift every
+                // beat of the clip off the timeline grid it was placed on.
+                // Slide only when trimming alone would leave too little.
+                let trimmed = p.timelineDuration - overrun / max(p.tempoRatio, 0.0001)
+                if trimmed >= minLen {
+                    p.timelineDuration = trimmed
+                } else {
+                    let slide = min(overrun, p.sourceStart)
+                    p.sourceStart -= slide
+                    let remaining = overrun - slide
+                    if remaining > 0 {
+                        p.timelineDuration -= remaining / max(p.tempoRatio, 0.0001)
+                    }
                 }
             }
             guard p.timelineDuration >= minLen else {

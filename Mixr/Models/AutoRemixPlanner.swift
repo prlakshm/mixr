@@ -206,6 +206,23 @@ enum AutoRemixPlanner {
             return bars[lo..<hi].map(\.vocal).reduce(0, +) / Double(hi - lo)
         }
 
+        /// Measured tempo of bars [a, b) — songs whose sections run at
+        /// slightly different tempos are stretched by the LOCAL tempo of
+        /// the bars actually played, so blends stay phase-locked.
+        func localBPM(_ a: Int, _ b: Int) -> Double {
+            guard structure != nil, b > a else { return bpm }
+            let seconds = barTime(b) - barTime(a)
+            return seconds > 0 ? 240 * Double(b - a) / seconds : bpm
+        }
+
+        /// True when the beat grid has no discontinuity inside bars [a, b]
+        /// — required for any beatmatched overlap.
+        func gridContinuous(_ a: Int, _ b: Int) -> Bool {
+            guard let st = structure else { return false }
+            let t0 = barTime(a) - 0.05, t1 = barTime(b) + 0.05
+            return !st.gridBreaks.contains { $0 > t0 && $0 < t1 }
+        }
+
         func isPhraseStart(_ bar: Int) -> Bool {
             guard let st = structure else { return bar % 4 == 0 }
             return ((bar - st.phraseOffsetBars) % 4 + 4) % 4 == 0
@@ -955,6 +972,13 @@ enum AutoRemixPlanner {
                     blend = min(blend, available)
                 }
                 blend = min(blend, apps[k + 1].payoffBar - apps[k + 1].entryBar)
+                // Both grids must be continuous across the overlap, or the
+                // beats drift apart mid-blend (a flam / trainwreck).
+                let xFrom = apps[k].blendInsidePayoff ? apps[k].payoffEndBar - blend : apps[k].payoffEndBar
+                if blend >= 2, !(s.gridContinuous(xFrom, xFrom + blend)
+                                 && y.gridContinuous(apps[k + 1].entryBar, apps[k + 1].entryBar + blend)) {
+                    blend = 0
+                }
                 if blend < 2 {
                     recipes[k] = available >= 2 ? .filterBuildDrop : .echoSlam
                     apps[k].blendInsidePayoff = false
@@ -997,9 +1021,26 @@ enum AutoRemixPlanner {
         var transitionsUsed: [AutoTransitionRecipe] = []
 
         var cursor = 0.0
+        /// Timeline tempo of the outgoing song inside the next blend window
+        /// (measured locally) — the incoming song is matched to it.
+        var blendMatchBPM: Double?
         for (k, app) in apps.enumerated() {
             let s = songs[app.song]
-            let rate = fits[app.song].gridAligned ? fits[app.song].ratio : 1
+            var rate = fits[app.song].gridAligned ? fits[app.song].ratio : 1
+            if fits[app.song].gridAligned, !fits[app.song].halfOrDoubleTime, s.structure != nil {
+                let entryBar = app.startsAtPayoff ? app.payoffBar : app.entryBar
+                let local = s.localBPM(entryBar, min(s.barCount, app.payoffEndBar + app.tailBars))
+                var r = targetBPM / local
+                // Incoming blend: lock to what the outgoing song is ACTUALLY
+                // playing in the overlap (DJ-style pitch-fader match).
+                if let match = blendMatchBPM, k > 0,
+                   [.beatmatchedBlend, .cleanCrossfade].contains(recipes[k - 1]) {
+                    let window = max(2, apps[k - 1].tailBars)
+                    r = match / s.localBPM(app.entryBar, app.entryBar + window)
+                }
+                if abs(r - 1) <= tuning.maxStretch + 0.01 { rate = r }
+            }
+            blendMatchBPM = nil
             let bpm = s.envelopeBPM(rate: rate)
             let volume = AutoGainPolicy.preservationSongVolume * gains[app.song]
             let entry = app.startsAtPayoff ? app.payoffBar : app.entryBar
@@ -1035,7 +1076,10 @@ enum AutoRemixPlanner {
                 break
             }
             let endBar = min(s.barCount, app.payoffEndBar + (app.blendInsidePayoff ? 0 : app.tailBars))
-            let srcEnd = s.barTime(endBar)
+            // Never schedule past the song's last sample (the validator
+            // would have to trim, opening a gap before the next song).
+            let lastSource = s.duration - 0.06
+            let srcEnd = min(s.barTime(endBar), lastSource)
             let duration = (srcEnd - src0) / rate
 
             var fadeOut: ClipTransition = .none
@@ -1096,11 +1140,18 @@ enum AutoRemixPlanner {
                 break
             }
 
+            if k + 1 < apps.count, [.beatmatchedBlend, .cleanCrossfade].contains(recipes[k]), s.structure != nil {
+                let from = app.blendInsidePayoff ? app.payoffEndBar - app.tailBars : app.payoffEndBar
+                blendMatchBPM = s.localBPM(from, from + max(2, app.tailBars)) * rate
+            }
+
             // Where the next appearance begins on the timeline.
-            let payoffEndT = t0 + (s.barTime(app.payoffEndBar) - src0) / rate
+            let payoffEndT = t0 + (min(s.barTime(app.payoffEndBar), lastSource) - src0) / rate
             switch outgoing {
             case .beatmatchedBlend? where app.blendInsidePayoff:
-                cursor = payoffEndT - Double(app.tailBars) * targetBar
+                // Measured downbeat where the blend starts (never nominal
+                // bar lengths — a song's real bars may drift).
+                cursor = t0 + (s.barTime(app.payoffEndBar - app.tailBars) - src0) / rate
             case .beatmatchedBlend?, .echoSlam?, .cleanCrossfade?:
                 cursor = payoffEndT
             case .filterBuildDrop?:
