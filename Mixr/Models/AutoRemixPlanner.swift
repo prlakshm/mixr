@@ -580,7 +580,7 @@ enum AutoRemixPlanner {
             trimmedForBudget = true
         }
         if trimmedForBudget {
-            decisions.append(AutoDecision(kind: .shortenedForMaterial, songTitle: song.title, detail: "ending to fit the timeline"))
+            decisions.append(AutoDecision(kind: .shortenedForMaterial, songTitle: song.title, detail: "ending"))
         }
         cuts.sort { $0.from < $1.from }
 
@@ -738,7 +738,9 @@ enum AutoRemixPlanner {
         if song.tier == .medium {
             decisions.append(AutoDecision(
                 kind: .fewerEditsExplained, songTitle: song.title,
-                detail: "Beat/phrase evidence was moderate, so \(song.title) stays continuous apart from filter automation and edge trims."
+                detail: cuts.isEmpty
+                    ? "Beat/phrase evidence was moderate, so \(song.title) stays continuous apart from filter automation and edge trims."
+                    : "Beat/phrase evidence was moderate, so \(song.title) gets only \(cuts.count) cut\(cuts.count == 1 ? "" : "s") at near-exact repeats; otherwise it stays continuous apart from filter automation and edge trims."
             ))
         }
 
@@ -807,7 +809,7 @@ enum AutoRemixPlanner {
         if usableEnd - usableStart > tuning.maxTimelineSeconds {
             usableEnd = usableStart + tuning.maxTimelineSeconds
             trimmed = true
-            decisions.append(AutoDecision(kind: .shortenedForMaterial, songTitle: song.title, detail: "ending to fit the timeline"))
+            decisions.append(AutoDecision(kind: .shortenedForMaterial, songTitle: song.title, detail: "ending"))
         }
         decisions.append(AutoDecision(kind: .usedLowConfidenceFallback, songTitle: song.title, detail: nil))
         let fadeOut: ClipTransition = trimmed
