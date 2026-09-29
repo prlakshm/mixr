@@ -442,8 +442,8 @@ nonisolated enum SongStructureAnalyzer {
     static func estimatePeriod(_ onset: [Double], frameRate: Double, bpmHint: Double?) -> Double? {
         let minLag = Int(frameRate * 60 / 215)
         let maxLag = Int(frameRate * 60 / 55) + 1
-        guard onset.count > maxLag * 8 else { return nil }
-        var ac = [Double](repeating: 0, count: 4 * maxLag + 4)
+        guard onset.count > maxLag * 16 else { return nil }
+        var ac = [Double](repeating: 0, count: 12 * maxLag + 8)
         onset.withUnsafeBufferPointer { o in
             for lag in 1..<ac.count {
                 var s = 0.0
@@ -479,7 +479,27 @@ nonisolated enum SongStructureAnalyzer {
             lag += 0.05
         }
         guard let best, best.score > 0 else { return nil }
-        return best.lag
+        guard bpmHint == nil else { return best.lag }
+
+        // Metrical disambiguation: a syncopated pattern (breakbeat kicks
+        // every 1½ beats, trap bounce, dembow 3+3+2) can out-score the real
+        // pulse. Among the winner and its 3:2 / 4:3 relatives, the TRUE
+        // beat is the one whose 1-bar and 2-bar lengths repeat — music
+        // loops by the bar, not by 1½ bars.
+        // Comb over beat multiples 1…8: the true beat lines up with pattern
+        // repeats at EVERY multiple; a 1½-beat pseudo-pulse lands on
+        // half-beats at every other multiple.
+        func barScore(_ l: Double) -> Double { (1...8).reduce(0.0) { $0 + acAt(Double($1) * l) } / 8 }
+        let minBPMLag = Double(minLag), maxBPMLag = Double(maxLag)
+        var chosen = best.lag
+        var chosenScore = barScore(best.lag)
+        for ratio in [2.0 / 3.0, 3.0 / 4.0, 4.0 / 3.0, 3.0 / 2.0] {
+            let l = best.lag * ratio
+            guard l >= minBPMLag, l <= maxBPMLag, 8 * l + 1 < Double(ac.count) else { continue }
+            let score = barScore(l)
+            if score > chosenScore * 1.1 { chosen = l; chosenScore = score }
+        }
+        return chosen
     }
 
     /// Ellis (2007) dynamic-programming beat tracker. Returns beat frames.
