@@ -173,6 +173,54 @@ one is paired with a demonstration that the previous behavior fails it:
 
 ---
 
+## 4b. Second round: 16 more generated songs, 20 genres
+
+The pipeline was run end to end on 16 additional generated songs: dance-pop, progressive house,
+tech house, drum & bass, dubstep, trap, boom-bap, R&B, afrobeats, reggaeton, pop-punk, indie rock,
+synthwave, disco-funk, k-pop and UK garage. That gave 16 one-song remixes and 11 mashups
+(8 pairs, 2 trios, 1 four-song mix), 27 renders in all.
+
+**Failures found and fixed**
+
+| Problem found | Fix |
+|---|---|
+| Trap at 148 BPM read as 98.7 (a 3:2 error) | Among the winning tempo and its 3:2 / 4:3 relatives, pick the one whose rhythm repeats at every beat multiple (1–8 beats). Trap now reads 148.00. |
+| A 352 ms off-beat blend (R&B with an ambiguous beat) | Beat confidence now gates every confidence tier and every beatmatched blend. |
+| A cut with downbeat confidence 0.06 left a 6 dB hole | Cuts, hook previews and repeated builds require confident downbeats. |
+| Echo slams landing on quiet intros (5–8 dB holes) | The incoming song lands on its energy-matched phrase or its drop. |
+| Three echo slams in a row | Pairs whose tempos can't lock alternate slams with high-pass build drops (no overlap, so no beatmatch needed). |
+| Lopsided airtime (63/37; four-song mix 54/27/11/8) | Landing points are chosen first, then seconds are balanced per song. Hooks must be substantial, and a song heard once gets its strongest hook. |
+| Medium-confidence remixes did nothing | Continuous effect zones are now allowed at medium confidence (no cuts). |
+
+**Result on the new batch:** 0 crashes, 0 misaligned blends, loudness holes at 3 of 45 joins,
+two-song mashups within 43/57 airtime, four-song mix 35/22/22/22.
+
+**Still open**
+
+| Problem | Details |
+|---|---|
+| Weak downbeat evidence on trap, afrobeats, k-pop and dubstep (confidence 0.00–0.25) | The confidence ladder correctly holds these songs back. Fixing it needs the drum-stem model. |
+| Drum & bass reads 117.3 instead of the requested 176 | The recording itself is ambiguous: librosa also reads 117.5. Needs a listen. |
+| Songs shorter than ~2.5 min only get the medium treatment | This is what AGENTS.md asks for. |
+
+**Demucs (official `htdemucs`, checksum-verified) on all 23 songs**
+- Speed: about 2 min of CPU per 3.7-min song on this 4-core container.
+- **Vocal clashes in mashup blends:** both songs sing at once during only **7%** of 62 s of blended
+  overlap. 7 of 8 blends are at 0–4%. The exception (48%) is a tech-house song whose vocals the
+  on-device detector misses.
+- **On-device vocal detector vs Demucs vocals:** pooled bar-level AUC **0.75** (0.5 = coin flip),
+  ranging from 0.17 to 0.96 per song.
+- **Small trained vocal models, tested leave-one-song-out:**
+
+  | Model | Pooled AUC |
+  |---|---|
+  | Existing features | 0.76 |
+  | Plus syllable-rate, harmonic-peakiness and midrange-flux cues | 0.76 |
+  | 40-band mel spectrum | 0.68 |
+
+  None beats the current detector enough to ship. With 23 songs, reliable vocal detection needs
+  the separated vocal track itself (Demucs on the phone) or far more training songs.
+
 ## 5. How to make it better (prioritized)
 
 1. **Listen before shipping.** I could not audition anything on headphones or speakers, and the edits to
