@@ -80,6 +80,7 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case shortenedOutro
     case echoOutEnding
     case fewerEditsExplained
+    case hypeTurns
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -149,6 +150,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Ended on an echo-out\(detail.map { " (\($0))" } ?? "")."
         case .fewerEditsExplained:
             return detail ?? "Kept more of \(song) intact."
+        case .hypeTurns:
+            return "Traded songs in \(detail ?? "short, phrase-aligned turns")."
         }
     }
 }
