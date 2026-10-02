@@ -386,6 +386,9 @@ struct AutoTuning: Sendable {
     var maxCorrectivePitchSemitones = 3
     /// Timeline budget for the arrangement.
     var maxTimelineSeconds = 232.0
+    /// Mashup: songs trade short, high-energy, phrase-aligned turns (DJ
+    /// back-and-forth). Off = the earlier long lead-in → hook appearances.
+    var mashupDJTurns = true
     /// Longest unintended silence tolerated between clips (beats).
     /// 0.5 beat = one eighth note at the target BPM.
     var maxGapBeats = 0.5

@@ -376,8 +376,10 @@ do {
     let shares = airtime.values.map { $0 / airtime.values.reduce(0, +) }
     check("Mashup: even airtime (each song 35–65%)", shares.allSatisfy { (0.35...0.65).contains($0) },
           shares.map { String(format: "%.2f", $0) }.joined(separator: " / "))
-    check("Mashup: each appearance breathes (≥ 20 s)", plan.placements.allSatisfy { $0.timelineDuration >= 20 },
-          String(format: "shortest %.1fs", plan.placements.map(\.timelineDuration).min() ?? 0))
+    // A turn is a full phrase: at least 8 bars at the mix tempo.
+    let eightBars = 8 * 240 / plan.targetBPM
+    check("Mashup: each turn is a full phrase (≥ 8 bars)", plan.placements.allSatisfy { $0.timelineDuration >= eightBars - 0.1 },
+          String(format: "shortest %.1fs (8 bars = %.1fs)", plan.placements.map(\.timelineDuration).min() ?? 0, eightBars))
     // Handoffs never leave a hole.
     let dom = plan.placements.sorted { $0.timelineStart < $1.timelineStart }
     let holes = zip(dom, dom.dropFirst()).filter { $1.timelineStart > $0.timelineEnd + 0.005 }.count
@@ -428,6 +430,111 @@ do {
     check("Previous sequential fade-out/fade-in join FAILS the hole gate", joinTrough(hole, at: a.timelineEnd) > 3,
           String(format: "%.1f dB hole", joinTrough(hole, at: a.timelineEnd)))
     check("Mashup render: sample peak ≤ −1 dBFS", dB(samplePeak(mix)) <= -0.99, String(format: "%.2f", dB(samplePeak(mix))))
+}
+
+// MARK: - 4a. DJ turns: frequent handoffs, hook up front, high-energy material
+
+do {
+    var longForm = AutoTuning.standard
+    longForm.mashupDJTurns = false
+    let previousPlan: AutoRemixPlan = {
+        let signals = [trackA.id: featuresA, trackB.id: featuresB]
+        let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [trackA, trackB], tuning: longForm, seed: 1, signals: signals)!
+        return AutoRemixValidator.validate(draft, profiles: profiles, tuning: longForm)
+    }()
+    // Pop + club (32-bar DJ intro, breakdowns before each drop): the
+    // material that made long-form mashups slow to hit and quiet.
+    let club = clubSong(bpm: 126, pickup: 0.2)
+    let trackC = track("Synthetic Club", club)
+    let clubSignals = [trackA.id: featuresA, trackC.id: SongSignalAnalyzer.extract(samples: club.samples, sampleRate: SR)]
+    let clubSources: [UUID: AutoOfflineMixdown.Source] = [
+        trackA.id: .init(samples: songA.samples, sampleRate: SR),
+        trackC.id: .init(samples: club.samples, sampleRate: SR),
+    ]
+    func clubMashup(_ tuning: AutoTuning) -> (plan: AutoRemixPlan, mix: [Float]) {
+        let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [trackA, trackC], tuning: tuning, seed: 1, signals: clubSignals)!
+        let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+        return (plan, AutoOfflineMixdown.render(plan: plan, sources: clubSources, sampleRate: SR).mix)
+    }
+    let clubNew = clubMashup(.standard), clubOld = clubMashup(longForm)
+    let fixtures = [trackA.id: songA, trackB.id: songB, trackC.id: club]
+
+    /// Seconds between consecutive song entries (how long one song holds
+    /// the floor before the next takes over), excluding the final turn.
+    func turnLengths(_ plan: AutoRemixPlan) -> [Double] {
+        let starts = plan.placements.sorted { $0.timelineStart < $1.timelineStart }.map(\.timelineStart)
+        return zip(starts, starts.dropFirst()).map { $1 - $0 }
+    }
+    /// Ground truth: is source second `t` of `song` inside a chorus?
+    func inChorus(_ song: SyntheticSong, _ t: Double) -> Bool {
+        song.sections.contains { $0.label == "chorus" && t >= song.barTime($0.startBar) && t < song.barTime($0.startBar + $0.bars) }
+    }
+    /// Timeline seconds until the first chorus (lead hook) is heard, and
+    /// the share of the mix that plays chorus material.
+    func hookStats(_ plan: AutoRemixPlan) -> (first: Double, share: Double) {
+        var first = Double.infinity, hits = 0, total = 0
+        var t = 0.0
+        while t < plan.targetDuration {
+            total += 1
+            let hit = plan.placements.contains { p in
+                guard t >= p.timelineStart, t < p.timelineEnd, let song = fixtures[p.songID] else { return false }
+                return inChorus(song, p.sourceStart + (t - p.timelineStart) * p.tempoRatio)
+            }
+            if hit { hits += 1; first = min(first, t) }
+            t += 0.25
+        }
+        return (first, Double(hits) / Double(max(total, 1)))
+    }
+    /// Rendered PCM: share of 2 s windows more than 6 dB below the mix's
+    /// 90th-percentile window (a quiet, low-energy stretch on the floor).
+    /// Deliberate builds (riser spans: high-pass drains the low end on
+    /// purpose before a drop) are not stretches.
+    func quietShare(_ plan: AutoRemixPlan, _ mix: [Float]) -> Double {
+        let builds = plan.sfxEvents.filter { $0.assetID == "riser" }.map { ($0.timelineStart, $0.timelineEnd) }
+        let end = plan.targetDuration - 10    // an echo-out ending is meant to be quiet
+        var levels: [Double] = []
+        var t = 0.0
+        while t + 2 <= end {
+            if !builds.contains(where: { t < $0.1 && t + 2 > $0.0 }) { levels.append(level(mix, t, t + 2)) }
+            t += 1
+        }
+        guard !levels.isEmpty else { return 1 }
+        let p90 = levels.sorted()[Int(Double(levels.count - 1) * 0.9)]
+        return Double(levels.filter { $0 < p90 - 6 }.count) / Double(levels.count)
+    }
+
+    let newTurns = turnLengths(mashupPlan), oldTurns = turnLengths(previousPlan)
+    check("DJ turns: ≥ 5 handoffs between two confident songs", mashupPlan.handoffCount >= 5, "\(mashupPlan.handoffCount)")
+    check("Previous long-form mashup FAILS the handoff gate", previousPlan.handoffCount < 5, "\(previousPlan.handoffCount)")
+    check("DJ turns: no song holds the floor > 30 s", (newTurns.max() ?? 0) <= 30,
+          String(format: "longest %.1f s", newTurns.max() ?? 0))
+    check("Previous long-form mashup FAILS the turn-length gate", (oldTurns.max() ?? 0) > 30,
+          String(format: "longest %.1f s", oldTurns.max() ?? 0))
+
+    let bar = clubNew.plan.targetBPM > 0 ? 240 / clubNew.plan.targetBPM : songA.barSeconds
+    let newHook = hookStats(clubNew.plan), oldHook = hookStats(clubOld.plan)
+    check("DJ turns (pop + club): first hook within 4 bars of the start", newHook.first <= 4 * bar + 0.5,
+          String(format: "%.1f s (4 bars = %.1f s)", newHook.first, 4 * bar))
+    // (The long-form planner also reaches these synthetic hooks quickly —
+    // this gate guards the turn opener, it is not a before/after claim.)
+    check("DJ turns (pop + club): ≥ 75% of the mix is hook material", newHook.share >= 0.75, String(format: "%.0f%%", newHook.share * 100))
+    check("Previous long-form mashup FAILS the hook-share gate", oldHook.share < 0.75, String(format: "%.0f%%", oldHook.share * 100))
+
+    // Rendered PCM, ending excluded (an echo-out tail is meant to be quiet).
+    let newQuiet = quietShare(clubNew.plan, clubNew.mix)
+    let oldQuiet = quietShare(clubOld.plan, clubOld.mix)
+    let clubJoins = clubNew.plan.placements.sorted { $0.timelineStart < $1.timelineStart }.dropFirst().map(\.timelineStart)
+    let clubWorst = clubJoins.map { joinTrough(clubNew.mix, at: $0) }.max() ?? 0
+    check("DJ turns render (pop + club): no handoff loudness hole > 2 dB", clubWorst <= 2.0, String(format: "worst %.2f dB", clubWorst))
+    check("DJ turns render (pop + club): sample peak ≤ −1 dBFS", dB(samplePeak(clubNew.mix)) <= -0.99,
+          String(format: "%.2f", dB(samplePeak(clubNew.mix))))
+    check("DJ turns (pop + club): timeline within budget", clubNew.plan.targetDuration <= AutoTuning.standard.maxTimelineSeconds,
+          String(format: "%.0f s", clubNew.plan.targetDuration))
+    print("pop+club: " + clubNew.plan.sequence.joined(separator: " → ") + " · "
+          + clubNew.plan.transitionsUsed.map(\.rawValue).joined(separator: ", "))
+    check("DJ turns render (pop + club): ≤ 10% of the mix sits > 6 dB below its peak level", newQuiet <= 0.10,
+          String(format: "%.0f%%", newQuiet * 100))
+    print(String(format: "      (long-form render on the same songs: %.0f%% quiet)", oldQuiet * 100))
 }
 
 // MARK: - 4b. Grid discontinuities never sit inside a beatmatched overlap

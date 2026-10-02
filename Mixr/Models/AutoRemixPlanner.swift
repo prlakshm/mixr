@@ -906,11 +906,7 @@ enum AutoRemixPlanner {
             }
         }
         let reference = songs.compactMap { $0.signal?.bodyLoudnessDB }.filter { $0 > -80 }.min() ?? -12
-        let gains = songs.map { $0.loudnessGain(referenceDB: reference) }
-        for (i, g) in gains.enumerated() where g < 0.97 {
-            decisions.append(AutoDecision(kind: .loudnessMatched, songTitle: songs[i].title,
-                                          detail: String(format: "%.1f dB", 20 * log10(g))))
-        }
+        var gains = songs.map { $0.loudnessGain(referenceDB: reference) }
 
         // ── Appearances ──
         // Measured structure for every song: DJ turns — short, even,
@@ -930,9 +926,29 @@ enum AutoRemixPlanner {
             for a in apps { used[a.song, default: []].append(a.payoffBar) }
             decisions.append(AutoDecision(
                 kind: .hypeTurns, songTitle: nil,
-                detail: String(format: "%d turns of %d–%d bars (≈%.0f s each), each on a song's highest-energy phrases",
-                               apps.count, turns.minBars, turns.maxBars, turns.seconds)
+                detail: "\(apps.count) turns of \(turns.minBars == turns.maxBars ? "\(turns.minBars)" : "\(turns.minBars)–\(turns.maxBars)") bars"
+                    + " (≈\(Int(turns.seconds.rounded())) s each), each on a song's highest-energy phrases"
             ))
+        }
+        if turnMode {
+            // Match the loudness of the phrases each song actually plays
+            // (a song heard only on its drops is louder than its body).
+            let levels = songs.indices.map { si -> Double? in
+                guard let sig = songs[si].signal else { return nil }
+                let powers = apps.filter { $0.song == si }.map { a in
+                    pow(10, sig.meanRMSDB(from: songs[si].barTime(a.payoffBar), to: songs[si].barTime(a.payoffEndBar)) / 10)
+                }
+                guard !powers.isEmpty else { return nil }
+                return 10 * log10(max(powers.reduce(0, +) / Double(powers.count), 1e-12))
+            }
+            if levels.allSatisfy({ ($0 ?? -120) > -80 }) {
+                let ref = levels.compactMap { $0 }.min()!
+                gains = levels.map { min(1, max(0.5, pow(10, (ref - $0!) / 20))) }
+            }
+        }
+        for (i, g) in gains.enumerated() where g < 0.97 {
+            decisions.append(AutoDecision(kind: .loudnessMatched, songTitle: songs[i].title,
+                                          detail: String(format: "%.1f dB", 20 * log10(g))))
         }
         let perSong = n == 2 ? 2 : (budgetBars / n >= 40 ? 2 : 1)
         var sequence: [Int] = []
@@ -984,8 +1000,11 @@ enum AutoRemixPlanner {
                     // Tempos (or a beat grid) that can't lock: nothing may
                     // overlap, but a high-pass build into the next drop
                     // needs no beatmatch — alternate it with echo slams so
-                    // handoffs don't all sound the same.
-                    recipes.append(k == apps.count - 1 || k % 2 == 0 ? .filterBuildDrop : .echoSlam)
+                    // handoffs don't all sound the same. DJ turns hand off
+                    // often, so builds (riser + impact) are kept for the
+                    // midpoint and the final peak.
+                    let build = turnMode ? (k == apps.count - 1 || k == apps.count / 2) : (k == apps.count - 1 || k % 2 == 0)
+                    recipes.append(build ? .filterBuildDrop : .echoSlam)
                 } else {
                     // Low confidence: no filter tricks — a clean, short
                     // equal-power overlap when tempos fit, else an echo slam.
@@ -1095,7 +1114,8 @@ enum AutoRemixPlanner {
             if k == apps.count - 1 {
                 // Ending: keep up to 8 bars of outro, else 2 bars + echo-out.
                 let outro = s.structure?.sections.last { $0.label == .outro && $0.startBar >= apps[k].payoffEndBar - 1 }
-                apps[k].tailBars = min(available, outro != nil ? min(8, outro!.barCount) : 2)
+                // DJ turns end on the peak: 2 bars + echo-out, no outro.
+                apps[k].tailBars = min(available, outro != nil && !turnMode ? min(8, outro!.barCount) : 2)
                 continue
             }
             let y = songs[apps[k + 1].song]
@@ -1134,14 +1154,28 @@ enum AutoRemixPlanner {
                                  && y.gridContinuous(apps[k + 1].entryBar, apps[k + 1].entryBar + blend)) {
                     blend = 0
                 }
-                if blend < 2 {
+                if blend < 2, turnMode {
+                    // No lockable overlap: beat-locked echo slam onto the
+                    // next phrase (no extra riser — builds stay rare).
+                    recipes[k] = .echoSlam
+                    apps[k].blendInsidePayoff = false
+                    apps[k].tailBars = 0
+                    apps[k + 1].startsAtPayoff = true
+                } else if blend < 2 {
                     recipes[k] = available >= 2 ? .filterBuildDrop : .echoSlam
                     apps[k].blendInsidePayoff = false
                     apps[k].tailBars = available >= 2 ? min(4, available) : 0
-                    apps[k + 1].startsAtPayoff = available >= 2 || turnMode
+                    apps[k + 1].startsAtPayoff = available >= 2
                 } else {
                     apps[k].tailBars = blend
                 }
+            case .filterBuildDrop where turnMode:
+                // DJ turns build over the turn's OWN last bars (2, or 4 on
+                // a 16-bar phrase) — never into the quieter material after
+                // the phrase — and drop straight onto the next song's phrase.
+                apps[k].tailBars = apps[k].payoffEndBar - apps[k].payoffBar >= 16 ? 4 : 2
+                apps[k].blendInsidePayoff = true
+                apps[k + 1].startsAtPayoff = true
             case .filterBuildDrop:
                 apps[k].tailBars = min(4, available)
                 apps[k + 1].startsAtPayoff = true
@@ -1394,8 +1428,11 @@ enum AutoRemixPlanner {
         while b + len <= end {
             if s.isPhraseStart(b) {
                 let e = s.energy(b, b + len), v = s.vocal(b, b + len)
-                let dip = stride(from: b, to: b + len, by: 2).map { e - s.energy($0, $0 + 2) }.max() ?? 0
-                var hype = e + 0.35 * v - max(0, dip - 0.25)
+                let dip = (b..<(b + len)).map { e - s.energy($0, $0 + 1) }.max() ?? 0
+                var hype = e + 0.5 * v - max(0, dip - 0.35)
+                // The handoff happens on the phrase's last bar: ending on a
+                // break bar drops the floor into a hole before the next song.
+                if s.energy(b + len - 1, b + len) < e - 0.3 { hype -= 0.3 }
                 switch st.sections.last(where: { $0.startBar <= b })?.label {
                 case .chorus?: hype += 0.15
                 case .intro?, .outro?, .breakdown?: hype -= 0.2
@@ -1422,19 +1459,25 @@ enum AutoRemixPlanner {
     /// handoffs) when any song's analysis is low-confidence.
     private static func turnAppearances(songs: [SongContext], barSeconds: [Double], tuning: AutoTuning) -> TurnPlan? {
         let n = songs.count
-        guard n >= 2, songs.allSatisfy({ $0.structure != nil }) else { return nil }
-        let confident = songs.allSatisfy { $0.tier > .low }
-        let minTurnSeconds = confident ? 13.0 : 26.0
+        guard tuning.mashupDJTurns, n >= 2, songs.allSatisfy({ $0.structure != nil }) else { return nil }
+        // 8-bar turns when they last ≥ 10 s (≥ 12 s for a song whose beat /
+        // structure evidence is low-confidence: fewer landings on a grid
+        // that may be off); faster songs double to 16 bars.
         let bars = songs.indices.map { si -> Int in
+            let minTurnSeconds = songs[si].tier > .low ? 10.0 : 12.0
             var b = 8
             while Double(b) * barSeconds[si] < minTurnSeconds { b *= 2 }
             return b
         }
         let turnSeconds = songs.indices.map { Double(bars[$0]) * barSeconds[$0] }.reduce(0, +) / Double(n)
-        let target = min(tuning.maxTimelineSeconds, 180)
-        var count = Int(target / max(turnSeconds, 1))
-        count = max(2 * n, min(count, n == 2 ? 8 : 3 * n))
+        // Whole rounds only (even airtime), inside the timeline budget:
+        // payoffs fill ≈ 180 s, leaving room for lead-ins, builds and the
+        // final 16-bar peak.
+        let target = min(tuning.maxTimelineSeconds - 50, 180)
+        let maxCount = n == 2 ? 8 : 3 * n
+        var count = min(maxCount, Int(target / max(turnSeconds, 1)))
         count -= count % n
+        count = max(n, count)
         let perSong = count / n
 
         var phrases: [[HypePhrase]] = []
@@ -1452,7 +1495,13 @@ enum AutoRemixPlanner {
             let distinct = chosen.sorted { $0.hype > $1.hype }
             var i = 0
             while chosen.count < perSong { chosen.append(distinct[i % distinct.count]); i += 1 }
-            phrases.append(chosen.sorted { $0.start < $1.start })
+            // Source order, except the opening song leads with its
+            // strongest phrase: the hook lands within the first 4 bars.
+            var ordered = chosen.sorted { $0.start < $1.start }
+            if si == 0, let top = ordered.indices.max(by: { ordered[$0].hype < ordered[$1].hype }) {
+                ordered.insert(ordered.remove(at: top), at: 0)
+            }
+            phrases.append(ordered)
         }
 
         var apps: [Appearance] = []
@@ -1464,8 +1513,15 @@ enum AutoRemixPlanner {
             // Lead-in: at most 4 bars (a blend's overlap, or the opener's
             // intro — the first hook arrives within one short phrase).
             let entry = max(first, p.start - 4)
+            // The final turn is the peak: let it run on (to 16 bars) while
+            // the next 4 bars still hit as hard — never into an outro.
+            var end = p.start + p.bars
+            if k == count - 1 {
+                let level = s.energy(p.start, end)
+                while end - p.start < 16, end + 4 <= s.loudEndBar, s.energy(end, end + 4) >= level - 0.1 { end += 4 }
+            }
             apps.append(Appearance(song: si, entryBar: entry, payoffBar: p.start,
-                                   payoffEndBar: p.start + p.bars, startsAtPayoff: k > 0))
+                                   payoffEndBar: end, startsAtPayoff: k > 0))
         }
         return TurnPlan(apps: apps, minBars: bars.min() ?? 8, maxBars: bars.max() ?? 8, seconds: turnSeconds)
     }
