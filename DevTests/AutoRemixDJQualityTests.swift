@@ -537,6 +537,79 @@ do {
     print(String(format: "      (long-form render on the same songs: %.0f%% quiet)", oldQuiet * 100))
 }
 
+// MARK: - 4a2. Loudness matched on what listeners hear (BS.1770 K-weighting)
+
+do {
+    // The pre-filter reproduces the spec's response at 48 kHz.
+    for (hz, expected) in [(100.0, -1.133), (997.0, 0.691), (5000.0, 4.013)] {
+        let fs = 48_000.0
+        let x = (0..<Int(fs * 2)).map { Float(sin(2 * .pi * hz * Double($0) / fs)) }
+        let curve = SongSignalAnalyzer.kWeightedCurveDB(x, sampleRate: fs, hop: Int(fs / 10), count: 20)
+        let measured = curve[10...].reduce(0, +) / 10 - 10 * log10(0.5)   // sine power = 0.5
+        check(String(format: "K-weighting: %.0f Hz response %+.2f dB (spec %+.3f)", hz, measured, expected),
+              abs(measured - expected) <= 0.1)
+    }
+
+    // A BRIGHT mix (song A through a 2-pole 300 Hz high-pass: snare, hats,
+    // lead, pads) and a DARK, bass-heavy one (song B through a 2-pole
+    // 150 Hz low-pass), at the SAME RMS: equal meters, but the bright one
+    // sounds several dB louder (the synthwave vs UK-garage case).
+    func filtered(_ x: [Float], cutoff: Double, highPass: Bool) -> [Float] {
+        let k = Float(1 - exp(-2 * Double.pi * cutoff / SR))
+        var lp1: Float = 0, lp2: Float = 0, out = x
+        for i in x.indices {
+            lp1 += k * (x[i] - lp1); lp2 += k * (lp1 - lp2)
+            out[i] = highPass ? x[i] - lp2 : lp2
+        }
+        return out
+    }
+    func rms(_ x: [Float]) -> Double { (x.reduce(0.0) { $0 + Double($1) * Double($1) } / Double(x.count)).squareRoot() }
+    var bright = songA, dark = songB
+    bright.samples = filtered(songA.samples, cutoff: 300, highPass: true)
+    dark.samples = filtered(songB.samples, cutoff: 150, highPass: false)
+    let target = rms(songA.samples)
+    for i in [0, 1] {
+        let x = i == 0 ? bright.samples : dark.samples
+        let g = Float(target / rms(x))
+        if i == 0 { bright.samples = x.map { $0 * g } } else { dark.samples = x.map { $0 * g } }
+    }
+    let trackBright = track("Synthetic Bright", bright), trackDark = track("Synthetic Dark", dark)
+    let brightFeatures = SongSignalAnalyzer.extract(samples: bright.samples, sampleRate: SR)
+    let darkFeatures = SongSignalAnalyzer.extract(samples: dark.samples, sampleRate: SR)
+    let sources: [UUID: AutoOfflineMixdown.Source] = [
+        trackBright.id: .init(samples: bright.samples, sampleRate: SR),
+        trackDark.id: .init(samples: dark.samples, sampleRate: SR),
+    ]
+    func render(rawRMSOnly: Bool) -> (plan: AutoRemixPlan, mix: [Float]) {
+        var fb = brightFeatures, fd = darkFeatures
+        if rawRMSOnly { fb.loudnessCurveDB = []; fd.loudnessCurveDB = [] }   // previous behavior: raw RMS
+        let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [trackBright, trackDark], seed: 1,
+                                                          signals: [trackBright.id: fb, trackDark.id: fd])!
+        let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: .standard)
+        return (plan, AutoOfflineMixdown.render(plan: plan, sources: sources, sampleRate: SR).mix)
+    }
+    /// Rendered PCM: perceived (K-weighted) level of each song across the
+    /// middle third of its turns (its phrase, clear of blends and builds);
+    /// returns the gap between the two songs.
+    func perceivedGap(_ r: (plan: AutoRemixPlan, mix: [Float])) -> Double {
+        let hop = Int(SR / 10)
+        let curve = SongSignalAnalyzer.kWeightedCurveDB(r.mix, sampleRate: SR, hop: hop, count: r.mix.count / hop)
+        var power: [UUID: (Double, Int)] = [:]
+        for p in r.plan.placements {
+            let a = p.timelineStart + p.timelineDuration / 3, b = p.timelineEnd - p.timelineDuration / 3
+            for i in max(0, Int(a * 10))..<min(curve.count, Int(b * 10)) {
+                power[p.songID, default: (0, 0)].0 += pow(10, curve[i] / 10); power[p.songID, default: (0, 0)].1 += 1
+            }
+        }
+        let levels = power.values.map { 10 * log10($0.0 / Double(max($0.1, 1))) }
+        return (levels.max() ?? 0) - (levels.min() ?? 0)
+    }
+    let perceived = perceivedGap(render(rawRMSOnly: false)), raw = perceivedGap(render(rawRMSOnly: true))
+    check("Mashup render: bright and dark songs play at the same perceived level (≤ 1 dB)", perceived <= 1,
+          String(format: "gap %.2f dB", perceived))
+    check("Previous raw-RMS matching FAILS the same gate", raw > 1, String(format: "gap %.2f dB", raw))
+}
+
 // MARK: - 4b. Grid discontinuities never sit inside a beatmatched overlap
 
 do {

@@ -931,12 +931,13 @@ enum AutoRemixPlanner {
             ))
         }
         if turnMode {
-            // Match the loudness of the phrases each song actually plays
-            // (a song heard only on its drops is louder than its body).
+            // Match the perceived (K-weighted) loudness of the phrases each
+            // song actually plays — a song heard only on its drops is louder
+            // than its body, and a bright mix louder than its raw RMS.
             let levels = songs.indices.map { si -> Double? in
                 guard let sig = songs[si].signal else { return nil }
                 let powers = apps.filter { $0.song == si }.map { a in
-                    pow(10, sig.meanRMSDB(from: songs[si].barTime(a.payoffBar), to: songs[si].barTime(a.payoffEndBar)) / 10)
+                    pow(10, sig.meanLoudnessDB(from: songs[si].barTime(a.payoffBar), to: songs[si].barTime(a.payoffEndBar)) / 10)
                 }
                 guard !powers.isEmpty else { return nil }
                 return 10 * log10(max(powers.reduce(0, +) / Double(powers.count), 1e-12))
@@ -1463,11 +1464,18 @@ enum AutoRemixPlanner {
         // 8-bar turns when they last ≥ 10 s (≥ 12 s for a song whose beat /
         // structure evidence is low-confidence: fewer landings on a grid
         // that may be off); faster songs double to 16 bars.
-        let bars = songs.indices.map { si -> Int in
+        let shortest = songs.indices.map { si -> Int in
             let minTurnSeconds = songs[si].tier > .low ? 10.0 : 12.0
             var b = 8
             while Double(b) * barSeconds[si] < minTurnSeconds { b *= 2 }
             return b
+        }
+        // Even airtime: a song whose shortest turn is much briefer than the
+        // longest song's turn plays twice the bars when that lands closer.
+        let longest = songs.indices.map { Double(shortest[$0]) * barSeconds[$0] }.max() ?? 0
+        let bars = songs.indices.map { si -> Int in
+            let b = shortest[si], seconds = Double(b) * barSeconds[si]
+            return abs(2 * seconds - longest) < abs(seconds - longest) ? 2 * b : b
         }
         let turnSeconds = songs.indices.map { Double(bars[$0]) * barSeconds[$0] }.reduce(0, +) / Double(n)
         // Whole rounds only (even airtime), inside the timeline budget:
