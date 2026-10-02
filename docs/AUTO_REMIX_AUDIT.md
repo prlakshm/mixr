@@ -221,6 +221,54 @@ two-song mashups within 43/57 airtime, four-song mix 35/22/22/22.
   None beats the current detector enough to ship. With 23 songs, reliable vocal detection needs
   the separated vocal track itself (Demucs on the phone) or far more training songs.
 
+## 4c. Third round: listening feedback → DJ turns
+
+Listening notes on the 13 round-2 mashups: not hype / not a club banger
+(most cards), too long before the lyrics land, one song plays for a long
+time and then the other, and transitions could be closer. Measured on the
+same renders (Demucs vocal stems for lyric coverage), those notes held up:
+3 handoffs per mashup, turns of 27–56 s, and 8–39% of each mix spent on
+material in the lower third of its own song's loudness.
+
+What changed (`AutoTuning.mashupDJTurns`, on by default; mashups whose
+songs all have measured structure):
+
+- **Turns, not appearances.** Songs trade 8-bar turns (16 when 8 bars
+  last under 10 s, or 12 s for a low-confidence song; a song doubles to 16
+  when that evens out airtime against slower songs), in round-robin,
+  inside the timeline budget.
+- **Hype phrases.** Every phrase-aligned window is scored on measured bar
+  energy + vocal presence + chorus label, minus intro/outro/breakdown,
+  any single drop-out bar, and phrases that end on a break bar. Each song
+  plays its upper-half phrases in source order; the opening song leads
+  with its strongest, so the hook lands within 4 bars.
+- **Tight transitions.** 4-bar bass-swap blends (2 on vocal/key clash),
+  beat-locked echo slams, and a build & drop over the outgoing turn's own
+  last 2–4 bars at the midpoint and the final peak. Slam impacts only on
+  a real energy lift. Mixes end on the peak (2 bars + echo-out).
+- **Perceived loudness.** Gains match the BS.1770 K-weighted loudness of
+  the phrases each song actually plays. Raw RMS left a bright synthwave
+  3.4–4.4 LU louder than a bass-heavy garage track at "equal" level.
+
+| 13 mashups | Rated round | DJ turns |
+|---|---|---|
+| Turns per mashup | 4 (3 handoffs) | 8 in ten mixes, 6 in two, 9 in one |
+| Mean turn length | 27–56 s | 15–27 s |
+| Loudness jumps > 4 dB at handoffs | 8 (11 mixes measured) | **0** |
+| Join holes > 3 dB | 1 of 34 joins (11 mixes) | 2 of 88 joins |
+| Misaligned overlaps (> 20 ms) | 0 | 0 |
+| Material in the lower third of its song's loudness | 8–39% | 0–11% |
+| Lyric coverage, mixes with sung sources (e.g. R&B + hip-hop, punk + indie, house + tech) | 61% / 57% / 34% | 72% / 69% / 50% |
+
+The two remaining holes (punk + indie 0:19, quad 1:59, 3.6 / 4.2 dB) sit
+in the last ~300 ms before a downbeat where the source songs themselves
+leave a gap; bar-level energy cannot see a gap that short.
+
+Several generated sources are essentially instrumental (Demucs vocal stem
+active ≤ 2% of the time: tech-house, D&B, dubstep, boom-bap, afrobeats,
+reggaeton t009, UK garage). Mashups built on them stay wordless — that is
+the sample, not the planner.
+
 ## 5. How to make it better (prioritized)
 
 1. **Listen before shipping.** I could not audition anything on headphones or speakers, and the edits to
