@@ -45,7 +45,8 @@ nonisolated enum MixrExportRenderer {
         let playerB = AVAudioPlayerNode()
         let head = AVAudioMixerNode()
         let timePitch = AVAudioUnitTimePitch()
-        let eq = AVAudioUnitEQ(numberOfBands: 1)
+        /// Band 0: Blur / transition low-pass. Band 1: transition high-pass.
+        let eq = AVAudioUnitEQ(numberOfBands: 2)
         let flangerNode: AVAudioUnit?
         let flangerKernel: FlangerKernel?
         let delay = AVAudioUnitDelay()
@@ -53,6 +54,9 @@ nonisolated enum MixrExportRenderer {
         let file: AVAudioFile
         var appliedReverbPreset: ReverbPreset?
         var appliedDelayTime: TimeInterval = 0
+        /// Smoothed automation state — same time constant as live playback
+        /// (ClipEffectDSP.smoothingTimeConstant), stepped once per block.
+        var smoothed: ClipEffectDSP.ChainTargets?
 
         init(file: AVAudioFile) {
             self.file = file
@@ -238,7 +242,10 @@ nonisolated enum MixrExportRenderer {
 
         renderLoop: while rendered < totalFrames {
             let t = Double(rendered) / outputSR
-            applyParameters(at: t, tracks: tracks, chains: chains, sfxPlayer: sfxPlayer)
+            applyParameters(
+                at: t, tracks: tracks, chains: chains, sfxPlayer: sfxPlayer,
+                projectBPM: projectBPM, blockSeconds: Double(blockFrames) / outputSR
+            )
 
             let framesThisBlock = AVAudioFrameCount(min(AVAudioFramePosition(blockFrames), totalFrames - rendered))
             do {
@@ -364,7 +371,9 @@ nonisolated enum MixrExportRenderer {
         at t: Double,
         tracks: [MixrTrack],
         chains: [(track: MixrTrack, chain: ExportChain)],
-        sfxPlayer: AVAudioPlayerNode?
+        sfxPlayer: AVAudioPlayerNode?,
+        projectBPM: Int?,
+        blockSeconds: Double
     ) {
         let soloActive = tracks.contains { $0.isSoloed }
 
@@ -385,7 +394,9 @@ nonisolated enum MixrExportRenderer {
 
         for (track, chain) in chains {
             let audible = !track.isMuted && (!soloActive || track.isSoloed)
-            let bpm = Double(track.bpm ?? 124)
+            // Same tempo model as live playback: fade beats and the echo
+            // follow each clip's TIMELINE tempo (native BPM × rate).
+            let trackBPM = track.bpm ?? projectBPM ?? AutoTransitionEnvelope.defaultTrackBPM
 
             let songClips = track.clips.filter { !$0.isSoundEffect }
             let lanes = AutoTransitionEnvelope.playerLanes(for: songClips)
@@ -396,30 +407,36 @@ nonisolated enum MixrExportRenderer {
 
             var laneVolumes: [Float] = [0, 0]
             var effectsClip: MixrClip?
-            var effectsBoost = 0.0
+            var effectsEnvelope = AutoTransitionEnvelope.Value(gain: 1, echoBoost: 0)
             if audible {
                 for clip in active {
                     let continuity = AutoTransitionEnvelope.continuity(for: clip, in: songClips)
                     let envelope = ClipEffectDSP.transitionEnvelope(
-                        for: clip, at: t, bpm: bpm, continuity: continuity
+                        for: clip, at: t,
+                        bpm: AutoTransitionEnvelope.timelineBPM(trackBPM: trackBPM, playbackSpeed: clip.playbackSpeed),
+                        continuity: continuity
                     )
                     let volume = Float(track.volume * clip.volume * envelope.gain * duckGain)
                     let lane = lanes[clip.id] ?? 0
                     laneVolumes[lane] = max(laneVolumes[lane], volume)
                     if effectsClip == nil || clip.start > effectsClip!.start {
                         effectsClip = clip
-                        effectsBoost = envelope.echoBoost
+                        effectsEnvelope = envelope
                     }
                 }
             }
 
             if let clip = effectsClip {
-                let targets = ClipEffectDSP.targets(
+                let raw = ClipEffectDSP.targets(
                     for: clip.effects,
                     playbackSpeed: clip.playbackSpeed,
-                    bpm: bpm,
-                    echoBoost: effectsBoost
+                    bpm: AutoTransitionEnvelope.timelineBPM(trackBPM: trackBPM, playbackSpeed: clip.playbackSpeed),
+                    echoBoost: effectsEnvelope.echoBoost,
+                    transitionHighPassHz: effectsEnvelope.highPassHz,
+                    transitionLowPassHz: effectsEnvelope.lowPassHz
                 )
+                let targets = smoothedTargets(raw, previous: chain.smoothed, blockSeconds: blockSeconds)
+                chain.smoothed = targets
                 ClipEffectDSP.apply(
                     targets,
                     timePitch: chain.timePitch,
@@ -447,6 +464,30 @@ nonisolated enum MixrExportRenderer {
             let audible = !sfxTrack.isMuted && (!soloActive || sfxTrack.isSoloed)
             sfxPlayer.volume = audible ? Float(sfxTrack.volume) : 0
         }
+    }
+
+    /// Steps the ramped parameters toward `raw` by one block with the live
+    /// engine's time constant (log domain for filter cutoffs), so export
+    /// automation never jumps at a render-block boundary.
+    private static func smoothedTargets(
+        _ raw: ClipEffectDSP.ChainTargets,
+        previous: ClipEffectDSP.ChainTargets?,
+        blockSeconds: Double
+    ) -> ClipEffectDSP.ChainTargets {
+        guard let prev = previous else { return raw }
+        let k = ClipEffectDSP.smoothingCoefficient(dt: blockSeconds)
+        func lin(_ a: Float, _ b: Float) -> Float { a + (b - a) * k }
+        func logStep(_ a: Float, _ b: Float) -> Float { a * pow(b / max(a, 1), k) }
+        var out = raw
+        out.pitchCents = lin(prev.pitchCents, raw.pitchCents)
+        out.lowPassFrequency = logStep(prev.lowPassFrequency, raw.lowPassFrequency)
+        out.lowPassBypass = raw.lowPassBypass && out.lowPassFrequency >= 19_999
+        out.highPassFrequency = logStep(prev.highPassFrequency, raw.highPassFrequency)
+        out.highPassBypass = raw.highPassBypass && out.highPassFrequency <= 20.5
+        out.delayWetDryMix = lin(prev.delayWetDryMix, raw.delayWetDryMix)
+        out.delayFeedback = lin(prev.delayFeedback, raw.delayFeedback)
+        out.reverbWetDryMix = lin(prev.reverbWetDryMix, raw.reverbWetDryMix)
+        return out
     }
 
     // MARK: - SFX buffers (bundled asset → synthesized fallback, like live)

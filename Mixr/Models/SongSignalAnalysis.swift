@@ -58,7 +58,38 @@ struct SongSignalFeatures: Sendable {
     /// 0…1 overall trust in these measurements.
     var overallConfidence: Double
 
+    /// Measured beat / bar / phrase / section structure (nil when the
+    /// audio was too short or had no trackable pulse).
+    var structure: SongStructure? = nil
+
+    /// Short-time K-weighted (ITU-R BS.1770 pre-filter) power in dB, one
+    /// value per `hopSeconds` — what listeners hear as loudness: a bright
+    /// mix reads louder, a bass-heavy one quieter, than its raw RMS.
+    var loudnessCurveDB: [Double] = []
+
+    /// Loudness of the song body, dBFS: mean power of the loudest 60% of
+    /// 100 ms hops (edge silence and quiet passages excluded). Used for
+    /// loudness matching between songs.
+    nonisolated var bodyLoudnessDB: Double {
+        let powers = rmsCurveDB.map { pow(10, $0 / 10) }.sorted(by: >)
+        guard !powers.isEmpty else { return -120 }
+        let n = max(1, Int(Double(powers.count) * 0.6))
+        return 10 * log10(max(powers.prefix(n).reduce(0, +) / Double(n), 1e-12))
+    }
+
     nonisolated var hopCount: Int { rmsCurveDB.count }
+
+    /// Mean K-weighted loudness over a source range (power domain, dB);
+    /// falls back to raw RMS when the curve is unavailable.
+    nonisolated func meanLoudnessDB(from start: Double, to end: Double) -> Double {
+        guard hopSeconds > 0, !loudnessCurveDB.isEmpty else { return meanRMSDB(from: start, to: end) }
+        let lo = max(0, Int(start / hopSeconds))
+        let hi = min(loudnessCurveDB.count - 1, Int(end / hopSeconds))
+        guard hi >= lo else { return -120 }
+        var power = 0.0
+        for i in lo...hi { power += pow(10, loudnessCurveDB[i] / 10) }
+        return 10 * log10(max(power / Double(hi - lo + 1), 1e-12))
+    }
 
     /// Mean short-time RMS (power domain) over a source range, dBFS.
     nonisolated func meanRMSDB(from start: Double, to end: Double) -> Double {
@@ -268,7 +299,25 @@ enum SongSignalAnalyzer {
         }
 
         let durationFactor = min(1.0, duration / 30.0)
-        let overall = min(1.0, max(0.0, 0.25 + 0.55 * beatConfidence + 0.2 * durationFactor))
+        var overall = min(1.0, max(0.0, 0.25 + 0.55 * beatConfidence + 0.2 * durationFactor))
+
+        // ── Measured structure (beats, bars, phrases, sections) ──
+        // When it succeeds it supersedes the coarse phase search above:
+        // float tempo, real downbeats, and section evidence.
+        let structure = SongStructureAnalyzer.analyze(samples: samples, sampleRate: sampleRate, bpmHint: bpmHint)
+        if let structure {
+            beatConfidence = max(beatConfidence * 0.5, structure.beatConfidence)
+            // Only a CONFIDENT bar phase may replace the first-beat estimate;
+            // with no bar-level evidence (identical beats) "beat one" is unknown.
+            if structure.downbeatConfidence >= 0.3,
+               let first = structure.downbeats.first(where: { $0 >= leadingSilence - 0.05 }) {
+                downbeatOffset = first
+            }
+            overall = min(1.0, max(0.0,
+                0.15 + 0.4 * structure.structureConfidence
+                    + 0.3 * min(1, structure.beatConfidence * 1.5)
+                    + 0.15 * structure.downbeatConfidence))
+        }
 
         return SongSignalFeatures(
             sampleRate: sampleRate,
@@ -286,8 +335,49 @@ enum SongSignalAnalyzer {
             vocalPresenceCurve: vocalCurve,
             noveltyCurve: noveltyCurve,
             drumConfidence: drumConfidence,
-            overallConfidence: overall
+            overallConfidence: overall,
+            structure: structure,
+            loudnessCurveDB: kWeightedCurveDB(samples, sampleRate: sampleRate, hop: hop, count: hopCount)
         )
+    }
+
+    /// BS.1770 K-weighting (high shelf +4 dB above ≈1.7 kHz, then a 38 Hz
+    /// high-pass; coefficients derived for any sample rate), mean power
+    /// per hop in dB.
+    nonisolated static func kWeightedCurveDB(_ x: [Float], sampleRate fs: Double, hop: Int, count: Int) -> [Double] {
+        // De Man's bilinear form of the BS.1770 shelf (reproduces the
+        // spec's published 48 kHz coefficients exactly).
+        func shelf() -> [Double] {
+            let g = 3.999843853973347, q = 0.7071752369554196, fc = 1681.974450955533
+            let k = tan(Double.pi * fc / fs), vh = pow(10, g / 20), vb = pow(vh, 0.4996667741545416)
+            let a0 = 1 + k / q + k * k
+            return [(vh + vb * k / q + k * k) / a0, 2 * (k * k - vh) / a0, (vh - vb * k / q + k * k) / a0,
+                    2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]
+        }
+        func highPass() -> [Double] {
+            let q = 0.5003270373238773, fc = 38.13547087602444
+            let k = tan(Double.pi * fc / fs), a0 = 1 + k / q + k * k
+            return [1, -2, 1, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]
+        }
+        let stages = [shelf(), highPass()]
+        var z = [[Double]](repeating: [0, 0], count: 2)   // transposed direct form II state
+        var out = [Double](repeating: -120, count: count)
+        var sum = 0.0, fill = 0, idx = 0
+        for sample in x {
+            var v = Double(sample)
+            for (k, h) in stages.enumerated() {
+                let y = h[0] * v + z[k][0]
+                z[k][0] = h[1] * v - h[3] * y + z[k][1]
+                z[k][1] = h[2] * v - h[4] * y
+                v = y
+            }
+            sum += v * v; fill += 1
+            if fill == hop {
+                if idx < count { out[idx] = 10 * log10(max(sum / Double(hop), 1e-12)) }
+                idx += 1; sum = 0; fill = 0
+            }
+        }
+        return out
     }
 
     // MARK: Internals

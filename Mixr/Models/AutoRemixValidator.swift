@@ -29,11 +29,19 @@ nonisolated enum AutoRemixValidator {
             if p.sourceStart < 0 { p.sourceStart = 0 }
             let overrun = p.sourceEnd - (duration - 0.05)
             if overrun > 0 {
-                let slide = min(overrun, p.sourceStart)
-                p.sourceStart -= slide
-                let remaining = overrun - slide
-                if remaining > 0 {
-                    p.timelineDuration -= remaining / max(p.tempoRatio, 0.0001)
+                // Trim the END: sliding the source start would shift every
+                // beat of the clip off the timeline grid it was placed on.
+                // Slide only when trimming alone would leave too little.
+                let trimmed = p.timelineDuration - overrun / max(p.tempoRatio, 0.0001)
+                if trimmed >= minLen {
+                    p.timelineDuration = trimmed
+                } else {
+                    let slide = min(overrun, p.sourceStart)
+                    p.sourceStart -= slide
+                    let remaining = overrun - slide
+                    if remaining > 0 {
+                        p.timelineDuration -= remaining / max(p.tempoRatio, 0.0001)
+                    }
                 }
             }
             guard p.timelineDuration >= minLen else {
@@ -157,6 +165,8 @@ nonisolated enum AutoRemixValidator {
                 for i in plan.sfxEvents.indices where plan.sfxEvents[i].timelineStart >= gap.end - 0.01 {
                     plan.sfxEvents[i].timelineStart -= gap.length
                 }
+                plan.payoffTimes = plan.payoffTimes.map { $0 >= gap.end - 0.01 ? $0 - gap.length : $0 }
+                plan.timelineDownbeats = plan.timelineDownbeats.map { $0 >= gap.end - 0.01 ? $0 - gap.length : $0 }
                 for i in plan.intentionalGaps.indices
                 where plan.intentionalGaps[i].start >= gap.end - 0.01 {
                     plan.intentionalGaps[i].start -= gap.length
@@ -180,6 +190,7 @@ nonisolated enum AutoRemixValidator {
 
         // ── 5. Every riser/build SFX must lead to a payoff ──
         let payoffStarts = plan.placements.filter { $0.role == .dominant }.map(\.timelineStart)
+            + plan.payoffTimes
         let beforeSFX = plan.sfxEvents.count
         plan.sfxEvents.removeAll { event in
             guard ["riser", "snareBuild", "reverseCymbal", "airSweep"].contains(event.assetID) else {
@@ -202,10 +213,18 @@ nonisolated enum AutoRemixValidator {
             warnings.append("Removed build SFX that had no clear payoff.")
         }
 
-        // ── 6. Impacts align to downbeats of the target grid ──
+        // ── 6. Impacts align to real downbeats ──
+        // Snap to the plan's timeline downbeats (source downbeats mapped
+        // through each placement); a global target grid is only a fallback
+        // because non-beatmatched songs keep their native tempo.
         for i in plan.sfxEvents.indices where plan.sfxEvents[i].assetID == "impact" {
             let t = plan.sfxEvents[i].timelineStart
-            let snapped = (t / plan.barSeconds).rounded() * plan.barSeconds
+            let snapped: Double
+            if let nearest = plan.timelineDownbeats.min(by: { abs($0 - t) < abs($1 - t) }) {
+                snapped = nearest
+            } else {
+                snapped = (t / plan.barSeconds).rounded() * plan.barSeconds
+            }
             if abs(snapped - t) <= plan.beatSeconds * 0.5 {
                 plan.sfxEvents[i].timelineStart = max(0, snapped)
             }
@@ -338,7 +357,8 @@ nonisolated enum AutoRemixValidator {
         for p in timelineOrder {
             if let last = lastStartBySong[p.songID], p.sourceStart < last - 0.05 {
                 let justified = plan.cutRecords.contains {
-                    $0.reason == .hookReturn && abs($0.timelineAt - p.timelineStart) < 0.1
+                    [.hookReturn, .hookPreview, .extendedBuild].contains($0.reason)
+                        && abs($0.timelineAt - p.timelineStart) < 0.1
                 }
                 if !justified {
                     toRemove.insert(idFor(p))
@@ -382,8 +402,8 @@ nonisolated enum AutoRemixValidator {
                 if sequential {
                     // Contiguous source split — continuity, no fades.
                     plan.placements[pair.1].continuesPrevious = true
-                    plan.placements[pair.0].fadeOut = .none
-                    plan.placements[pair.1].fadeIn = .none
+                    plan.placements[pair.0].fadeOut = filterOnly(prev.fadeOut)
+                    plan.placements[pair.1].fadeIn = filterOnly(next.fadeIn)
                 }
                 continue
             }
@@ -416,8 +436,8 @@ nonisolated enum AutoRemixValidator {
                     // Hard/SFX/tail-masked cut: never fade both sides to
                     // silence — the masking layer carries the join.
                     if fadesTowardSilence(prev.fadeOut), fadesIn(next.fadeIn) {
-                        plan.placements[pair.0].fadeOut = .none
-                        plan.placements[pair.1].fadeIn = .none
+                        plan.placements[pair.0].fadeOut = filterOnly(prev.fadeOut)
+                        plan.placements[pair.1].fadeIn = filterOnly(next.fadeIn)
                     }
                 }
             } else {
@@ -426,8 +446,8 @@ nonisolated enum AutoRemixValidator {
                 if prev.sourceEnd + next.sourceDuration <= songDuration - 0.05 {
                     plan.placements[pair.1].sourceStart = prev.sourceEnd
                     plan.placements[pair.1].continuesPrevious = true
-                    plan.placements[pair.0].fadeOut = .none
-                    plan.placements[pair.1].fadeIn = .none
+                    plan.placements[pair.0].fadeOut = filterOnly(prev.fadeOut)
+                    plan.placements[pair.1].fadeIn = filterOnly(next.fadeIn)
                     warnings.append(
                         "Removed an unjustified internal cut — kept the song continuous."
                     )
@@ -471,6 +491,13 @@ nonisolated enum AutoRemixValidator {
                 0, 0, 0, 0, 0, 0, 0, 0
             )
         )
+    }
+
+    /// Drops an edge's gain fade but keeps its filter automation (a
+    /// high-pass build on a continuous split must survive repairs).
+    private static func filterOnly(_ t: ClipTransition) -> ClipTransition {
+        guard t.filter != nil else { return .none }
+        return ClipTransition(type: .none, duration: t.duration, curve: t.curve, filter: t.filter)
     }
 
     private static func isCrossfadeMasking(_ masking: AutoCutMasking) -> Bool {

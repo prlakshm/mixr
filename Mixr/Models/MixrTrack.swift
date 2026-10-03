@@ -15,19 +15,38 @@ enum ClipTransitionType: String, CaseIterable, Equatable, Sendable, Identifiable
     var id: Self { self }
 }
 
+/// DJ filter automation carried by a clip edge (Auto-generated; optional
+/// so saved projects decode unchanged). Evaluated by AutoTransitionEnvelope
+/// — the one model live playback, export, and the test mixdown share.
+enum TransitionFilter: String, Equatable, Sendable, Codable {
+    /// Bass swap: the incoming edge enters with its low end cut and gets it
+    /// back at the midpoint of its fade; the outgoing edge loses its low end
+    /// at the same midpoint — only one bassline sounds at a time.
+    case bassSwap
+    /// High-pass build: the low end drains out across the edge window
+    /// (20 Hz → ~1.2 kHz) — tension before a drop.
+    case highPassSweep
+    /// Low-pass: an entering edge opens from muffled to full; a leaving
+    /// edge closes toward muffled.
+    case lowPassSweep
+}
+
 struct ClipTransition: Equatable, Sendable, Codable {
     var type:     ClipTransitionType = .none
     var duration: Double = 0.5
     var curve:    String = "linear"
+    var filter:   TransitionFilter? = nil
 
     nonisolated init(
         type: ClipTransitionType = .none,
         duration: Double = 0.5,
-        curve: String = "linear"
+        curve: String = "linear",
+        filter: TransitionFilter? = nil
     ) {
         self.type = type
         self.duration = duration
         self.curve = curve
+        self.filter = filter
     }
 
     nonisolated static let none = ClipTransition()

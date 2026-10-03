@@ -8,9 +8,11 @@ import Foundation
 //
 // It mirrors the REAL engines' scheduling math (trim/offset/speed,
 // per-clip volume, transition envelopes via AutoTransitionEnvelope, SFX
-// gains and ducking via AutoGainPolicy) without the effect DSP chain
-// (reverb/echo/flanger add tails but do not change transition gain
-// structure, which is what these gates measure).
+// gains and ducking via AutoGainPolicy), the DJ filter automation (the
+// engines' 12 dB/oct EQ high-/low-pass bands, driven by the same envelope
+// model), and the tempo-synced echo (AVAudioUnitDelay wet/dry semantics,
+// so echo-outs keep their tails). Reverb and flanger are not modeled —
+// they add color, not transition gain structure.
 nonisolated enum AutoOfflineMixdown {
 
     struct Source {
@@ -41,7 +43,8 @@ nonisolated enum AutoOfflineMixdown {
         sampleRate: Double = 44_100,
         trackVolume: Double = 1.0,
         sfxTrackVolume: Double = 0.85,
-        includeTail: Bool = true
+        includeTail: Bool = true,
+        sfxSamples: [String: [Float]] = [:]
     ) -> Result {
         let contentEnd = plan.placements.map(\.timelineEnd).max() ?? 0
         let sfxEnd = plan.sfxEvents.map(\.timelineEnd).max() ?? 0
@@ -54,25 +57,32 @@ nonisolated enum AutoOfflineMixdown {
 
         var songBus = [Float](repeating: 0, count: frames)
 
-        // ── Song placements ──
+        // ── Song placements (dry) + per-song echo send ──
         let bySong = Dictionary(grouping: plan.placements) { $0.songID }
         for (songID, placements) in bySong {
             guard let source = sources[songID] else { continue }
             let ordered = placements.sorted { $0.timelineStart < $1.timelineStart }
+            var send = [Float](repeating: 0, count: frames)
+            var usesEcho = false
             for (idx, p) in ordered.enumerated() {
                 let continuity = AutoTransitionEnvelope.Continuity(
                     previous: p.continuesPrevious,
                     next: idx + 1 < ordered.count && ordered[idx + 1].continuesPrevious
                 )
-                renderPlacement(
+                usesEcho = renderPlacement(
                     p,
                     continuity: continuity,
                     source: source,
-                    bpm: plan.targetBPM,
+                    bpm: p.envelopeBPM > 0 ? p.envelopeBPM : plan.targetBPM,
                     trackVolume: trackVolume,
                     sampleRate: sampleRate,
-                    into: &songBus
-                )
+                    into: &songBus,
+                    echoSend: &send
+                ) || usesEcho
+            }
+            if usesEcho {
+                let bpm = ordered.first.map { $0.envelopeBPM > 0 ? $0.envelopeBPM : plan.targetBPM } ?? plan.targetBPM
+                applyEcho(send: send, beatSeconds: 60 / max(bpm, 1), sampleRate: sampleRate, into: &songBus)
             }
         }
 
@@ -91,7 +101,9 @@ nonisolated enum AutoOfflineMixdown {
         var mix = songBus
         for event in plan.sfxEvents {
             guard let def = SoundEffectLibrary.definition(for: event.assetID) else { continue }
-            let buffer = syntheticSFX(
+            // Real asset PCM when supplied (audition renders); otherwise the
+            // deterministic copyright-free stand-in (tests).
+            let buffer = sfxSamples[event.assetID] ?? syntheticSFX(
                 type: def.synthesisType,
                 durationSeconds: def.durationSeconds,
                 sampleRate: sampleRate
@@ -141,6 +153,9 @@ nonisolated enum AutoOfflineMixdown {
 
     // MARK: Placement rendering
 
+    /// Renders one placement's dry signal into `bus` and its echo send
+    /// (pre-delay wet input) into `echoSend`. Returns true when echo is used.
+    @discardableResult
     private static func renderPlacement(
         _ p: AutoClipPlacement,
         continuity: AutoTransitionEnvelope.Continuity,
@@ -148,12 +163,19 @@ nonisolated enum AutoOfflineMixdown {
         bpm: Double,
         trackVolume: Double,
         sampleRate: Double,
-        into bus: inout [Float]
-    ) {
+        into bus: inout [Float],
+        echoSend: inout [Float]
+    ) -> Bool {
         let startFrame = Int(p.timelineStart * sampleRate)
         let frameCount = Int(p.timelineDuration * sampleRate)
-        guard frameCount > 0 else { return }
+        guard frameCount > 0 else { return false }
         let srcRate = source.sampleRate
+        let echoLevel = p.effects.level(for: "echo") / 100.0
+        let blurLP = ClipEffectMapping.blurLowPassHz(level: p.effects.level(for: "blur"))
+        var hp = Biquad(), lp = Biquad()
+        var usesEcho = false
+        var envelope = AutoTransitionEnvelope.Value(gain: 1, echoBoost: 0)
+        let controlStride = 32
 
         for j in 0..<frameCount {
             let outIdx = startFrame + j
@@ -164,18 +186,95 @@ nonisolated enum AutoOfflineMixdown {
             let i0 = Int(srcPos)
             guard i0 >= 0, i0 + 1 < source.samples.count else { continue }
             let frac = Float(srcPos - Double(i0))
-            let sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
+            var sample = source.samples[i0] * (1 - frac) + source.samples[i0 + 1] * frac
 
-            let envelope = AutoTransitionEnvelope.envelope(
-                transitionIn: p.fadeIn,
-                transitionOut: p.fadeOut,
-                clipStart: p.timelineStart,
-                clipEnd: p.timelineEnd,
-                at: t,
-                bpm: bpm,
-                continuity: continuity
-            )
-            bus[outIdx] += sample * Float(trackVolume * p.volume * envelope.gain)
+            if j % controlStride == 0 {
+                envelope = AutoTransitionEnvelope.envelope(
+                    transitionIn: p.fadeIn,
+                    transitionOut: p.fadeOut,
+                    clipStart: p.timelineStart,
+                    clipEnd: p.timelineEnd,
+                    at: t,
+                    bpm: bpm,
+                    continuity: continuity
+                )
+                hp.setHighPass(envelope.highPassHz, sampleRate: sampleRate)
+                lp.setLowPass(min(envelope.lowPassHz, blurLP), sampleRate: sampleRate)
+            } else if j % controlStride == controlStride / 2 {
+                // Gain tracks at half the control stride (sub-ms), so
+                // anti-click microfades stay exact.
+                let g = AutoTransitionEnvelope.envelope(
+                    transitionIn: p.fadeIn, transitionOut: p.fadeOut,
+                    clipStart: p.timelineStart, clipEnd: p.timelineEnd,
+                    at: t, bpm: bpm, continuity: continuity
+                )
+                envelope.gain = g.gain
+            }
+            if envelope.highPassHz > AutoTransitionEnvelope.openHighPassHz + 1 { sample = hp.process(sample) }
+            if min(envelope.lowPassHz, blurLP) < AutoTransitionEnvelope.openLowPassHz - 1 { sample = lp.process(sample) }
+
+            let g = Float(trackVolume * p.volume * envelope.gain)
+            // AVAudioUnitDelay semantics: output = dry·(1 − mix) + wet·mix.
+            let wetMix = Float(min(70, ClipEffectMapping.echoWetPercent(amount: echoLevel) + envelope.echoBoost) / 100)
+            bus[outIdx] += sample * g * (1 - wetMix)
+            if wetMix > 0.001 {
+                echoSend[outIdx] += sample * g * wetMix
+                usesEcho = true
+            }
+        }
+        return usesEcho
+    }
+
+    /// Tempo-synced feedback delay (1 beat, ~45% feedback, 9 kHz damping)
+    /// over a song's echo send — its tail rings past the clip like the
+    /// engines' AVAudioUnitDelay.
+    private static func applyEcho(send: [Float], beatSeconds: Double, sampleRate: Double, into bus: inout [Float]) {
+        let delay = max(1, Int(beatSeconds * sampleRate))
+        var line = [Float](repeating: 0, count: delay)
+        var idx = 0
+        let feedback: Float = 0.45
+        let damp = Float(1 - exp(-2 * Double.pi * 9000 / sampleRate))
+        var lpState: Float = 0
+        for i in 0..<min(send.count, bus.count) {
+            let out = line[idx]
+            lpState += (out - lpState) * damp
+            line[idx] = send[i] + lpState * feedback
+            bus[i] += out
+            idx += 1
+            if idx == delay { idx = 0 }
+        }
+    }
+
+    /// RBJ-cookbook 2nd-order section (12 dB/oct, Q = 0.707) — the shape
+    /// of AVAudioUnitEQ's high-/low-pass bands.
+    struct Biquad {
+        var b0: Float = 1, b1: Float = 0, b2: Float = 0, a1: Float = 0, a2: Float = 0
+        var z1: Float = 0, z2: Float = 0
+        var lastHz = -1.0
+
+        mutating func setHighPass(_ hz: Double, sampleRate: Double) {
+            guard abs(hz - lastHz) > 0.5 else { return }
+            lastHz = hz
+            let w = 2 * Double.pi * min(hz, sampleRate * 0.45) / sampleRate
+            let alpha = sin(w) / (2 * 0.7071), c = cos(w), a0 = 1 + alpha
+            b0 = Float((1 + c) / 2 / a0); b1 = Float(-(1 + c) / a0); b2 = b0
+            a1 = Float(-2 * c / a0); a2 = Float((1 - alpha) / a0)
+        }
+
+        mutating func setLowPass(_ hz: Double, sampleRate: Double) {
+            guard abs(hz - lastHz) > 0.5 else { return }
+            lastHz = hz
+            let w = 2 * Double.pi * min(hz, sampleRate * 0.45) / sampleRate
+            let alpha = sin(w) / (2 * 0.7071), c = cos(w), a0 = 1 + alpha
+            b0 = Float((1 - c) / 2 / a0); b1 = Float((1 - c) / a0); b2 = b0
+            a1 = Float(-2 * c / a0); a2 = Float((1 - alpha) / a0)
+        }
+
+        mutating func process(_ x: Float) -> Float {
+            let y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            return y
         }
     }
 

@@ -58,8 +58,10 @@ nonisolated enum AutoGainPolicy {
 
     // MARK: Ducking
 
-    /// Duck depth under a major impact, dB (smoothly ramped).
-    static let duckDepthDB = 3.0
+    /// Duck depth under a major impact, dB (smoothly ramped). Kept small:
+    /// impacts land ON drop downbeats, and a deep duck there would blunt
+    /// the very downbeat the impact is meant to reinforce.
+    static let duckDepthDB = 1.5
     static let duckAttackSeconds = 0.06
     static let duckHoldSeconds = 0.25
     static let duckReleaseSeconds = 0.30

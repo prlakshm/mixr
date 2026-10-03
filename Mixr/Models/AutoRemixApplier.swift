@@ -27,6 +27,9 @@ nonisolated enum AutoRemixApplier {
 
         for ti in result.indices where !result[ti].isSFXTrack {
             let trackID = result[ti].id
+            if result[ti].bpm == nil, let measured = plan.measuredTrackBPMs[trackID] {
+                result[ti].bpm = measured
+            }
             if let placements = placementsBySong[trackID] {
                 result[ti].clips = placements
                     .sorted { $0.timelineStart < $1.timelineStart }
@@ -56,11 +59,21 @@ nonisolated enum AutoRemixApplier {
                     )
                     continue
                 }
+                // The SFX lane cannot overlap. Sliding a colliding event later
+                // would move a riser past its drop or an impact off the
+                // downbeat, so a colliding event is dropped instead.
+                let proposed = MixrTimeline.units(fromSeconds: max(0, event.timelineStart))
                 let start = SoundEffectLibrary.nonOverlappingStart(
-                    proposedStart: MixrTimeline.units(fromSeconds: max(0, event.timelineStart)),
+                    proposedStart: proposed,
                     lengthUnits: definition.lengthUnits,
                     in: clips
                 )
+                guard abs(start - proposed) <= MixrTimeline.clipEdgeEpsilon else {
+                    appliedPlan.decisions.append(
+                        AutoDecision(kind: .removedInvalidSFX, songTitle: nil, detail: "\(event.assetID) collided on the SFX lane")
+                    )
+                    continue
+                }
                 clips.append(
                     MixrClip(
                         id: UUID(),
