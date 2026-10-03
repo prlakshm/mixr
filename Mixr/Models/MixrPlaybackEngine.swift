@@ -5,7 +5,7 @@ import Combine
 //
 // Real DSP graph — every song track renders through its own effect chain:
 //
-//   player → timePitch → EQ (blur LPF) → flanger → delay → reverb
+//   player → varispeed → timePitch → EQ (blur LPF) → flanger → delay → reverb
 //          → mainMixer → peak limiter → output
 //
 // The flanger is a custom modulated fractional-delay unit (ClipFlanger);
@@ -83,6 +83,7 @@ final class MixrPlaybackEngine: ObservableObject {
         let playerB = AVAudioPlayerNode()
         let head = AVAudioMixerNode()
         let timePitch = AVAudioUnitTimePitch()
+        let rateNode = AVAudioUnitVarispeed()
         /// Single band: Blur low-pass.
         let eq = AVAudioUnitEQ(numberOfBands: 1)
         /// Custom modulated fractional-delay flanger (nil if instantiation failed).
@@ -124,7 +125,7 @@ final class MixrPlaybackEngine: ObservableObject {
         }
 
         var allNodes: [AVAudioNode] {
-            var nodes: [AVAudioNode] = [playerA, playerB, head, timePitch, eq]
+            var nodes: [AVAudioNode] = [playerA, playerB, head, rateNode, timePitch, eq]
             if let flangerNode { nodes.append(flangerNode) }
             nodes.append(contentsOf: [delay, reverb])
             return nodes
@@ -261,6 +262,7 @@ final class MixrPlaybackEngine: ObservableObject {
             // playhead — see applyEffects(clip:chain:...).
             ClipEffectDSP.configureRestState(
                 timePitch: chain.timePitch,
+                rateNode: chain.rateNode,
                 eq: chain.eq,
                 flanger: chain.flangerKernel,
                 delay: chain.delay,
@@ -272,7 +274,8 @@ final class MixrPlaybackEngine: ObservableObject {
             let fmt = file.processingFormat
             engine.connect(chain.playerA, to: chain.head, format: fmt)
             engine.connect(chain.playerB, to: chain.head, format: fmt)
-            engine.connect(chain.head, to: chain.timePitch, format: fmt)
+            engine.connect(chain.head, to: chain.rateNode, format: fmt)
+            engine.connect(chain.rateNode, to: chain.timePitch, format: fmt)
             engine.connect(chain.timePitch, to: chain.eq, format: fmt)
             if let flangerNode = chain.flangerNode {
                 engine.connect(chain.eq, to: flangerNode, format: fmt)
@@ -496,9 +499,14 @@ final class MixrPlaybackEngine: ObservableObject {
                let next = track.clips
                    .filter({ !$0.isSoundEffect && MixrTimeline.seconds(fromUnits: $0.start) >= timelineSeconds })
                    .min(by: { $0.start < $1.start }) {
-                chain.timePitch.rate = Float(max(next.playbackSpeed, 0.03125))
-                chain.timePitch.overlap = abs(next.playbackSpeed - 1.0) > 0.08 ? 32 : 8
-                if abs(next.playbackSpeed - 1.0) >= 0.001 { chain.timePitch.bypass = false }
+                let initial = ClipEffectDSP.targets(for: next.effects, playbackSpeed: next.playbackSpeed,
+                                                    bpm: Double(track.bpm ?? 120), echoBoost: 0)
+                chain.rateNode.rate = initial.rateNodeRate
+                chain.timePitch.rate = initial.timePitchRate
+                chain.timePitch.pitch = initial.pitchCents
+                chain.smoothedPitch = initial.musicalPitchCents
+                chain.timePitch.overlap = initial.timePitchOverlap
+                chain.timePitch.bypass = initial.timePitchBypass
             }
         }
 
@@ -679,10 +687,11 @@ final class MixrPlaybackEngine: ObservableObject {
         // ── Pitch (AVAudioUnitTimePitch) ──
         // Pitch ramps in cents → smooth glide between slider values and
         // when flipping Up ↔ Down (signed cents).
-        chain.smoothedPitch += (t.pitchCents - chain.smoothedPitch) * coeff
-        if abs(t.pitchCents - chain.smoothedPitch) < 0.5 { chain.smoothedPitch = t.pitchCents }
-        chain.timePitch.pitch = chain.smoothedPitch
-        chain.timePitch.rate = t.playbackRate
+        chain.smoothedPitch += (t.musicalPitchCents - chain.smoothedPitch) * coeff
+        if abs(t.musicalPitchCents - chain.smoothedPitch) < 0.5 { chain.smoothedPitch = t.musicalPitchCents }
+        chain.timePitch.pitch = chain.smoothedPitch + t.ratePitchCompensationCents
+        chain.rateNode.rate = t.rateNodeRate
+        chain.timePitch.rate = t.timePitchRate
         chain.timePitch.overlap = t.timePitchOverlap
         // Bypassing the phase vocoder changes its latency, so only
         // re-engage the bypass on force applies (start/seek) — engaging

@@ -1,0 +1,18 @@
+{
+  "review_date": "2026-09-13",
+  "reviewer": "owner",
+  "candidate": "Exports/Audit-2026-09-04/listening-groove-sep13/revised.wav",
+  "musical_approval": false,
+  "observations": [
+    "Lyrics are too quiet",
+    "All feels like background music or the beginning/ending of a song",
+    "Interior passages should feel upbeat; intro/outro may relax"
+  ],
+  "direction": "Preserve vocal prominence and rhythmic energy together. Do not optimize continuity by burying the lead.",
+  "monitoring_device": "unspecified",
+  "dry_stem_diagnostics": {
+    "incoming_native_contrast_loss_db": 4.54,
+    "outgoing_native_contrast_loss_db": 4.7,
+    "interpretation": "Advisory relative-power estimate on voiced windows, not a listening judgment."
+  }
+}

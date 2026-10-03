@@ -1,0 +1,113 @@
+Compiling listen renderer…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipFlanger.swift:395:13: warning: capture of 'node' with non-Sendable type 'AVAudioUnit?' in a '@Sendable' closure [#SendableClosureCaptures]
+393 |                 print("ClipFlanger: instantiate failed — \(error.localizedDescription)")
+394 |             }
+395 |             node = unit
+    |             `- warning: capture of 'node' with non-Sendable type 'AVAudioUnit?' in a '@Sendable' closure [#SendableClosureCaptures]
+396 |             semaphore.signal()
+397 |         }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioUnit.h:28:12: note: class 'AVAudioUnit' does not conform to the 'Sendable' protocol
+ 26 | */
+ 27 | API_AVAILABLE(macos(10.10), ios(8.0), tvos(9.0)) API_UNAVAILABLE(watchos)
+ 28 | @interface AVAudioUnit : AVAudioNode
+    |            `- note: class 'AVAudioUnit' does not conform to the 'Sendable' protocol
+ 29 | 
+ 30 | #if AVAUDIOUNIT_HAVE_AUDIOUNIT
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipFlanger.swift:1:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+  1 | import AVFoundation
+    | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+  2 | import AudioToolbox
+  3 | import CoreAudio
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:898:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 896 |         var placements: [AutoClipPlacement] = []
+ 897 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 898 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 899 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 900 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:900:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 898 |         var joinContracts: [AutoJoinContract] = []
+ 899 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 900 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 901 |         var sfx: [AutoSFXEvent] = []
+ 902 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1559:62: warning: will never be executed
+1557 |             mashupVocalID: drop1?.songID,
+1558 |             mashupBedID: bed.songID,
+1559 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1560 |             vocalTempoRatio: vocalTempoRatio,
+1561 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         joinContracts: inout [AutoJoinContract]
+177 |     ) {
+178 |         let repeats = tuning.pivotWallpaperBeats
+    |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+180 |         let loopStart = dropTimelineStart - loopDur
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:275:13: warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+273 |         )
+274 | 
+275 |         let grainVol = AutoGainPolicy.roleStagingVolume(
+    |             `- warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+276 |             role: .pivotGrain,
+277 |             measuredStemRMS: nil,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-listen-8cd3sy/main.swift:25:29: warning: 'tracks(withMediaType:)' was deprecated in macOS 13.0: Use loadTracks(withMediaType:) instead [#DeprecatedDeclaration]
+ 23 |     let url = URL(fileURLWithPath: path)
+ 24 |     let asset = AVURLAsset(url: url)
+ 25 |     guard let track = asset.tracks(withMediaType: .audio).first else {
+    |                             `- warning: 'tracks(withMediaType:)' was deprecated in macOS 13.0: Use loadTracks(withMediaType:) instead [#DeprecatedDeclaration]
+ 26 |         throw NSError(domain: "mixr", code: 1, userInfo: [NSLocalizedDescriptionKey: "no audio \(path)"])
+ 27 |     }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+Rendering local crate...
+Swift/ErrorType.swift:254: Fatal error: Error raised at top level: Error Domain=AVFoundationErrorDomain Code=-11800 "The operation could not be completed" UserInfo={NSLocalizedFailureReason=An unknown error occurred (-1), NSLocalizedDescription=The operation could not be completed, NSUnderlyingError=0xc11039680 {Error Domain=NSOSStatusErrorDomain Code=-1 "kCFStreamErrorHTTPParseFailure / kCFSocketError / kCFStreamErrorDomainCustom / kCSIdentityUnknownAuthorityErr / qErr / telGenericError / dsNoExtsMacsBug / kMovieLoadStateError / cdevGenErr: Could not parse the request/response. /  / custom to the kind of stream in question  /  / queue element not found during deletion /  / not a SysErr, just a placeholder  /  / General error; gray cdev w/o alert"}}
+Scripts/run_crate_render_tests.sh: line 68: 34990 Trace/BPT trap: 5       "$OUT" "$RESULTS" "${@:2}"

@@ -6,7 +6,7 @@ import Foundation
 // Offline bounce of the project using AVAudioEngine manual rendering.
 // The graph is a mirror of MixrPlaybackEngine's live graph:
 //
-//   per song track: player → timePitch → EQ → flanger → delay → reverb → mainMixer
+//   per song track: player → varispeed → timePitch → EQ → flanger → delay → reverb → mainMixer
 //   each SFX row:   player → mainMixer  (one player per row so stacks mix)
 //   master:         mainMixer → peak limiter → output
 //
@@ -45,6 +45,7 @@ nonisolated enum MixrExportRenderer {
         let playerB = AVAudioPlayerNode()
         let head = AVAudioMixerNode()
         let timePitch = AVAudioUnitTimePitch()
+        let rateNode = AVAudioUnitVarispeed()
         let eq = AVAudioUnitEQ(numberOfBands: 1)
         let flangerNode: AVAudioUnit?
         let flangerKernel: FlangerKernel?
@@ -68,7 +69,7 @@ nonisolated enum MixrExportRenderer {
         }
 
         var allNodes: [AVAudioNode] {
-            var nodes: [AVAudioNode] = [playerA, playerB, head, timePitch, eq]
+            var nodes: [AVAudioNode] = [playerA, playerB, head, rateNode, timePitch, eq]
             if let flangerNode { nodes.append(flangerNode) }
             nodes.append(contentsOf: [delay, reverb])
             return nodes
@@ -82,6 +83,7 @@ nonisolated enum MixrExportRenderer {
         tracks: [MixrTrack],
         projectName: String,
         projectBPM: Int? = nil,
+        auditURL: URL? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) throws -> URL {
         let contentSeconds = MixrTimeline.remixDurationSeconds(tracks: tracks)
@@ -106,6 +108,7 @@ nonisolated enum MixrExportRenderer {
             let chain = ExportChain(file: file)
             ClipEffectDSP.configureRestState(
                 timePitch: chain.timePitch,
+                rateNode: chain.rateNode,
                 eq: chain.eq,
                 flanger: chain.flangerKernel,
                 delay: chain.delay,
@@ -117,7 +120,8 @@ nonisolated enum MixrExportRenderer {
             let fmt = file.processingFormat
             engine.connect(chain.playerA, to: chain.head, format: fmt)
             engine.connect(chain.playerB, to: chain.head, format: fmt)
-            engine.connect(chain.head, to: chain.timePitch, format: fmt)
+            engine.connect(chain.head, to: chain.rateNode, format: fmt)
+            engine.connect(chain.rateNode, to: chain.timePitch, format: fmt)
             engine.connect(chain.timePitch, to: chain.eq, format: fmt)
             if let flangerNode = chain.flangerNode {
                 engine.connect(chain.eq, to: flangerNode, format: fmt)
@@ -179,9 +183,13 @@ nonisolated enum MixrExportRenderer {
             if let first = track.clips
                 .filter({ !$0.isSoundEffect })
                 .min(by: { $0.start < $1.start }) {
-                chain.timePitch.rate = Float(max(first.playbackSpeed, 0.03125))
-                chain.timePitch.overlap = abs(first.playbackSpeed - 1.0) > 0.08 ? 32 : 8
-                if abs(first.playbackSpeed - 1.0) >= 0.001 { chain.timePitch.bypass = false }
+                let initial = ClipEffectDSP.targets(for: first.effects, playbackSpeed: first.playbackSpeed,
+                                                    bpm: Double(projectBPM ?? track.bpm ?? 120), echoBoost: 0)
+                chain.rateNode.rate = initial.rateNodeRate
+                chain.timePitch.rate = initial.timePitchRate
+                chain.timePitch.pitch = initial.pitchCents
+                chain.timePitch.overlap = initial.timePitchOverlap
+                chain.timePitch.bypass = initial.timePitchBypass
             }
         }
         for entry in sfxPlayers {
@@ -200,17 +208,7 @@ nonisolated enum MixrExportRenderer {
             .appendingPathComponent(safeFileName(projectName))
             .appendingPathExtension("m4a")
         try? FileManager.default.removeItem(at: outURL)
-        let outFile = try AVAudioFile(
-            forWriting: outURL,
-            settings: [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 44_100,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 256_000,
-            ],
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
+
 
         guard let block = AVAudioPCMBuffer(
             pcmFormat: engine.manualRenderingFormat,
@@ -304,18 +302,92 @@ nonisolated enum MixrExportRenderer {
         // then encode. Same DSP as the offline mixdown so the crate
         // scoreboard and the app export deliver the same loudness.
         let master = AutoMasterBus.masterize(channels: collected, sampleRate: outputSR)
+        if let auditURL {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(master.reductionAudit).write(to: auditURL, options: .atomic)
+        }
         if ProcessInfo.processInfo.environment["MIXR_DEBUG_MASTER"] == "1" {
             print(String(format: "MASTER export in=%.1f LUFS makeup=%+.1f dB sustainedGR=%.1f p90=%.1f limited=%.0f%% peakGR=%.1f out=%.1f LUFS",
                          master.measuredLUFS, master.makeupDB, master.sustainedReductionDB,
                          master.reductionP90DB, master.limitedFraction * 100,
                          master.peakReductionDB, master.outputLUFS))
         }
-        try writeChannels(master.channels, to: outFile, format: engine.manualRenderingFormat)
+        let encodedAudit = try encodePeakSafeAAC(master.channels,
+            format: engine.manualRenderingFormat, to: outURL)
+        if let auditURL {
+            let destination = auditURL.deletingPathExtension().appendingPathExtension("encoded.json")
+            try JSONEncoder().encode(encodedAudit).write(to: destination, options: .atomic)
+        }
         progress?(1.0)
         return outURL
     }
 
     // MARK: - Master-bus helpers
+
+    struct EncodedPeakAudit: Codable {
+        let attempts: Int
+        let gainDB: Double
+        let decodedTruePeakDBTP: Double
+    }
+
+    /// AAC can reconstruct peaks above its input PCM ceiling. Check the
+    /// delivered samples and, if necessary, re-encode the original master
+    /// with a uniform gain reduction. This does not add another limiter.
+    static func encodePeakSafeAAC(_ channels: [[Float]], format: AVAudioFormat,
+                                  to url: URL) throws -> EncodedPeakAudit {
+        var gainDB = 0.0
+        let target = AutoGainPolicy.truePeakCeilingDB - 0.1
+        for attempt in 1...3 {
+            try? FileManager.default.removeItem(at: url)
+            // Scope the writer so the container is finalized before reading.
+            do {
+                let file = try AVAudioFile(forWriting: url, settings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 44_100,
+                    AVNumberOfChannelsKey: 2,
+                    AVEncoderBitRateKey: 256_000,
+                ], commonFormat: .pcmFormatFloat32, interleaved: false)
+                try writeChannels(channels, to: file, format: format,
+                                  gain: Float(pow(10, gainDB / 20)))
+            }
+            let decoded = try decodedChannels(url)
+            guard let peak = AutoMasterBus.truePeakTrack(channels: decoded).max(),
+                  peak.isFinite else {
+                throw ExportError.renderFailed("encoded peak measurement was unavailable")
+            }
+            let db = 20 * log10(max(Double(peak), 1e-12))
+            if db <= target {
+                return EncodedPeakAudit(attempts: attempt, gainDB: gainDB, decodedTruePeakDBTP: db)
+            }
+            gainDB -= max(0.1, db - target + 0.05)
+        }
+        try? FileManager.default.removeItem(at: url)
+        throw ExportError.renderFailed("encoded audio did not meet the true-peak ceiling")
+    }
+
+    private static func decodedChannels(_ url: URL) throws -> [[Float]] {
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192) else {
+            throw ExportError.renderFailed("could not allocate encoded-audio check")
+        }
+        var channels = Array(repeating: [Float](), count: Int(file.processingFormat.channelCount))
+        while file.framePosition < file.length {
+            try file.read(into: buffer)
+            guard buffer.frameLength > 0, let data = buffer.floatChannelData else { break }
+            for c in channels.indices {
+                let block = UnsafeBufferPointer(start: data[c], count: Int(buffer.frameLength))
+                guard block.allSatisfy({ $0.isFinite }) else {
+                    throw ExportError.renderFailed("encoded audio contains invalid samples")
+                }
+                channels[c].append(contentsOf: block)
+            }
+        }
+        guard channels.first?.isEmpty == false else {
+            throw ExportError.renderFailed("encoded audio check returned no samples")
+        }
+        return channels
+    }
 
     private static func appendBlock(_ buffer: AVAudioPCMBuffer, into collected: inout [[Float]]) {
         guard let data = buffer.floatChannelData else { return }
@@ -326,7 +398,7 @@ nonisolated enum MixrExportRenderer {
     }
 
     private static func writeChannels(_ channels: [[Float]], to file: AVAudioFile,
-                                      format: AVAudioFormat) throws {
+                                      format: AVAudioFormat, gain: Float = 1) throws {
         guard let total = channels.first?.count, total > 0 else { return }
         let chunk = 4096
         guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(chunk)),
@@ -338,7 +410,7 @@ nonisolated enum MixrExportRenderer {
             let n = min(chunk, total - pos)
             for c in 0..<min(channels.count, Int(format.channelCount)) {
                 channels[c].withUnsafeBufferPointer { src in
-                    data[c].update(from: src.baseAddress! + pos, count: n)
+                    for i in 0..<n { data[c][i] = src[pos + i] * gain }
                 }
             }
             buf.frameLength = AVAudioFrameCount(n)
@@ -485,6 +557,7 @@ nonisolated enum MixrExportRenderer {
                 ClipEffectDSP.apply(
                     targets,
                     timePitch: chain.timePitch,
+                rateNode: chain.rateNode,
                     eq: chain.eq,
                     flanger: chain.flangerKernel,
                     delay: chain.delay,

@@ -19,15 +19,20 @@ struct ClipTransition: Equatable, Sendable, Codable {
     var type:     ClipTransitionType = .none
     var duration: Double = 0.5
     var curve:    String = "linear"
+    /// Optional nonzero endpoint for a level ride. Nil preserves ordinary
+    /// fades and decoding of existing saved projects.
+    var floorGain: Double? = nil
 
     nonisolated init(
         type: ClipTransitionType = .none,
         duration: Double = 0.5,
-        curve: String = "linear"
+        curve: String = "linear",
+        floorGain: Double? = nil
     ) {
         self.type = type
         self.duration = duration
         self.curve = curve
+        self.floorGain = floorGain
     }
 
     nonisolated static let none = ClipTransition()

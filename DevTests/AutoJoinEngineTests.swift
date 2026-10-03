@@ -282,22 +282,18 @@ do {
         decisions: &decisions,
         joinContracts: &joinContracts
     )
-    // Sweep join (2026-08-20): no grain loop. The window gets sample-
-    // continuous ramp segments plus exactly one decaying echo throw.
+    // Owner audition (2026-09-09): a continuous runway without a
+    // separate lyric throw or incoming preview.
     let segs = placements.filter { $0.continuesPrevious }
-    check("Join: sweep join emits ramp segments (no grain loop)", segs.count >= 2, "segs=\(segs.count)")
+    check("Join: sweep join emits continuous runway (no grain loop)", !segs.isEmpty, "segs=\(segs.count)")
     let throws_ = placements.filter {
         $0.role == .supporting && $0.fadeOut.type == .echoOut
             && $0.timelineDuration <= beatSec * 1.4
     }
-    check("Join: sweep join emits one decaying echo throw", throws_.count == 1, "throws=\(throws_.count)")
-    if let t0 = throws_.first {
-        check(
-            "Join: echo throw marks the window start (~2 bars before Drop 1)",
-            abs(t0.timelineStart - loopStart) < beatSec * 0.6,
-            String(format: "throw=%.2f loop=%.2f", t0.timelineStart, loopStart)
-        )
-    }
+    check("Join: sweep join does not insert an automatic lyric throw", throws_.isEmpty, "throws=\(throws_.count)")
+    check("Join: continuous runway preserves the outgoing source clock", segs.allSatisfy {
+        abs($0.sourceStart - (48.0 + $0.timelineStart * 1.33)) < 0.001
+    })
     let shortRepeats = placements.filter {
         $0.role == .supporting && !$0.continuesPrevious
             && abs($0.timelineDuration - beatSec) < beatSec * 0.4
@@ -768,7 +764,7 @@ func sweepPlan(
             )
         )
     }
-    var plan = AutoRemixPlan(
+    let plan = AutoRemixPlan(
         mode: .mashup,
         targetBPM: bpm,
         targetDuration: cutAt + bar * 8,
@@ -864,6 +860,214 @@ do {
     check(
         "Join: noneRequired still gets last-beat seam cover",
         hasSeamCover(plan)
+    )
+}
+
+// MARK: - Finish the lyric line (not just the current word)
+
+func profileWithLyrics(
+    title: String,
+    id: UUID,
+    words: [(t: Double, word: String)],
+    bpm: Int = 124
+) -> AutoSongProfile {
+    var signal = makeFeatures(duration: 180, bpm: Double(bpm))
+    signal.lyricWords = words
+    var track = joinFixtureTrack(title: title, id: id)
+    track.bpm = bpm
+    return AutoSectionCatalog.profile(track: track, signal: signal)
+}
+
+func clip(
+    song: UUID,
+    source: Double,
+    start: Double,
+    duration: Double,
+    volume: Double = 1,
+    role: AutoPlacementRole = .dominant,
+    slot: Int,
+    fadeIn: ClipTransition = .none,
+    fadeOut: ClipTransition = .hardCut,
+    stem: AutoStemKind? = nil
+) -> AutoClipPlacement {
+    AutoClipPlacement(
+        songID: song, sourceStart: source, timelineStart: start,
+        timelineDuration: duration, tempoRatio: 1, volume: volume,
+        fadeIn: fadeIn, fadeOut: fadeOut, effects: ClipEffectSettings(),
+        role: role, slotIndex: slot, stemKind: stem
+    )
+}
+
+/// Line: I / played / with / your / heart. Cut sits BETWEEN "your" and
+/// "heart" — outside the old 0.06…0.34s mid-word window — so a word-nudge
+/// still beheads the line.
+let heartLine: [(t: Double, word: String)] = [
+    (16.20, "I"), (16.60, "played"), (17.00, "with"), (17.40, "your"), (17.95, "heart")
+]
+let heartLineEnd = 17.95 + 0.35
+
+do {
+    let songID = UUID()
+    let sourceStart = 10.0
+    let sourceEnd = 17.70   // 0.30s after "your", 0.25s before "heart"
+    let duration = sourceEnd - sourceStart
+    let plan = AutoRemixPlan(
+        mode: .remix,
+        targetBPM: 124,
+        targetDuration: duration + 4,
+        anchorSongIDs: [songID],
+        selectedSections: [],
+        placements: [
+            clip(song: songID, source: sourceStart, start: 0, duration: duration, slot: 0)
+        ],
+        sfxEvents: [],
+        handoffCount: 0,
+        songLetters: [songID: "A"],
+        sequence: ["A"],
+        transitionsUsed: [],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let profiles = [
+        songID: profileWithLyrics(title: "Line Song", id: songID, words: heartLine)
+    ]
+    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
+    let end = validated.placements.filter { $0.songID == songID }.map(\.sourceEnd).max() ?? 0
+    check(
+        "Join: mid-line cut extends to the last word of the lyric line",
+        end >= heartLineEnd - 0.05,
+        String(format: "sourceEnd=%.2f want≥%.2f", end, heartLineEnd)
+    )
+}
+
+do {
+    let bedID = UUID()
+    let guestID = UUID()
+    let bpm = 124.0
+    let bar = 240.0 / bpm
+    let sourceStart = 10.0
+    let sourceEnd = 17.70
+    let duration = sourceEnd - sourceStart
+    let cutAt = duration
+    let plan = AutoRemixPlan(
+        mode: .mashup,
+        targetBPM: bpm,
+        targetDuration: cutAt + bar * 8,
+        anchorSongIDs: [bedID],
+        selectedSections: [],
+        placements: [
+            clip(song: bedID, source: sourceStart, start: 0, duration: cutAt, slot: 0),
+            clip(
+                song: guestID, source: 40, start: cutAt, duration: bar * 8,
+                slot: 1, fadeIn: .hardCut, fadeOut: .none, stem: .vocals
+            ),
+        ],
+        sfxEvents: [],
+        pulseRegions: [
+            AutoClubPulse.Region(role: .drop, timelineStart: cutAt, timelineEnd: cutAt + bar * 8)
+        ],
+        joinContracts: [
+            AutoJoinContract(
+                kind: .sweepJoin,
+                windowStart: cutAt - bar * 2,
+                cutAt: cutAt,
+                outgoingSongID: bedID,
+                incomingSongID: guestID,
+                coverage: .noneRequired
+            )
+        ],
+        mashupVocalSongID: guestID,
+        mashupBedSongID: bedID,
+        handoffCount: 1,
+        songLetters: [bedID: "A", guestID: "B"],
+        sequence: ["A", "B"],
+        transitionsUsed: [.hardHypeCut],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let profiles = [
+        bedID: profileWithLyrics(title: "Bed", id: bedID, words: heartLine),
+        guestID: profileWithLyrics(title: "Guest", id: guestID, words: []),
+    ]
+    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
+    let bedTail = validated.placements.filter { $0.songID == bedID }.map(\.timelineEnd).max() ?? 0
+    let guest = validated.placements.first {
+        $0.songID == guestID && $0.role == .dominant && abs($0.timelineStart - cutAt) < 0.2
+    }
+    check(
+        "Join: unfinished line layers over Drop 1 instead of a flush lyric chop",
+        bedTail > cutAt + 0.35,
+        String(format: "bedEnd=%.2f cutAt=%.2f", bedTail, cutAt)
+    )
+    check(
+        "Join: Drop 1 incoming stays a hard cut at full volume",
+        guest != nil
+            && guest!.volume >= 0.95
+            && guest!.fadeIn.type != .crossfade,
+        "vol=\(guest?.volume ?? -1) fade=\(guest?.fadeIn.type.rawValue ?? "missing")"
+    )
+}
+
+do {
+    let aID = UUID()
+    let bID = UUID()
+    let stay = 4.2
+    let plan = AutoRemixPlan(
+        mode: .mashup,
+        targetBPM: 124,
+        targetDuration: 24,
+        anchorSongIDs: [aID],
+        selectedSections: [],
+        placements: [
+            clip(song: aID, source: 8, start: 0, duration: stay, slot: 0),
+            clip(song: bID, source: 40, start: stay, duration: stay, slot: 1),
+            clip(song: aID, source: 20, start: stay * 2, duration: 12, slot: 2),
+        ],
+        sfxEvents: [],
+        mashupVocalSongID: bID,
+        mashupBedSongID: aID,
+        handoffCount: 2,
+        songLetters: [aID: "A", bID: "B"],
+        sequence: ["A", "B", "A"],
+        transitionsUsed: [.hardHypeCut],
+        decisions: [],
+        warnings: [],
+        confidence: 0.9,
+        randomSeed: 1
+    )
+    let profiles = [
+        aID: profileWithLyrics(title: "A", id: aID, words: []),
+        bID: profileWithLyrics(title: "B", id: bID, words: []),
+    ]
+    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
+    let leadStarts = validated.placements
+        .filter { $0.role == .dominant && !$0.continuesPrevious }
+        .sorted { $0.timelineStart < $1.timelineStart }
+    var switchTimes: [Double] = []
+    for (prev, next) in zip(leadStarts, leadStarts.dropFirst())
+    where prev.songID != next.songID {
+        switchTimes.append(next.timelineStart)
+    }
+    let rapid = zip(switchTimes, switchTimes.dropFirst()).contains { $1 - $0 < 4.95 }
+    let bIsLayer = validated.placements.contains {
+        $0.songID == bID && $0.role == .supporting
+    }
+    let aCoversWindow = (validated.placements.filter { $0.songID == aID }.map(\.timelineEnd).max() ?? 0) >= stay + 0.8
+    let bOverlaps = validated.placements.contains { p in
+        p.songID == bID && p.timelineStart < stay + 0.2 && p.timelineEnd > stay + 0.5
+            && validated.placements.contains {
+                $0.songID == aID && $0.timelineStart < p.timelineEnd - 0.3
+                    && $0.timelineEnd > p.timelineStart + 0.3
+            }
+    }
+    check(
+        "Join: A→B→A inside 5s becomes a layer, not two flush lead switches",
+        !rapid && (bIsLayer || (aCoversWindow && bOverlaps)),
+        "rapid=\(rapid) bLayer=\(bIsLayer) aCover=\(aCoversWindow) overlap=\(bOverlaps) leads=\(leadStarts.map { String(format: "%@%.1f", $0.songID == aID ? "A" : "B", $0.timelineStart) })"
     )
 }
 

@@ -821,8 +821,8 @@ do {
                 $0.timelineEnd <= drop1 + 0.05 && $0.timelineEnd >= drop1 - plan.beatSeconds * 1.6
             }.map(\.assetID))
             check(
-                "Auto mashup take-out is riser+snare+tape ending before Drop 1",
-                takeIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop"]),
+                "Auto mashup handoff uses one modest rise before Drop 1",
+                takeIDs == Set(["riser"]),
                 "ids=\(takeIDs.sorted())"
             )
             let rideIDs = Set(musical.filter {
@@ -1234,9 +1234,8 @@ do {
     check("Master: BS.1770 meter calibration (0 dBFS 1 kHz sine = −3.01 LKFS)",
           abs(ref - (-3.01)) < 0.2, String(format: "%.2f LKFS", ref))
 
-    // Sparse transients must not block makeup: −18 LUFS program with 8
-    // single clicks at −1 dBFS. Expect makeup toward the target, peaks
-    // under the ceiling, negligible sustained reduction.
+    // Sparse transients still permit makeup, but cannot waive the frozen
+    // reduction limits merely to reach the preferred loudness target.
     var program = sine(220, amp: 0.2, seconds: 40)
     for k in 0..<8 {
         let at = Int((3.0 + Double(k) * 4.5) * SR)
@@ -1245,10 +1244,10 @@ do {
     let m1 = AutoMasterBus.masterize(channels: [program], sampleRate: SR)
     let ceiling = Float(pow(10.0, (AutoGainPolicy.truePeakCeilingDB - AutoGainPolicy.masterTruePeakMarginDB) / 20.0))
     let p1 = m1.channels[0].map { abs($0) }.max() ?? 0
-    check("Master: rare transients do not block makeup (≥ 6 dB)",
-          m1.makeupDB >= 6, String(format: "makeup=%.1f dB in=%.1f LUFS", m1.makeupDB, m1.measuredLUFS))
-    check("Master: delivered loudness within 1 LU of target",
-          abs(m1.outputLUFS - AutoGainPolicy.masterTargetLUFS) <= 1.0,
+    check("Master: sparse-transient makeup respects reduction contract",
+          m1.makeupDB > 0 && m1.reductionAudit.passes, String(format: "makeup=%.1f dB in=%.1f LUFS", m1.makeupDB, m1.measuredLUFS))
+    check("Master: moves toward target without exceeding it or forcing compression",
+          m1.outputLUFS > m1.measuredLUFS && m1.outputLUFS <= AutoGainPolicy.masterTargetLUFS + 0.01,
           String(format: "out=%.1f LUFS", m1.outputLUFS))
     check("Master: sample peak never exceeds the limiter ceiling",
           p1 <= ceiling * 1.002, String(format: "peak=%.3f ceiling=%.3f", p1, ceiling))

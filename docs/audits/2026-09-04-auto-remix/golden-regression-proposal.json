@@ -1,0 +1,440 @@
+{
+  "schema_version": 2,
+  "status": "partially_executable_not_release_approved",
+  "created": "2026-09-04",
+  "scope": "Audit-plan companion; do not treat these records as passing goldens.",
+  "local_crate": {
+    "source_root": "/Users/pranavi/Documents/Mixr/Songs",
+    "solos": 5,
+    "mashup_subsets": 26,
+    "seeds": [
+      20260815,
+      20260904,
+      33
+    ],
+    "require_held_out_tracks": true,
+    "audio_in_repository": "Do not commit commercial source audio or derived listening exports."
+  },
+  "case_requirements": [
+    {
+      "id": "tempo-midtempo-pair",
+      "fixture": "93/95 BPM pair",
+      "expected_behavior": "Both realized tempos match; neither vocal exceeds the 12% lift cap.",
+      "negative_control": "Old decision returns 1.132043 for the 93 BPM vocal.",
+      "status": "rendered_regression_pass",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoTempoRenderedTests.swift; Scripts/check_tempo_render.py"
+    },
+    {
+      "id": "tempo-incompatible-full-hook",
+      "fixture": "90 BPM vocal over 144 BPM bed",
+      "expected_behavior": "Reject full-hook overlay unless independently valid beat mapping and allowed rate exist.",
+      "negative_control": "Old helper accepts 1.12 = 100.8 BPM.",
+      "status": "structural_regression_pass",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoTempoAlignmentTests.swift; DevTests/AutoClubRemixTests.swift"
+    },
+    {
+      "id": "tempo-valid-double-time",
+      "fixture": "72 BPM vocal over 144 BPM bed",
+      "expected_behavior": "Native vocal speed with explicit 2:1 beat mapping; stable alignment for 16 bars.",
+      "negative_control": "Mutate beat mapping or add drift; rendered alignment must fail.",
+      "status": "structural_pass_pcm_mapping_control_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoTempoAlignmentTests.swift"
+    },
+    {
+      "id": "drop1-early-independent",
+      "fixture": "Copyright-free fixture with separately authored phrase/word annotations: source intro 0\u20138 bars, full hook 8\u201316, hook ends before the 2-bar lead-in; legal incoming phrase starts at elapsed bar 24.",
+      "expected_behavior": "Drop 1 at 16\u201324 elapsed bars, full 8-bar hook preserved and independent phrase entrance matched. No exception path in this case.",
+      "negative_control": "A 34-bar plan fails regardless of any planner explanation.",
+      "status": "authored_fixture_rendered_pass_independent_review_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoPhraseRenderedTests.swift; DevTests/Fixtures/phrase-render-annotations.json"
+    },
+    {
+      "id": "source-phrase-origin",
+      "fixture": "Nonzero downbeat offset and pickup vocal",
+      "expected_behavior": "Source and mix phrase annotations agree; preserve pickup and sustained ending.",
+      "negative_control": "Shift by one beat or cut after the first consonant.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "title-entrance-continuity",
+      "fixture": "Fresh Oops \u00d7 Baby at 54.45 seconds",
+      "expected_behavior": "Classify against source and audition; no unowned internal hole.",
+      "negative_control": "A 0.4-second deep hole must not vanish behind a five-second vocal exemption.",
+      "status": "label_exemption_regression_pass_source_audition_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoSilenceExemptionTests.swift"
+    },
+    {
+      "id": "lyric-tail-ownership",
+      "fixture": "Existing working-tree lyric-tail extension",
+      "expected_behavior": "Complete line with one foreground lead; no duplicate low end or source slice.",
+      "negative_control": "Extend a full mix into a guest downbeat with drums; detect competing ownership.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "filter-automation",
+      "fixture": "Sweep with existing blur",
+      "expected_behavior": "Use correctly described low-pass and continuous trajectories; preserve tails.",
+      "negative_control": "Per-bar target step or block-size-dependent seam must fail.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "stem-availability",
+      "fixture": "Full, partial, corrupt, and missing sidecars",
+      "expected_behavior": "Explicitly degrade missing isolation; verify one kick/bass on real audio.",
+      "negative_control": "Missing vocal stem must not silently become full-mix vocal overlay.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "pulse-thin-vs-strong",
+      "fixture": "Thin ballad, strong drums/low bass, contradictory stem proxy",
+      "expected_behavior": "Pulse only when actual drum evidence is weak; reject second kick.",
+      "negative_control": "Strong drums stem plus weak full-mix proxy cannot force a house kick.",
+      "status": "structural_and_rendered_pulse_controls_pass_general_audition_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoPulseOwnershipTests.swift"
+    },
+    {
+      "id": "harmonic-and-energy-fit",
+      "fixture": "Local chord change, unknown key, ballad over peak bed",
+      "expected_behavior": "No unjustified pitch; compatible sustained hooks or refusal/cameo.",
+      "negative_control": "Globally matching keys must not excuse a measured local clash.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "sfx-and-master",
+      "fixture": "Dense festival transition and incoming title",
+      "expected_behavior": "Calibrated combined gain; title intelligible; headroom, true peak and limiter gates pass.",
+      "negative_control": "Bury title with a take-out hit or hide overdrive with a limiter.",
+      "status": "software_limiter_control_pass_delivery_guard_pass_final_matrix_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoLimiterAuditTests.swift; Scripts/measure_remix_exports.py"
+    },
+    {
+      "id": "outro-vs-body-silence",
+      "fixture": "Shaped tail and deliberately injected internal dropout",
+      "expected_behavior": "Treat bounded ending decay separately; detect inserted body silence.",
+      "negative_control": "Removing all tail exclusions or exempting whole joins must fail different controls.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "real-render-parity",
+      "fixture": "Actual live/export DSP at several block sizes",
+      "expected_behavior": "Match event timing, rate, pitch, ownership, and automation within defined tolerances.",
+      "negative_control": "Portable sine-wave renderer cannot substitute for real-DSP result.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "release-evidence",
+      "fixture": "Missing token fields, manifests, cases, process failures",
+      "expected_behavior": "Required evidence yields pass/fail/inconclusive; only pass releases.",
+      "negative_control": "Current JoinAuditor passes both fresh cases with whisper=inconclusive.",
+      "status": "runner_regressions_pass_full_contract_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/test_auto_remix_runner.py; DevTests/test_release_runner.py"
+    },
+    {
+      "id": "provenance",
+      "fixture": "Changed source slice, stem, effect, tempo, dirty patch",
+      "expected_behavior": "Any audible plan change alters canonical fingerprint; audio hash matches file.",
+      "negative_control": "Change sourceStart without changing timeline; old fingerprint omits it.",
+      "status": "plan_fingerprint_regression_pass_full_asset_provenance_pending",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoJoinManifestIntegrityTests.swift"
+    },
+    {
+      "id": "musical-generalization",
+      "fixture": "Five solos, 26 subsets of 2\u20135 songs, held-out material",
+      "expected_behavior": "Matched-level blind comparison plus full-mix headphones/speakers evaluation.",
+      "negative_control": "Known negatives must rank below good references without exposing A/B labels.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "drop1-long-hook-exception",
+      "fixture": "Separately annotated source whose first complete hook plus minimum intro/runway cannot finish by 24 bars. Annotation authored before rendering, reviewed independently of planner.",
+      "expected_behavior": "Later entrance is allowed only at annotated next legal phrase; record all excluded early candidates.",
+      "negative_control": "A fabricated exception or avoidable verse padding fails.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "high-confidence-transformation",
+      "fixture": "High-confidence source with independently known intro, hook, verse, repeated hook and break.",
+      "expected_behavior": "At least two purposeful nonadjacent phrase moves/omissions with legal joins; deliberate breakdown/build/drop energy arc; recognizable Drop1. Signal and human checks confirm meaningful change.",
+      "negative_control": "Original source order and duration plus pulse/filter/SFX fails, even if all audio-quality gates pass.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "drop2-distinct-idea",
+      "fixture": "High-confidence solo with an independently annotated alternate phrase/layer option.",
+      "expected_behavior": "Drop2 retains identity and has exactly one identifiable musical change: hook variation, rhythmic flip or complementary layer. PCM/source ownership corroborate plan; human reviewer can name it.",
+      "negative_control": "Copy Drop1 and add only a louder impact or riser: fail.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "guest-rotation",
+      "fixture": "3\u20135-song fixtures with at least two independently eligible guest hooks.",
+      "expected_behavior": "Different guest lead owns Drop1 and Drop2 for complete 8\u201316-bar identity stays; one bed/low-end owner.",
+      "negative_control": "Stack all guests or repeat the same guest despite an eligible distinct hook: fail.",
+      "status": "not_implemented",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "low-confidence-energy",
+      "fixture": "Weak phrase evidence with continuous source audio.",
+      "expected_behavior": "Source mapping remains monotonically continuous apart from signal-supported end trims; independently measured drop energy exceeds breakdown by 3\u20138 LU over 4-bar windows, through lawful pulse/effect shaping.",
+      "negative_control": "Random cuts fail; unchanged energy curve also fails. Strong source drums prohibit added kick.",
+      "status": "source_order_pass_staging_fix_under_verification",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoLowConfidenceTests.swift"
+    },
+    {
+      "id": "native-speed-chop",
+      "fixture": "Tempo-incompatible guest with isolated short word and no sustained note.",
+      "expected_behavior": "After Drop1 only, breakdown/outro, outside foreground lead, <=min(1 mix beat,0.75 seconds), <=2 per 8 bars; no repetition or low end.",
+      "negative_control": "An 8-bar native-speed cameo, repeated beat wallpaper or chopped title on Drop1 fails.",
+      "status": "unverified_incompatible_chops_skipped",
+      "human_verdict": "not_auditioned",
+      "executable_evidence": "DevTests/AutoRemixGoldenTests.swift"
+    },
+    {
+      "id": "single-rising-handoff",
+      "fixture": "Outgoing phrase, instrumental runway, incoming phrase",
+      "expected_behavior": "Keep the deliberate outgoing continuation, preserve whole lines, allow a measured runway, and retain the incoming consonant without a repeated preview.",
+      "negative_control": "Previous code failed all four owner-fault controls.",
+      "status": "22_focused_checks_and_fresh_r3_render_diagnostics_pass_owner_audition_pending",
+      "human_verdict": "r3_rejected_by_owner: pause around excerpt11s and quieter ending; technical phrase assertions are not musical approval",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift"
+    },
+    {
+      "id": "title-is-not-mandatory",
+      "fixture": "Selected complete grid phrase with a later title token",
+      "expected_behavior": "Prefer the selected complete phrase over a forced later title entrance.",
+      "negative_control": "Previous title override rejected the selected phrase.",
+      "status": "structural_regression_pass_rendered_matrix_under_review",
+      "human_verdict": "new_revision_not_auditioned",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift"
+    },
+    {
+      "id": "lead-level-continuity",
+      "fixture": "Equal-level isolated vocal stems",
+      "expected_behavior": "No fixed +6.4 dB drop multiplier; use measured local matching.",
+      "negative_control": "Previous fixed multiplier failed equal-level control.",
+      "status": "structural_regression_pass_rendered_matrix_under_review",
+      "human_verdict": "new_revision_not_auditioned",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift"
+    },
+    {
+      "id": "metadata-invariant-bed",
+      "fixture": "Same audio evidence under reference and neutral display titles",
+      "expected_behavior": "Names cannot force bed selection.",
+      "negative_control": "Previous named-pair exception changes selected bed.",
+      "status": "structural_regression_pass_rendered_matrix_under_review",
+      "human_verdict": "new_revision_not_auditioned",
+      "executable_evidence": "DevTests/AutoGeneralizationTests.swift"
+    },
+    {
+      "id": "missing-stems-single-owner",
+      "fixture": "Compatible tracks without isolated stems",
+      "expected_behavior": "Single-record handoff rather than two full mixes disguised as hook replacement.",
+      "negative_control": "Previous fallback stacked two full mixes.",
+      "status": "structural_regression_pass_rendered_matrix_under_review",
+      "human_verdict": "new_revision_not_auditioned",
+      "executable_evidence": "DevTests/AutoGeneralizationTests.swift"
+    },
+    {
+      "id": "general-repeatability-confidence",
+      "fixture": "72/95/128/145 BPM solos; two-to-five-song groups; low confidence",
+      "expected_behavior": "Repeatable plans, bounded source spans, common realized tempos, conservative uncertain fallback.",
+      "negative_control": "Previous uncertain mashup invented structural cuts.",
+      "status": "structural_regression_pass_rendered_matrix_under_review",
+      "human_verdict": "new_revision_not_auditioned",
+      "executable_evidence": "DevTests/AutoGeneralizationTests.swift"
+    },
+    {
+      "id": "input-domain",
+      "fixture": "Short/long clips, missing and invalid tempo/duration, repeated track IDs",
+      "expected_behavior": "Defined bounded arrangement or clear refusal; duplicates cannot become extra decks",
+      "negative_control": "Previous two-second case crashed, duplicate became mashup and NaN hung analysis",
+      "executable_evidence": "DevTests/AutoInputDomainTests.swift",
+      "status": "31_structural_checks_pass",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "measured-structure-required",
+      "fixture": "Tempo/key metadata present but no waveform beat evidence",
+      "expected_behavior": "Preserve continuous source order; no invented multi-song hook cuts",
+      "negative_control": "Previous metadata-only pair entered structural mashup path",
+      "executable_evidence": "DevTests/AutoGeneralizationTests.swift",
+      "status": "structural_regression_pass",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "applied-plan-integrity",
+      "fixture": "Validated handoff containing one rising effect or no effects",
+      "expected_behavior": "Applied events match approved identities/count/timing; diagnostic sorting invents nothing",
+      "negative_control": "Old applier reinserted 19-event stack and manufactured a festival decision",
+      "executable_evidence": "DevTests/AutoGeneralizationTests.swift; DevTests/AutoClubRemixTests.swift",
+      "status": "structural_regression_pass",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "encoded-peak-control",
+      "fixture": "Copyright-free AAC tone and decoded local exports",
+      "expected_behavior": "Decoded delivery <=-1 dBTP with bounded attenuation and no PCM clipping",
+      "negative_control": "Unguarded encode measured +0.171 dBTP; guard measured -1.205 dBTP",
+      "executable_evidence": "DevTests/AutoAACPeakTests.swift; Scripts/check_aac_peak.py",
+      "status": "control_and_31_export_matrix_pass_before_latest_phrase_revision",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "pulse-source-ownership",
+      "fixture": "Thin full mix, missing declared stem, isolated lead, contradictory drums stem",
+      "expected_behavior": "Pulse requires measured weak drums and actual isolated source ownership; strong drums veto another kick",
+      "negative_control": "Old code fails four of five checks, including rendered duplicate low-end control",
+      "executable_evidence": "DevTests/AutoPulseOwnershipTests.swift",
+      "status": "5_controls_pass_including_rendered_pcm",
+      "human_verdict": "not_auditioned"
+    },
+    {
+      "id": "continuation-exit-after-delay",
+      "fixture": "Synthetic late outgoing pickup; vocal still active at the former fixed two-bar boundary, followed by a measured pause",
+      "expected_behavior": "Do not shorten the continuation or cut at the fixed delay; release after its measured tail and keep instrumental coverage until the following song. Shift later events by the same amount.",
+      "negative_control": "Fixed two-bar delay fails the longer continuation; isolated earlier RMS valley cannot authorize shortening.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift",
+      "status": "22_focused_checks_and_fresh_r3_render_diagnostics_pass_owner_audition_pending",
+      "human_verdict": "r3_rejected_by_owner: pause around excerpt11s and quieter ending; technical phrase assertions are not musical approval",
+      "limitation": "A measured pause does not prove semantic phrase completeness; retain unresolved listening status."
+    },
+    {
+      "id": "consonant-pickup-clock",
+      "fixture": "Synthetic short high-frequency consonant before incoming source trim, including a stretched vocal",
+      "expected_behavior": "Retain the consonant while preserving word/downbeat mapping and the phrase endpoint. Repeated validation must not move it earlier again.",
+      "negative_control": "Original source trim excludes the rendered consonant burst.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift",
+      "status": "22_focused_checks_and_fresh_r3_render_diagnostics_pass_owner_audition_pending",
+      "human_verdict": "r3_rejected_by_owner: pause around excerpt11s and quieter ending; technical phrase assertions are not musical approval",
+      "limitation": "A measured pause does not prove semantic phrase completeness; retain unresolved listening status."
+    },
+    {
+      "id": "backing-entry-lead-ownership",
+      "fixture": "A vocal pickup precedes a backing-drum entrance and its tail needs extension",
+      "expected_behavior": "The backing entrance must preserve the full incoming lead and must not create a supporting duplicate.",
+      "negative_control": "Two assertions fail under the old repair; real r1 export had a 0.254-second dominant fragment.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift",
+      "status": "22_focused_checks_and_fresh_r3_render_diagnostics_pass_owner_audition_pending",
+      "human_verdict": "r3_rejected_by_owner: pause around excerpt11s and quieter ending; technical phrase assertions are not musical approval"
+    },
+    {
+      "id": "absorbed-continuation-tail",
+      "fixture": "A retained outgoing continuation already covers an older repair tail at the original cut",
+      "expected_behavior": "Remove the covered duplicate; do not move it to the delayed incoming drop.",
+      "negative_control": "Real r2 export replayed a 75-millisecond old source slice at the drop.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift",
+      "status": "22_focused_checks_and_fresh_r3_render_diagnostics_pass_owner_audition_pending",
+      "human_verdict": "r3_rejected_by_owner: pause around excerpt11s and quieter ending; technical phrase assertions are not musical approval"
+    },
+    {
+      "id": "continuation-room-in-instrumental-intro",
+      "fixture": "Independent source downbeats, next-word entrance and a verified quiet intro cut",
+      "expected_behavior": "Prefer the source-bar/word entrance to a later internal pause. Shorten only a verified vocal-free intro to keep Drop 1 at or before bar 24, preserving later source mapping.",
+      "negative_control": "Prior candidate cut inside the next lyric and delayed Drop 1 to bar 27.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift",
+      "status": "22_focused_checks_and_fresh_r3_render_diagnostics_pass_owner_audition_pending",
+      "human_verdict": "r3_rejected_by_owner: pause around excerpt11s and quieter ending; technical phrase assertions are not musical approval"
+    },
+    {
+      "id": "backing-dropout-under-retained-vocal",
+      "fixture": "Deterministic drum/bass/harmony stems with a four-second dropout hidden by a strong full-mix vocal proxy",
+      "expected_behavior": "Measure the backing separately; prepare a stable incoming bed while preserving both vocal clocks and one kick/bass owner.",
+      "negative_control": "Old validator fails both prepared-source assertion and rendered song-bus energy check.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift; implementation/groove-sep13-before.log",
+      "status": "47_focused_checks_pass; final_real_render_keeps_prepared_groove_and_complete_guest_section"
+    },
+    {
+      "id": "stable-measured-bar-island",
+      "fixture": "Measured bars and complete backing with an empty region inside an otherwise loud passage",
+      "expected_behavior": "Choose a stable whole backing island on a measured bar; missing evidence preserves the existing choice.",
+      "negative_control": "Former planner moved to the loudest full-mix beat inside the bar.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift",
+      "status": "47_focused_checks_pass; final_real_render_starts_guest_on_measured_section_bar"
+    },
+    {
+      "id": "owner-sep13-shallow-pause-and-quiet-ending",
+      "fixture": "Owner-rejected26-second r3 listening excerpt; 0:11 pause and quieter last passage",
+      "expected_behavior": "Reject non-silent energy holes and review the following passage, under the frozen3LU/200ms trough and2LU passage limits.",
+      "negative_control": "Previous delivered AAC fails with28.45LU approach deficit and-2.44LU following-passage change.",
+      "executable_evidence": "Scripts/check_handoff_continuity.py; Exports/Audit-2026-09-04/phrase-owner-sep12-r3/handoff-energy.json",
+      "status": "baseline_rejected; groove_candidate_reduces_trough_to3.61LU_but_fails3LU_gate_and_owner_rejects_vocal_balance",
+      "human_verdict": "baseline_rejected_by_owner"
+    },
+    {
+      "id": "native-foreground-contrast",
+      "fixture": "Independent orthogonal vocal and backing PCM; replacement bed six dB above native backing",
+      "expected_behavior": "Restore measured native voiced contrast with bounded lead gain; preserve lyrics, rhythm, and repeat-repair stability. Missing vocal evidence leaves gain unchanged.",
+      "negative_control": "Uncorrected full rendered mix puts the lead6.02dB below its original contrast. Fixed control restores it within0.1dB. Both measured from the same mixed render so mastering cannot normalize the compared components independently.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift; implementation/groove-sep13-foreground-tests.log",
+      "status": "47_focused_checks_pass; final_pair_preserves_measured_foreground_contrast; peak_limiter_silence_pass; human_review_pending"
+    },
+    {
+      "id": "revalidated-phrase-and-covered-tail",
+      "fixture": "Verified outgoing bar followed by next-word onset; redundant supporting continuation fully covered by retained lead",
+      "expected_behavior": "Later weak lyric-gap repair cannot extend into the next word. Remove covered continuation before generic overlap repair can truncate the retained lead.",
+      "negative_control": "Covered-tail test fails before early removal; recorded real candidate moved source end73.24 to73.63 before exit protection.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift; implementation/groove-sep13-phrase-lock-tests.log; implementation/groove-sep13-foreground-tests.log",
+      "status": "focused_and_actual_pair_source_map_pass; outgoing_exit73.24_and_incoming_pickup_clock_preserved"
+    },
+    {
+      "id": "owner-sep13-foreground-and-upbeat-interior",
+      "fixture": "Owner-rejected listening-groove-sep13/revised.wav",
+      "expected_behavior": "Intelligible present lead, sustained rhythmic drive through the body. Intro/outro may relax; an interior breakdown must remain musically purposeful. Continuity metrics cannot approve buried vocals or background-music character.",
+      "negative_control": "Owner rejected stronger backing candidate despite improved trough and ending measurements.",
+      "executable_evidence": "owner-listening-sep13-foreground.json",
+      "status": "previous_candidate_owner_rejected; owner_accepts_brief_transition_but_rejects_prolonged_quiet_and_partial_hook; final_section_candidate_pending",
+      "human_verdict": "partial: brief transition accepted; whole candidate not approved"
+    },
+    {
+      "id": "measured-full-guest-section-not-title-tail",
+      "fixture": "A confident measured vocal section whose recognizable title token occurs near its end",
+      "expected_behavior": "Enter on the section's measured source downbeat, retain its complete measured duration, and keep the hook at foreground gain. A title token or consonant pickup cannot independently establish a complete sustained-hook entrance.",
+      "negative_control": "Previous real candidate started at source59.465 near the60.26 title word inside the42.60-65.82 measured vocal section, producing a partial hook followed by prolonged quiet material.",
+      "executable_evidence": "DevTests/AutoRisingHandoffTests.swift; implementation/final-pass-section-before.log; implementation/final-pass-section-tests.log; Exports/Audit-2026-09-04/final-section-sep13/crate-0-1.join_manifest.json",
+      "status": "focused_and_actual_render_pass; final applied pickup42.35 reaches measured section start42.60 at Drop1; human review pending"
+    }
+  ],
+  "acceptance": {
+    "required_gate_states": [
+      "pass",
+      "fail",
+      "inconclusive"
+    ],
+    "release_requires": "All required gates pass, diagnostics reviewed, headphones and speakers approved.",
+    "model_critique": "advisory_only_until_calibrated",
+    "all_transition_changes_require_rendered_pcm": true
+  },
+  "revised": "2026-09-05",
+  "acceptance_contract": "acceptance-contract.json",
+  "updated": "2026-09-14",
+  "audio_judge_calibration": {
+    "status": "failed_control",
+    "date": "2026-09-08",
+    "model": "gemini-3.8-flash",
+    "observed": "Missed verified 370.5ms injected complete dropout; described intentional arrangement subtraction. Not approved as release judge.",
+    "evidence": "implementation/control-gemini-2026-09-08.json",
+    "requests_this_pass": 2
+  }
+}

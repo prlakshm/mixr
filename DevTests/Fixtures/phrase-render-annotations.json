@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provenance": "Copyright-free compositional score authored before the timing repair; not extracted from candidate output. Human independent review remains pending.",
+  "generator": "DevTests/AutoPhraseRenderedTests.swift",
+  "bpm": 128,
+  "meter": "4/4",
+  "phrase_origin_seconds": 0,
+  "phrase_period_bars": 8,
+  "lead_span_within_each_phrase_bars": [0, 6],
+  "instrumental_runway_within_each_phrase_bars": [6, 8],
+  "mandatory_early_drop_elapsed_bars": [16, 24],
+  "timing_exception_allowed": false,
+  "baseline_observed_drop_bars": {"solo": 26, "duo": 34},
+  "long_hook_exception": {
+    "status": "unresolved; this short-phrase fixture cannot authorize a long-hook exception",
+    "required_separate_evidence": "Independent source annotation of a complete long hook, every rejected earlier source/timeline boundary, and independent review provenance; planner-generated labels are insufficient"
+  },
+  "limitations": ["Generated lead is vocal-like synthesis, not recorded words", "Feature arrays describe the authored score; they do not certify the analyzer", "No human headphone/speaker audition", "No live engine capture", "No limiter telemetry"]
+}

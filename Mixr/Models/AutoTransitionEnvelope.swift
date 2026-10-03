@@ -94,12 +94,14 @@ nonisolated enum AutoTransitionEnvelope {
         var echoBoost = 0.0
 
         // ── Entering edge ──
-        if !continuity.previous {
+        if !continuity.previous || transitionIn.floorGain != nil {
             switch transitionIn.type {
             case .crossfade, .auto:
                 let dur = min(transitionIn.duration * beat, clipLen * 0.5)
                 if dur > 0.01 {
-                    gain *= fadeInGain(progress: (t - clipStart) / dur, curve: transitionIn.curve)
+                    let rawFloor = transitionIn.floorGain ?? 0
+                    let floor = rawFloor.isFinite ? min(1, max(0, rawFloor)) : 0
+                    gain *= floor + (1-floor) * fadeInGain(progress: (t - clipStart) / dur, curve: transitionIn.curve)
                 }
             case .none, .fadeOut, .echoOut:
                 // Hard entrance: anti-click microfade only.
@@ -111,12 +113,14 @@ nonisolated enum AutoTransitionEnvelope {
         }
 
         // ── Leaving edge ──
-        if !continuity.next {
+        if !continuity.next || transitionOut.floorGain != nil {
             let outDur = min(transitionOut.duration * beat, clipLen * 0.5)
             switch transitionOut.type {
             case .fadeOut, .crossfade, .auto:
                 if outDur > 0.01 {
-                    gain *= fadeOutGain(progress: (clipEnd - t) / outDur, curve: transitionOut.curve)
+                    let rawFloor = transitionOut.floorGain ?? 0
+                    let floor = rawFloor.isFinite ? min(1, max(0, rawFloor)) : 0
+                    gain *= floor + (1-floor) * fadeOutGain(progress: (clipEnd - t) / outDur, curve: transitionOut.curve)
                 }
             case .echoOut:
                 if outDur > 0.01 {

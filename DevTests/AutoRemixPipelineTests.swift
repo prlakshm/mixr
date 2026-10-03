@@ -50,6 +50,20 @@ func makeSong(
 
 // MARK: - 1. Scope engine routing
 
+func regularBeatEvidence(for tracks: [MixrTrack]) -> [UUID: SongSignalFeatures] {
+    Dictionary(uniqueKeysWithValues: tracks.map { track in
+        let duration = track.durationSeconds!
+        let count = Int(duration / 0.1)
+        return (track.id, SongSignalFeatures(sampleRate: 8000, durationSeconds: duration,
+            rmsCurveDB: Array(repeating: -18, count: count), onsetStrength: Array(repeating: 0.6, count: count),
+            hopSeconds: 0.1, downbeatOffsetSeconds: 0, beatConfidence: 0.95,
+            leadingSilenceSeconds: 0, trailingSilenceSeconds: 0, quietRegions: [],
+            energyCurve: Array(repeating: 0.7, count: count), bassEnergyCurve: Array(repeating: 0.6, count: count),
+            vocalPresenceCurve: Array(repeating: 0.6, count: count), noveltyCurve: Array(repeating: 0.2, count: count),
+            drumConfidence: 0.8, overallConfidence: 0.95))
+    })
+}
+
 check(
     "Entire Project uses plan pipeline",
     AutoRemixRunner.engine(for: .entireProject) == .planPipeline
@@ -133,8 +147,9 @@ do {
         makeSong(title: "Beta", bpm: 126, key: "C", color: .purple),
     ]
     let seed: UInt64 = 99_001
-    let a = AutoRemixRunner.runEntireProject(tracks: tracks, seed: seed)
-    let b = AutoRemixRunner.runEntireProject(tracks: tracks, seed: seed)
+    let evidence = regularBeatEvidence(for: tracks)
+    let a = AutoRemixRunner.runEntireProject(tracks: tracks, seed: seed, signals: evidence)
+    let b = AutoRemixRunner.runEntireProject(tracks: tracks, seed: seed, signals: evidence)
     switch (a, b) {
     case (.success(_, let pa, _), .success(_, let pb, _)):
         check("Same seed → same mode", pa.mode == pb.mode)
@@ -167,7 +182,7 @@ do {
         makeSong(title: "Groove Anchor", bpm: 124, key: "Am", color: .pink),
         makeSong(title: "Vocal Feature", bpm: 124, key: "C", color: .purple),
     ]
-    let outcome = AutoRemixRunner.runEntireProject(tracks: tracks, seed: 7)
+    let outcome = AutoRemixRunner.runEntireProject(tracks: tracks, seed: 7, signals: regularBeatEvidence(for: tracks))
     switch outcome {
     case .success(_, let plan, let summary):
         check("Two songs → Mashup mode", plan.mode == .mashup)

@@ -1,0 +1,19 @@
+FAIL 90-to-144 cannot be passed by a capped 1.12 rate
+FAIL A 90-to-90 target must not acquire a hidden speedup
+PASS Allowed lift realizes exact target 93.0 to 104.16
+PASS Allowed lift realizes exact target 95.0 to 104.16
+PASS Allowed lift realizes exact target 90.0 to 100.8
+FAIL Midtempo pair fits both independent caps 93.0/95.0
+FAIL Midtempo pair fits both independent caps 95.0/93.0
+FAIL Midtempo pair fits both independent caps 90.0/100.0
+FAIL Midtempo pair fits both independent caps 100.0/90.0
+PASS Half/double mapping realizes exact shared grid 72.0/144.0
+FAIL Half/double mapping realizes exact shared grid 73.0/144.0
+FAIL Half/double mapping realizes exact shared grid 144.0/73.0
+PASS Incompatible pair refuses a sustained mix
+FAIL Same named pocket does not waive alignment
+FAIL Invalid BPM rejected
+FAIL Invalid BPM rejected
+FAIL Invalid BPM rejected
+FAIL Invalid BPM rejected
+FAILED: 13

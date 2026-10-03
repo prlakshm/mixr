@@ -57,14 +57,14 @@ nonisolated enum AutoClubTempo {
         return nil
     }
 
-    /// Playback rate for a midtempo source. Caps at `clubLiftMaxRatio` so
-    /// 93 BPM does not become a 126 chipmunk. Pitch-preserving time-stretch
-    /// (AVAudioUnitTimePitch.rate / offline WSOLA), not a rate-and-pitch yank.
+    /// A permitted lift must reach the requested grid exactly. The target
+    /// selection applies caps; this eligibility check must never clamp a rate
+    /// and then claim the original target was reached.
     static func clubHouseLiftRatio(songBPM: Double, targetBPM: Double) -> Double? {
-        guard classify(songBPM) == .midtempoPop else { return nil }
-        let raw = targetBPM / max(songBPM, 1)
-        let ratio = min(clubLiftMaxRatio, max(clubLiftMinRatio, raw))
-        guard ratio > 1.06, ratio < 1.5 else { return nil }
+        guard songBPM.isFinite, targetBPM.isFinite, songBPM > 0, targetBPM > 0,
+              classify(songBPM) == .midtempoPop else { return nil }
+        let ratio = targetBPM / songBPM
+        guard ratio > 1, ratio <= clubLiftMaxRatio + 1e-10 else { return nil }
         return ratio
     }
 
@@ -171,27 +171,28 @@ nonisolated enum AutoClubTempo {
         maxVocalStretch: Double = maxVocalStretch,
         maxInstrumentalStretch: Double = maxInstrumentalStretch
     ) -> (targetBPM: Double, vocalRatio: Double, bedRatio: Double, ok: Bool, detail: String) {
-        // Shared / near pocket. House and festival stay; midtempo pop is a
-        // ballad-slow listen at native BPM — club-lift into house instead.
-        if abs(vocalBPM - bedBPM) / max(vocalBPM, 1) <= maxInstrumentalStretch {
+        guard vocalBPM.isFinite, bedBPM.isFinite, vocalBPM > 0, bedBPM > 0,
+              maxVocalStretch.isFinite, maxInstrumentalStretch.isFinite,
+              maxVocalStretch >= 0, maxInstrumentalStretch >= 0 else {
+            return (vocalBPM.isFinite && vocalBPM > 0 ? vocalBPM : 0, 1, 1, false,
+                    "refused mashup tempo — invalid BPM or stretch limit")
+        }
+        // Choose within the intersection of BOTH permitted rate ranges.
+        // The 8% preferred lift is not a minimum eligibility threshold: a
+        // smaller lift may be required to keep every source on the same grid.
+        if abs(vocalBPM - bedBPM) / vocalBPM <= maxInstrumentalStretch {
             let native = (vocalBPM + bedBPM) / 2
-            if classify(native) == .midtempoPop
-                || classify(vocalBPM) == .midtempoPop
-                || classify(bedBPM) == .midtempoPop {
-                let ratio = clubLiftMaxRatio
-                let target = native * ratio
-                let bedRatio = target / max(bedBPM, 1)
-                let vocalRatio = target / max(vocalBPM, 1)
-                return (
-                    target,
-                    vocalRatio,
-                    bedRatio,
-                    true,
-                    String(
-                        format: "club-lift midtempo %+.0f%% to %.0f BPM (pitch preserved — not house 126)",
-                        (ratio - 1) * 100, target
-                    )
-                )
+            if classify(vocalBPM) == .midtempoPop && classify(bedBPM) == .midtempoPop {
+                let target = min(native * clubLiftMaxRatio,
+                                 vocalBPM * clubLiftMaxRatio,
+                                 bedBPM * min(clubLiftMaxRatio, 1 + maxInstrumentalStretch))
+                if target > max(vocalBPM, bedBPM),
+                   let vocalRatio = clubHouseLiftRatio(songBPM: vocalBPM, targetBPM: target),
+                   let bedRatio = clubHouseLiftRatio(songBPM: bedBPM, targetBPM: target) {
+                    return (target, vocalRatio, bedRatio, true,
+                            String(format: "club-lift midtempo to %.2f BPM (vocal %+.2f%%, bed %+.2f%%; pitch preserved)",
+                                   target, (vocalRatio - 1) * 100, (bedRatio - 1) * 100))
+                }
             }
             let target = native
             let bedRatio = target / max(bedBPM, 1)
@@ -200,8 +201,8 @@ nonisolated enum AutoClubTempo {
                abs(bedRatio - 1) <= maxInstrumentalStretch {
                 return (
                     target,
-                    abs(vocalRatio - 1) < 0.0001 ? 1.0 : vocalRatio,
-                    abs(bedRatio - 1) < 0.0001 ? 1.0 : bedRatio,
+                    vocalRatio,
+                    bedRatio,
                     true,
                     String(format: "shared pocket ~%.0f BPM (bed stretch %+.0f%%, vocal %+.0f%%)",
                            target, (bedRatio - 1) * 100, (vocalRatio - 1) * 100)
@@ -212,11 +213,12 @@ nonisolated enum AutoClubTempo {
         // Half / double relationship between the pair (90 vs 180, 72 vs 144).
         for fold in [2.0, 0.5] {
             let foldedBed = bedBPM * fold
-            if abs(foldedBed - vocalBPM) / max(vocalBPM, 1) <= maxVocalStretch {
+            let bedRatio = vocalBPM / foldedBed
+            if abs(bedRatio - 1) <= maxInstrumentalStretch {
                 return (
                     vocalBPM,
                     1.0,
-                    1.0,
+                    bedRatio,
                     true,
                     "half/double-time relationship — kept vocal at \(Int(vocalBPM.rounded())) BPM"
                 )
@@ -236,12 +238,6 @@ nonisolated enum AutoClubTempo {
             )
         }
 
-        // Festival/rock bed over midtempo vocal: keep bed pocket, leave vocal
-        // native only when ratios already align via feel — else refuse.
-        if let vPocket = classify(vocalBPM), let bPocket = classify(bedBPM),
-           vPocket == bPocket {
-            return (vocalBPM, 1.0, 1.0, true, "same \(vPocket.rawValue) pocket — native tempos")
-        }
 
         return (
             vocalBPM,

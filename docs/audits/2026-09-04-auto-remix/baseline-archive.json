@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-05",
+  "private_archive": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04",
+  "original_code_unchanged": {
+    "DevTests/AutoJoinEngineTests.swift": true,
+    "Mixr/Models/AutoRemixPlan.swift": true,
+    "Mixr/Models/AutoRemixValidator.swift": true
+  },
+  "patch_sha256": "9fc9b0880d9f6e984d30f34247760e07ca341f2f03c4597e0f451e5e0d1d2b45",
+  "files": {
+    "01-mashup-oops-x-baby.m4a": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+    "01-mashup-oops-x-baby.join_manifest.json": "67aff00a9151961572d39e2310d59af163784a5aa550045d5586ed36b0e05bdd",
+    "02-mashup-paramore-x-tatu.m4a": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+    "02-mashup-paramore-x-tatu.join_manifest.json": "5ddc1265e4fd2d0807b03642a82b6d2d31b0ba1551d2da0c3243d15abd0d5ed4",
+    "fresh-meters.json": "8f4e1cb2e4ef5350b45678137adf17f5ef163f9c687d15ceb7a4baf2da01079e",
+    "render_listen.swift": "160ebc4f0633737c2fd784e8d6a9e545fc8ab1aa0b4eff5ac187eda6a10411aa",
+    "run.sh": "27749721d0d6eaef9a8892b526ab4fb09c3041b0e111caf3703492125ee763a2"
+  },
+  "limitations": "Legacy join manifests remain incomplete. New audio hashes preserve these exact baseline exports, but cannot retroactively supply missing annotations or renderer telemetry."
+}

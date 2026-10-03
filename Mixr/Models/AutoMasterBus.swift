@@ -9,8 +9,9 @@ import Foundation
 /// old finalize scaled the whole program down to fit (−22 LUFS, a DJ
 /// gain-rides it +10 dB), and a plain brickwall at 0 dB makeup crushed
 /// the drops with 4–9 dB of sustained reduction. The solver finds the
-/// gain — up OR down — whose SUSTAINED reduction over the loudest 10 %
-/// of blocks stays under `AutoGainPolicy.maxSustainedLimiterReductionDB`:
+/// gain — up OR down — respecting the sustained policy and the frozen
+/// peak/duration/fraction limits. The loud-block median alone misses sparse
+/// crushed transients; its score cannot waive the sample-level audit:
 /// rare impacts are caught, drops keep their dynamics, and loudness
 /// lands as high as the material's own crest factor allows.
 enum AutoMasterBus {
@@ -25,6 +26,47 @@ enum AutoMasterBus {
         var limitedFraction: Double
         var peakReductionDB: Double
         var outputLUFS: Double
+        var reductionAudit: ReductionAudit = .init()
+    }
+
+    /// Final software-limiter evidence. This does not measure any upstream
+    /// Audio Unit limiter; an export cannot infer that missing telemetry.
+    struct ReductionAudit: Codable, Sendable {
+        var sampleCount: Int = 0
+        var maximumDB: Double = 0
+        var maximumAtSeconds: Double = 0
+        var longestHeavySeconds: Double = 0
+        var heavyFraction: Double = 0
+        var maximum10msDB: [Double] = []
+        var passes: Bool {
+            sampleCount > 0 && maximumDB <= 6 && longestHeavySeconds < 0.5 && heavyFraction <= 0.01
+        }
+    }
+
+    static func auditReduction(envelope: [Float], sampleRate: Double) -> ReductionAudit {
+        guard sampleRate.isFinite, sampleRate > 0, !envelope.isEmpty,
+              envelope.allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 1 }) else { return .init() }
+        var result = ReductionAudit(sampleCount: envelope.count)
+        let hop = max(1, Int(sampleRate * 0.01))
+        var heavy = 0, run = 0, longest = 0
+        var blockMaximum = 0.0
+        for (i, gain) in envelope.enumerated() {
+            let db = -20 * log10(Double(gain))
+            if db > result.maximumDB {
+                result.maximumDB = db
+                result.maximumAtSeconds = Double(i) / sampleRate
+            }
+            if db > 3 { heavy += 1; run += 1; longest = max(longest, run) }
+            else { run = 0 }
+            blockMaximum = max(blockMaximum, db)
+            if (i + 1) % hop == 0 || i == envelope.count - 1 {
+                result.maximum10msDB.append(blockMaximum)
+                blockMaximum = 0
+            }
+        }
+        result.longestHeavySeconds = Double(longest) / sampleRate
+        result.heavyFraction = Double(heavy) / Double(envelope.count)
+        return result
     }
 
     // MARK: - Loudness (ITU-R BS.1770-4, pyloudnorm-matched filters)
@@ -259,10 +301,28 @@ enum AutoMasterBus {
                                   ceilingLinear: ceiling, sampleRate: sampleRate)
             stats = reductionStats(envelope: env, peakTrack: peakTrack,
                                    gainLinear: lin, sampleRate: sampleRate)
-            if stats.sustainedDB <= maxSustainedDB || gainDB <= -maxCutDB { break }
-            gainDB = max(gainDB - (stats.sustainedDB - maxSustainedDB) - 0.1, -maxCutDB)
+            let audit = auditReduction(envelope: env, sampleRate: sampleRate)
+            if (stats.sustainedDB <= maxSustainedDB && audit.passes) || gainDB <= -maxCutDB { break }
+            // The median over loud blocks misses sparse crushed transients.
+            // Reduce makeup rather than demanding more compression. Keep
+            // the frozen peak, duration and program-fraction limits separate.
+            var cut = max(0, stats.sustainedDB - maxSustainedDB + 0.1)
+            cut = max(cut, audit.maximumDB - 6 + 0.05)
+            if audit.heavyFraction > 0.01 {
+                let ordered = audit.maximum10msDB.sorted()
+                let percentile = ordered[min(ordered.count - 1, Int(Double(ordered.count) * 0.99))]
+                cut = max(cut, percentile - 3 + 0.05)
+            }
+            if audit.longestHeavySeconds >= 0.5 { cut = max(cut, 0.5) }
+            gainDB = max(gainDB - max(cut, 0.05), -maxCutDB)
         }
         let lin = Float(pow(10.0, gainDB / 20.0))
+        // The final iteration may have changed makeup. Its envelope and
+        // diagnostics must describe the gain actually applied below.
+        env = limiterEnvelope(peakTrack: peakTrack, gainLinear: lin,
+                              ceilingLinear: ceiling, sampleRate: sampleRate)
+        stats = reductionStats(envelope: env, peakTrack: peakTrack,
+                               gainLinear: lin, sampleRate: sampleRate)
         var peakGR: Float = 1
         for g in env { peakGR = min(peakGR, g) }
         func apply(_ x: [Float]) -> [Float] {
@@ -282,7 +342,8 @@ enum AutoMasterBus {
             reductionP90DB: stats.p90DB,
             limitedFraction: stats.limitedFraction,
             peakReductionDB: -20 * log10(Double(max(peakGR, 1e-6))),
-            outputLUFS: integratedLUFS(channels: out, sampleRate: sampleRate)
+            outputLUFS: integratedLUFS(channels: out, sampleRate: sampleRate),
+            reductionAudit: auditReduction(envelope: env, sampleRate: sampleRate)
         )
     }
 }

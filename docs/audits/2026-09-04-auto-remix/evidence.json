@@ -1,0 +1,1771 @@
+{
+  "date": "2026-09-04",
+  "head": "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "baseline_dirty_patch_sha256": "9fc9b0880d9f6e984d30f34247760e07ca341f2f03c4597e0f451e5e0d1d2b45",
+  "pre_existing_modified_code": {
+    "DevTests/AutoJoinEngineTests.swift": "633c012b4b25f5fddee6d78956776854b339beca0b91aea5265fe015b97fb68f",
+    "Mixr/Models/AutoRemixPlan.swift": "f5f0677b51b393f2557eaa84ece45ed789adc294756ff4ab8f2ff4fbf96101f2",
+    "Mixr/Models/AutoRemixValidator.swift": "ebb4e6e1e2dba14c0393acf14a15586a42d8e003c43adeb5a96e74681d6d48f1"
+  },
+  "test_summary": {
+    "pipeline": 50,
+    "render": 88,
+    "club": 547,
+    "join": 31,
+    "golden": 24,
+    "total_pass": 740,
+    "total_fail": 0,
+    "completed_harnesses": 5
+  },
+  "latest_local_exports": [
+    {
+      "file": "01-mashup-oops-x-baby.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/01-mashup-oops-x-baby.m4a",
+      "mtime": 1787420630.0414777,
+      "sha256": "17a2d886cb8c2697ef84042863c842c9b34686469df5acbfc3f933df1c5a06f4",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "192.632744"
+        }
+      },
+      "loudness": {
+        "input_i": "-13.40",
+        "input_tp": "-1.05",
+        "input_lra": "11.10",
+        "input_thresh": "-23.80",
+        "output_i": "-15.69",
+        "output_tp": "-1.00",
+        "output_lra": "10.30",
+        "output_thresh": "-25.86",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.31"
+      }
+    },
+    {
+      "file": "02-mashup-paramore-x-tatu.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/02-mashup-paramore-x-tatu.m4a",
+      "mtime": 1787420647.5309355,
+      "sha256": "9295f92b919913eb0fde8c0c41b48b7133ed3a333bf580a3ea766d24f461acc8",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "140.387846"
+        }
+      },
+      "loudness": {
+        "input_i": "-13.06",
+        "input_tp": "-1.09",
+        "input_lra": "11.10",
+        "input_thresh": "-23.56",
+        "output_i": "-15.09",
+        "output_tp": "-2.27",
+        "output_lra": "9.80",
+        "output_thresh": "-25.38",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.91"
+      }
+    },
+    {
+      "file": "03-mashup-all-5.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/03-mashup-all-5.m4a",
+      "mtime": 1787420701.2790837,
+      "sha256": "8cb3ec952acc37d99cfb73c663862d8842f145e4686d01a264ee42da58eba850",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "206.866576"
+        }
+      },
+      "loudness": {
+        "input_i": "-13.29",
+        "input_tp": "-0.99",
+        "input_lra": "10.80",
+        "input_thresh": "-23.53",
+        "output_i": "-15.57",
+        "output_tp": "-1.00",
+        "output_lra": "9.90",
+        "output_thresh": "-25.66",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.43"
+      }
+    },
+    {
+      "file": "04-remix-oops-i-did-it-again.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/04-remix-oops-i-did-it-again.m4a",
+      "mtime": 1787420714.1138434,
+      "sha256": "baf7f5d86c965a9c8953efe453b8125d7028840d9797652b3717a8d2c81e30de",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "155.596916"
+        }
+      },
+      "loudness": {
+        "input_i": "-11.55",
+        "input_tp": "-0.93",
+        "input_lra": "9.60",
+        "input_thresh": "-22.13",
+        "output_i": "-15.85",
+        "output_tp": "-1.00",
+        "output_lra": "7.00",
+        "output_thresh": "-26.10",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.15"
+      }
+    },
+    {
+      "file": "05-remix-baby-one-more-time.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/05-remix-baby-one-more-time.m4a",
+      "mtime": 1787420729.2121778,
+      "sha256": "f12c4fafb0ea4b3ab69b38a6213133e2e7d5af2fa1e32c5bef8faff8378f9fa0",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "185.132698"
+        }
+      },
+      "loudness": {
+        "input_i": "-12.09",
+        "input_tp": "-1.04",
+        "input_lra": "4.60",
+        "input_thresh": "-22.35",
+        "output_i": "-15.66",
+        "output_tp": "-1.00",
+        "output_lra": "4.70",
+        "output_thresh": "-25.77",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.34"
+      }
+    },
+    {
+      "file": "06-remix-stupid-song.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/06-remix-stupid-song.m4a",
+      "mtime": 1787420737.649447,
+      "sha256": "58437c2d48451321710bb028e92dcda14ffac42238fbbf378fa35da3a192a172",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "147.005533"
+        }
+      },
+      "loudness": {
+        "input_i": "-10.54",
+        "input_tp": "-0.97",
+        "input_lra": "5.40",
+        "input_thresh": "-20.70",
+        "output_i": "-15.25",
+        "output_tp": "-2.25",
+        "output_lra": "4.60",
+        "output_thresh": "-25.31",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.75"
+      }
+    },
+    {
+      "file": "07-remix-all-i-wanted.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/07-remix-all-i-wanted.m4a",
+      "mtime": 1787420744.1062803,
+      "sha256": "ae200df87dd47ac94293e9f291354fd11c95c2f524bb5763d278667b1ea93033",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "113.777778"
+        }
+      },
+      "loudness": {
+        "input_i": "-10.26",
+        "input_tp": "-1.04",
+        "input_lra": "6.10",
+        "input_thresh": "-20.51",
+        "output_i": "-15.76",
+        "output_tp": "-4.36",
+        "output_lra": "4.80",
+        "output_thresh": "-25.86",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.24"
+      }
+    },
+    {
+      "file": "08-remix-all-the-things-she-said.m4a",
+      "path": "/Users/pranavi/Documents/Mixr/Bounces/LISTEN/08-remix-all-the-things-she-said.m4a",
+      "mtime": 1787420755.506969,
+      "sha256": "530a6b24cf39bffcf41a6fce28830b7b6e1b73184e1be651cc4e3a6608fea075",
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "sample_rate": "44100",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "178.956190"
+        }
+      },
+      "loudness": {
+        "input_i": "-11.55",
+        "input_tp": "-0.93",
+        "input_lra": "10.40",
+        "input_thresh": "-21.98",
+        "output_i": "-15.16",
+        "output_tp": "-1.00",
+        "output_lra": "8.60",
+        "output_thresh": "-25.32",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.84"
+      }
+    }
+  ],
+  "latest_local_smoothness": [
+    {
+      "file": "01-mashup-oops-x-baby.m4a",
+      "dur_s": 192.6,
+      "ref_db": -16.0,
+      "quiet_holes": [
+        {
+          "t": 3.05,
+          "dur_s": 1.25,
+          "min_db_vs_ref": -33.9,
+          "below_local_db": 14.8
+        },
+        {
+          "t": 4.95,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -19.4,
+          "below_local_db": 1.4
+        },
+        {
+          "t": 5.8,
+          "dur_s": 2.05,
+          "min_db_vs_ref": -24.2,
+          "below_local_db": 16.3
+        },
+        {
+          "t": 188.0,
+          "dur_s": 4.55,
+          "min_db_vs_ref": -55.8,
+          "below_local_db": 46.9
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 6.75,
+          "dip_db": -8.6
+        },
+        {
+          "t": 74.35,
+          "dip_db": -9.1
+        },
+        {
+          "t": 96.45,
+          "dip_db": -8.5
+        }
+      ],
+      "mean_flatness": 0.002,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.94
+        },
+        {
+          "t": 9.3,
+          "comb": 0.95
+        },
+        {
+          "t": 13.9,
+          "comb": 0.95
+        },
+        {
+          "t": 18.6,
+          "comb": 0.96
+        },
+        {
+          "t": 23.2,
+          "comb": 0.94
+        },
+        {
+          "t": 27.9,
+          "comb": 0.95
+        },
+        {
+          "t": 32.5,
+          "comb": 0.96
+        },
+        {
+          "t": 37.2,
+          "comb": 0.94
+        },
+        {
+          "t": 41.8,
+          "comb": 0.94
+        },
+        {
+          "t": 46.4,
+          "comb": 0.95
+        },
+        {
+          "t": 51.1,
+          "comb": 0.95
+        },
+        {
+          "t": 55.7,
+          "comb": 0.95
+        },
+        {
+          "t": 60.4,
+          "comb": 0.94
+        },
+        {
+          "t": 65.0,
+          "comb": 0.94
+        },
+        {
+          "t": 69.7,
+          "comb": 0.95
+        },
+        {
+          "t": 74.3,
+          "comb": 0.79
+        },
+        {
+          "t": 78.9,
+          "comb": 0.93
+        },
+        {
+          "t": 83.6,
+          "comb": 0.93
+        },
+        {
+          "t": 88.2,
+          "comb": 0.93
+        },
+        {
+          "t": 92.9,
+          "comb": 0.81
+        }
+      ],
+      "n_metallic": 41,
+      "fails": [
+        "dead air @188.0s (4.55s, -55.8 dB, 46.9 under local)"
+      ]
+    },
+    {
+      "file": "02-mashup-paramore-x-tatu.m4a",
+      "dur_s": 140.3,
+      "ref_db": -16.3,
+      "quiet_holes": [
+        {
+          "t": 27.1,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -20.5,
+          "below_local_db": 17.5
+        },
+        {
+          "t": 27.45,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -16.2,
+          "below_local_db": 13.5
+        },
+        {
+          "t": 34.3,
+          "dur_s": 0.55,
+          "min_db_vs_ref": -17.5,
+          "below_local_db": 16.5
+        },
+        {
+          "t": 83.35,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -24.0,
+          "below_local_db": 19.6
+        },
+        {
+          "t": 136.45,
+          "dur_s": 3.85,
+          "min_db_vs_ref": -53.5,
+          "below_local_db": 44.1
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 27.1,
+          "dip_db": -9.0
+        },
+        {
+          "t": 33.7,
+          "dip_db": -9.9
+        }
+      ],
+      "mean_flatness": 0.0019,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.91
+        },
+        {
+          "t": 9.3,
+          "comb": 0.91
+        },
+        {
+          "t": 13.9,
+          "comb": 0.94
+        },
+        {
+          "t": 18.6,
+          "comb": 0.91
+        },
+        {
+          "t": 23.2,
+          "comb": 0.92
+        },
+        {
+          "t": 27.9,
+          "comb": 0.92
+        },
+        {
+          "t": 32.5,
+          "comb": 0.9
+        },
+        {
+          "t": 37.2,
+          "comb": 0.9
+        },
+        {
+          "t": 41.8,
+          "comb": 0.9
+        },
+        {
+          "t": 46.4,
+          "comb": 0.92
+        },
+        {
+          "t": 51.1,
+          "comb": 0.9
+        },
+        {
+          "t": 55.7,
+          "comb": 0.78
+        },
+        {
+          "t": 60.4,
+          "comb": 0.94
+        },
+        {
+          "t": 65.0,
+          "comb": 0.84
+        },
+        {
+          "t": 69.7,
+          "comb": 0.89
+        },
+        {
+          "t": 74.3,
+          "comb": 0.94
+        },
+        {
+          "t": 78.9,
+          "comb": 0.92
+        },
+        {
+          "t": 83.6,
+          "comb": 0.51
+        },
+        {
+          "t": 88.2,
+          "comb": 0.93
+        },
+        {
+          "t": 92.9,
+          "comb": 0.94
+        }
+      ],
+      "n_metallic": 30,
+      "fails": [
+        "dead air @136.45s (3.85s, -53.5 dB, 44.1 under local)"
+      ]
+    },
+    {
+      "file": "03-mashup-all-5.m4a",
+      "dur_s": 206.8,
+      "ref_db": -15.9,
+      "quiet_holes": [
+        {
+          "t": 3.05,
+          "dur_s": 1.25,
+          "min_db_vs_ref": -34.5,
+          "below_local_db": 14.8
+        },
+        {
+          "t": 4.95,
+          "dur_s": 0.45,
+          "min_db_vs_ref": -20.0,
+          "below_local_db": 1.4
+        },
+        {
+          "t": 5.8,
+          "dur_s": 2.25,
+          "min_db_vs_ref": -24.8,
+          "below_local_db": 16.5
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 6.75,
+          "dip_db": -8.6
+        },
+        {
+          "t": 74.35,
+          "dip_db": -9.3
+        },
+        {
+          "t": 96.45,
+          "dip_db": -8.7
+        }
+      ],
+      "mean_flatness": 0.0016,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.94
+        },
+        {
+          "t": 9.3,
+          "comb": 0.95
+        },
+        {
+          "t": 13.9,
+          "comb": 0.95
+        },
+        {
+          "t": 18.6,
+          "comb": 0.95
+        },
+        {
+          "t": 23.2,
+          "comb": 0.94
+        },
+        {
+          "t": 27.9,
+          "comb": 0.94
+        },
+        {
+          "t": 32.5,
+          "comb": 0.96
+        },
+        {
+          "t": 37.2,
+          "comb": 0.94
+        },
+        {
+          "t": 41.8,
+          "comb": 0.95
+        },
+        {
+          "t": 46.4,
+          "comb": 0.95
+        },
+        {
+          "t": 51.1,
+          "comb": 0.95
+        },
+        {
+          "t": 55.7,
+          "comb": 0.95
+        },
+        {
+          "t": 60.4,
+          "comb": 0.95
+        },
+        {
+          "t": 65.0,
+          "comb": 0.94
+        },
+        {
+          "t": 69.7,
+          "comb": 0.95
+        },
+        {
+          "t": 74.3,
+          "comb": 0.79
+        },
+        {
+          "t": 78.9,
+          "comb": 0.93
+        },
+        {
+          "t": 83.6,
+          "comb": 0.93
+        },
+        {
+          "t": 88.2,
+          "comb": 0.93
+        },
+        {
+          "t": 92.9,
+          "comb": 0.81
+        }
+      ],
+      "n_metallic": 44,
+      "fails": []
+    },
+    {
+      "file": "04-remix-oops-i-did-it-again.m4a",
+      "dur_s": 155.5,
+      "ref_db": -13.8,
+      "quiet_holes": [
+        {
+          "t": 3.55,
+          "dur_s": 0.45,
+          "min_db_vs_ref": -68.5,
+          "below_local_db": 54.2
+        },
+        {
+          "t": 6.7,
+          "dur_s": 0.5,
+          "min_db_vs_ref": -20.9,
+          "below_local_db": 14.8
+        },
+        {
+          "t": 43.25,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -21.9,
+          "below_local_db": 20.7
+        },
+        {
+          "t": 140.95,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -18.0,
+          "below_local_db": 8.7
+        },
+        {
+          "t": 141.7,
+          "dur_s": 0.6,
+          "min_db_vs_ref": -20.9,
+          "below_local_db": 11.3
+        },
+        {
+          "t": 144.7,
+          "dur_s": 0.45,
+          "min_db_vs_ref": -23.0,
+          "below_local_db": 10.1
+        },
+        {
+          "t": 147.45,
+          "dur_s": 0.55,
+          "min_db_vs_ref": -22.0,
+          "below_local_db": 7.1
+        },
+        {
+          "t": 149.3,
+          "dur_s": 1.25,
+          "min_db_vs_ref": -26.4,
+          "below_local_db": 8.9
+        },
+        {
+          "t": 150.6,
+          "dur_s": 1.3,
+          "min_db_vs_ref": -23.8,
+          "below_local_db": 3.8
+        },
+        {
+          "t": 152.1,
+          "dur_s": 3.4,
+          "min_db_vs_ref": -50.9,
+          "below_local_db": 31.4
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 6.55,
+          "dip_db": -8.4
+        },
+        {
+          "t": 80.55,
+          "dip_db": -9.6
+        }
+      ],
+      "mean_flatness": 0.0026,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.94
+        },
+        {
+          "t": 9.3,
+          "comb": 0.95
+        },
+        {
+          "t": 13.9,
+          "comb": 0.95
+        },
+        {
+          "t": 18.6,
+          "comb": 0.95
+        },
+        {
+          "t": 23.2,
+          "comb": 0.96
+        },
+        {
+          "t": 27.9,
+          "comb": 0.94
+        },
+        {
+          "t": 32.5,
+          "comb": 0.94
+        },
+        {
+          "t": 37.2,
+          "comb": 0.94
+        },
+        {
+          "t": 41.8,
+          "comb": 0.92
+        },
+        {
+          "t": 46.4,
+          "comb": 0.94
+        },
+        {
+          "t": 51.1,
+          "comb": 0.94
+        },
+        {
+          "t": 55.7,
+          "comb": 0.92
+        },
+        {
+          "t": 60.4,
+          "comb": 0.93
+        },
+        {
+          "t": 65.0,
+          "comb": 0.92
+        },
+        {
+          "t": 69.7,
+          "comb": 0.94
+        },
+        {
+          "t": 74.3,
+          "comb": 0.91
+        },
+        {
+          "t": 78.9,
+          "comb": 0.95
+        },
+        {
+          "t": 83.6,
+          "comb": 0.95
+        },
+        {
+          "t": 88.2,
+          "comb": 0.96
+        },
+        {
+          "t": 92.9,
+          "comb": 0.94
+        }
+      ],
+      "n_metallic": 33,
+      "fails": [
+        "dead air @152.1s (3.4s, -50.9 dB, 31.4 under local)"
+      ]
+    },
+    {
+      "file": "05-remix-baby-one-more-time.m4a",
+      "dur_s": 185.1,
+      "ref_db": -14.4,
+      "quiet_holes": [
+        {
+          "t": 3.05,
+          "dur_s": 0.4,
+          "min_db_vs_ref": -36.3,
+          "below_local_db": 22.7
+        },
+        {
+          "t": 3.6,
+          "dur_s": 0.45,
+          "min_db_vs_ref": -41.0,
+          "below_local_db": 28.7
+        },
+        {
+          "t": 180.9,
+          "dur_s": 4.15,
+          "min_db_vs_ref": -51.3,
+          "below_local_db": 47.7
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 3.55,
+          "dip_db": -12.7
+        },
+        {
+          "t": 8.05,
+          "dip_db": -9.6
+        },
+        {
+          "t": 71.1,
+          "dip_db": -9.4
+        }
+      ],
+      "mean_flatness": 0.0036,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.93
+        },
+        {
+          "t": 9.3,
+          "comb": 0.94
+        },
+        {
+          "t": 13.9,
+          "comb": 0.91
+        },
+        {
+          "t": 18.6,
+          "comb": 0.92
+        },
+        {
+          "t": 23.2,
+          "comb": 0.9
+        },
+        {
+          "t": 27.9,
+          "comb": 0.93
+        },
+        {
+          "t": 32.5,
+          "comb": 0.94
+        },
+        {
+          "t": 37.2,
+          "comb": 0.91
+        },
+        {
+          "t": 41.8,
+          "comb": 0.92
+        },
+        {
+          "t": 46.4,
+          "comb": 0.94
+        },
+        {
+          "t": 51.1,
+          "comb": 0.93
+        },
+        {
+          "t": 55.7,
+          "comb": 0.94
+        },
+        {
+          "t": 60.4,
+          "comb": 0.94
+        },
+        {
+          "t": 65.0,
+          "comb": 0.76
+        },
+        {
+          "t": 69.7,
+          "comb": 0.87
+        },
+        {
+          "t": 74.3,
+          "comb": 0.82
+        },
+        {
+          "t": 78.9,
+          "comb": 0.93
+        },
+        {
+          "t": 83.6,
+          "comb": 0.94
+        },
+        {
+          "t": 88.2,
+          "comb": 0.93
+        },
+        {
+          "t": 92.9,
+          "comb": 0.95
+        }
+      ],
+      "n_metallic": 39,
+      "fails": [
+        "dead air @180.9s (4.15s, -51.3 dB, 47.7 under local)"
+      ]
+    },
+    {
+      "file": "06-remix-stupid-song.m4a",
+      "dur_s": 147.0,
+      "ref_db": -12.5,
+      "quiet_holes": [
+        {
+          "t": 66.25,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -16.9,
+          "below_local_db": 5.7
+        }
+      ],
+      "energy_dips": [],
+      "mean_flatness": 0.0021,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.87
+        },
+        {
+          "t": 9.3,
+          "comb": 0.91
+        },
+        {
+          "t": 13.9,
+          "comb": 0.89
+        },
+        {
+          "t": 18.6,
+          "comb": 0.92
+        },
+        {
+          "t": 23.2,
+          "comb": 0.89
+        },
+        {
+          "t": 27.9,
+          "comb": 0.91
+        },
+        {
+          "t": 32.5,
+          "comb": 0.91
+        },
+        {
+          "t": 37.2,
+          "comb": 0.9
+        },
+        {
+          "t": 41.8,
+          "comb": 0.87
+        },
+        {
+          "t": 51.1,
+          "comb": 0.85
+        },
+        {
+          "t": 55.7,
+          "comb": 0.72
+        },
+        {
+          "t": 60.4,
+          "comb": 0.83
+        },
+        {
+          "t": 65.0,
+          "comb": 0.89
+        },
+        {
+          "t": 69.7,
+          "comb": 0.9
+        },
+        {
+          "t": 74.3,
+          "comb": 0.91
+        },
+        {
+          "t": 78.9,
+          "comb": 0.73
+        },
+        {
+          "t": 83.6,
+          "comb": 0.92
+        },
+        {
+          "t": 88.2,
+          "comb": 0.91
+        },
+        {
+          "t": 92.9,
+          "comb": 0.93
+        },
+        {
+          "t": 97.5,
+          "comb": 0.7
+        }
+      ],
+      "n_metallic": 30,
+      "fails": []
+    },
+    {
+      "file": "07-remix-all-i-wanted.m4a",
+      "dur_s": 113.7,
+      "ref_db": -11.8,
+      "quiet_holes": [
+        {
+          "t": 74.5,
+          "dur_s": 0.45,
+          "min_db_vs_ref": -21.4,
+          "below_local_db": 19.6
+        },
+        {
+          "t": 110.4,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -16.9,
+          "below_local_db": 7.1
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 74.45,
+          "dip_db": -8.3
+        }
+      ],
+      "mean_flatness": 0.0018,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.93
+        },
+        {
+          "t": 9.3,
+          "comb": 0.92
+        },
+        {
+          "t": 13.9,
+          "comb": 0.94
+        },
+        {
+          "t": 18.6,
+          "comb": 0.92
+        },
+        {
+          "t": 23.2,
+          "comb": 0.93
+        },
+        {
+          "t": 27.9,
+          "comb": 0.93
+        },
+        {
+          "t": 32.5,
+          "comb": 0.92
+        },
+        {
+          "t": 37.2,
+          "comb": 0.9
+        },
+        {
+          "t": 41.8,
+          "comb": 0.67
+        },
+        {
+          "t": 46.4,
+          "comb": 0.95
+        },
+        {
+          "t": 51.1,
+          "comb": 0.88
+        },
+        {
+          "t": 55.7,
+          "comb": 0.95
+        },
+        {
+          "t": 60.4,
+          "comb": 0.92
+        },
+        {
+          "t": 65.0,
+          "comb": 0.94
+        },
+        {
+          "t": 69.7,
+          "comb": 0.93
+        },
+        {
+          "t": 74.3,
+          "comb": 0.95
+        },
+        {
+          "t": 78.9,
+          "comb": 0.94
+        },
+        {
+          "t": 83.6,
+          "comb": 0.95
+        },
+        {
+          "t": 88.2,
+          "comb": 0.94
+        },
+        {
+          "t": 92.9,
+          "comb": 0.93
+        }
+      ],
+      "n_metallic": 24,
+      "fails": []
+    },
+    {
+      "file": "08-remix-all-the-things-she-said.m4a",
+      "dur_s": 178.9,
+      "ref_db": -13.1,
+      "quiet_holes": [
+        {
+          "t": 3.05,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -20.1,
+          "below_local_db": 2.8
+        },
+        {
+          "t": 3.35,
+          "dur_s": 0.4,
+          "min_db_vs_ref": -22.0,
+          "below_local_db": 5.3
+        },
+        {
+          "t": 109.45,
+          "dur_s": 0.35,
+          "min_db_vs_ref": -19.1,
+          "below_local_db": 11.6
+        },
+        {
+          "t": 110.7,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -17.7,
+          "below_local_db": 8.8
+        },
+        {
+          "t": 111.8,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -19.0,
+          "below_local_db": 11.7
+        },
+        {
+          "t": 112.45,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -20.7,
+          "below_local_db": 13.1
+        },
+        {
+          "t": 113.7,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -19.2,
+          "below_local_db": 10.8
+        },
+        {
+          "t": 169.15,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -21.8,
+          "below_local_db": 12.9
+        },
+        {
+          "t": 170.3,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -18.5,
+          "below_local_db": 6.5
+        },
+        {
+          "t": 171.45,
+          "dur_s": 0.4,
+          "min_db_vs_ref": -20.5,
+          "below_local_db": 8.3
+        },
+        {
+          "t": 172.0,
+          "dur_s": 0.45,
+          "min_db_vs_ref": -25.8,
+          "below_local_db": 13.1
+        },
+        {
+          "t": 172.65,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -23.4,
+          "below_local_db": 10.4
+        },
+        {
+          "t": 173.3,
+          "dur_s": 0.35,
+          "min_db_vs_ref": -25.6,
+          "below_local_db": 11.6
+        },
+        {
+          "t": 175.15,
+          "dur_s": 3.75,
+          "min_db_vs_ref": -54.6,
+          "below_local_db": 41.3
+        }
+      ],
+      "energy_dips": [],
+      "mean_flatness": 0.002,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.88
+        },
+        {
+          "t": 9.3,
+          "comb": 0.91
+        },
+        {
+          "t": 13.9,
+          "comb": 0.95
+        },
+        {
+          "t": 18.6,
+          "comb": 0.95
+        },
+        {
+          "t": 23.2,
+          "comb": 0.94
+        },
+        {
+          "t": 27.9,
+          "comb": 0.91
+        },
+        {
+          "t": 32.5,
+          "comb": 0.93
+        },
+        {
+          "t": 37.2,
+          "comb": 0.91
+        },
+        {
+          "t": 41.8,
+          "comb": 0.91
+        },
+        {
+          "t": 46.4,
+          "comb": 0.94
+        },
+        {
+          "t": 51.1,
+          "comb": 0.94
+        },
+        {
+          "t": 55.7,
+          "comb": 0.96
+        },
+        {
+          "t": 60.4,
+          "comb": 0.7
+        },
+        {
+          "t": 65.0,
+          "comb": 0.95
+        },
+        {
+          "t": 69.7,
+          "comb": 0.9
+        },
+        {
+          "t": 74.3,
+          "comb": 0.9
+        },
+        {
+          "t": 78.9,
+          "comb": 0.94
+        },
+        {
+          "t": 83.6,
+          "comb": 0.95
+        },
+        {
+          "t": 88.2,
+          "comb": 0.94
+        },
+        {
+          "t": 92.9,
+          "comb": 0.95
+        }
+      ],
+      "n_metallic": 38,
+      "fails": [
+        "dead air @175.15s (3.75s, -54.6 dB, 41.3 under local)"
+      ]
+    }
+  ],
+  "fresh_render_metrics": [
+    {
+      "file": "01-mashup-oops-x-baby.m4a",
+      "dur_s": 194.3,
+      "ref_db": -16.7,
+      "quiet_holes": [
+        {
+          "t": 3.05,
+          "dur_s": 1.25,
+          "min_db_vs_ref": -33.1,
+          "below_local_db": 14.8
+        },
+        {
+          "t": 5.8,
+          "dur_s": 0.25,
+          "min_db_vs_ref": -19.7,
+          "below_local_db": 4.7
+        },
+        {
+          "t": 6.1,
+          "dur_s": 0.4,
+          "min_db_vs_ref": -18.3,
+          "below_local_db": 4.1
+        },
+        {
+          "t": 6.55,
+          "dur_s": 1.05,
+          "min_db_vs_ref": -23.4,
+          "below_local_db": 15.9
+        },
+        {
+          "t": 54.45,
+          "dur_s": 0.4,
+          "min_db_vs_ref": -29.5,
+          "below_local_db": 26.9
+        },
+        {
+          "t": 190.3,
+          "dur_s": 4.0,
+          "min_db_vs_ref": -51.9,
+          "below_local_db": 43.5
+        }
+      ],
+      "energy_dips": [
+        {
+          "t": 6.75,
+          "dip_db": -8.6
+        },
+        {
+          "t": 74.35,
+          "dip_db": -9.0
+        },
+        {
+          "t": 96.45,
+          "dip_db": -8.3
+        }
+      ],
+      "mean_flatness": 0.0016,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.94
+        },
+        {
+          "t": 9.3,
+          "comb": 0.95
+        },
+        {
+          "t": 13.9,
+          "comb": 0.95
+        },
+        {
+          "t": 18.6,
+          "comb": 0.96
+        },
+        {
+          "t": 23.2,
+          "comb": 0.94
+        },
+        {
+          "t": 27.9,
+          "comb": 0.95
+        },
+        {
+          "t": 32.5,
+          "comb": 0.96
+        },
+        {
+          "t": 37.2,
+          "comb": 0.95
+        },
+        {
+          "t": 41.8,
+          "comb": 0.93
+        },
+        {
+          "t": 46.4,
+          "comb": 0.95
+        },
+        {
+          "t": 51.1,
+          "comb": 0.94
+        },
+        {
+          "t": 55.7,
+          "comb": 0.95
+        },
+        {
+          "t": 60.4,
+          "comb": 0.94
+        },
+        {
+          "t": 65.0,
+          "comb": 0.94
+        },
+        {
+          "t": 69.7,
+          "comb": 0.94
+        },
+        {
+          "t": 74.3,
+          "comb": 0.81
+        },
+        {
+          "t": 78.9,
+          "comb": 0.94
+        },
+        {
+          "t": 83.6,
+          "comb": 0.93
+        },
+        {
+          "t": 88.2,
+          "comb": 0.94
+        },
+        {
+          "t": 92.9,
+          "comb": 0.82
+        }
+      ],
+      "n_metallic": 41,
+      "fails": [
+        "deep hole @54.45s (0.4s, -29.5 dB, 26.9 under local)",
+        "dead air @190.3s (4.0s, -51.9 dB, 43.5 under local)"
+      ],
+      "loudness": {
+        "input_i": "-13.68",
+        "input_tp": "-1.10",
+        "input_lra": "11.00",
+        "input_thresh": "-24.07",
+        "output_i": "-15.51",
+        "output_tp": "-1.00",
+        "output_lra": "10.00",
+        "output_thresh": "-25.67",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.49"
+      },
+      "sha256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+      "joinContracts": [
+        {
+          "coverage": "bedOther",
+          "cutAt": 77.50759878419451,
+          "incomingSongID": "D4B1ACFC-2FF2-4FA0-A910-999CD958776B",
+          "kind": "sweepJoin",
+          "outgoingSongID": "466E571A-14CF-46C9-951E-69620B79482A",
+          "windowStart": 72.9483282674772
+        }
+      ],
+      "dropTimes": [
+        77.50759878419451,
+        150.45592705167172
+      ]
+    },
+    {
+      "file": "02-mashup-paramore-x-tatu.m4a",
+      "dur_s": 139.8,
+      "ref_db": -15.1,
+      "quiet_holes": [
+        {
+          "t": 27.1,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -17.2,
+          "below_local_db": 9.1
+        },
+        {
+          "t": 83.35,
+          "dur_s": 0.3,
+          "min_db_vs_ref": -25.2,
+          "below_local_db": 19.5
+        },
+        {
+          "t": 134.5,
+          "dur_s": 5.25,
+          "min_db_vs_ref": -55.6,
+          "below_local_db": 44.1
+        }
+      ],
+      "energy_dips": [],
+      "mean_flatness": 0.0021,
+      "metallic_windows": [
+        {
+          "t": 4.6,
+          "comb": 0.91
+        },
+        {
+          "t": 9.3,
+          "comb": 0.91
+        },
+        {
+          "t": 13.9,
+          "comb": 0.93
+        },
+        {
+          "t": 18.6,
+          "comb": 0.9
+        },
+        {
+          "t": 23.2,
+          "comb": 0.92
+        },
+        {
+          "t": 27.9,
+          "comb": 0.91
+        },
+        {
+          "t": 32.5,
+          "comb": 0.9
+        },
+        {
+          "t": 37.2,
+          "comb": 0.91
+        },
+        {
+          "t": 41.8,
+          "comb": 0.9
+        },
+        {
+          "t": 46.4,
+          "comb": 0.91
+        },
+        {
+          "t": 51.1,
+          "comb": 0.9
+        },
+        {
+          "t": 55.7,
+          "comb": 0.77
+        },
+        {
+          "t": 60.4,
+          "comb": 0.94
+        },
+        {
+          "t": 65.0,
+          "comb": 0.83
+        },
+        {
+          "t": 69.7,
+          "comb": 0.91
+        },
+        {
+          "t": 74.3,
+          "comb": 0.94
+        },
+        {
+          "t": 78.9,
+          "comb": 0.92
+        },
+        {
+          "t": 83.6,
+          "comb": 0.56
+        },
+        {
+          "t": 88.2,
+          "comb": 0.93
+        },
+        {
+          "t": 92.9,
+          "comb": 0.95
+        }
+      ],
+      "n_metallic": 30,
+      "fails": [
+        "dead air @134.5s (5.25s, -55.6 dB, 44.1 under local)"
+      ],
+      "loudness": {
+        "input_i": "-12.55",
+        "input_tp": "-1.08",
+        "input_lra": "13.90",
+        "input_thresh": "-23.18",
+        "output_i": "-14.06",
+        "output_tp": "-1.19",
+        "output_lra": "11.40",
+        "output_thresh": "-24.34",
+        "normalization_type": "dynamic",
+        "target_offset": "-1.94"
+      },
+      "sha256": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+      "joinContracts": [
+        {
+          "coverage": "bedOther",
+          "cutAt": 56.66666666666667,
+          "incomingSongID": "A8D88771-6603-48FC-9858-4C9E9FF90FE9",
+          "kind": "sweepJoin",
+          "outgoingSongID": "36B598FC-D8DE-4F5B-B9F1-E617584A4B5E",
+          "windowStart": 53.333333333333336
+        }
+      ],
+      "dropTimes": [
+        56.66666666666667,
+        110
+      ]
+    }
+  ],
+  "fresh_manifests": [
+    {
+      "audioSHA256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+      "dropTimes": [
+        77.50759878419451,
+        150.45592705167172
+      ],
+      "gitCommit": "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+      "inputAssetHashes": {
+        "britney-baby-one-more-time.mp3": "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252",
+        "britney-oops-i-did-it-again.mp3": "813410aa8f0466f210a78f38730578e1946fbd3291c05a92b2872eab3cf4eaa4"
+      },
+      "joinContracts": [
+        {
+          "coverage": "bedOther",
+          "cutAt": 77.50759878419451,
+          "incomingSongID": "D4B1ACFC-2FF2-4FA0-A910-999CD958776B",
+          "kind": "sweepJoin",
+          "outgoingSongID": "466E571A-14CF-46C9-951E-69620B79482A",
+          "windowStart": 72.9483282674772
+        }
+      ],
+      "planFingerprint": "e332a15ec658fa8e2dbce88f8afa5a92b7b73a3cd8a918946e0e745527e183cd",
+      "preApplyScore": {
+        "candidate": {
+          "criticalContractViolations": 0,
+          "dropApproachDeficit": 0,
+          "missingRequiredCoverage": 0,
+          "worstTroughDeficit": 0
+        },
+        "original": {
+          "criticalContractViolations": 0,
+          "dropApproachDeficit": 0,
+          "missingRequiredCoverage": 0,
+          "worstTroughDeficit": 0
+        },
+        "repairKept": true
+      },
+      "releaseAudit": {
+        "audioSHA256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+        "joins": [
+          {
+            "coverage": "bedOther",
+            "cutAt": 77.50759878419451,
+            "highpassDipDB": 4.23,
+            "troughDeficit": 0.0,
+            "windowStart": 72.9483282674772
+          }
+        ],
+        "status": "pass",
+        "whisper": "inconclusive",
+        "worstTroughDeficit": 0.0,
+        "zScore": "diagnostic-only"
+      },
+      "schemaVersion": 1,
+      "seed": 20260815
+    },
+    {
+      "audioSHA256": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+      "dropTimes": [
+        56.66666666666667,
+        110
+      ],
+      "gitCommit": "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+      "inputAssetHashes": {
+        "paramore-all-i-wanted.mp3": "9515694f184d0f6fff14b7d2b4d47adf2c80cf0c345f080ce0355552e78eb77e",
+        "tatu-all-the-things-she-said.mp3": "aa3d90a1854abdb232ccdb9b690844074b8c4ac54856f486a105d40c6c51917d"
+      },
+      "joinContracts": [
+        {
+          "coverage": "bedOther",
+          "cutAt": 56.66666666666667,
+          "incomingSongID": "A8D88771-6603-48FC-9858-4C9E9FF90FE9",
+          "kind": "sweepJoin",
+          "outgoingSongID": "36B598FC-D8DE-4F5B-B9F1-E617584A4B5E",
+          "windowStart": 53.333333333333336
+        }
+      ],
+      "planFingerprint": "eef0a1be205b41dfb81267d83e043a5f0f5fcd5556f87292b505c718fb1c6554",
+      "preApplyScore": {
+        "candidate": {
+          "criticalContractViolations": 0,
+          "dropApproachDeficit": 0,
+          "missingRequiredCoverage": 0,
+          "worstTroughDeficit": 0
+        },
+        "original": {
+          "criticalContractViolations": 0,
+          "dropApproachDeficit": 0,
+          "missingRequiredCoverage": 0,
+          "worstTroughDeficit": 0
+        },
+        "repairKept": false
+      },
+      "releaseAudit": {
+        "audioSHA256": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+        "joins": [
+          {
+            "coverage": "bedOther",
+            "cutAt": 56.66666666666667,
+            "highpassDipDB": -8.27,
+            "troughDeficit": 0.0,
+            "windowStart": 53.333333333333336
+          }
+        ],
+        "status": "pass",
+        "whisper": "inconclusive",
+        "worstTroughDeficit": 0.0,
+        "zScore": "diagnostic-only"
+      },
+      "schemaVersion": 1,
+      "seed": 20260815
+    }
+  ],
+  "tempo_probe": "93/95 decision: target=105.28000000000002, vocal=1.1320430107526884, bed=1.1082105263157895, ok=true\nboth ratios <=1.12: false\n90 ->144 helper: ratio=1.12, realizedBPM=100.80000000000001, errorBPM=43.19999999999999\n",
+  "listening_status": "Not auditioned by agent; computer control does not provide system-audio input.",
+  "raw_artifacts": "/tmp/mixr-audit-20260904"
+}

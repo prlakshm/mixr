@@ -1,0 +1,1202 @@
+Compiling AutoRemixPipelineTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1614:62: warning: will never be executed
+1612 |             mashupVocalID: drop1?.songID,
+1613 |             mashupBedID: bed.songID,
+1614 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1615 |             vocalTempoRatio: vocalTempoRatio,
+1616 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.meiBe1/main.swift:206:13: warning: variable 'bass' was never mutated; consider changing to 'let' constant
+204 |         var energy = [Double](repeating: 0.55, count: hops)
+205 |         var vocal = [Double](repeating: 0.5, count: hops)
+206 |         var bass = [Double](repeating: 0.45, count: hops)
+    |             `- warning: variable 'bass' was never mutated; consider changing to 'let' constant
+207 |         for i in 0..<hops {
+208 |             let t = Double(i) * hop
+Running pipeline...
+PASS  Entire Project uses plan pipeline
+PASS  Selected Clip uses arrangement engine
+PASS  Playhead Clips uses arrangement engine
+PASS  Remix mode for one song
+PASS  Summary mode matches plan
+PASS  Summary seed retained for debug
+PASS  Summary BPM matches plan
+PASS  Summary handoffs match plan
+PASS  Summary decisions come from plan records
+PASS  Plan retains seed
+PASS  Applied plan has placements
+PASS  Empty project fails cleanly
+PASS  Failure does not invent tracks
+PASS  No-clip songs fail without applying
+PASS  Input track array identity preserved on failure path
+PASS  Same seed → same mode
+PASS  Same seed → same target BPM
+PASS  Same seed → same sequence
+PASS  Same seed → same handoff count
+PASS  Same seed → same placement count
+PASS  Same seed → same SFX count
+PASS  Same seed → same clip placements
+PASS  Same seed → same effects
+PASS  Same seed → same SFX selections
+PASS  Two songs → Mashup mode
+PASS  Bed owner assigned
+PASS  Drop 1 vocal assigned
+PASS  Drop 2 flip assigned
+PASS  Drop 1 and Drop 2 are different roles — drop1=CD19CAF0-9790-4AED-A64B-750F1792EDB7 drop2=75DBC5BA-4351-4154-9C47-23EF6ACF6EA9
+PASS  Summary sequence uses song names
+PASS  One-song remix used club phrase grid (not energy-curve only) — decisions include energy-curve=true count=22
+PASS  One-song remix: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  One-song remix musical SFX stays finite (≤ 40/min) — 9.26 events/min
+PASS  One-song remix uses a variety of SFX ids — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Mashup still coordinates SFX moments
+PASS  Mashup has drop/join SFX (not a silent drip) — count=20
+PASS  One-song remix records pulse regions
+PASS  Invalid gaps repaired to ≤ eighth note — largest gap 0.000s, eighth=0.250s
+PASS  Gap repair records a decision
+PASS  Intentional micro-pause preserved
+PASS  No unsupported / retired effects in plan
+PASS  No unsupported effects on applied clips
+PASS  Summary uses applied plan (orphan riser removed)
+PASS  Summary SFX list matches applied plan
+PASS  Successful apply creates one undo entry
+PASS  Undo Auto restores pre-Auto project
+PASS  Failed apply leaves undo stack empty
+PASS  Failed apply restores original timeline
+PASS  Input tracks unchanged after run
+PASS  Input still has one clip
+
+ALL PASSED
+Compiling AutoRemixRenderQualityTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1614:62: warning: will never be executed
+1612 |             mashupVocalID: drop1?.songID,
+1613 |             mashupBedID: bed.songID,
+1614 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1615 |             vocalTempoRatio: vocalTempoRatio,
+1616 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.meiBe1/main.swift:1333:9: warning: variable 'plan' was never mutated; consider changing to 'let' constant
+1331 |         return y
+1332 |     }
+1333 |     var plan = AutoRemixPlan(
+     |         `- warning: variable 'plan' was never mutated; consider changing to 'let' constant
+1334 |         mode: .remix, targetBPM: bpm, targetDuration: 80,
+1335 |         anchorSongIDs: [song.id], selectedSections: [],
+Running render...
+PASS  Meter: RMS of 0.25 sine ≈ −15 dBFS — -15.05 dB
+PASS  Meter: silence detector finds a 300 ms hole — [(0.9, 1.2)]
+PASS  Meter: click detector finds a 0.9 step
+PASS  Meter: true peak sees inter-sample peaks — sample -3.01 dB, true 0.12 dB
+PASS  Meter: integrated loudness of steady tone tracks RMS — -15.05 dB
+PASS  Equal-power fade midpoint is −3 dB — -3.01 dB
+PASS  Equal-power in²+out² ≡ 1 across the fade
+PASS  Live and export share one envelope model
+PASS  Block-rate envelope steps stay ramp-sized — max step 0.01824
+PASS  One song: every internal cut has a structured record — 4 cuts, 4 records
+PASS  One song: source order monotonic unless a justified return
+PASS  One song: pivoted plan has no pre-drop void gaps — 0 gaps
+PASS  One song: Drop 1 is a pivot hard-cut (no quiet void) — pivot=true voids=0
+PASS  One song: Drop 2 stays a hard cut (no equal-power fade after killing the void) — dropCuts=["sfx:impact", "sfx:impact"]
+PASS  One song: two-wave club drops — got 2 drop regions
+PASS  One song: kick muted in build-out
+PASS  One song: pulse policy recorded
+PASS  One song: club flavor chosen
+PASS  One song: no random pitch section by default — 0 pitched placements
+PASS  One song: plan records the usable source range
+PASS  One song: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  One song: musical SFX density finite (≤ 40/min) — 9.0 events/min
+PASS  One song: build/break clip FX actually fire — fxPlacements=3
+PASS  Render: no clipped samples in pre-encode PCM
+PASS  Render: true peak ≤ −1 dBTP — -1.50 dBTP
+PASS  Render: limiter is safety, not glue (GR ≤ 3 dB) — 0.2 dB reduction
+PASS  Render: no unintended silence ≥ 100 ms inside musical content
+PASS  Render: no join-centered trough > 3 dB — worst 0.3 dB
+PASS  Render: no unexplained join jump > 4 dB — worst 0.0 dB
+PASS  Render: no sample discontinuity above click threshold at Auto joins — 0.348 at 77.42s
+PASS  Render: no fixed silent export tail — last 250 ms at -26.7 dBFS
+PASS  Validator preserves a declared same-song crossfade overlap — [0.00–12.00] [10.00–22.00]
+PASS  Validator keeps the cut record for the masked cut
+PASS  Equal-power overlap holds level through the join (≤ 1.2 dB) — trough 0.00 dB
+PASS  Validator repairs sequential fade-out + fade-in (level hole)
+PASS  Detector flags a mix-window RMS hole before incoming — hole=229.0 dB pre=-240.0 est=-11.0
+PASS  Detector passes a hard cut that holds level through the join — hole=0.0 dB
+PASS  Bad join exposes a song-switch incoming time
+PASS  Rendered fade-to-silence song switch is an RMS hole (previous behavior fails) — hole=11.3 dB @4.00s
+PASS  Britney mashup has a song-switch join
+PASS  Auto mashup song-switch mix window has no RMS hole before incoming — worst hole=1.8 dB @92.17s
+PASS  Auto mashup switches songs by overlap or hard cut at full volume (no dead-air handoff)
+PASS  Auto mashup mix-window RMS is within 1.5 dB of verse (or louder) — verse=-16.68 mix=-9.56 delta=-7.12
+PASS  Auto mashup Drop 1 RMS is within 1.5 dB of verse (or louder) — verse=-16.68 drop=-8.32 delta=-8.36
+PASS  Auto mashup take-out is riser+snare+tape ending before Drop 1 — ids=["riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Auto mashup mix-window SFX rides the drop (air/clap/impact) — ids=["airSweep", "bassDrop", "clapFill", "impact", "sweepUp"]
+PASS  Auto mashup Drop 1 first-bar RMS is within 1.5 dB of verse (or louder) — verse=-16.68 bar1=-7.97 delta=-8.70
+PASS  Analysis: energy curve is measured (non-empty)
+PASS  Analysis: leading silence detected — 3.00s
+PASS  Analysis: first downbeat found away from t = 0 — 3.365s
+PASS  Analysis: beat grid carries confidence — 1.00
+PASS  Analysis: interior quiet region detected — [(15.0, 16.2)]
+PASS  Analysis: overall confidence reflects clean fixture — 1.00
+PASS  Analysis: extraction is deterministic
+PASS  Trim: leading silence removed from usable range — usable start 5.85s
+PASS  Trim: trailing silence removed from usable range — usable end 156.15s
+PASS  Trim: no placement reads the silent edges
+PASS  Trim: usable range recorded
+PASS  Low confidence: only justified hook-return cuts — unjustified=0 totalCuts=2
+PASS  Low confidence: source order monotonic unless hook return
+PASS  Low confidence: still uses low-confidence club path
+PASS  Low confidence: pulse / filter energy present
+PASS  Low confidence: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  Low confidence: musical SFX stays finite (≤ 40/min) — 8.3/min
+PASS  Low confidence: drop has impact
+PASS  Low confidence: Drop 1 by bar 16–36 — bar=26.0
+PASS  Low confidence: cymbal punctuation ≤ 2 — count=1
+PASS  Mixdown uses stemKind source (not always the full mix) — peak=0.401
+PASS  Mixdown falls back to full mix when stem source is omitted — fullPeak=0.050
+
+── Auto Remix quality report ──
+usable source: 0.00s – 160.00s
+internal cuts: 4
+  cut @46.45s  reason=hookReturn masking=sfx:impact conf=0.97 Δ=8.0 dB
+  cut @77.42s  reason=redundantRepeat masking=equal-power crossfade 3.74s conf=0.97 Δ=0.5 dB
+  cut @108.39s  reason=hookReturn masking=sfx:impact conf=0.97 Δ=8.0 dB
+  cut @139.35s  reason=redundantRepeat masking=equal-power crossfade 3.74s conf=0.97 Δ=6.0 dB
+  boundary @46.45s  before=-8.8 center=-7.8 after=-5.9 dBFS (trough 0.0, jump 2.9)
+  boundary @77.42s  before=-9.9 center=-9.7 after=-9.7 dBFS (trough 0.0, jump 0.2)
+  boundary @108.39s  before=-14.3 center=-10.8 after=-7.2 dBFS (trough 0.0, jump 7.1)
+  boundary @139.35s  before=-10.0 center=-12.0 after=-11.7 dBFS (trough 0.3, jump 1.7)
+integrated ≈ -10.9 dB   sample peak -1.50 dBFS   true peak -1.50 dBTP
+limiter reduction 0.2 dB
+analysis confidence 0.97
+PASS  Listen loop: genuine source silence is filled (no residual hole)
+PASS  Listen loop: fill placements cover the silent span — span=20.0–22.5 fills=2
+PASS  Listen loop: a 0.6s breath inside a vocal phrase is exempt (no hole, no fill) — residualHoles=0 fills=0
+PASS  Listen loop: a 2.5s gap is NOT a breath — filled as before — residual=0
+PASS  Master: BS.1770 meter calibration (0 dBFS 1 kHz sine = −3.01 LKFS) — -3.05 LKFS
+PASS  Master: rare transients do not block makeup (≥ 6 dB) — makeup=7.9 dB in=-17.9 LUFS
+PASS  Master: delivered loudness within 1 LU of target — out=-10.1 LUFS
+PASS  Master: sample peak never exceeds the limiter ceiling — peak=0.745 ceiling=0.841
+PASS  Master: sustained reduction under policy on a sparse-transient program — sustained=0.00 dB
+PASS  Master: glue guard — makeup stops where sustained reduction hits policy — makeup=2.4 (wanted 11.1) sustained=1.47 p90=2.6
+PASS  Master: glue guard — ceiling still honored — peak=0.841
+PASS  Gate A: worse contract count is not kept
+PASS  Gate A: equal tuple is not kept (no churn)
+PASS  Gate A: strictly better coverage is kept
+PASS  Gate A: equal join tuple keeps a candidate that drops body residuals
+PASS  Gate A: leftover critical score blocks apply
+PASS  Gate A: clean kept score does not block apply
+PASS  Gate A: 9 dB trough inside a labeled sweep window scores a deficit — deficit=3.00
+PASS  Gate A: filtered-but-continuous sweep (~2.5 dB) is within allowance — deficit=0.00
+
+ALL PASSED
+Compiling AutoClubRemixTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1614:62: warning: will never be executed
+1612 |             mashupVocalID: drop1?.songID,
+1613 |             mashupBedID: bed.songID,
+1614 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1615 |             vocalTempoRatio: vocalTempoRatio,
+1616 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+Running club...
+PASS  Britney-class midtempo gets a gentle club-lift (not 126 chipmunk, not a 94 ballad) — bpm=104.16000000000001 ratio=1.12 club-lift midtempo +12% (93 → 104 BPM, pitch preserved — not house 126)
+PASS  House pocket kept
+PASS  Festival/rock pocket kept
+PASS  Far-below house prefers double-time into pocket — double-time feel into house (64 → 128 grid)
+PASS  Double-time into a pocket is preferred over stretch — double-time feel into festival / rock (70 → 140 grid)
+PASS  Vocal-wrecking stretch refused when no pocket fits — kept source 55 BPM — stretch to house would process the vocal
+PASS  AutoTuning default pivot wallpaper is 2 bars / 4–8 beats (not 4-bar / 16×) — bars=2 beats=8
+PASS  Britney mashup gentle club-lift (not house 126, not a polite 94 pocket) — club-lift midtempo to 104.16 BPM (vocal +12.00%, bed +9.64%; pitch preserved)
+PASS  Britney mashup time-stretches both sides onto the house grid — vocal=1.120 bed=1.096 target=104.2
+PASS  club-lift does not quietly fall back to a midtempo ballad pocket — club-lift midtempo to 104.16 BPM (vocal +12.00%, bed +9.64%; pitch preserved)
+PASS  t.A.T.u / Paramore-class refuse illegal vocal stretch — refused mashup tempo — stretch would wreck the vocal or leave the pair unlocked
+PASS  Thin song writes kick+bass
+PASS  Thin song one-kick rule ok
+PASS  Slamming kit does not write second kick
+PASS  Slamming one-kick rule ok
+PASS  Moderate kit gets no pulse layer
+PASS  Club Kick and Club Bass are first-class SFX menu items
+PASS  SFX library includes pulse alongside the classic one-shots
+PASS  Kick muted in build-out
+PASS  Kick muted in pre-drop void
+PASS  Kick present on drop — 16 kicks
+PASS  Thin piano song writes pulse
+PASS  Two-wave drops present — 2
+PASS  Drops land on bar downbeats after void — first drop at 53.571 bar=24.000
+PASS  Drop 1 is Xirex pivot (no quiet void on a pivoted plan) — voids=0 pivot=true
+PASS  Thin piano gets a gentle club-lift (not a 94 ballad and not 126 chipmunk) — bpm=107.52000000000001
+PASS  Slamming dance song skips second kick
+PASS  Still has riser/impact SFX
+PASS  Mashup mode
+PASS  Assigned vocal hook role — vocal=DE02F5FB-9025-4614-9179-45EBAC453630
+PASS  Assigned club bed role — bed=E84D2D2F-9019-4C22-A8E2-7B49ED3FC6C5
+PASS  Tempo club-lifts into house (not a ballad-slow midtempo pocket) — bpm=104.16000000000001
+PASS  Bed appears in arrangement
+PASS  Vocal hook appears on drops
+PASS  Vocal time-stretch is the gentle club-lift (pitch stays; not +33%) — 0.120
+PASS  Pitch shifts the bed, not the star vocal — bedPitched=true vocalPitched=false
+PASS  Roles decision recorded
+PASS  Illegal stretch pair refuses or keeps vocal ≤ 8% — refused=false stretch=0.0
+PASS  Hook-replace mashup mode
+PASS  Hook-replace plan accepted
+PASS  No default dual-vocal wallpaper (overlay absent or ≤8-bar call-response) — stacked=0 bars=[]
+PASS  Hook-replace carves bed vocal (heavy blur/HPF) — blur=48
+PASS  Hook-replace places bed under guest drop
+PASS  No overlapping dual dominant full mixes
+PASS  One bed/kick owner assigned
+PASS  N=2 mashup mode
+PASS  N=2 bed owner set
+PASS  N=2 has dominant islands — got 14
+PASS  N=2 no sub-8-bar identity stays — shortStays=0
+PASS  N=2 may include supporting bed layers — supports=5
+PASS  N=2 no dual-vocal wallpaper (overlay absent or ≤8-bar call-response) — stacked=[]
+PASS  N=2 Drop 1 vocal role
+PASS  N=2 Drop 2 flip role
+PASS  N=2 song switches keep energy (overlap or hard cut, no dead air)
+PASS  N=2 roles decision recorded
+PASS  N=2 bed wins drums
+PASS  N=2 drop2 is bed flip or distinct
+PASS  N=3 mashup mode
+PASS  N=3 bed owner set
+PASS  N=3 has dominant islands — got 13
+PASS  N=3 no sub-8-bar identity stays — shortStays=0
+PASS  N=3 may include supporting bed layers — supports=9
+PASS  N=3 no dual-vocal wallpaper (overlay absent or ≤8-bar call-response) — stacked=[]
+PASS  N=3 Drop 1 vocal role
+PASS  N=3 Drop 2 flip role
+PASS  N=3 Drop 2 is a different song than Drop 1 — drop1=0B4EADDD-EE33-40C9-ACEC-758A734A68C7 drop2=66DC2944-2FC4-4555-80BA-A9484E57854C
+PASS  N=3 song switches keep energy (overlap or hard cut, no dead air)
+PASS  N=3 roles decision recorded
+PASS  N=3 bed owner
+PASS  N=3 drop flip uses second hook — d1=A d2=B
+PASS  N=3 hook-replace default (no dual-vocal wallpaper) — decisions=[]
+PASS  N=3 no full-drop second-guest vocal stack — longGuestSupports=0
+PASS  N=4 mashup mode
+PASS  N=4 bed owner set
+PASS  N=4 has dominant islands — got 16
+PASS  N=4 no sub-8-bar identity stays — shortStays=0
+PASS  N=4 may include supporting bed layers — supports=10
+PASS  N=4 no dual-vocal wallpaper (overlay absent or ≤8-bar call-response) — stacked=[]
+PASS  N=4 Drop 1 vocal role
+PASS  N=4 Drop 2 flip role
+PASS  N=4 Drop 2 is a different song than Drop 1 — drop1=EE7A4467-2932-4C27-BC69-24895DF55C89 drop2=026B616B-7DBF-4065-B1C5-95DF89E722F7
+PASS  N=4 song switches keep energy (overlap or hard cut, no dead air)
+PASS  N=4 roles decision recorded
+PASS  N=4 bed owner
+PASS  N=4 places multiple guests or records skip/cameo
+PASS  N=5 mashup mode
+PASS  N=5 bed owner set
+PASS  N=5 has dominant islands — got 14
+PASS  N=5 no sub-8-bar identity stays — shortStays=0
+PASS  N=5 may include supporting bed layers — supports=10
+PASS  N=5 no dual-vocal wallpaper (overlay absent or ≤8-bar call-response) — stacked=[]
+PASS  N=5 Drop 1 vocal role
+PASS  N=5 Drop 2 flip role
+PASS  N=5 Drop 2 is a different song than Drop 1 — drop1=6AAD9528-EFE0-4922-8881-7C5C9AE70FA9 drop2=4A940177-C8CB-4FD5-83DB-FB1EBF911B41
+PASS  N=5 song switches keep energy (overlap or hard cut, no dead air)
+PASS  N=5 roles decision recorded
+PASS  N=5 bed owner
+PASS  N=5 accepts 5-track input
+PASS  N=5 sour gated or not drop1
+PASS  Oops analysis: title-chorus entrance is not the 40.4s prechorus snap — entrance=46.0 rise=0.22 analysis=[46.0s,106.1s] catalog=[45.5s/h=0.82 106.1s/h=0.72] analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.82 chorus@106.1h=0.72]
+PASS  Shaped Oops: first bed hook is NOT prechorus ~20s or ~40s (previous 40.4s gate was the bug) — hook=45.5 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.82 chorus@106.1h=0.72]
+PASS  Shaped Oops: first bed hook starts on title chorus ~46s — hook=45.5 want=46.0 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.82 chorus@106.1h=0.72]
+PASS  Shaped BOMT Drop 1 island is title chorus ~59.5s (hit me), not verse/confess — guestSrc=59.4 want=59.5 analysis=[sec@59.4,sec@105.8] catalog=[chorus@59.4h=0.86 chorus@105.8h=0.57]
+PASS  Shaped Oops: pivotWallpaperLoop still recorded
+PASS  Shaped Oops: roles stay Oops bed / BOMT Drop 1
+PASS  Real-crate shape: Oops entrance is NOT verse 2 @78s (score-sort bug) — entrance=46.0 verse2=78.3 analysis=[46.0s,106.1s]
+PASS  Real-crate shape: Oops entrance is first title chorus ~46s — entrance=46.0 want=46.0 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.82 chorus@106.1h=0.72]
+PASS  Real-crate shape: bed hook is NOT Oops verse 2 @78s — hook=45.5 verse2=78.3 analysis=[46.0s,106.1s]
+PASS  Real-crate shape: bed hook is first Oops title chorus ~46s — hook=45.5 want=46.0 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.82 chorus@106.1h=0.72]
+PASS  Real-crate shape: BOMT Drop 1 is NOT loneliness verse ~95s — guestSrc=59.4 lateVerse=95.0 analysis=[59.4s,105.8s]
+PASS  Real-crate shape: BOMT Drop 1 is title chorus ~59.5s (hit me) — guestSrc=59.4 want=59.5 analysis=[sec@59.4,sec@105.8] catalog=[chorus@59.4h=0.86 chorus@105.8h=0.57] analysis=[59.4s,105.8s]
+PASS  Real-crate shape: pivotWallpaperLoop still recorded
+PASS  Real-crate shape: roles stay Oops bed / BOMT Drop 1
+PASS  03370e8 crate: Oops refine entrance is NOT prechorus snap @40.4s — entrance=46.0 pre=40.4 analysis=[46.0s,106.1s] catalog=analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.75 chorus@106.1h=0.72]
+PASS  03370e8 crate: Oops refine entrance is title chorus ~46s — entrance=46.0 want=46.0
+PASS  03370e8 crate: bed hook is NOT @40.4s prechorus (oops_count=0 bug) — hook=45.5 pre=40.4 analysis=[46.0s,106.1s]
+PASS  03370e8 crate: bed hook starts title chorus ~46s uncut — hook=45.5 want=46.0 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.75 chorus@106.1h=0.72]
+PASS  03370e8 crate: BOMT Drop 1 is NOT loneliness verse — guest=59.4 analysis=[59.4s,105.8s] catalog=analysis=[sec@59.4,sec@105.8] catalog=[chorus@59.4h=0.86 chorus@105.8h=0.57]
+PASS  03370e8 crate: BOMT Drop 1 is title chorus ~59.5s (hit me) — guest=59.4 want=59.5
+PASS  591bef3 crate: firstTitleEntrance is NOT verse-2 lift @65.7s — entrance=46.0 lift=65.7 analysis=[46.0s,106.1s]
+PASS  591bef3 crate: firstTitleEntrance is NOT prechorus @40.4s — entrance=46.0 pre=40.4
+PASS  591bef3 crate: firstTitleEntrance is title chorus ~46s — entrance=46.0 want=46.0 catalog=analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.81 chorus@106.1h=0.72]
+PASS  591bef3 crate: bed hook is NOT @65.7s verse-2 lift — hook=45.5 lift=65.7 analysis=[46.0s,106.1s]
+PASS  591bef3 crate: bed hook is NOT @40.4s prechorus snap — hook=45.5 pre=40.4
+PASS  591bef3 crate: bed hook is title chorus ~46s (uncut Oops line) — hook=45.5 want=46.0 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.81 chorus@106.1h=0.72]
+PASS  591bef3 crate: BOMT Drop 1 is NOT loneliness verse — guest=59.4 analysis=[59.4s,105.8s]
+PASS  591bef3 crate: BOMT Drop 1 is title chorus ~59.5s (hit me) — guest=59.4 want=59.5 catalog=analysis=[sec@59.4,sec@105.8] catalog=[chorus@59.4h=0.88 chorus@105.8h=0.71]
+PASS  3e7dd8d crate: firstTitleEntrance is NOT chorus tail @50.5s — entrance=46.0 tail=50.5 analysis=[46.0s,106.1s]
+PASS  3e7dd8d crate: firstTitleEntrance is title downbeat ~46s — entrance=46.0 want=46.0 catalog=analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.76 chorus@106.1h=0.72]
+PASS  3e7dd8d crate: bed hook is NOT chorus tail @50.5s — hook=45.5 tail=50.5 analysis=[46.0s,106.1s]
+PASS  3e7dd8d crate: bed hook is title downbeat ~46s (uncut Oops) — hook=45.5 want=46.0 analysis=[sec@46.0,sec@106.1] catalog=[chorus@45.5h=0.76 chorus@106.1h=0.72]
+PASS  3e7dd8d crate: BOMT Drop 1 stays title hook (not loneliness) — guest=59.4 want=59.5
+PASS  71773f0: Oops title uses distinctive oops/again, not generic baby — tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted]
+PASS  6a75fb6: BOMT downweight does not empty distinctive — title tokens ARE the set — tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted]
+PASS  6a75fb6: BOMT extras include hook lexicon (hit), never instead of title — tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted]
+PASS  71773f0: lone generic filler is down-weighted (not a title phrase) — tokens=[baby] distinctive=[baby] extras=[again,hit,lonely,oops,things,wanted]
+PASS  71773f0: title-hook onset STARTS on Oops (~48s), not chorus body @55.6 — onset=48.00 body=55.6 tokens=tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted]
+PASS  6a75fb6: title-hook onset is the chorus OPENING, not later line @58.1 — onset=48.00 later=58.1
+PASS  71773f0: opening word is FIRST stem onset, not last peak @48.7 — onset=48.00 lastPeak=48.72
+PASS  71773f0: ignoring title walks off the Oops word (title is actually used) — withTitle=48.00 noTitle=45.47
+PASS  71773f0: BOMT title phrase locks hit-me ~59.5s, not verse baby @42 — onset=59.35 want=59.5 verse=42.0 tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted]
+PASS  71773f0: BOMT generic-only title is not enough — empty/junk tokens differ — phrase=59.35 junk=39.20
+PASS  61471fa: plateau walkback lands title OPEN ~48s, not catalog tail @50.5 — onset=48.00 tail=50.5 open=48.0
+PASS  61471fa: verse baby @41.9 is not the title chorus — hit-me ~59.5 wins — onset=59.35 hit=59.5 verse=41.9 dump=tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted]
+PASS  61471fa: BOMT dump keeps title tokens in distinctive (not empty) — tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted]
+PASS  59fe1e8 crate: stem title onset is NOT chorus tail @50.5s — entrance=48.0 tail=50.5
+PASS  59fe1e8 crate: stem title onset is NOT prechorus lead-in @43.0s — entrance=48.0 leadIn=43.0
+PASS  59fe1e8 crate: stem title onset is NOT prechorus baby @45.5s — entrance=48.0 baby=45.5
+PASS  59fe1e8 crate: stem title onset is Oops word ~48.0–48.8s — entrance=48.0 want=48.0 catalog=analysis=[sec@48.0,sec@106.1] catalog=[chorus@48.0h=0.74 chorus@106.1h=0.72]
+PASS  59fe1e8 crate: refineChoruses chorus1 is ~48.0s not 50.5s / not 45.5s — analysis=[sec@48.0,sec@106.1] catalog=[chorus@48.0h=0.74 chorus@106.1h=0.72]
+PASS  59fe1e8 crate: bed hook is NOT chorus tail @50.5s — hook=48.0 tail=50.5 decision=bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  59fe1e8 crate: bed hook is NOT prechorus baby @45.5s — hook=48.0 baby=45.5 bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  59fe1e8 crate: bed hook is Oops word ~48.0–48.8s (not @43 / not @45.5 / not @50.5) — hook=48.0 want=48.0 analysis=[sec@48.0,sec@106.1] catalog=[chorus@48.0h=0.74 chorus@106.1h=0.72]
+PASS  59fe1e8 crate: bed hook is NOT chorus body @55.6 — hook=48.0 body=55.6 bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  6a75fb6 crate: bed hook is NOT later chorus line @58.1 — hook=48.0 later=58.1 bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  59fe1e8 crate: dump placed start is ~48s — bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  59fe1e8 crate: dump includes title tokens considered — bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  59fe1e8 crate: title-hook chorus slots stay at full (outgoing yields) — src=48.0 t=18.4 fade=None dur=0.00
+PASS  59fe1e8 crate: dump includes title-hook src+entry+fadeDur=0+tokens — bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none || title-hook clip src=48.00s t=18.43s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none || title-hook clip src=48.00s t=36.87s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none
+PASS  59fe1e8 crate: decision line includes raw candidate dump — bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none
+PASS  59fe1e8 crate: BOMT Drop 1 stays title hook (hit me, not confess) — guest=59.4 want=59.5
+PASS  59fe1e8 crate: Drop 1 guest dump includes placed start
+PASS  59fe1e8 crate: last 8 of A is title chorus hold (not verse 2 @66s) — t=18.4 src=48.0 t=36.9 src=48.0 t=50.7 src=63.2 t=53.0 src=65.7
+PASS  59fe1e8 crate: title chorus hold decision recorded
+PASS  59fe1e8 crate: zero allowedPredropVoid
+PASS  59fe1e8 crate: vocal stem sidecar onset ~48.0–48.8s (Oops word, not @45.5) — stemEntrance=48.0 want=48.0 tail=50.5 hasStem=yes
+PASS  398d7de crate: Drop 1 guest is NOT mashability @47.1s — guest=59.4 hot=47.1 Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none
+PASS  398d7de crate: Drop 1 guest is NOT verse @39.3s — guest=59.4 verse=39.3
+PASS  398d7de crate: Drop 1 guest is NOT confess @47.1s — guest=59.4 confess=47.1
+PASS  398d7de crate: Drop 1 guest is NOT verse baby @42.0s — guest=59.4 verseBaby=42.0 Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none
+PASS  398d7de crate: Drop 1 guest is hit-me title ~59.5s — guest=59.4 want=59.5 Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none
+PASS  398d7de crate: decision dump placed start ~59.5s — Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none
+PASS  398d7de crate: dump includes placed vs mashability — Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none
+PASS  398d7de crate: Oops 8+8 chorus hold kept
+PASS  398d7de crate: Drop 1 after 16–24 elapsed bars — bar=24.0
+PASS  398d7de crate: pivotWallpaperLoop 8× baby
+PASS  Planner BOMT+Oops: pivotWallpaperLoop
+PASS  Planner BOMT+Oops: zero allowedPredropVoid — []
+PASS  Planner BOMT+Oops: zero intentionalGaps on Drop 1 — gaps=0
+PASS  Planner BOMT+Oops: pivot join has no quiet void
+PASS  Planner BOMT+Oops: club drops stay hard cuts (no equal-power fade-in) — dropCuts=[]
+PASS  Planner BOMT+Oops: Drop 2 hard cut at full clip volume — fade=None vol=1.58
+PASS  Britney 93 drum=1.00 bass=0.37 → no pulse
+PASS  Oops 95 drum=0.71 bass=0.38 → no pulse
+PASS  stupid song 128 drum=0.19 → writes pulse
+PASS  All I Wanted 144 festival uncertain → no house pulse
+PASS  t.A.T.u. 90 drum=0.82 → no pulse
+PASS  stupid song remix writes pulse
+PASS  stupid song keeps house 128 — bpm=128.0
+PASS  stupid song used low-confidence club path
+PASS  energy curve volume model: build-out < drop — 0.790 vs 1.000
+PASS  stupid song plan has quiet build-out placements — vols=["1.00", "1.00", "0.71", "1.00", "0.42", "0.60", "1.58", "1.00", "1.00", "1.00", "1.58", "1.00"]
+PASS  stupid song plan has loud drop placements — vols=["1.00", "1.00", "0.71", "1.00", "0.42", "0.60", "1.58", "1.00", "1.00", "1.00", "1.58", "1.00"]
+PASS  stupid song build-out quieter than drop (energy curve)
+PASS  stupid song Drop 1 by bar 16–36 — bar=26.0
+PASS  stupid song cymbal punctuation ≤ 2 — count=1
+PASS  All I Wanted keeps festival 144 — bpm=144.0
+PASS  All I Wanted writesKick false
+PASS  All I Wanted first drop on downbeat — t=40.000 bars=24.000
+PASS  All I Wanted Drop 1 by bar 16–36 — bar=24.0
+PASS  All I Wanted cymbal punctuation ≤ 2 — count=1
+PASS  BOMT+Oops club-lifts into house 124–128 (not a polite 94 pocket) — bpm=104.16000000000001
+PASS  BOMT+Oops: mix has a first dominant clip
+PASS  BOMT+Oops: first clip fades in over a long intro (longer than the UI 8-beat pill) — fade=Crossfade dur=12.0 t=0.00
+PASS  BOMT+Oops: dump records the opening fade-in — assignedmashuproles bed: oops i did it again; drop 1: baby one more time; drop 2: oops i did it again hook flip | selectedanchor drop 1 guest placed @20.6s (titleentrance=20.6 mashability=20.6 chorusordrop=[20.6,105.8]) over bed @20.2s (score 1.04) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none | pivotwallpaperloop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedriserintodrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedanchor club bed / one kick+bass owner | choseclubtempo shared admitted grid 104.16 bpm; bed rate 1.096421 | skippedsecondkick source already slams — no pulse kick (use existing sfx one-shots only) | choseclubflavor maximalist festival / global-bass | beatmatchedsong +10% to 104 bpm | beatmatchedsong +12% to 104 bpm | selectedanchor bed complete hook @20.21s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[20.2,106.1] measured=20.21 chosen=20.21 catalog=[20.2(h0.70),106.1(h0.68)] stem=none lyric=none | raw=[] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none | returnedtohook title chorus hold @20.2s (repeat 8-bar island, not verse-2 walk) | selectedanchor title-hook clip src=20.21s t=18.43s entry=none fadein=none fadedur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none | selectedanchor title-hook clip src=20.21s t=36.87s entry=none fadein=none fadedur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none | hookreplace guest in / bed vocal out under drop 1 | addedriserintodrop drop 2 flip impact | savedstrongestforpeak  | pitchcorrectedoverlap -1 st on bed | selectedanchor opening fade-in 12 beats (longer than ui 8) | repairedtimelinegap equal-power handoff overlap | returnedtohook novelty budget: 3rd replay of src=20.2 retargeted to unused island @106.1 | layeredrapidswitch switch at 92.2s was 4.6s after the previous lead | hookreplace pivot blend floor (ducked full-mix @50.69 vol=0.42) | imposedclubenergycurve loudness-matched 5 sections to -12.0 db reference (largest -4.0 db) | removedinvalidsfx slid rides off the drop vocal's first line: airsweep 55.88→58.18, bassdrop 56.45→58.18, impact 57.60→58.18 | shortenedlowenergysection trailing outro: 1 layer(s) decay over 6 bars into the fade | duoalternationfallback fewer song handoffs than intended — some sections were skipped for lack of material.
+PASS  BOMT+Oops: Drop 1 / later hook-replace stays a hard cut at full volume — fade=None dur=0.0 vol=1.58
+PASS  BOMT+Oops: later title-hook copies stay at full (outgoing yields)
+PASS  BOMT+Oops bed is Oops (not raw drum winner) — bed=Oops
+PASS  BOMT+Oops vocal is BOMT — vocal=BOMT
+PASS  BOMT+Oops intro starts at the record head (not skipped to the title) — src=0.00 t=0.00
+PASS  BOMT+Oops vocal pitch is 0 — 0.000
+PASS  BOMT+Oops |bed pitch| ≤ 2 st — 0.083
+PASS  BOMT+Oops pitches bed toward vocal (down) — dir=down amount=0.08333333333333331
+PASS  BOMT+Oops reversed order still Oops bed
+PASS  BOMT+Oops reversed order still BOMT vocal
+PASS  Paramore+tatu target 144 — bpm=144.0
+PASS  Paramore+tatu bed is Paramore — bed=Paramore
+PASS  Paramore+tatu tatu is not the bed
+PASS  Paramore+tatu incompatible guest cannot own Drop 1 — vocal=?
+PASS  Paramore+tatu records the incompatible guest exclusion — stretch gate failed — cameo chop at native tempo; no verified bounded chop available
+PASS  Paramore+tatu excluded guest has no unverified placements
+PASS  Paramore+tatu bed remains dominant and audible on Drop 1
+PASS  Paramore+tatu applied bed still covers the Drop 1 downbeat
+PASS  Paramore×tatu: dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride — details=["festival take-out + drop-ride (riser/snare/tape then air/clap/impact)", "drop 2 flip impact"]
+PASS  Paramore×tatu: dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride — bed: all i wanted — no compatible full vocal hook; bed carries both drops
+pivot wallpaper loop on all i wanted — sweep join “wanted” (filter ramp + echo throw, no loop) → hard cut @40.0s.
+addedriserintodrop — festival take-out + drop-ride (riser/snare/tape then air/clap/impact) into the drop.
+selected all i wanted as the anchor (club bed / one kick+bass owner).
+skipped all the things she said as a full hook: stretch gate failed — cameo chop at native tempo; no verified bounded chop available.
+club tempo for all i wanted: shared admitted grid 144.00 bpm; bed rate 1.000000.
+skipped a second kick on all i wanted — festival / rock pocket — no house pulse when drum analysis is uncertain.
+club flavor: maximalist festival / global-bass.
+selected all i wanted as the anchor (bed complete hook @26.67s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[26.7,106.7] measured=26.67 chosen=26.67 catalog=[26.7(h0.71),106.7(h0.69)] stem=none lyric=none | raw=[] | tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] | lyric=none).
+returned to all i wanted's title chorus hold @26.7s (repeat 8-bar island, not verse-2 walk) for the final peak.
+selected all i wanted as the anchor (title-hook clip src=26.67s t=13.33s entry=none fadein=none fadedur=0.00 full-mix tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=none).
+selected all i wanted as the anchor (title-hook clip src=26.67s t=26.67s entry=none fadein=none fadedur=0.00 full-mix tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=none).
+addedriserintodrop — drop 2 flip impact into the drop.
+saved all i wanted's strongest section for the final peak.
+selected a song as the anchor (opening fade-in 12 beats (longer than ui 8)).
+repaired an accidental timeline gap — equal-power handoff overlap.
+hook-replaced a song — pivot blend floor (ducked full-mix @36.67 vol=0.42).
+imposed a club energy curve on a song — loudness-matched 5 sections to -12.0 db reference (largest -4.0 db).
+removed an invalid sfx event (slid rides off the drop vocal's first line: airsweep 40.42→42.08, bassdrop 40.83→42.08, impact 41.67→42.08).
+shortened a song's low-energy trailing outro: 1 layer(s) decay over 6 bars into the fade.
+PASS  Paramore×tatu: mashup writes festival take-out + drop-ride SFX — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Paramore×tatu: mix window + drop ride is denser than take-out-only (existing SFX menu) — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"] n=23
+PASS  Paramore×tatu: dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride — assignedMashupRoles Bed: All I Wanted — no compatible full vocal hook; bed carries both drops | pivotWallpaperLoop sweep join “wanted” (filter ramp + echo throw, no loop) → hard cut @40.0s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | choseClubTempo shared admitted grid 144.00 BPM; bed rate 1.000000 | skippedSecondKick festival / rock pocket — no house pulse when drum analysis is uncertain | choseClubFlavor Maximalist festival / global-bass | selectedAnchor bed complete hook @26.67s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[26.7,106.7] measured=26.67 chosen=26.67 catalog=[26.7(h0.71),106.7(h0.69)] stem=none lyric=none | raw=[] | tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] | lyric=none | returnedToHook title chorus hold @26.7s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=26.67s t=13.33s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=none | selectedAnchor title-hook clip src=26.67s t=26.67s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=none | addedRiserIntoDrop drop 2 flip impact | savedStrongestForPeak  | selectedAnchor opening fade-in 12 beats (longer than UI 8) | repairedTimelineGap equal-power handoff overlap
+PASS  Paramore×tatu: dump_gate prefix(16) has pivotWallpaperLoop — assignedMashupRoles Bed: All I Wanted — no compatible full vocal hook; bed carries both drops | pivotWallpaperLoop sweep join “wanted” (filter ramp + echo throw, no loop) → hard cut @40.0s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | choseClubTempo shared admitted grid 144.00 BPM; bed rate 1.000000 | skippedSecondKick festival / rock pocket — no house pulse when drum analysis is uncertain | choseClubFlavor Maximalist festival / global-bass | selectedAnchor bed complete hook @26.67s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[26.7,106.7] measured=26.67 chosen=26.67 catalog=[26.7(h0.71),106.7(h0.69)] stem=none lyric=none | raw=[] | tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] | lyric=none | returnedToHook title chorus hold @26.7s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=26.67s t=13.33s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=none | selectedAnchor title-hook clip src=26.67s t=26.67s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=none | addedRiserIntoDrop drop 2 flip impact | savedStrongestForPeak  | selectedAnchor opening fade-in 12 beats (longer than UI 8) | repairedTimelineGap equal-power handoff overlap
+PASS  Paramore×tatu: applied mix has a Drop 1 time
+PASS  Paramore×tatu: applied riser take-out ends on the last pivot beat — drop=40.00 ends=40.00,93.33
+PASS  Paramore×tatu: applied snareBuild take-out ends on the last pivot beat — drop=40.00 ends=93.33,40.00
+PASS  Paramore×tatu: applied tapeStop take-out ends on the last pivot beat — drop=40.00 ends=40.00
+PASS  Paramore×tatu: applied airSweep drop-ride starts after Drop 1 first syllable — drop=40.00 beat=0.42 starts=42.08,51.67,46.67
+PASS  Paramore×tatu: applied clapFill drop-ride starts after Drop 1 first syllable — drop=40.00 beat=0.42 starts=48.33,50.00,43.33
+PASS  Paramore×tatu: applied impact drop-ride starts after Drop 1 first syllable — drop=40.00 beat=0.42 starts=53.33,93.33,106.67,42.08,46.67
+PASS  Paramore×tatu: festival SFX do not cover Drop 1 first syllable
+PASS  Paramore×tatu: festival SFX do not cover the title token — title=13.33…17.33
+PASS  Paramore×tatu: colliding mix-window SFX spill onto extra rows — sfxRows=4
+PASS  pair B: compatible guest owns the incoming Drop 1 vocal
+PASS  pair B: title clip keeps the title's first word — src=39.42 all=39.84 wanted=40.26
+PASS  pair B: title-hook placement exists
+PASS  pair B: title token sits inside the first 4s of the title-hook clip — src=39.42 lyric=40.26 offset=0.84
+PASS  pair B: title-hook copy uses the vocal stem so Whisper hears the token — stem=vocals src=39.42
+PASS  pair B: title-hook dump names vocal-stem (not full-mix bed) — title-hook clip src=39.42s t=26.67s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84 | title-hook clip src=39.42s t=53.33s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84
+PASS  pair B: title-hook dump t= matches the clip to 10ms (not rounded to 0.1s) — dumpT=26.670 clip=26.667 dump=title-hook clip src=39.42s t=26.67s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84 | title-hook clip src=39.42s t=53.33s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84
+PASS  pair B: title-hook dump records vocals.wav sidecar — kick energy from drums.wav | title-hook from vocals.wav | ducked drums+bass+other under title-hook vocal | title-hook from vocals.wav | ducked drums+bass+other under title-hook vocal | pivot grain from vocals.wav | bed instrumental stems under Drop 1 | hook-replace from vocals.wav
+PASS  pair B: bed under the title token is ducked instrumental, not a second full-mix vocal — under=drums@0.18,bass@0.18,other@0.18 hookVol=1.58
+PASS  pair B: title-hook vocal is a hard cut (incoming fade-in eats the token) — fade=None dur=0.00
+PASS  pair B: no loud full-mix/instrumental under the title token's first 4s
+PASS  pair B: applier puts the title-hook copy on the vocal-stem row — vocalClips=8 wantSrc=39.42
+PASS  pair B: incoming Drop 1 RMS makeup is at least the title-hook vocal copy — title=1.58 drop=3.32
+PASS  pair B: incoming Drop 1 is louder than an isolated title-hook copy (mix RMS makeup) — title=1.58 floor=3.32 drop=3.32
+PASS  pair B: dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride — details=["festival take-out + drop-ride (riser/snare/tape then air/clap/impact)", "drop 2 flip impact"]
+PASS  pair B: dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride — bed: all i wanted; drop 1: all the things she said; drop 2: all i wanted hook flip
+selected all the things she said as the anchor (drop 1 guest placed @51.2s (titleentrance=51.2 mashability=50.0 chorusordrop=[51.2,106.7]) over bed @38.3s (score 1.14) tokens=[all,the,things,she,said] distinctive=[things] extras=[again,hit,lonely,oops,wanted] lyric=52.00).
+pivot wallpaper loop on all the things she said — sweep join “things” (filter ramp + echo throw, no loop) → hard cut @80.0s.
+addedriserintodrop — festival take-out + drop-ride (riser/snare/tape then air/clap/impact) into the drop.
+selected all i wanted as the anchor (club bed / one kick+bass owner).
+club tempo for all i wanted: shared admitted grid 72.00 bpm; bed rate 1.000000.
+skipped a second kick on all i wanted — festival / rock pocket — no house pulse when drum analysis is uncertain.
+used stem sidecar for all i wanted — kick energy from drums.wav.
+club flavor: maximalist festival / global-bass.
+beatmatched all i wanted half/double-time lock at native tempo.
+selected all i wanted as the anchor (bed complete hook @39.42s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[39.4,106.7] measured=39.01 chosen=39.42 catalog=[38.3(h0.71),106.7(h0.69)] stem=vocals lyric=39.84 | raw=[] | tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] | lyric=39.84).
+returned to all i wanted's title chorus hold @39.4s (repeat 8-bar island, not verse-2 walk) for the final peak.
+skipped all i wanted's ending (insufficient material).
+selected all i wanted as the anchor (title-hook clip src=39.42s t=26.67s entry=none fadein=none fadedur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84).
+used stem sidecar for all i wanted — title-hook from vocals.wav.
+used stem sidecar for all i wanted — ducked drums+bass+other under title-hook vocal.
+selected all i wanted as the anchor (title-hook clip src=39.42s t=53.33s entry=none fadein=none fadedur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84).
+used stem sidecar for all i wanted — title-hook from vocals.wav.
+used stem sidecar for all i wanted — ducked drums+bass+other under title-hook vocal.
+used stem sidecar for all the things she said — pivot grain from vocals.wav.
+hook-replaced all the things she said — guest vocal stem / bed drums+bass+other under drop 1.
+used stem sidecar for all i wanted — bed instrumental stems under drop 1.
+used stem sidecar for all the things she said — hook-replace from vocals.wav.
+ducked all the things she said under the lead vocal — under all i wanted.
+addedriserintodrop — drop 2 flip impact into the drop.
+saved all i wanted's strongest section for the final peak.
+selected a song as the anchor (opening fade-in 12 beats (longer than ui 8)).
+repaired an accidental timeline gap — equal-power handoff overlap.
+hook-replaced a song — incoming vocal ride-in 2.0 bars @66.67s (src=44.50 vol=0.98 under lead 1.58).
+hook-replaced a song — pivot blend floor (bed other @73.33 vol=0.42).
+imposed a club energy curve on a song — loudness-matched 2 sections to -12.0 db reference (largest -4.0 db).
+removed an invalid sfx event (slid rides off the drop vocal's first line: airsweep 80.83→83.33, bassdrop 81.67→83.33).
+shortened a song's low-energy trailing outro: 1 layer(s) decay over 6 bars into the fade.
+fewer song handoffs than intended — some sections were skipped for lack of material.
+PASS  pair B: mashup writes festival take-out + drop-ride SFX — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  pair B: mix window + drop ride is denser than take-out-only (existing SFX menu) — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"] n=19
+PASS  pair B: dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride — assignedMashupRoles Bed: All I Wanted; Drop 1: All The Things She Said; Drop 2: All I Wanted hook flip | selectedAnchor Drop 1 guest placed @51.2s (titleEntrance=51.2 mashability=50.0 chorusOrDrop=[51.2,106.7]) over bed @38.3s (score 1.14) tokens=[all,the,things,she,said] distinctive=[things] extras=[again,hit,lonely,oops,wanted] lyric=52.00 | pivotWallpaperLoop sweep join “things” (filter ramp + echo throw, no loop) → hard cut @80.0s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | choseClubTempo shared admitted grid 72.00 BPM; bed rate 1.000000 | skippedSecondKick festival / rock pocket — no house pulse when drum analysis is uncertain | usedStemSidecar kick energy from drums.wav | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong half/double-time lock at native tempo | selectedAnchor bed complete hook @39.42s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[39.4,106.7] measured=39.01 chosen=39.42 catalog=[38.3(h0.71),106.7(h0.69)] stem=vocals lyric=39.84 | raw=[] | tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] | lyric=39.84 | returnedToHook title chorus hold @39.4s (repeat 8-bar island, not verse-2 walk) | skippedWeakSection ending (insufficient material) | selectedAnchor title-hook clip src=39.42s t=26.67s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84 | usedStemSidecar title-hook from vocals.wav | usedStemSidecar ducked drums+bass+other under title-hook vocal
+PASS  pair B: dump_gate prefix(16) has pivotWallpaperLoop — assignedMashupRoles Bed: All I Wanted; Drop 1: All The Things She Said; Drop 2: All I Wanted hook flip | selectedAnchor Drop 1 guest placed @51.2s (titleEntrance=51.2 mashability=50.0 chorusOrDrop=[51.2,106.7]) over bed @38.3s (score 1.14) tokens=[all,the,things,she,said] distinctive=[things] extras=[again,hit,lonely,oops,wanted] lyric=52.00 | pivotWallpaperLoop sweep join “things” (filter ramp + echo throw, no loop) → hard cut @80.0s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | choseClubTempo shared admitted grid 72.00 BPM; bed rate 1.000000 | skippedSecondKick festival / rock pocket — no house pulse when drum analysis is uncertain | usedStemSidecar kick energy from drums.wav | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong half/double-time lock at native tempo | selectedAnchor bed complete hook @39.42s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[39.4,106.7] measured=39.01 chosen=39.42 catalog=[38.3(h0.71),106.7(h0.69)] stem=vocals lyric=39.84 | raw=[] | tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] | lyric=39.84 | returnedToHook title chorus hold @39.4s (repeat 8-bar island, not verse-2 walk) | skippedWeakSection ending (insufficient material) | selectedAnchor title-hook clip src=39.42s t=26.67s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[all,wanted] distinctive=[wanted] extras=[again,hit,lonely,oops,things] lyric=39.84 | usedStemSidecar title-hook from vocals.wav | usedStemSidecar ducked drums+bass+other under title-hook vocal
+PASS  pair B: applied mix has a Drop 1 time
+PASS  pair B: applied riser take-out ends on the last pivot beat — drop=80.00 ends=80.00,160.00
+PASS  pair B: applied snareBuild take-out ends on the last pivot beat — drop=80.00 ends=160.00,80.00
+PASS  pair B: applied tapeStop take-out ends on the last pivot beat — drop=80.00 ends=80.00
+PASS  pair B: applied airSweep drop-ride starts after Drop 1 first syllable — drop=80.00 beat=0.83 starts=83.33,93.33,103.33
+PASS  pair B: applied clapFill drop-ride starts after Drop 1 first syllable — drop=80.00 beat=0.83 starts=86.67,96.67,100.00
+PASS  pair B: applied impact drop-ride starts after Drop 1 first syllable — drop=80.00 beat=0.83 starts=160.00,93.33,83.33
+PASS  pair B: festival SFX do not cover Drop 1 first syllable
+PASS  pair B: festival SFX do not cover the title token — title=26.67…30.67
+PASS  pair B: colliding mix-window SFX spill onto extra rows — sfxRows=4
+PASS  pair B: sweep window (buildOut) ends on Drop 1 — drop=80.00
+PASS  pair B: no grain loop — one decaying echo throw at most — shorts=1 throws=1
+PASS  pair B: echo throw marks the window start — t=73.33
+PASS  pair B: sweep window is covered by riding material (no hole) — covered=6.67 of 6.57
+PASS  pair B: low-pass sweeps shut across the window — blur 30 -> 46
+PASS  pair B: outgoing lead tapers under the sweep (no competing chorus tail) — lead end vol=1.19 pre=1.58 blur=46 stem=vocals role=dominant t=76.67 src=62.76
+PASS  pair B: incoming guest teases via vocal ride-in before the window — loopStart=73.33 rides=1
+PASS  pair B: dump records the sweep join with a hard cut — sweep join “things” (filter ramp + echo throw, no loop) → hard cut @80.0s
+PASS  pair B: dump names the join token — sweep join “things” (filter ramp + echo throw, no loop) → hard cut @80.0s
+PASS  All-5 bed is not Paramore parked at midtempo — bed=other bpm=104.16000000000001
+PASS  All-5 does not park a 144 bed at ~95 — bedBPM=104.16000000000001
+PASS  All-5 keeps Oops bed when Britney pair in crate — bed=Oops
+PASS  all-5: dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride — details=["festival take-out + drop-ride (riser/snare/tape then air/clap/impact)", "drop 2 flip impact"]
+PASS  all-5: dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride — bed: oops i did it again; drop 1: baby one more time; drop 2: oops i did it again hook flip
+selected baby one more time as the anchor (drop 1 guest placed @20.6s (titleentrance=20.6 mashability=20.6 chorusordrop=[20.6,105.8]) over bed @20.2s (score 1.04) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none).
+pivot wallpaper loop on baby one more time — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s.
+addedriserintodrop — festival take-out + drop-ride (riser/snare/tape then air/clap/impact) into the drop.
+selected oops i did it again as the anchor (club bed / one kick+bass owner).
+skipped all the things she said as a full hook: stretch gate failed — cameo chop at native tempo; no verified bounded chop available.
+skipped all i wanted as a full hook: stretch gate failed — cameo chop at native tempo; no verified bounded chop available.
+skipped stupid song as a full hook: stretch gate failed — cameo chop at native tempo; no verified bounded chop available.
+club tempo for oops i did it again: shared admitted grid 104.16 bpm; bed rate 1.096421.
+skipped a second kick on oops i did it again — source already slams — no pulse kick (use existing sfx one-shots only).
+club flavor: maximalist festival / global-bass.
+beatmatched oops i did it again +10% to 104 bpm.
+beatmatched baby one more time +12% to 104 bpm.
+selected oops i did it again as the anchor (bed complete hook @20.21s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[20.2,106.1] measured=20.21 chosen=20.21 catalog=[20.2(h0.70),106.1(h0.68)] stem=none lyric=none | raw=[] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none).
+returned to oops i did it again's title chorus hold @20.2s (repeat 8-bar island, not verse-2 walk) for the final peak.
+selected oops i did it again as the anchor (title-hook clip src=20.21s t=18.43s entry=none fadein=none fadedur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none).
+selected oops i did it again as the anchor (title-hook clip src=20.21s t=36.87s entry=none fadein=none fadedur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none).
+hook-replaced baby one more time — guest in / bed vocal out under drop 1.
+addedriserintodrop — drop 2 flip impact into the drop.
+saved oops i did it again's strongest section for the final peak.
+pitch-corrected oops i did it again's overlap by -1 st on bed for key compatibility.
+selected a song as the anchor (opening fade-in 12 beats (longer than ui 8)).
+repaired an accidental timeline gap — equal-power handoff overlap.
+returned to oops i did it again's novelty budget: 3rd replay of src=20.2 retargeted to unused island @106.1 for the final peak.
+layered a rapid song switch on oops i did it again — switch at 92.2s was 4.6s after the previous lead.
+hook-replaced a song — pivot blend floor (ducked full-mix @50.69 vol=0.42).
+imposed a club energy curve on a song — loudness-matched 5 sections to -12.0 db reference (largest -4.0 db).
+removed an invalid sfx event (slid rides off the drop vocal's first line: airsweep 55.88→58.18, bassdrop 56.45→58.18, impact 57.60→58.18).
+shortened a song's low-energy trailing outro: 1 layer(s) decay over 6 bars into the fade.
+fewer song handoffs than intended — some sections were skipped for lack of material.
+PASS  all-5: mashup writes festival take-out + drop-ride SFX — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  all-5: mix window + drop ride is denser than take-out-only (existing SFX menu) — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"] n=24
+PASS  all-5: dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride — assignedMashupRoles Bed: Oops I Did It Again; Drop 1: Baby One More Time; Drop 2: Oops I Did It Again hook flip | selectedAnchor Drop 1 guest placed @20.6s (titleEntrance=20.6 mashability=20.6 chorusOrDrop=[20.6,105.8]) over bed @20.2s (score 1.04) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none | pivotWallpaperLoop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | choseClubTempo shared admitted grid 104.16 BPM; bed rate 1.096421 | skippedSecondKick source already slams — no pulse kick (use existing SFX one-shots only) | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong +10% to 104 BPM | beatmatchedSong +12% to 104 BPM | selectedAnchor bed complete hook @20.21s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[20.2,106.1] measured=20.21 chosen=20.21 catalog=[20.2(h0.70),106.1(h0.68)] stem=none lyric=none | raw=[] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none | returnedToHook title chorus hold @20.2s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=20.21s t=18.43s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none
+PASS  all-5: dump_gate prefix(16) has pivotWallpaperLoop — assignedMashupRoles Bed: Oops I Did It Again; Drop 1: Baby One More Time; Drop 2: Oops I Did It Again hook flip | selectedAnchor Drop 1 guest placed @20.6s (titleEntrance=20.6 mashability=20.6 chorusOrDrop=[20.6,105.8]) over bed @20.2s (score 1.04) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none | pivotWallpaperLoop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | skippedIncompatibleHook stretch gate failed — cameo chop at native tempo; no verified bounded chop available | choseClubTempo shared admitted grid 104.16 BPM; bed rate 1.096421 | skippedSecondKick source already slams — no pulse kick (use existing SFX one-shots only) | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong +10% to 104 BPM | beatmatchedSong +12% to 104 BPM | selectedAnchor bed complete hook @20.21s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[20.2,106.1] measured=20.21 chosen=20.21 catalog=[20.2(h0.70),106.1(h0.68)] stem=none lyric=none | raw=[] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none | returnedToHook title chorus hold @20.2s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=20.21s t=18.43s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none
+PASS  all-5: applied mix has a Drop 1 time
+PASS  all-5: applied riser take-out ends on the last pivot beat — drop=55.30 ends=55.30,129.03
+PASS  all-5: applied snareBuild take-out ends on the last pivot beat — drop=55.30 ends=129.03,55.30
+PASS  all-5: applied tapeStop take-out ends on the last pivot beat — drop=55.30 ends=92.87,55.30
+PASS  all-5: applied airSweep drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=58.18,64.52,71.43
+PASS  all-5: applied clapFill drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=66.82,69.12,59.91
+PASS  all-5: applied impact drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=73.73,129.03,64.52,147.47,58.18
+PASS  all-5: festival SFX do not cover Drop 1 first syllable
+PASS  all-5: festival SFX do not cover the title token — title=18.43…22.43
+PASS  all-5: colliding mix-window SFX spill onto extra rows — sfxRows=4
+PASS  All-5 target is house when the bed is midtempo, else near the bed pocket — target=104.16000000000001 bedNative=95.0 midtempoBed=true
+PASS  Britney solo club-lifts into house (not a 93 ballad pocket) — bpm=104.16000000000001
+PASS  Britney solo: mix has a first dominant clip
+PASS  Britney solo: first clip fades in over a long intro (longer than the UI 8-beat pill) — fade=Crossfade dur=12.0 t=0.00
+PASS  Britney solo: dump records the opening fade-in — selectedanchor club remix rewrite | choseclubtempo club-lift midtempo +12% (93 → 104 bpm, pitch preserved — not house 126) | choseclubflavor maximalist festival / global-bass | skippedsecondkick source already slams — no pulse kick (use existing sfx one-shots only) | returnedtohook drop | addedriserintodrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | pivotwallpaperloop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | returnedtohook drop | addedriserintodrop drop 2 flip (impact) | selectedanchor opening fade-in 12 beats (longer than ui 8) | hookreplace pivot blend floor (ducked full-mix @50.69 vol=0.42) | imposedclubenergycurve loudness-matched 5 sections to -12.0 db reference (largest -4.0 db) | removedinvalidsfx slid rides off the drop vocal's first line: airsweep 55.88→58.18, bassdrop 56.45→58.18, impact 57.60→58.18 | shortenedlowenergysection trailing outro: 1 layer(s) decay over 6 bars into the fade | removedinvalidsfx downlifter
+PASS  Britney solo writesKick false
+PASS  Britney first drop on downbeat — t=55.300 bars=24.000
+PASS  Britney void or sweep-join window before drop — void=false sweepWindow=true
+PASS  Britney solo: pivot join has no quiet void — gaps=0
+PASS  Handoff overlap seconds > 0 — overlap=3.742 declared=3.742 at t=95.24
+PASS  At least one blended handoff exists — joins=1 voids=0
+PASS  Intentional gaps are only pre-drop voids
+PASS  Bed under drop stays audible (not muted) — vol=1.00
+PASS  Hook-replace carves bed vocal (heavy HPF/blur) — blur=48
+PASS  Bed under drop stays audible (not muted) — vol=1.00
+PASS  Hook-replace carves bed vocal (heavy HPF/blur) — blur=48
+PASS  Drop placement overlaps bed placement in time — drops=2 bedSupports=3
+PASS  Britney: complete Oops hook and sweep reach Drop 1 within 16–24 bars — bar=24.0 t=55.30
+PASS  Britney two-deck: no BOMT before Drop 1 mix — earlyGuest=0
+PASS  Britney: first complete Oops hook is title chorus island (not verse-1 intro) — hookSrc=48.00 hookDur=22.18 firstBedSrc=0.00
+PASS  Britney: Oops title chorus played twice (8+8 hold, not 16-bar verse-2 walk) — titleHolds=2 src=["48.0", "48.0"]
+PASS  Britney: last 8 of A is still title chorus (not verse 2 @66s) — t=18.4 src=48.0 t=36.9 src=48.0 t=50.7 src=63.2 t=53.0 src=65.7
+PASS  Britney: first Deck A hook is not a sub-phrase chop of the title — src=48.00 dur=22.18 bar=2.30
+PASS  Britney: first complete hook is Oops word ~48.0–48.8s, not baby @45.5 / not prechorus ~20/~40 — src=48.0 analysis=[sec@48.0,sec@106.1] catalog=[chorus@48.0h=0.74 chorus@106.1h=0.72]
+PASS  Britney mashup is clubby (Diplo/Guetta/Snake), not Calvin preservation — flavor=Maximalist festival / global-bass
+PASS  Britney: Drop 1 has pivot wallpaper (loop + hard cut)
+PASS  Britney: pivotWallpaperLoop recorded
+PASS  Britney mashup: dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride — details=["festival take-out + drop-ride (riser/snare/tape then air/clap/impact)", "drop 2 flip impact"]
+PASS  Britney mashup: dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride — bed: oops i did it again; drop 1: baby one more time; drop 2: oops i did it again hook flip
+selected baby one more time as the anchor (drop 1 guest placed @59.4s (titleentrance=59.4 mashability=59.4 chorusordrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none).
+pivot wallpaper loop on baby one more time — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s.
+addedriserintodrop — festival take-out + drop-ride (riser/snare/tape then air/clap/impact) into the drop.
+selected oops i did it again as the anchor (club bed / one kick+bass owner).
+club tempo for oops i did it again: shared admitted grid 104.16 bpm; bed rate 1.096421.
+skipped a second kick on oops i did it again — source already slams — no pulse kick (use existing sfx one-shots only).
+club flavor: maximalist festival / global-bass.
+beatmatched oops i did it again +10% to 104 bpm.
+beatmatched baby one more time +12% to 104 bpm.
+selected oops i did it again as the anchor (bed complete hook @48.00s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none).
+returned to oops i did it again's title chorus hold @48.0s (repeat 8-bar island, not verse-2 walk) for the final peak.
+selected oops i did it again as the anchor (title-hook clip src=48.00s t=18.43s entry=none fadein=none fadedur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none).
+selected oops i did it again as the anchor (title-hook clip src=48.00s t=36.87s entry=none fadein=none fadedur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none).
+hook-replaced baby one more time — guest in / bed vocal out under drop 1.
+addedriserintodrop — drop 2 flip impact into the drop.
+saved oops i did it again's strongest section for the final peak.
+pitch-corrected oops i did it again's overlap by -1 st on bed for key compatibility.
+selected a song as the anchor (opening fade-in 12 beats (longer than ui 8)).
+repaired an accidental timeline gap — equal-power handoff overlap.
+layered a rapid song switch on oops i did it again — switch at 92.2s was 4.6s after the previous lead.
+hook-replaced a song — pivot blend floor (ducked full-mix @50.69 vol=0.42).
+imposed a club energy curve on a song — loudness-matched 5 sections to -12.0 db reference (largest -4.0 db).
+removed an invalid sfx event (slid rides off the drop vocal's first line: airsweep 55.88→58.18, bassdrop 56.45→58.18, impact 57.60→58.18).
+returned to a song's hold varied: drop ride pass 2 sweeps down @147.5s (no verbatim repeat) for the final peak.
+fewer song handoffs than intended — some sections were skipped for lack of material.
+PASS  Britney mashup: mashup writes festival take-out + drop-ride SFX — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Britney mashup: mix window + drop ride is denser than take-out-only (existing SFX menu) — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"] n=24
+PASS  Britney mashup: dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride — assignedMashupRoles Bed: Oops I Did It Again; Drop 1: Baby One More Time; Drop 2: Oops I Did It Again hook flip | selectedAnchor Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none | pivotWallpaperLoop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | choseClubTempo shared admitted grid 104.16 BPM; bed rate 1.096421 | skippedSecondKick source already slams — no pulse kick (use existing SFX one-shots only) | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong +10% to 104 BPM | beatmatchedSong +12% to 104 BPM | selectedAnchor bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none | returnedToHook title chorus hold @48.0s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=48.00s t=18.43s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none | selectedAnchor title-hook clip src=48.00s t=36.87s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none | hookReplace guest in / bed vocal out under Drop 1 | addedRiserIntoDrop drop 2 flip impact
+PASS  Britney mashup: dump_gate prefix(16) has pivotWallpaperLoop — assignedMashupRoles Bed: Oops I Did It Again; Drop 1: Baby One More Time; Drop 2: Oops I Did It Again hook flip | selectedAnchor Drop 1 guest placed @59.4s (titleEntrance=59.4 mashability=59.4 chorusOrDrop=[59.4,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=none | pivotWallpaperLoop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | choseClubTempo shared admitted grid 104.16 BPM; bed rate 1.096421 | skippedSecondKick source already slams — no pulse kick (use existing SFX one-shots only) | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong +10% to 104 BPM | beatmatchedSong +12% to 104 BPM | selectedAnchor bed complete hook @48.00s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[48.0,106.1] measured=49.40 chosen=48.00 catalog=[48.0(h0.74),106.1(h0.72)] stem=none lyric=none | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=none | returnedToHook title chorus hold @48.0s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=48.00s t=18.43s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none | selectedAnchor title-hook clip src=48.00s t=36.87s entry=None fadeIn=None fadeDur=0.00 full-mix tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=none | hookReplace guest in / bed vocal out under Drop 1 | addedRiserIntoDrop drop 2 flip impact
+PASS  Britney mashup: applied mix has a Drop 1 time
+PASS  Britney mashup: applied riser take-out ends on the last pivot beat — drop=55.30 ends=55.30,129.03
+PASS  Britney mashup: applied snareBuild take-out ends on the last pivot beat — drop=55.30 ends=129.03,55.30
+PASS  Britney mashup: applied tapeStop take-out ends on the last pivot beat — drop=55.30 ends=92.87,55.30
+PASS  Britney mashup: applied airSweep drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=58.18,64.52,71.43
+PASS  Britney mashup: applied clapFill drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=66.82,69.12,59.91
+PASS  Britney mashup: applied impact drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=73.73,129.03,64.52,147.47,58.18
+PASS  Britney mashup: festival SFX do not cover Drop 1 first syllable
+PASS  Britney mashup: festival SFX do not cover the title token — title=18.43…22.43
+PASS  Britney mashup: colliding mix-window SFX spill onto extra rows — sfxRows=4
+PASS  Britney mashup: sweep window (buildOut) ends on Drop 1 — drop=55.30
+PASS  Britney mashup: no grain loop — one decaying echo throw at most — shorts=1 throws=1
+PASS  Britney mashup: echo throw marks the window start — t=50.69
+PASS  Britney mashup: sweep window is covered by riding material (no hole) — covered=4.61 of 4.51
+PASS  Britney mashup: low-pass sweeps shut across the window — blur 30 -> 46
+PASS  Britney mashup: outgoing lead tapers under the sweep (no competing chorus tail) — lead end vol=0.75 pre=1.00 blur=46 stem=mix role=dominant t=53.00 src=65.68
+PASS  Britney mashup: dump records the sweep join with a hard cut — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s
+PASS  Britney mashup: dump names the join token — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s
+PASS  Britney: zero allowedPredropVoid on a pivoted plan — voidDecisions=[]
+PASS  Britney: zero intentionalGaps on Drop 1 — gaps=0
+PASS  Britney: pivot join has no quiet void (planner emit, not a hand-built plan) — gaps=0
+PASS  Britney: club drops stay hard cuts (no equal-power fade-in)
+PASS  Britney: no early intro/title chops — earlyChops=0
+PASS  Britney: pivot hard cut matches pulse Drop 1 (not an earlier fake drop) — pulseDrop=55.30 guestDrop=55.30
+PASS  Britney: Drop 1 hard cut — no fade-in / volume ramp — fadeIn=None dur=0.0
+PASS  Britney: Drop 1 slam is ~full gain on bar 1 of the hook — vol=1.58
+PASS  Britney: mix-window take-out is riser+snare+tape ending before Drop 1 — ids=["riser", "snareBuild", "sweepUp", "tapeStop"] endTimes=["riser=55.30", "snareBuild=55.30", "sweepUp=55.30", "tapeStop=55.30"]
+PASS  Britney: SFX do not overlap Drop 1 first syllable — cover=[]
+PASS  Britney: SFX ride the drop (air/clap/extra impact, not join-only) — count=11 ids=["airSweep", "bassDrop", "clapFill", "impact", "sweepUp"]
+PASS  Britney: SFX do not cover title-hook onsets — buried=[] onsets=["0.0", "18.4"]
+PASS  Britney: pivotWallpaperLoop decision recorded
+PASS  Britney: no echo-throw spam (one sweep-join throw allowed) — echoes=0
+PASS  Britney two-deck: no dual-vocal overlay default
+PASS  Britney pivot token is 'baby' — token=baby
+PASS  Britney: Auto applied song clips exist
+PASS  Britney: Auto writes clip-wise volume (not all 1.0 by accident) — vols=0.42,0.56,0.75,0.78,0.88,0.90,0.91,0.93,0.95,0.97,0.98,1.00,1.26,1.58
+PASS  Britney: applied sweep-window clips exist and stay audible (no wallpaper hole) — n=4 vols=0.88,1.26,0.42,0.75
+PASS  Britney: applied Drop 1 clip is ~full volume — vol=1.58
+PASS  Britney: applied Drop 1 clip has no audible fade-in — fadeIn=None dur=0.0
+PASS  Britney: pivot and Drop 1 clips are at least as loud as the bed verse — verse=1.00 join=1.58,1.00
+PASS  Britney: applied SFX rows mix the festival stack (not dropped on one lane) — rows=4 ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Britney: colliding mix-window SFX spill onto extra rows — sfxRows=4
+PASS  Mashup emits impact slam on a drop
+PASS  Mashup impact is not on Drop 1 first syllable
+PASS  Mashup impact rides Drop 1 after the attack
+PASS  Two simultaneous SFX create ≥2 SFX tracks — sfxRows=2
+PASS  Two SFX events can share a timestamp across rows — clipsAtT=2
+PASS  Per SFX row clips do not overlap — row clips 2.2…4.3 vs 4.3
+PASS  Auto apply uses multiple SFX rows when hits collide — sfxTracks=5 clips=301
+PASS  Applied SFX row has no overlapping clips
+PASS  Applied SFX row has no overlapping clips
+PASS  Applied SFX row has no overlapping clips
+PASS  Applied SFX row has no overlapping clips
+PASS  Applied SFX row has no overlapping clips
+PASS  Skewed-vocal Britney still Oops bed — bed=Oops
+PASS  Skewed-vocal Britney still BOMT Drop 1 — vocal=BOMT
+PASS  Two-deck: no riser/snare/tape/clap wallpaper outside mix windows — wallpaper=[] @ []
+PASS  Club remix has impact riding Drop 1 (not on the first syllable)
+PASS  Club remix Drop 1 take-out is riser+snare+tape ending before the attack
+PASS  Club remix Drop 1 mix window rides the drop (air/clap/impact)
+PASS  Club remix cymbal punctuation ≤ 2 — count=1
+PASS  Club remix Drop 1 by bar 16–36 — bar=24.0
+PASS  Club remix Drop 1 is a chorus/teaser island — sourceStart=21.3
+PASS  Club remix: first Deck A hook is not a sub-phrase chop of the title — src=61.33 dur=2.38 bar=2.38
+PASS  Club remix: pivot Drop 1 has no pre-drop void
+PASS  Two-deck: verses/grooves stay the record (no heavy echo FX) — heavyGrooveFX=0
+PASS  Club remix fires build-out blur / echo-out in mix window
+PASS  Club remix picks Diplo for dancehall/festival midtempo — flavor=Maximalist festival / global-bass
+PASS  Diplo flavor is maximalist
+PASS  Diplo flavor allows half-time drop
+PASS  No echo-throw spam (one decaying throw per join) — echoes=1
+PASS  Pivot wallpaper grains gated to mix windows — grains=1
+PASS  Britney-class pop-over-club bed → Diplo — got Maximalist festival / global-bass
+PASS  Sparse piano ballad still Calvin — got Sparse piano / vocal / bass
+PASS  Festival bass → Snake or Diplo — got Chant / aggressive low end
+PASS  Diplo bias keeps midrange busy
+PASS  Diplo bias treats FX as groove
+PASS  Role proxy: Oops beats BOMT as bed (drum 1.00 soft-capped) — oops=0.558 bomt=0.498
+PASS  Role proxy: BOMT beats Oops as hook — bomt=0.617 oops=0.616
+PASS  AutoMashUpper island bars are 8–16 — bars=16
+PASS  AutoMashUpper island has positive mashability — 1.181
+PASS  AutoMashUpper spectral balance is defined — 1.000
+PASS  Mixxx: long intro delays incoming — 8.00
+PASS  Mixxx: aligned BPM prefers long crossfade
+PASS  Mixxx: far BPM prefers tape-stop
+PASS  Mixxx: far BPM keeps short overlap — 1.00
+PASS  Solo remix: no early intro chops — count=0
+PASS  Solo remix: opening phrase starts near source start — sourceStart=0.00
+PASS  Solo remix: sweep-join window before Drop 1 — drop=57.14
+PASS  Solo remix: sweep segments ride the window (no stutter loop) — segs=2
+PASS  Solo remix records pivotWallpaperLoop
+PASS  No echo-throw spam on Drop 2 (one sweep-join throw allowed) — count=0
+PASS  Songs basename resolves …/Stems/htdemucs_ft/<basename>/vocals.wav — vocals=/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/vocals.wav
+PASS  Explicit stemsRoot wins over missing Songs layout
+PASS  Missing stems resolve empty (full-mix fallback)
+PASS  Songs basename resolves lyrics.json beside vocals.wav — lyrics=/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/Oops I Did It Again/lyrics.json
+PASS  lyrics.json parse reads titleHookStart — got=48.12
+PASS  lyrics.json words: title phrase / hit extra beats verse filler baby — derived=59.52 verse=40.0 hook=59.52
+PASS  lyrics sidecar: distinctive title attack pads 2 beats, not 1 beat / not a bar — onset=46.86 lyric=48.12 beat=0.63 want=46.86 oneBeat=47.49 lead=1.26
+PASS  lyrics sidecar: snap is the word's bar downbeat (not the next bar) — snap=48.00 word=48.12
+PASS  lyrics sidecar wins over energy island (hook start is padded, not energy 48) — onset=60.04 lyric=61.30 energy=48.0
+PASS  lyrics sidecar override: distinctive attack still 2-beat pad — onset=60.04 lyric=61.30 beat=0.63 want=60.04 oneBeat=60.67 lead=1.26
+PASS  9843f9b: snap is at or before lyric, never the next downbeat — snap=50.38 lyric=50.38 catalog=50.5
+PASS  title-hook clip pads 2 beats when 1 beat still edge-cuts the title token (not a full bar / catalog 48) — onset=49.12 lyric=50.38 beat=0.63 want=49.12 oneBeat=49.75 lead=1.26
+PASS  2-beat pad never walks a full bar / catalog 48 — onset=49.12 lyric=50.38 beat=0.63 catalog=50.5
+PASS  Drop 1 guest lead-in stays one beat before the lyric (Hit me lock) — guest=49.75 lyric=50.38 beat=0.63
+PASS  isolated token keeps a title-owned first word as the anchor — got=39.84 want=39.84
+PASS  title-hook clip opens before the title's first word — start=39.42 all=39.84 wanted=40.26
+PASS  isolated token still skips filler that is NOT part of the title — got=40.26 want=40.26
+PASS  club-lift title pad puts the token after stretch settle, still inside the first 2s of mix — onset=48.09 lyric=50.38 mixLead=1.70 bar=2.53
+PASS  native-tempo title pad is unchanged when there is no club-lift — native=39.42 liftedPath=39.42
+PASS  join token is the incoming distinctive hook word, not a generic shared filler — oops×bomt=baby paramore×tatu=things
+PASS  incoming join grain is the guest hook token, not verse filler — grain=60.60
+PASS  pivot grain is the last pivot token, not the empty phrase tail — grain=16.48 token=16.55 tail=17.50
+PASS  pivot grain uses the last-phrase pivot token, not the opening baby — grain=64.70 want≈64.8
+PASS  catalog merge writes lyricTitleHookStart from lyrics.json — lyric=48.12
+PASS  lyrics sidecar: planner bed hook is titleHookStart (not energy tail) — src=46.86 want=48.12 bed complete hook @46.86s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[46.9,106.1] measured=46.97 chosen=46.86 catalog=[45.5(h0.75),106.1(h0.72)] stem=none lyric=48.12 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=48.12
+PASS  lyrics sidecar: planner bed pads 2 beats for a distinctive attack — onset=46.86 lyric=48.12 ratio=1.10 mixLead=1.15 beat=0.63
+PASS  lyrics sidecar: planner Drop 1 is titleHookStart (not verse) — src=58.87 want=59.52 Drop 1 guest placed @58.9s (titleEntrance=58.9 mashability=56.8 chorusOrDrop=[58.9,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=59.52
+PASS  lyrics sidecar: dump includes lyric= and fadeDur=0 — bed complete hook @46.86s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[46.9,106.1] measured=46.97 chosen=46.86 catalog=[45.5(h0.75),106.1(h0.72)] stem=none lyric=48.12 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=48.12
+PASS  lyrics sidecar: title-hook clips hard-cut — hookSrc=46.86
+PASS  599dec4: dump placed startSeconds < lyric — bed complete hook @50.24s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[50.3,106.1] measured=50.32 chosen=50.24 catalog=[48.0(h0.71),106.1(h0.72)] stem=vocals lyric=50.38 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=50.38
+PASS  599dec4: bed placed start pads 2 beats when 1 beat edge-cuts, not a full bar / catalog 48 — onset=50.24 lyric=50.38 ratio=1.10 mixLead=0.13 beat=0.63
+PASS  dump_gate: club-lift mix-time pad puts title token after stretch settle — src=50.24 lyric=50.38 ratio=1.10 mixLead=0.13 mixBeat=0.576
+PASS  599dec4: club-lift pad stays on the title island (not prechorus / verse 2) — src=50.24 lyric=50.38 catalog=50.5 bed complete hook @50.24s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[50.3,106.1] measured=50.32 chosen=50.24 catalog=[48.0(h0.71),106.1(h0.72)] stem=vocals lyric=50.38 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=50.38
+PASS  Oops×BOMT: dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride — details=["festival take-out + drop-ride (riser/snare/tape then air/clap/impact)", "drop 2 flip impact"]
+PASS  Oops×BOMT: dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride — bed: oops i did it again; drop 1: baby one more time; drop 2: oops i did it again hook flip
+selected baby one more time as the anchor (drop 1 guest placed @59.6s (titleentrance=59.6 mashability=59.4 chorusordrop=[59.6,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=60.26).
+pivot wallpaper loop on baby one more time — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s.
+addedriserintodrop — festival take-out + drop-ride (riser/snare/tape then air/clap/impact) into the drop.
+selected oops i did it again as the anchor (club bed / one kick+bass owner).
+club tempo for oops i did it again: shared admitted grid 104.16 bpm; bed rate 1.096421.
+skipped a second kick on oops i did it again — source already slams — no pulse kick (use existing sfx one-shots only).
+used stem sidecar for oops i did it again — kick energy from drums.wav.
+club flavor: maximalist festival / global-bass.
+beatmatched oops i did it again +10% to 104 bpm.
+beatmatched baby one more time +12% to 104 bpm.
+selected oops i did it again as the anchor (bed complete hook @50.24s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[50.3,106.1] measured=50.32 chosen=50.24 catalog=[48.0(h0.71),106.1(h0.72)] stem=vocals lyric=50.38 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=50.38).
+returned to oops i did it again's title chorus hold @50.2s (repeat 8-bar island, not verse-2 walk) for the final peak.
+selected oops i did it again as the anchor (title-hook clip src=50.24s t=18.43s entry=none fadein=none fadedur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38).
+used stem sidecar for oops i did it again — title-hook from vocals.wav.
+used stem sidecar for oops i did it again — ducked drums+bass+other under title-hook vocal.
+selected oops i did it again as the anchor (title-hook clip src=50.24s t=36.87s entry=none fadein=none fadedur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38).
+used stem sidecar for oops i did it again — title-hook from vocals.wav.
+used stem sidecar for oops i did it again — ducked drums+bass+other under title-hook vocal.
+used stem sidecar for baby one more time — pivot grain from vocals.wav.
+hook-replaced baby one more time — guest vocal stem / bed drums+bass+other under drop 1.
+used stem sidecar for oops i did it again — bed instrumental stems under drop 1.
+used stem sidecar for baby one more time — hook-replace from vocals.wav.
+addedriserintodrop — drop 2 flip impact into the drop.
+saved oops i did it again's strongest section for the final peak.
+pitch-corrected oops i did it again's overlap by -1 st on bed for key compatibility.
+selected a song as the anchor (opening fade-in 12 beats (longer than ui 8)).
+repaired an accidental timeline gap — equal-power handoff overlap.
+layered a rapid song switch on oops i did it again — switch at 92.2s was 4.6s after the previous lead.
+hook-replaced a song — incoming vocal ride-in 2.0 bars @46.08s (src=54.45 vol=0.98 under lead 1.58).
+hook-replaced a song — pivot blend floor (bed other @50.69 vol=0.42).
+imposed a club energy curve on a song — loudness-matched 3 sections to -12.0 db reference (largest -4.0 db).
+removed an invalid sfx event (slid rides off the drop vocal's first line: airsweep 55.88→57.60, bassdrop 56.45→57.60).
+returned to a song's hold varied: drop ride pass 2 sweeps down @147.5s (no verbatim repeat) for the final peak.
+fewer song handoffs than intended — some sections were skipped for lack of material.
+PASS  Oops×BOMT: mashup writes festival take-out + drop-ride SFX — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Oops×BOMT: mix window + drop ride is denser than take-out-only (existing SFX menu) — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"] n=24
+PASS  Oops×BOMT: dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride — assignedMashupRoles Bed: Oops I Did It Again; Drop 1: Baby One More Time; Drop 2: Oops I Did It Again hook flip | selectedAnchor Drop 1 guest placed @59.6s (titleEntrance=59.6 mashability=59.4 chorusOrDrop=[59.6,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=60.26 | pivotWallpaperLoop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | choseClubTempo shared admitted grid 104.16 BPM; bed rate 1.096421 | skippedSecondKick source already slams — no pulse kick (use existing SFX one-shots only) | usedStemSidecar kick energy from drums.wav | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong +10% to 104 BPM | beatmatchedSong +12% to 104 BPM | selectedAnchor bed complete hook @50.24s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[50.3,106.1] measured=50.32 chosen=50.24 catalog=[48.0(h0.71),106.1(h0.72)] stem=vocals lyric=50.38 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=50.38 | returnedToHook title chorus hold @50.2s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=50.24s t=18.43s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38 | usedStemSidecar title-hook from vocals.wav | usedStemSidecar ducked drums+bass+other under title-hook vocal
+PASS  Oops×BOMT: dump_gate prefix(16) has pivotWallpaperLoop — assignedMashupRoles Bed: Oops I Did It Again; Drop 1: Baby One More Time; Drop 2: Oops I Did It Again hook flip | selectedAnchor Drop 1 guest placed @59.6s (titleEntrance=59.6 mashability=59.4 chorusOrDrop=[59.6,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=60.26 | pivotWallpaperLoop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedRiserIntoDrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedAnchor club bed / one kick+bass owner | choseClubTempo shared admitted grid 104.16 BPM; bed rate 1.096421 | skippedSecondKick source already slams — no pulse kick (use existing SFX one-shots only) | usedStemSidecar kick energy from drums.wav | choseClubFlavor Maximalist festival / global-bass | beatmatchedSong +10% to 104 BPM | beatmatchedSong +12% to 104 BPM | selectedAnchor bed complete hook @50.24s entry=None (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusOrDrop=[50.3,106.1] measured=50.32 chosen=50.24 catalog=[48.0(h0.71),106.1(h0.72)] stem=vocals lyric=50.38 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=50.38 | returnedToHook title chorus hold @50.2s (repeat 8-bar island, not verse-2 walk) | selectedAnchor title-hook clip src=50.24s t=18.43s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38 | usedStemSidecar title-hook from vocals.wav | usedStemSidecar ducked drums+bass+other under title-hook vocal
+PASS  Oops×BOMT: applied mix has a Drop 1 time
+PASS  Oops×BOMT: applied riser take-out ends on the last pivot beat — drop=55.30 ends=55.30,129.03
+PASS  Oops×BOMT: applied snareBuild take-out ends on the last pivot beat — drop=55.30 ends=129.03,55.30
+PASS  Oops×BOMT: applied tapeStop take-out ends on the last pivot beat — drop=55.30 ends=92.87,55.30
+PASS  Oops×BOMT: applied airSweep drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=57.60,64.52,71.43
+PASS  Oops×BOMT: applied clapFill drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=59.91,66.82,69.12
+PASS  Oops×BOMT: applied impact drop-ride starts after Drop 1 first syllable — drop=55.30 beat=0.58 starts=73.73,129.03,64.52,147.47,57.60
+PASS  Oops×BOMT: festival SFX do not cover Drop 1 first syllable
+PASS  Oops×BOMT: festival SFX do not cover the title token — title=18.43…22.43
+PASS  Oops×BOMT: colliding mix-window SFX spill onto extra rows — sfxRows=4
+PASS  Oops×BOMT: title-hook placement exists
+PASS  Oops×BOMT: title token sits inside the first 4s of the title-hook clip — src=50.24 lyric=50.38 offset=0.14
+PASS  Oops×BOMT: title-hook copy uses the vocal stem so Whisper hears the token — stem=vocals src=50.24
+PASS  Oops×BOMT: title-hook dump names vocal-stem (not full-mix bed) — title-hook clip src=50.24s t=18.43s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38 | title-hook clip src=50.24s t=36.87s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38
+PASS  Oops×BOMT: title-hook dump t= matches the clip to 10ms (not rounded to 0.1s) — dumpT=18.430 clip=18.433 dump=title-hook clip src=50.24s t=18.43s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38 | title-hook clip src=50.24s t=36.87s entry=None fadeIn=None fadeDur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38
+PASS  Oops×BOMT: title-hook dump records vocals.wav sidecar — kick energy from drums.wav | title-hook from vocals.wav | ducked drums+bass+other under title-hook vocal | title-hook from vocals.wav | ducked drums+bass+other under title-hook vocal | pivot grain from vocals.wav | bed instrumental stems under Drop 1 | hook-replace from vocals.wav
+PASS  Oops×BOMT: bed under the title token is ducked instrumental, not a second full-mix vocal — under=drums@0.18,bass@0.18,other@0.18 hookVol=1.58
+PASS  Oops×BOMT: title-hook vocal is a hard cut (incoming fade-in eats the token) — fade=None dur=0.00
+PASS  Oops×BOMT: no loud full-mix/instrumental under the title token's first 4s
+PASS  Oops×BOMT: applier puts the title-hook copy on the vocal-stem row — vocalClips=9 wantSrc=50.24
+PASS  Oops×BOMT: incoming Drop 1 RMS makeup is at least the title-hook vocal copy — title=1.58 drop=3.32
+PASS  Oops×BOMT: incoming Drop 1 is louder than an isolated title-hook copy (mix RMS makeup) — title=1.58 floor=3.32 drop=3.32
+PASS  Oops×BOMT: sweep window (buildOut) ends on Drop 1 — drop=55.30
+PASS  Oops×BOMT: no grain loop — one decaying echo throw at most — shorts=1 throws=1
+PASS  Oops×BOMT: echo throw marks the window start — t=50.69
+PASS  Oops×BOMT: sweep window is covered by riding material (no hole) — covered=4.61 of 4.51
+PASS  Oops×BOMT: low-pass sweeps shut across the window — blur 30 -> 46
+PASS  Oops×BOMT: outgoing lead tapers under the sweep (no competing chorus tail) — lead end vol=1.19 pre=1.58 blur=46 stem=vocals role=dominant t=53.00 src=67.92
+PASS  Oops×BOMT: incoming guest teases via vocal ride-in before the window — loopStart=50.69 rides=1
+PASS  Oops×BOMT: dump records the sweep join with a hard cut — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s
+PASS  Oops×BOMT: dump names the join token — sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s
+PASS  599dec4: Drop 1 still lyric hook ~60s (not verse, not after lyric) — src=59.61 lyric=60.26 Drop 1 guest placed @59.6s (titleEntrance=59.6 mashability=59.4 chorusOrDrop=[59.6,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=60.26
+PASS  Oops×BOMT: mix has a first dominant clip
+PASS  Oops×BOMT: first clip fades in over a long intro (longer than the UI 8-beat pill) — fade=Crossfade dur=12.0 t=0.00
+PASS  Oops×BOMT: dump records the opening fade-in — assignedmashuproles bed: oops i did it again; drop 1: baby one more time; drop 2: oops i did it again hook flip | selectedanchor drop 1 guest placed @59.6s (titleentrance=59.6 mashability=59.4 chorusordrop=[59.6,105.8]) over bed @96.0s (score 1.06) tokens=[baby,one,more,time] distinctive=[baby,one,more,time] extras=[again,hit,lonely,oops,things,wanted] lyric=60.26 | pivotwallpaperloop sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s | addedriserintodrop festival take-out + drop-ride (riser/snare/tape then air/clap/impact) | selectedanchor club bed / one kick+bass owner | choseclubtempo shared admitted grid 104.16 bpm; bed rate 1.096421 | skippedsecondkick source already slams — no pulse kick (use existing sfx one-shots only) | usedstemsidecar kick energy from drums.wav | choseclubflavor maximalist festival / global-bass | beatmatchedsong +10% to 104 bpm | beatmatchedsong +12% to 104 bpm | selectedanchor bed complete hook @50.24s entry=none (title-hook onset after prechorus, hard cut, not prechorus/tail/verse-2) | chorusordrop=[50.3,106.1] measured=50.32 chosen=50.24 catalog=[48.0(h0.71),106.1(h0.72)] stem=vocals lyric=50.38 | raw=[37.9,40.4,45.5,48.0,50.5,53.1,55.6,58.1,60.6,63.2,65.7] | tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] | lyric=50.38 | returnedtohook title chorus hold @50.2s (repeat 8-bar island, not verse-2 walk) | selectedanchor title-hook clip src=50.24s t=18.43s entry=none fadein=none fadedur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38 | usedstemsidecar title-hook from vocals.wav | usedstemsidecar ducked drums+bass+other under title-hook vocal | selectedanchor title-hook clip src=50.24s t=36.87s entry=none fadein=none fadedur=0.00 vocal-stem tokens=[oops,did,again] distinctive=[oops,again] extras=[hit,lonely,things,wanted] lyric=50.38 | usedstemsidecar title-hook from vocals.wav | usedstemsidecar ducked drums+bass+other under title-hook vocal | usedstemsidecar pivot grain from vocals.wav | hookreplace guest vocal stem / bed drums+bass+other under drop 1 | usedstemsidecar bed instrumental stems under drop 1 | usedstemsidecar hook-replace from vocals.wav | addedriserintodrop drop 2 flip impact | savedstrongestforpeak  | pitchcorrectedoverlap -1 st on bed | selectedanchor opening fade-in 12 beats (longer than ui 8) | repairedtimelinegap equal-power handoff overlap | layeredrapidswitch switch at 92.2s was 4.6s after the previous lead | hookreplace incoming vocal ride-in 2.0 bars @46.08s (src=54.45 vol=0.98 under lead 1.58) | hookreplace pivot blend floor (bed other @50.69 vol=0.42) | imposedclubenergycurve loudness-matched 3 sections to -12.0 db reference (largest -4.0 db) | removedinvalidsfx slid rides off the drop vocal's first line: airsweep 55.88→57.60, bassdrop 56.45→57.60 | returnedtohook hold varied: drop ride pass 2 sweeps down @147.5s (no verbatim repeat) | duoalternationfallback fewer song handoffs than intended — some sections were skipped for lack of material.
+PASS  Oops×BOMT: Drop 1 / later hook-replace stays a hard cut at full volume — fade=None dur=0.0 vol=3.3180000000000005
+PASS  Oops×BOMT: later title-hook copies stay at full (outgoing yields)
+PASS  Oops×BOMT club-lifts into house (listen: not a 94 ballad) — bpm=104.16000000000001
+PASS  Solo remix: join throw uses vocal stem when sidecars exist — shorts=1 kinds=vocals
+PASS  Solo remix: Drop 1 stays full mix (kick remains) — n=1
+PASS  Solo remix records vocal-stem sidecar
+PASS  Applier routes pivot clips onto a vocal-stem track — titles=All The Things She Said | All The Things She Said · vocals | All The Things She Said · other | Sound Effects | Sound Effects | Sound Effects | Sound Effects
+PASS  Mashup incoming tease uses guest vocal stem (ride-in) — tease=1
+PASS  Hook-replace Drop 1 uses guest vocal stem — n=1 kinds=vocals
+PASS  Stem mashup: title-hook copy uses vocal stem (not full-mix bed) — stem=vocals
+PASS  Incoming vocal hard-cut (no fade-in)
+PASS  Hook-replace Drop 1 vocal stem gets RMS makeup (clip volume may exceed 1.0) — vols=3.32
+PASS  Bed under drop is drums+bass+other (not full mix) — kinds=bass,drums,other
+PASS  Mashup records hook-replace stem sidecar
+PASS  Applier exposes vocal-stem tracks for mashup
+PASS  sparse pop texture would have been Calvin without mashup override
+PASS  mashup Drop 1 is still a festival rewrite (not Calvin radio) — flavor=Maximalist festival / global-bass
+PASS  sparse-texture mashup still dumps festival take-out + drop ride — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"] flavor=Maximalist festival / global-bass
+PASS  No-stems mashup keeps full-mix placements
+PASS  No-stems mashup has empty stem sets
+PASS  stupid song + drums stem: pulseDrumStrength stays thin — pulseDrum=0.190 full=0.190 stem=1.000
+PASS  stupid song + drums stem: writesKick=true (meter regression) — thin source — four-on-the-floor kick+bass; ducking original low end
+PASS  Loud drums fixture reads slamming — energy=1.000
+PASS  Slamming full-mix + drums stem skips Club Kick pulse — source already slams — no pulse kick (use existing SFX one-shots only)
+PASS  Sparse slamming kick pattern reads as slamming (not thin mean) — energy=1.000
+PASS  tatu solo with drums stem keeps writesKick=false — source already slams — no pulse kick (use existing SFX one-shots only)
+PASS  Thin source with no stems still allows pulse — thin source — four-on-the-floor kick+bass; ducking original low end
+PASS  Missing stem files do not crash Auto
+PASS  Missing stem files keep full-mix clips
+PASS  Stem-hot BOMT still Oops bed (title lock) — bed=Oops
+PASS  Stem-hot BOMT still BOMT Drop 1 vocal — vocal=BOMT
+PASS  Britney pivot token is baby (not oops) with stems — detail=sweep join “baby” (filter ramp + echo throw, no loop) → hard cut @55.3s
+PASS  Stem-hot Britney: first Deck A hook is not a title teaser chop
+PASS  Stem-hot Britney: Drop 1 has pivot wallpaper
+PASS  Stem-hot Britney: pivot Drop 1 has no pre-drop void
+PASS  Stem-hot Britney: zero allowedPredropVoid
+PASS  Title-chop detector flags a 4-bar Deck A hook from source 0 — src=0.00 dur=10.11
+PASS  Title-chop detector accepts intro 8 + complete 8-bar A hook
+PASS  First Deck A hook is the groove phrase (≥8 bars), not the intro teaser — t=20.21 dur=20.21
+PASS  Title-chop detector flags a 4-bar title rewind used as the first A hook
+PASS  Void detector flags a 1-beat hole on pivot Drop 1 (previous behavior fails)
+PASS  Verse-tail detector flags hook starting before chorus anchor
+PASS  Verse-tail detector passes hook at chorus anchor
+PASS  Prechorus detector flags a 40.4s first hook (the a83a66b bug)
+PASS  Equal-power detector flags a Drop 2 fade-in (previous behavior fails)
+PASS  Title-chop detector still fails a 4-bar title teaser
+PASS  Native cameo cannot claim a 144 BPM grid
+PASS  Gentle lift is aligned without a false half/double label
+PASS  Exact double-time records its mapping
+PASS  Clamped rate cannot claim the requested grid
+
+ALL PASSED
+Compiling AutoJoinEngineTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1614:62: warning: will never be executed
+1612 |             mashupVocalID: drop1?.songID,
+1613 |             mashupBedID: bed.songID,
+1614 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1615 |             vocalTempoRatio: vocalTempoRatio,
+1616 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+Running join...
+PASS  Join: club-lift title pad puts token after stretch settle
+PASS  Join: native tempo keeps 2-beat source pad
+PASS  Join: club-lift pad does not pull a previous lyric ahead of the distinctive token
+PASS  Join: isolated token keeps a title-owned first word as the anchor
+PASS  Join: isolated token still walks past filler foreign to the title
+PASS  Join: missing attack word in lyrics does not walk to a later distinctive
+PASS  Join: title lyric in the last 30% of the song is not the opening hook
+PASS  Join: late sidecar still uses the first-half distinctive token when present
+PASS  Join: rejected late lyric still lands the opening title island
+PASS  Join: club-lift energy island pads so the title token is after stretch settle
+PASS  Join: native pad starts on distinctive token, not the filler before it
+PASS  Join: sweep join emits ramp segments (no grain loop)
+PASS  Join: sweep join emits one decaying echo throw
+PASS  Join: echo throw marks the window start (~2 bars before Drop 1)
+PASS  Join: no stutter grains remain
+PASS  Join: pre-drop void stripped on pivot join
+PASS  Join: Drop 1 vocal volume ≥ title × isolation boost
+PASS  Join: hot title stem does not clamp Drop 1 below isolation boost
+PASS  Join: title-hook instrumental stems stay quieter than the isolated vocal
+PASS  Join: intro full-mix does not keep playing under the title vocal
+PASS  Join: opening fade-in on first dominant clip
+PASS  Join: takeover overlaps and incoming swells quiet → loud
+PASS  Join: yield fades the outgoing; incoming title stays at full
+PASS  Join: sweep contract with bedOther creates a floor spanning the window
+PASS  Join: sweep contract places seam SFX on the last beat before the cut
+PASS  Join: noneRequired does not invent a blend floor
+PASS  Join: noneRequired still gets last-beat seam cover
+PASS  Join: mid-line cut extends to the last word of the lyric line
+PASS  Join: unfinished line layers over Drop 1 instead of a flush lyric chop
+PASS  Join: Drop 1 incoming stays a hard cut at full volume
+PASS  Join: A→B→A inside 5s becomes a layer, not two flush lead switches
+
+ALL PASSED
+Compiling AutoRemixGoldenTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1614:62: warning: will never be executed
+1612 |             mashupVocalID: drop1?.songID,
+1613 |             mashupBedID: bed.songID,
+1614 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1615 |             vocalTempoRatio: vocalTempoRatio,
+1616 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.meiBe1/main.swift:161:13: warning: variable 'signals' was never mutated; consider changing to 'let' constant
+159 |         tuning.explicitStemsBySongID[oops.id] = oopsStems
+160 |         tuning.explicitStemsBySongID[bomt.id] = bomtStems
+161 |         var signals: [UUID: SongSignalFeatures] = [
+    |             `- warning: variable 'signals' was never mutated; consider changing to 'let' constant
+162 |             oops.id: {
+163 |                 var s = popTitleChorusRealCrate(
+Running golden...
+PASS  Golden Oops×BOMT: gentle club-lift (not house 126 chipmunk) — bpm=104.16000000000001
+PASS  Golden Oops×BOMT: title token mixLead after a 1–2 beat pad — mixLead=1.15 ratio=1.10
+PASS  Golden Oops×BOMT: sweep join covers the window (material + echo throw, no loop) — coverage=yes throws=1
+PASS  Golden Oops×BOMT: sweep segments carry their head's staged level (× planner shape) — breaks=[] entry=[]
+PASS  Golden Oops×BOMT: pivot grains do not slam above the title hook — grain=1.58 title=1.58 ratio=1.00x
+PASS  Golden Oops×BOMT: no >4 dB instant volume step on continuous material — worst=4.0 dB
+PASS  Golden Oops×BOMT: Drop 2 brings fresh source material (≤50% replay) — replayed 6% of 24.3s
+PASS  Golden Oops×BOMT: no grain stutter loops (broken-record ban) — worst identical-grain run=1 []
+PASS  Golden Oops×BOMT: no verbatim repeated passes (broken-record ban)
+PASS  Golden Oops×BOMT: drop-ride SFX stay off the guest's first line
+PASS  Golden Oops×BOMT: drop 1 has a take-out lifting into it — drop@55.30 lifts=3
+PASS  Golden Oops×BOMT: drop 2 has a take-out lifting into it — drop@129.03 lifts=2
+PASS  Golden Oops×BOMT: incoming vocal rides in before the switch — t=46.08-50.69 src=54.45 vol=0.98 (deckA=1.58)
+PASS  Golden Oops×BOMT: opening fades from silence (not a slam) — early=-47.5 later=-25.3
+PASS  Golden Oops×BOMT: pre-drop window is not silent — preDrop=-9.6 dB
+PASS  Golden Oops×BOMT: Drop 1 clip volume meets isolation floor — title=1.58 floor=3.32 drop=3.32
+PASS  Golden Oops×BOMT: Drop 1 window is audible on rendered PCM — drop=-9.6 dB
+PASS  Golden Oops×BOMT: ending trails off (progressive decay, ≥3 dB per stage) — -25.2 -> -29.7 -> -34.3 dB
+PASS  Golden Oops×BOMT: Drop 1 8s mix RMS ≥ title-hook 4s — drop=-9.63 title=-12.37
+PASS  Golden Oops×BOMT: bed renders the semitones its decision claims — stated=-1.00 st rendered=-1.00,-1.00,-1.00 worstErr=0.00 st
+PASS  Golden Paramore×tatu: stays at festival 144 (no house lift) — bpm=144.0
+PASS  Golden incompatible 90/144: rejected guest cannot own Drop 1
+PASS  Golden incompatible 90/144: no sustained unaligned guest placement
+PASS  Golden Paramore×tatu: title clip keeps the title's first word ('All') — src=39.42 all=39.84 wanted=40.26 lead=0.84
+PASS  Golden Paramore×tatu: Drop 1 is audible — drop=-11.6 dB
+
+ALL PASSED
+HARNESS_SUMMARY completed=5 expected=5

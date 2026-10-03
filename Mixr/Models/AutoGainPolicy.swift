@@ -45,7 +45,10 @@ nonisolated enum AutoGainPolicy {
     /// the title window is ducked (bounded) when it does not.
     static let dropOverTitleMarginDB = 1.0
     static let titleDuckRepairMaxDB = 6.0
-    static let masterTruePeakMarginDB = 0.3
+    // AAC reconstruction exceeded the -1 dBTP release ceiling with 0.3 dB
+    // reserve (-0.919 dBTP on the local rendered regression). Leave 0.5 dB
+    // before encoding; decoded output still requires its own peak check.
+    static let masterTruePeakMarginDB = 0.5
     static let masterLimiterLookaheadSeconds = 0.005
     static let masterLimiterReleaseSeconds = 0.08
 
@@ -147,11 +150,9 @@ nonisolated enum AutoGainPolicy {
     /// Fallback makeup when a vocal stem has no RMS curve (~+4 dB).
     static let vocalStemMakeupDefault = 1.58
 
-    /// Isolated title-hook vocals at the same clip volume read louder than a
-    /// mixed Drop 1. Extra linear gain (~+6.4 dB) so incoming Drop 1 mix RMS
-    /// stays at least the title copy after the shared ceiling limiter.
-    /// Do not duck the title stem.
-    static let dropVsIsolatedTitleBoost = 2.10
+    /// Missing-measurement fallback: do not automatically add gain merely
+    /// because the next lead is a drop. Measured stems are matched locally.
+    static let dropVsIsolatedTitleBoost = 1.0
 
     /// Per-stem volume for drums/bass/other under a title-hook vocal copy.
     /// Three instrumental stems at ~0.62 sum louder than the isolated vocal

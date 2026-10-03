@@ -55,39 +55,56 @@ SOURCES=(
   "$ROOT/DevTests/AutoRemixTestStubs.swift"
 )
 
-run_harness() {
-  local test_file="$1" out="$2"
-  # Top-level statements require a single main file.
-  local main="$ROOT/main.swift"
-  cp "$test_file" "$main"
-  trap 'rm -f "$ROOT/main.swift"' EXIT
+WHICH="${1:-all}"
+case "$WHICH" in
+  all) EXPECTED=5 ;;
+  pipeline|render|club|join|golden) EXPECTED=1 ;;
+  *) echo "Unknown harness: $WHICH" >&2; exit 2 ;;
+esac
 
+# Each invocation owns its compiler inputs and outputs. Never overwrite a
+# caller's main.swift or collide with another simultaneous test run.
+RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mixr-auto-tests.XXXXXX")"
+trap 'rm -rf "$RUN_DIR"' EXIT
+export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$RUN_DIR/module-cache}"
+export SWIFT_MODULECACHE_PATH="${SWIFT_MODULECACHE_PATH:-$CLANG_MODULE_CACHE_PATH}"
+COMPLETED=0
+
+run_harness() {
+  local test_file="$1" name="$2"
+  local main="$RUN_DIR/main.swift" out="$RUN_DIR/$name" log="$RUN_DIR/$name.log"
+  cp "$test_file" "$main"
   echo "Compiling $(basename "$test_file")…"
   "${SWIFTC[@]}" -O "${SOURCES[@]}" "$main" -o "$out"
-  rm -f "$main"
-
-  echo "Running…"
-  "$out"
+  echo "Running ${name}..."
+  local rc=0
+  "$out" >"$log" 2>&1 || rc=$?
+  cat "$log"
+  if [[ "$rc" -ne 0 ]] || grep -qiE '^[[:space:]]*FAIL(ED)?([[:space:]:]|$)' "$log" \
+     || grep -qE '^[[:space:]]*(SKIP(PED)?|INCONCLUSIVE)([[:space:]:]|$)' "$log" \
+     || grep -qiE '[[:alnum:]_.-]+[[:space:]]*=[[:space:]]*(SKIP(PED)?|INCONCLUSIVE)([^[:alnum:]_]|$)' "$log" \
+     || ! grep -qE '^PASS[[:space:]]' "$log" \
+     || [[ "$(grep -c '^ALL PASSED$' "$log" || true)" -ne 1 ]]; then
+    echo "HARNESS_FAILED name=$name exit=$rc (failure or incomplete evidence)" >&2
+    return 1
+  fi
+  COMPLETED=$((COMPLETED + 1))
 }
 
-WHICH="${1:-all}"
-
 if [[ "$WHICH" == "pipeline" || "$WHICH" == "all" ]]; then
-  run_harness "$ROOT/DevTests/AutoRemixPipelineTests.swift" /tmp/mixr_auto_remix_tests
+  run_harness "$ROOT/DevTests/AutoRemixPipelineTests.swift" pipeline
 fi
-
 if [[ "$WHICH" == "render" || "$WHICH" == "all" ]]; then
-  run_harness "$ROOT/DevTests/AutoRemixRenderQualityTests.swift" /tmp/mixr_auto_render_tests
+  run_harness "$ROOT/DevTests/AutoRemixRenderQualityTests.swift" render
 fi
-
 if [[ "$WHICH" == "club" || "$WHICH" == "all" ]]; then
-  run_harness "$ROOT/DevTests/AutoClubRemixTests.swift" /tmp/mixr_auto_club_tests
+  run_harness "$ROOT/DevTests/AutoClubRemixTests.swift" club
 fi
-
 if [[ "$WHICH" == "join" || "$WHICH" == "all" ]]; then
-  run_harness "$ROOT/DevTests/AutoJoinEngineTests.swift" /tmp/mixr_auto_join_tests
+  run_harness "$ROOT/DevTests/AutoJoinEngineTests.swift" join
 fi
-
 if [[ "$WHICH" == "golden" || "$WHICH" == "all" ]]; then
-  run_harness "$ROOT/DevTests/AutoRemixGoldenTests.swift" /tmp/mixr_auto_golden_tests
+  run_harness "$ROOT/DevTests/AutoRemixGoldenTests.swift" golden
 fi
+[[ "$COMPLETED" -eq "$EXPECTED" ]]
+echo "HARNESS_SUMMARY completed=$COMPLETED expected=$EXPECTED"

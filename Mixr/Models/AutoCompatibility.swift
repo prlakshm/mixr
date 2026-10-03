@@ -85,16 +85,34 @@ nonisolated enum AutoTempo {
         var halfOrDoubleTime: Bool
     }
 
+    /// Validate the rate that will actually be applied, including its beat
+    /// mapping. A safe native-speed cameo is not automatically grid-aligned.
+    static func fitAppliedRate(songBPM: Double, targetBPM: Double, ratio: Double, maxStretch: Double) -> Fit {
+        guard songBPM.isFinite, targetBPM.isFinite, ratio.isFinite,
+              songBPM > 0, targetBPM > 0, ratio > 0 else {
+            return Fit(ratio: ratio, gridAligned: false, halfOrDoubleTime: false)
+        }
+        let permitted = abs(ratio - 1) <= maxStretch + 1e-10
+            || AutoClubTempo.clubHouseLiftRatio(songBPM: songBPM, targetBPM: targetBPM)
+                .map { abs($0 - ratio) < 1e-10 } == true
+        for fold in [1.0, 2.0, 0.5] where permitted {
+            if abs(songBPM * ratio * fold - targetBPM) < 1e-8 {
+                return Fit(ratio: ratio, gridAligned: true, halfOrDoubleTime: fold != 1)
+            }
+        }
+        return Fit(ratio: ratio, gridAligned: false, halfOrDoubleTime: false)
+    }
+
     /// How a song locks to the target BPM within the safe stretch window.
     static func fit(songBPM: Double, targetBPM: Double, maxStretch: Double) -> Fit {
         let r = targetBPM / max(songBPM, 1)
         if abs(r - 1) <= maxStretch {
-            return Fit(ratio: abs(r - 1) < 0.0001 ? 1.0 : r, gridAligned: true, halfOrDoubleTime: false)
+            return Fit(ratio: r, gridAligned: true, halfOrDoubleTime: false)
         }
         // Half/double time: bars still align every 1–2 target bars.
         for fold in [2.0, 0.5] where abs(r / fold - 1) <= maxStretch {
             let folded = r / fold
-            return Fit(ratio: abs(folded - 1) < 0.0001 ? 1.0 : folded, gridAligned: true, halfOrDoubleTime: true)
+            return Fit(ratio: folded, gridAligned: true, halfOrDoubleTime: true)
         }
         return Fit(ratio: 1.0, gridAligned: false, halfOrDoubleTime: false)
     }
@@ -261,7 +279,7 @@ nonisolated enum AutoMashupCompat {
             keyScore: key.score,
             vocalRatio: vocalRatio,
             detail: liftRatio != nil
-                ? "full hook over bed (club-lift into house)"
+                ? "full hook over bed (gentle club-lift)"
                 : "full hook over bed"
         )
     }

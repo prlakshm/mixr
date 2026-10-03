@@ -1,0 +1,55 @@
+{
+  "review_date": "2026-09-09",
+  "reviewer": "owner",
+  "preferred_sample": "B",
+  "comparison_key": "Exports/Audit-2026-09-04/listening-sep9/comparison-key.json",
+  "candidate_musical_approval": false,
+  "headphone_signoff": null,
+  "speaker_signoff": null,
+  "observations": [
+    "B is better.",
+    "The first song is cut to layer the phrase described as problem is this, followed immediately by another cut to the second song. The sequence is jarring.",
+    "A cut on Hit me baby is optional; musical judgment should choose the entrance.",
+    "The transition should have a small ascension."
+  ],
+  "required_behavior": [
+    "Preserve a complete outgoing phrase without a brief new lead phrase immediately before the handoff.",
+    "Select a complete natural incoming phrase; do not require the title token.",
+    "Use one coherent handoff with a modest continuous rise over the available musical runway."
+  ],
+  "code_findings": [
+    {
+      "file": "Mixr/Models/AutoMashability.swift",
+      "symbol": "drop1GuestStart",
+      "finding": "Title-hook onset takes precedence over the selected mashability island."
+    },
+    {
+      "file": "Mixr/Models/AutoRemixPlanner.swift",
+      "finding": "Drop 1 guest search enables titleEntranceOnly."
+    },
+    {
+      "file": "Mixr/Models/AutoJoinEngine.swift",
+      "symbol": "appendPivotWallpaperLoop",
+      "finding": "Sweep extends outgoing source material through the window and applies per-bar blur targets. This does not establish a safe lyrical endpoint or a continuously rising trajectory."
+    }
+  ],
+  "regression_requirements": [
+    {
+      "case": "outgoing_phrase_then_single_handoff",
+      "assertion": "An independently annotated outgoing phrase ends before a fresh outgoing lyric begins; no inserted lead detour precedes the incoming phrase.",
+      "status": "structural controls pass; measured source-tail retirement rendered; independent phrase review and owner audition pending"
+    },
+    {
+      "case": "natural_phrase_beats_title_token",
+      "assertion": "A natural complete phrase may win over a later title token; title location alone cannot force the cut.",
+      "status": "structural regression passes; new revision not auditioned"
+    },
+    {
+      "case": "short_continuous_ascension",
+      "assertion": "Rendered handoff has a modest continuous rise with no extra lead switch, and passes the frozen continuity and loudness gates.",
+      "status": "one-rise and no-preview/no-throw controls pass; final PCM and audition review pending"
+    }
+  ],
+  "limits": "Original owner ratings are unchanged. New implementation evidence is separate from listening approval; word-onset gaps alone do not establish lyric endings.",
+  "implementation_update": "2026-09-12"
+}

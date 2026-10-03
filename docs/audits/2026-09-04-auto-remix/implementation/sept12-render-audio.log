@@ -1,0 +1,178 @@
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.4s)
+
+=== crate-0 ===
+  Remix bpm=104 drops at 0:55, 2:09
+  wrote crate-0.m4a
+  wrote crate-0.join_manifest.json
+
+=== crate-1 ===
+  Remix bpm=106 drops at 0:54, 2:06
+  wrote crate-1.m4a
+  wrote crate-1.join_manifest.json
+
+=== crate-0-1 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1.m4a
+  wrote crate-0-1.join_manifest.json
+
+=== crate-2 ===
+  Remix bpm=128 drops at 0:45, 1:45
+  wrote crate-2.m4a
+  wrote crate-2.join_manifest.json
+
+=== crate-0-2 ===
+  Remix bpm=104 drops at 0:55, 2:09
+  wrote crate-0-2.m4a
+  wrote crate-0-2.join_manifest.json
+
+=== crate-1-2 ===
+  Remix bpm=106 drops at 0:54, 2:06
+  wrote crate-1-2.m4a
+  wrote crate-1-2.join_manifest.json
+
+=== crate-0-1-2 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-2.m4a
+  wrote crate-0-1-2.join_manifest.json
+
+=== crate-3 ===
+  Remix bpm=144 drops at 0:40, 1:33
+  wrote crate-3.m4a
+  wrote crate-3.join_manifest.json
+
+=== crate-0-3 ===
+  Remix bpm=104 drops at 0:55, 2:09
+  wrote crate-0-3.m4a
+  wrote crate-0-3.join_manifest.json
+
+=== crate-1-3 ===
+  Remix bpm=106 drops at 0:54, 2:06
+  wrote crate-1-3.m4a
+  wrote crate-1-3.join_manifest.json
+
+=== crate-0-1-3 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-3.m4a
+  wrote crate-0-1-3.join_manifest.json
+
+=== crate-2-3 ===
+  Remix bpm=128 drops at 0:45, 1:45
+  wrote crate-2-3.m4a
+  wrote crate-2-3.join_manifest.json
+
+=== crate-0-2-3 ===
+  Remix bpm=104 drops at 0:55, 2:09
+  wrote crate-0-2-3.m4a
+  wrote crate-0-2-3.join_manifest.json
+
+=== crate-1-2-3 ===
+  Remix bpm=106 drops at 0:54, 2:06
+  wrote crate-1-2-3.m4a
+  wrote crate-1-2-3.join_manifest.json
+
+=== crate-0-1-2-3 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-2-3.m4a
+  wrote crate-0-1-2-3.join_manifest.json
+
+=== crate-4 ===
+  Remix bpm=101 drops at 0:57, 2:13
+  wrote crate-4.m4a
+  wrote crate-4.join_manifest.json
+
+=== crate-0-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-0-4.m4a
+  wrote crate-0-4.join_manifest.json
+
+=== crate-1-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-1-4.m4a
+  wrote crate-1-4.join_manifest.json
+
+=== crate-0-1-4 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-4.m4a
+  wrote crate-0-1-4.join_manifest.json
+
+=== crate-2-4 ===
+  Remix bpm=101 drops at 0:57, 2:13
+  wrote crate-2-4.m4a
+  wrote crate-2-4.join_manifest.json
+
+=== crate-0-2-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-0-2-4.m4a
+  wrote crate-0-2-4.join_manifest.json
+
+=== crate-1-2-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-1-2-4.m4a
+  wrote crate-1-2-4.join_manifest.json
+
+=== crate-0-1-2-4 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-2-4.m4a
+  wrote crate-0-1-2-4.join_manifest.json
+
+=== crate-3-4 ===
+  Remix bpm=101 drops at 0:57, 2:13
+  wrote crate-3-4.m4a
+  wrote crate-3-4.join_manifest.json
+
+=== crate-0-3-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-0-3-4.m4a
+  wrote crate-0-3-4.join_manifest.json
+
+=== crate-1-3-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-1-3-4.m4a
+  wrote crate-1-3-4.join_manifest.json
+
+=== crate-0-1-3-4 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-3-4.m4a
+  wrote crate-0-1-3-4.join_manifest.json
+
+=== crate-2-3-4 ===
+  Remix bpm=101 drops at 0:57, 2:13
+  wrote crate-2-3-4.m4a
+  wrote crate-2-3-4.join_manifest.json
+
+=== crate-0-2-3-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-0-2-3-4.m4a
+  wrote crate-0-2-3-4.join_manifest.json
+
+=== crate-1-2-3-4 ===
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+  wrote crate-1-2-3-4.m4a
+  wrote crate-1-2-3-4.join_manifest.json
+
+=== crate-0-1-2-3-4 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+  wrote crate-0-1-2-3-4.m4a
+  wrote crate-0-1-2-3-4.join_manifest.json
+
+LISTEN_RENDERS_DONE cases=31 failures=0

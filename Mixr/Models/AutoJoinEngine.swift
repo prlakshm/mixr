@@ -279,103 +279,30 @@ nonisolated enum AutoJoinEngine {
             useIncomingJoin: useIncomingJoin,
             stemKind: resolvedStem
         )
-        // ── Sweep join (no stutter loop) ──
-        // Product decision 2026-08-20, supersedes the Xirex wallpaper lock:
-        // repetition may only appear TRANSFORMED, so the constant-rate
-        // 1-beat grain loop is gone. The window instead keeps the outgoing
-        // material playing straight through under a rising low-pass sweep
-        // (split into per-bar sample-continuous segments so live, export,
-        // and offline render the same ramp), with the take-out SFX and the
-        // incoming vocal ride-in on top, into the same hard cut. One
-        // decaying ECHO THROW of the outgoing last beat marks the join —
-        // each repeat quieter and more distant, the classic any-song move.
+        // One continuous outgoing passage. The short riser supplies the
+        // ascension; per-bar filter/level steps and an extra vocal throw
+        // introduced audible detours before the actual song handoff.
         var sweepSegments: [AutoClipPlacement] = []
         for i in placements.indices {
             let p = placements[i]
-            // Outgoing deck only — the incoming song's ride-in ends at the
-            // window on purpose (extending it would pre-play the hook).
-            guard p.songID == completedPhrase.songID else { continue }
-            guard p.timelineEnd > loopStart - 0.08,
-                  p.timelineEnd < dropTimelineStart + 0.05,
+            guard p.songID == completedPhrase.songID,
                   p.timelineStart < loopStart - 0.05,
-                  abs(p.timelineEnd - loopStart) <= 0.35 || p.timelineEnd > loopStart
-            else { continue }
-            // Extend through the window; the sweep does the leaving.
-            placements[i].timelineDuration = dropTimelineStart - p.timelineStart
-            placements[i].fadeOut = ClipTransition(type: .none, duration: 0)
-
-            // Split the window span into per-bar segments with rising blur.
-            let src = placements[i]
-            let bars = max(1, Int((loopDur / barSec).rounded()))
-            let segDur = loopDur / Double(bars)
-            // Head keeps everything before the window.
-            placements[i].timelineDuration = loopStart - src.timelineStart
-            for b in 0..<bars {
-                var seg = src
-                seg.timelineStart = loopStart + Double(b) * segDur
-                seg.timelineDuration = segDur
-                seg.sourceStart = src.sourceStart
-                    + (seg.timelineStart - src.timelineStart) * src.tempoRatio
-                seg.continuesPrevious = true
-                seg.fadeIn = ClipTransition(type: .none, duration: 0)
-                seg.fadeOut = ClipTransition(type: .none, duration: 0)
-                var fx = seg.effects
-                let ramp = Double(b + 1) / Double(bars)
-                // Cap the ramp: the sweep THINS the window, it must not dig
-                // an energy hole (Paramore's approach fell 11 dB when a 54
-                // low-pass compounded with the lead taper — the gate allows
-                // 5). Makeup on the non-lead layers pays for the LPF loss.
-                fx.setLevel(
-                    max(fx.level(for: MixrEffect.blur.rawValue), 14 + 32 * ramp),
-                    for: MixrEffect.blur.rawValue
-                )
-                seg.effects = AutoSupportedEffects.sanitize(fx)
-                if seg.stemKind == .vocals || seg.role == .dominant {
-                    // The lead tapers so the incoming ride-in owns the ear.
-                    seg.volume = src.volume * (1.0 - 0.25 * ramp)
-                } else {
-                    // Groove stems SWELL under the filter into the drop: the
-                    // real DSP low-pass removes HF energy the offline meter
-                    // never sees (real render dipped 7 dB vs the run-up with
-                    // the old flat ×1.25), so makeup grows with the ramp and
-                    // the remaining lows carry the approach — the DJ move.
-                    seg.volume = min(
-                        AutoGainPolicy.maxClipVolume,
-                        src.volume * (1.25 + AutoGainPolicy.sweepSwellPerRamp * ramp)
-                    )
-                }
-                seg.continuationShape = seg.volume / max(src.volume, 0.01)
-                sweepSegments.append(seg)
-            }
+                  p.timelineEnd >= loopStart - 0.08,
+                  p.timelineEnd <= dropTimelineStart + 0.05 else { continue }
+            var seg = p
+            seg.timelineStart = loopStart
+            seg.timelineDuration = loopDur
+            seg.sourceStart = p.sourceStart + (loopStart - p.timelineStart) * p.tempoRatio
+            seg.continuesPrevious = true
+            seg.continuationShape = 1
+            seg.fadeIn = .none
+            seg.fadeOut = .none
+            placements[i].timelineDuration = loopStart - p.timelineStart
+            placements[i].fadeOut = .none
+            sweepSegments.append(seg)
         }
         placements.append(contentsOf: sweepSegments)
 
-        // One decaying echo throw of the OUTGOING last beat at the window
-        // start. Echo taps decay ~0.55× each, so it reads as a throw into
-        // the distance — never a loop.
-        let throwSource = max(completedPhrase.sourceStart, phraseEnd - beatSec * completedPhrase.tempoRatio)
-        var throwFX = ClipEffectSettings()
-        throwFX.setLevel(55, for: MixrEffect.echo.rawValue)
-        throwFX.echoPreset = .classic
-        throwFX.setLevel(20, for: MixrEffect.blur.rawValue)
-        throwFX = AutoSupportedEffects.sanitize(throwFX)
-        placements.append(
-            AutoClipPlacement(
-                songID: completedPhrase.songID,
-                sourceStart: throwSource,
-                timelineStart: loopStart,
-                timelineDuration: beatSec,
-                tempoRatio: completedPhrase.tempoRatio,
-                volume: grainVol * 0.8,
-                fadeIn: ClipTransition(type: .none, duration: 0),
-                fadeOut: ClipTransition(type: .echoOut, duration: 2),
-                effects: throwFX,
-                role: .supporting,
-                slotIndex: completedPhrase.slotIndex,
-                overlapsPreviousSeconds: beatSec,
-                stemKind: grainStem
-            )
-        )
         _ = grainSource
         _ = grainSongID
         _ = resolvedStem
@@ -386,7 +313,7 @@ nonisolated enum AutoJoinEngine {
                 kind: .pivotWallpaperLoop,
                 songTitle: useIncomingJoin ? deckBTitle : deckATitle,
                 detail: String(
-                    format: "sweep join%@ (filter ramp + echo throw, no loop) → hard cut @%.1fs",
+                    format: "continuous rising handoff%@ (no vocal preview or throw) @%.1fs",
                     pivot.map { " “\($0)”" } ?? "",
                     dropTimelineStart
                 )
@@ -615,6 +542,59 @@ nonisolated enum AutoJoinEngine {
         )
     }
 
+    struct BedIsland {
+        var sourceStart: Double
+        var bars: Double
+    }
+
+    /// Judge the lead-in AND the complete following backing. Long source
+    /// passages may contain breaks; an intact four-bar instrumental phrase
+    /// is preferable to an eight-bar loop that repeatedly loses its groove.
+    static func stableBedIsland(profile: AutoSongProfile, preferred: Double,
+        duration: Double, sourceBeat: Double) -> BedIsland {
+        let fallback = BedIsland(sourceStart: preferred, bars: 8)
+        guard sourceBeat.isFinite, sourceBeat > 0,
+              profile.analysis.analysisConfidence >= 0.65,
+              let energy = profile.instrumentalEnergy else { return fallback }
+        let bar = sourceBeat * 4
+        let grid = profile.loudness?.downbeats ?? profile.analysis.downbeats
+        let candidates = grid.filter { $0.isFinite && $0 >= 2*bar && abs($0-preferred) <= 4*bar }
+        guard let nearest = candidates.min(by: { abs($0-preferred) < abs($1-preferred) }) else { return fallback }
+        func score(_ start: Double, bars: Double) -> Double? {
+            let length = min(duration, bars*bar) + 2*bar
+            let from = start-2*bar
+            guard let floor = energy.floor(from: from, duration: length, beat: sourceBeat),
+                  let drums = energy.floor(from: from, duration: length, beat: sourceBeat, drums: true),
+                  let mean = energy.level(from: from, to: from+length) else { return nil }
+            return 0.5*floor + 0.3*drums + 0.2*mean
+                - 0.25*abs(start-nearest)/bar - (bars == 4 ? 3 : 0)
+        }
+        guard let originalScore = score(nearest, bars: 8) else { return fallback }
+        var best = BedIsland(sourceStart: nearest, bars: 8), bestScore = originalScore
+        for bars in [8.0, 4.0] {
+            for start in candidates.sorted() {
+                guard let value = score(start, bars: bars) else { continue }
+                if value > bestScore + 1 {
+                    best = BedIsland(sourceStart: start, bars: bars); bestScore = value
+                }
+            }
+        }
+        return best
+    }
+
+    static func stableBedSourceStart(profile: AutoSongProfile, preferred: Double,
+        duration: Double, sourceBeat: Double) -> Double {
+        stableBedIsland(profile: profile, preferred: preferred, duration: duration, sourceBeat: sourceBeat).sourceStart
+    }
+
+    static func stagingFloor(placements: [AutoClipPlacement], dropStarts: [Double], beat: Double) -> Double {
+        let verse = placements.filter { p in
+            p.role == .dominant && p.stemKind == nil && p.timelineDuration > beat*2
+                && !dropStarts.contains { abs($0-p.timelineStart) < 0.12 }
+        }.map(\.volume).max() ?? AutoGainPolicy.preservationSongVolume
+        return max(verse, AutoGainPolicy.incomingDropVolume, AutoGainPolicy.pivotGrainVolume)
+    }
+
     static func boostJoinClipVolumes(
         placements: inout [AutoClipPlacement],
         pulseRegions: [AutoClubPulse.Region],
@@ -622,7 +602,8 @@ nonisolated enum AutoJoinEngine {
         barSec: Double,
         profiles: [UUID: AutoSongProfile]
     ) {
-        let dropStarts = pulseRegions.filter { $0.role == .drop }.map(\.timelineStart)
+        let dropRegions = pulseRegions.filter { $0.role == .drop }
+        let dropStarts = dropRegions.map(\.timelineStart)
         func nearDrop(_ t: Double) -> Bool {
             dropStarts.contains { abs($0 - t) < 0.12 }
         }
@@ -639,7 +620,8 @@ nonisolated enum AutoJoinEngine {
             p.role == .dominant && nearDrop(p.timelineStart)
         }
         func isBedUnderDrop(_ p: AutoClipPlacement) -> Bool {
-            p.role == .supporting && nearDrop(p.timelineStart) && !isPivotGrain(p)
+            p.role == .supporting && p.stemKind != .vocals && !isPivotGrain(p)
+                && dropRegions.contains { p.timelineStart < $0.timelineEnd - 0.01 && p.timelineEnd > $0.timelineStart + beatSec }
         }
         func measuredRMSDB(_ p: AutoClipPlacement) -> Double? {
             guard let signal = profiles[p.songID]?.analysis.signal else { return nil }
@@ -654,20 +636,7 @@ nonisolated enum AutoJoinEngine {
             return rms + 20.0 * log10(max(p.volume, 0.001))
         }
 
-        let verseVol = placements
-            .filter { p in
-                p.role == .dominant
-                    && p.stemKind == nil
-                    && !nearDrop(p.timelineStart)
-                    && p.timelineDuration > beatSec * 2
-            }
-            .map(\.volume)
-            .max() ?? AutoGainPolicy.preservationSongVolume
-        let floor = max(
-            verseVol,
-            AutoGainPolicy.incomingDropVolume,
-            AutoGainPolicy.pivotGrainVolume
-        )
+        let floor = stagingFloor(placements: placements, dropStarts: dropStarts, beat: beatSec)
 
         var referenceRMS = -120.0
         for p in placements where p.role == .dominant && p.stemKind == nil
@@ -702,7 +671,7 @@ nonisolated enum AutoJoinEngine {
                 vol = max(vol, AutoGainPolicy.roleStagingVolume(role: .titleStem))
             }
             placements[i].volume = min(AutoGainPolicy.maxClipVolume, vol)
-            if pivot || dropLead || bedUnderDrop {
+            if pivot || dropLead || (bedUnderDrop && nearDrop(p.timelineStart)) {
                 placements[i].fadeIn = .hardCut
             }
         }
@@ -924,9 +893,12 @@ nonisolated enum AutoJoinEngine {
             guard isDropLead(p), p.songID == dropSongID, p.stemKind == .vocals else { continue }
             var vol = max(p.volume, titleVol)
             if let titleEff, let rms = measuredRMSDB(p) {
-                vol = max(vol, pow(10.0, (titleEff - rms) / 20.0))
+                // Match measured lead energy in either direction. A blanket
+                // +6.4 dB boost made already-loud guests slam into the mix.
+                vol = pow(10.0, (titleEff - rms) / 20.0)
+            } else {
+                vol = max(vol, titleVol * AutoGainPolicy.dropVsIsolatedTitleBoost)
             }
-            vol = max(vol, titleVol * AutoGainPolicy.dropVsIsolatedTitleBoost)
             vol = min(AutoGainPolicy.maxClipVolume, vol)
             dropScale = max(dropScale, vol / max(p.volume, 0.001))
             placements[i].volume = vol

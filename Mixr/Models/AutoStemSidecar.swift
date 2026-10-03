@@ -41,6 +41,11 @@ struct AutoStemSet: Sendable, Equatable {
         drums != nil || bass != nil || other != nil
     }
 
+    /// A partial stem set cannot silently stand in for the complete bed.
+    var hasCompleteInstrumental: Bool {
+        drums != nil && bass != nil && other != nil
+    }
+
     func url(for kind: AutoStemKind) -> URL? {
         switch kind {
         case .vocals: vocals
@@ -421,6 +426,68 @@ enum AutoStemVocalCurve {
 }
 
 // MARK: - Kick energy from a drums stem (pure Swift WAV)
+
+/// Local backing measurements, kept separate from the vocal/full-mix proxy.
+/// Missing or truncated evidence cannot approve an unmeasured passage.
+struct AutoInstrumentalEnergy: Sendable {
+    var hopSeconds: Double = 0.1
+    var power: [Double]
+    var drumPower: [Double]
+
+    static func load(stems: AutoStemSet, duration: Double) -> AutoInstrumentalEnergy? {
+        guard stems.hasCompleteInstrumental, duration.isFinite, duration > 0 else { return nil }
+        var summed: [Float] = []
+        var drums: [Float] = []
+        var rate = 0.0
+        for kind in [AutoStemKind.drums, .bass, .other] {
+            guard let url = stems.url(for: kind),
+                  let pcm = AutoStemKickEnergy.readPCMWithRate(url: url, maxSeconds: min(duration, 600)),
+                  pcm.sampleRate > 0, !pcm.samples.isEmpty else { return nil }
+            if summed.isEmpty {
+                rate = pcm.sampleRate
+                summed = pcm.samples
+                drums = pcm.samples
+            } else {
+                guard pcm.sampleRate == rate, pcm.samples.count == summed.count else { return nil }
+                for i in summed.indices { summed[i] += pcm.samples[i] }
+            }
+        }
+        let size = max(1, Int(rate * 0.1))
+        func curve(_ samples: [Float]) -> [Double] {
+            stride(from: 0, through: samples.count - size, by: size).map { start in
+                var sum = 0.0
+                for i in start..<(start + size) { let v = Double(samples[i]); sum += v * v }
+                return sum / Double(size)
+            }
+        }
+        guard summed.count >= size else { return nil }
+        return .init(power: curve(summed), drumPower: curve(drums))
+    }
+
+    func level(from start: Double, to end: Double, drums: Bool = false) -> Double? {
+        let values = drums ? drumPower : power
+        guard start.isFinite, end.isFinite, start >= 0, end > start, hopSeconds > 0,
+              end <= Double(values.count) * hopSeconds + 0.001 else { return nil }
+        let lo = Int(start / hopSeconds), hi = min(values.count, Int(ceil(end / hopSeconds)))
+        guard hi > lo else { return nil }
+        let mean = values[lo..<hi].reduce(0, +) / Double(hi - lo)
+        return mean.isFinite ? 10 * log10(max(mean, 1e-12)) : nil
+    }
+
+    /// Score the quietest beat, so a loud vocal or one loud downbeat cannot
+    /// hide a missing groove. Use the same window for both candidates.
+    func floor(from start: Double, duration: Double, beat: Double, drums: Bool = false) -> Double? {
+        guard beat.isFinite, beat > 0, duration.isFinite, duration >= beat else { return nil }
+        var levels: [Double] = []
+        var offset = 0.0
+        let window = min(beat, 0.4)
+        while offset + window <= duration + 0.001 {
+            guard let db = level(from: start + offset, to: start + offset + window, drums: drums) else { return nil }
+            levels.append(db); offset += hopSeconds
+        }
+        return levels.min()
+    }
+}
 
 enum AutoStemKickEnergy {
     /// 0…1 drum/kick strength from a sidecar WAV. nil if unreadable.

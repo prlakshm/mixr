@@ -1,0 +1,100 @@
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:898:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 896 |         var placements: [AutoClipPlacement] = []
+ 897 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 898 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 899 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 900 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:900:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 898 |         var joinContracts: [AutoJoinContract] = []
+ 899 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 900 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 901 |         var sfx: [AutoSFXEvent] = []
+ 902 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1559:62: warning: will never be executed
+1557 |             mashupVocalID: drop1?.songID,
+1558 |             mashupBedID: bed.songID,
+1559 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1560 |             vocalTempoRatio: vocalTempoRatio,
+1561 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         joinContracts: inout [AutoJoinContract]
+177 |     ) {
+178 |         let repeats = tuning.pivotWallpaperBeats
+    |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+180 |         let loopStart = dropTimelineStart - loopDur
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:275:13: warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+273 |         )
+274 | 
+275 |         let grainVol = AutoGainPolicy.roleStagingVolume(
+    |             `- warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+276 |             role: .pivotGrain,
+277 |             measuredStemRMS: nil,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+PASS display titles do not select a privileged club bed
+PASS same input evidence and seed reproduce the musical plan
+PASS missing stems never stack two complete records at the drop
+PASS missing stems do not claim isolated hook replacement
+PASS 72 BPM / confidence 0.15: finite bounded source placements
+PASS 72 BPM / confidence 0.95: finite bounded source placements
+PASS 95 BPM / confidence 0.15: finite bounded source placements
+PASS 95 BPM / confidence 0.95: finite bounded source placements
+PASS 128 BPM / confidence 0.15: finite bounded source placements
+PASS 128 BPM / confidence 0.95: finite bounded source placements
+PASS 145 BPM / confidence 0.15: finite bounded source placements
+PASS 145 BPM / confidence 0.95: finite bounded source placements
+PASS uncertain mashup does not invent hook cuts
+PASS uncertain fallback keeps continuous source order
+PASS 2-song group: repeatable decisions
+PASS 2-song group: realized rates share tempo
+PASS 3-song group: repeatable decisions
+PASS 3-song group: realized rates share tempo
+PASS 4-song group: repeatable decisions
+PASS 4-song group: realized rates share tempo
+PASS 5-song group: repeatable decisions
+PASS 5-song group: realized rates share tempo
+ALL PASSED

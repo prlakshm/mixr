@@ -1,0 +1,14 @@
+/Users/pranavi/Documents/Mixr/join_auditor.py:31: UserWarning: PySoundFile failed. Trying audioread instead.
+  y, _ = librosa.load(str(path), sr=sr, mono=True)
+/Users/pranavi/Documents/Mixr/.venv/lib/python3.9/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+	Deprecated as of librosa version 0.10.0.
+	It will be removed in librosa version 1.0.
+  y, sr_native = __audioread_load(path, offset, duration, dtype)
+/Users/pranavi/Documents/Mixr/join_auditor.py:31: UserWarning: PySoundFile failed. Trying audioread instead.
+  y, _ = librosa.load(str(path), sr=sr, mono=True)
+/Users/pranavi/Documents/Mixr/.venv/lib/python3.9/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+	Deprecated as of librosa version 0.10.0.
+	It will be removed in librosa version 1.0.
+  y, sr_native = __audioread_load(path, offset, duration, dtype)
+PASS  01-mashup-oops-x-baby.join_manifest.json  trough=0.0 whisper=inconclusive
+PASS  02-mashup-paramore-x-tatu.join_manifest.json  trough=0.0 whisper=inconclusive

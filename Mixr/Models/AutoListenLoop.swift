@@ -120,17 +120,22 @@ nonisolated enum AutoListenLoop {
         // ── Holes: the SCOREBOARD's rules, ported verbatim ──
         // (analyze_smoothness.py gate 2026-08-21). Divergent thresholds left
         // the engine blind to holes the offline meter fails; one meter, two
-        // languages. Design-quiet spans (title probe, sweep windows) exempt.
-        var designQuiet: [(Double, Double)] = plan.joinContracts.map {
-            ($0.windowStart - 0.2, $0.cutAt + 0.2)
-        }
-        for pl in plan.placements
-        where pl.stemKind == .vocals && pl.role == .dominant
-            && pl.timelineDuration > plan.barSeconds * 4 {
-            designQuiet.append((pl.timelineStart - 0.3, pl.timelineStart + 5.0))
-        }
-        func isDesignQuiet(_ t: Double) -> Bool {
-            designQuiet.contains { t >= $0.0 && t <= $0.1 }
+        // languages. A title or sweep label is not evidence of musical silence.
+        // Source breaths are checked separately against mapped source PCM.
+        // This legacy 100ms detector only recognizes a declared, one-beat
+        // plain-drop void; the finer release meter still owns exact timing.
+        func isPermittedVoid(_ start: Double, _ end: Double) -> Bool {
+            plan.intentionalGaps.contains { gap in
+                abs(gap.length - plan.beatSeconds) <= 0.002
+                    && start >= gap.start - hop / 2
+                    && end <= gap.end + hop / 2
+                    && plan.pulseRegions.contains {
+                        $0.role == .drop && abs($0.timelineStart - gap.end) <= 0.002
+                    }
+                    && !plan.joinContracts.contains {
+                        $0.kind == .sweepJoin && abs($0.cutAt - gap.end) <= 0.002
+                    }
+            }
         }
         func localCtxDB(_ a: Int, _ b: Int) -> Double {
             let lo = max(0, a - Int(3.0 / hop))
@@ -152,7 +157,7 @@ nonisolated enum AutoListenLoop {
                 let t0 = Double(runStart) * hop
                 let deadAir = len >= 0.8 && depth >= 15 && prom >= 8
                 let deep = len >= 0.35 && depth >= 28 && prom >= (len < 0.6 ? 24 : 12)
-                if (deadAir || deep) && !isDesignQuiet(t0) {
+                if (deadAir || deep) && !isPermittedVoid(t0, Double(k) * hop) {
                     out.append(Violation(
                         kind: .hole,
                         t: t0,

@@ -159,6 +159,44 @@ struct SongAnalysis: Sendable {
 
 // MARK: - Analyzer (heuristic V1 builder)
 
+/// Validate metadata before constructing grids or converting times to indices.
+/// A malformed project must have a defined outcome, not an unbounded stride.
+enum AutoRemixInput {
+    static func usableBPM(_ bpm: Int?) -> Int? {
+        guard let bpm, (6...600).contains(bpm) else { return nil }
+        return bpm
+    }
+
+    static func sourceDuration(_ track: MixrTrack) -> Double? {
+        let duration = track.durationSeconds ?? track.clips.map {
+            $0.sourceOffsetSeconds + MixrTimeline.seconds(fromUnits: $0.length) * $0.playbackSpeed
+        }.max()
+        // Bound analysis allocation; recordings beyond a day need a shorter
+        // source export before they can become a streaming-length remix.
+        guard let duration, duration.isFinite, duration > 0, duration <= 86_400 else { return nil }
+        return duration
+    }
+
+    static func normalizedTracks(_ tracks: [MixrTrack]) -> [MixrTrack]? {
+        var seen = Set<UUID>()
+        var result: [MixrTrack] = []
+        for var track in tracks where seen.insert(track.id).inserted {
+            if !track.isSFXTrack, !track.clips.isEmpty {
+                guard sourceDuration(track) != nil,
+                      track.clips.allSatisfy({
+                          $0.start.isFinite && $0.length.isFinite && $0.length > 0
+                              && $0.sourceOffsetSeconds.isFinite && $0.sourceOffsetSeconds >= 0
+                              && $0.playbackSpeed.isFinite && $0.playbackSpeed > 0
+                      }) else { return nil }
+                track.bpm = usableBPM(track.bpm)
+                if track.bpm == nil { track.bpmConfidence = 0 }
+            }
+            result.append(track)
+        }
+        return result
+    }
+}
+
 enum SongAnalyzer {
 
     static let defaultBPM: Double = 124
@@ -169,10 +207,9 @@ enum SongAnalyzer {
     /// when the audio has been measured, and deterministic heuristics
     /// only where no measurement exists.
     static func analyze(track: MixrTrack, signal: SongSignalFeatures? = nil) -> SongAnalysis {
-        let bpm = track.bpm.map(Double.init) ?? defaultBPM
-        let duration = track.durationSeconds
-            ?? track.clips.first.map { MixrTimeline.seconds(fromUnits: $0.length) * $0.playbackSpeed }
-            ?? 60
+        let realBPM = AutoRemixInput.usableBPM(track.bpm)
+        let bpm = realBPM.map(Double.init) ?? defaultBPM
+        let duration = AutoRemixInput.sourceDuration(track) ?? 0
 
         let beat = 60.0 / bpm
         let bar = beat * 4
@@ -318,7 +355,7 @@ enum SongAnalyzer {
         // BPM/key from metadata are fully trusted (confidence nil → 1.0);
         // on-device estimates carry their own confidence; a default BPM
         // means the beat grid is a guess and Auto must stay conservative.
-        let bpmTrust: Double = track.bpm == nil ? 0.15 : (track.bpmConfidence ?? 1.0)
+        let bpmTrust: Double = realBPM == nil ? 0.15 : (track.bpmConfidence ?? 1.0)
         let keyTrust: Double = track.key == nil ? 0.2 : (track.keyConfidence ?? 1.0)
         let durationTrust: Double = track.durationSeconds == nil ? 0.4 : 1.0
         let metadataConfidence = min(1, max(0, bpmTrust * 0.55 + keyTrust * 0.20 + durationTrust * 0.25))
@@ -346,7 +383,7 @@ enum SongAnalyzer {
 
         return SongAnalysis(
             bpm: bpm,
-            bpmIsReal: track.bpm != nil,
+            bpmIsReal: realBPM != nil,
             bpmConfidence: track.bpmConfidence,
             key: track.key,
             keyConfidence: track.keyConfidence,

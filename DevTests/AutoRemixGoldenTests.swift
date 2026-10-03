@@ -1,7 +1,7 @@
 import Foundation
 
-// Perceptual golden tier: stem-shaped fixtures + rendered RMS windows for
-// Oops×BOMT @126 and Paramore×tatu @144 patterns. Runs in cloud CI via:
+// Structural and simplified-PCM regression tier (not perceptual certification):
+// compatible midtempo hooks and rejection of a 90-BPM lead on a 144-BPM bed. Runs in cloud CI via:
 //   Scripts/run_auto_remix_tests.sh golden
 //
 // Offline mixdown uses linear resample (not AVAudioUnitTimePitch overlap).
@@ -204,8 +204,8 @@ do {
                     && $0.timelineStart < drop1
             }
             // Sweep join: the window is COVERED by continuous outgoing
-            // material under a rising low-pass, plus one decaying echo
-            // throw — not a grain loop.
+            // material and one ascending effect, with no automatic
+            // future-lyric echo throw.
             let windowClips = plan.placements.filter {
                 $0.timelineEnd > preDropStart + 0.05
                     && $0.timelineStart < drop1 - 0.05
@@ -221,8 +221,8 @@ do {
                     && abs($0.timelineStart - preDropStart) < plan.beatSeconds
             }
             check(
-                "Golden Oops×BOMT: sweep join covers the window (material + echo throw, no loop)",
-                sweepCoverage && !throwClips.isEmpty,
+                "Golden Oops×BOMT: sweep join covers the window without a future-lyric throw",
+                sweepCoverage && throwClips.isEmpty,
                 String(format: "coverage=%@ throws=%d", sweepCoverage ? "yes" : "NO", throwClips.count)
             )
 
@@ -539,7 +539,9 @@ do {
             )
             let dropVocals = plan.placements.filter {
                 $0.role == .dominant && $0.stemKind == .vocals
-                    && abs($0.timelineStart - drop1) < 0.12
+                    && $0.timelineStart <= drop1 + 0.01
+                    && drop1 - $0.timelineStart <= 0.25 / $0.tempoRatio + 0.01
+                    && $0.timelineEnd > drop1
             }
             let titleVol = hook.volume
             let isolationFloor = titleVol * AutoGainPolicy.dropVsIsolatedTitleBoost
@@ -653,7 +655,9 @@ do {
                 abs(plan.targetBPM - 144) < 0.5,
                 "bpm=\(plan.targetBPM)"
             )
-            check("Golden Paramore×tatu: tatu owns Drop 1 vocal", plan.mashupVocalSongID == tatu.id)
+            check("Golden incompatible 90/144: rejected guest cannot own Drop 1", plan.mashupVocalSongID != tatu.id)
+            check("Golden incompatible 90/144: no sustained unaligned guest placement",
+                  !plan.placements.contains { $0.songID == tatu.id && $0.timelineDuration > min(60 / plan.targetBPM, 0.75) })
             if let hook = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
                 let wanted = titleLyric + 0.42
                 // The title's OWN first word must survive. Chasing "the

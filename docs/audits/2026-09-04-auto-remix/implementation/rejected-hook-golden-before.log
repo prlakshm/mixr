@@ -1,0 +1,82 @@
+Compiling AutoRemixGoldenTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.PppHTV/main.swift:161:13: warning: variable 'signals' was never mutated; consider changing to 'let' constant
+159 |         tuning.explicitStemsBySongID[oops.id] = oopsStems
+160 |         tuning.explicitStemsBySongID[bomt.id] = bomtStems
+161 |         var signals: [UUID: SongSignalFeatures] = [
+    |             `- warning: variable 'signals' was never mutated; consider changing to 'let' constant
+162 |             oops.id: {
+163 |                 var s = popTitleChorusRealCrate(
+Running golden...
+PASS  Golden Oops×BOMT: gentle club-lift (not house 126 chipmunk) — bpm=104.16000000000001
+PASS  Golden Oops×BOMT: title token mixLead after a 1–2 beat pad — mixLead=1.15 ratio=1.10
+PASS  Golden Oops×BOMT: sweep join covers the window (material + echo throw, no loop) — coverage=yes throws=1
+PASS  Golden Oops×BOMT: sweep segments carry their head's staged level (× planner shape) — breaks=[] entry=[]
+PASS  Golden Oops×BOMT: pivot grains do not slam above the title hook — grain=1.58 title=1.58 ratio=1.00x
+PASS  Golden Oops×BOMT: no >4 dB instant volume step on continuous material — worst=4.0 dB
+PASS  Golden Oops×BOMT: Drop 2 brings fresh source material (≤50% replay) — replayed 6% of 24.3s
+PASS  Golden Oops×BOMT: no grain stutter loops (broken-record ban) — worst identical-grain run=1 []
+PASS  Golden Oops×BOMT: no verbatim repeated passes (broken-record ban)
+PASS  Golden Oops×BOMT: drop-ride SFX stay off the guest's first line
+PASS  Golden Oops×BOMT: drop 1 has a take-out lifting into it — drop@78.34 lifts=3
+PASS  Golden Oops×BOMT: drop 2 has a take-out lifting into it — drop@152.07 lifts=2
+PASS  Golden Oops×BOMT: incoming vocal rides in before the switch — t=69.12-73.73 src=54.45 vol=0.98 (deckA=1.58)
+PASS  Golden Oops×BOMT: opening fades from silence (not a slam) — early=-47.3 later=-25.0
+PASS  Golden Oops×BOMT: pre-drop window is not silent — preDrop=-9.2 dB
+PASS  Golden Oops×BOMT: Drop 1 clip volume meets isolation floor — title=1.58 floor=3.32 drop=3.32
+PASS  Golden Oops×BOMT: Drop 1 window is audible on rendered PCM — drop=-9.4 dB
+PASS  Golden Oops×BOMT: ending trails off (progressive decay, ≥3 dB per stage) — -25.0 -> -29.4 -> -34.1 dB
+PASS  Golden Oops×BOMT: Drop 1 8s mix RMS ≥ title-hook 4s — drop=-9.41 title=-12.13
+PASS  Golden Oops×BOMT: bed renders the semitones its decision claims — stated=-1.00 st rendered=-1.00,-1.00,-1.00 worstErr=0.00 st
+PASS  Golden Paramore×tatu: stays at festival 144 (no house lift) — bpm=144.0
+FAIL  Golden incompatible 90/144: rejected guest cannot own Drop 1
+FAIL  Golden incompatible 90/144: no sustained unaligned guest placement
+PASS  Golden Paramore×tatu: title clip keeps the title's first word ('All') — src=39.42 all=39.84 wanted=40.26 lead=0.84
+PASS  Golden Paramore×tatu: Drop 1 is audible — drop=-5.0 dB
+
+FAILED: 2
+HARNESS_FAILED name=golden exit=1 (failure or incomplete evidence)

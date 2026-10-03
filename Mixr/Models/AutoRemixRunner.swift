@@ -43,6 +43,9 @@ enum AutoRemixRunner {
         pcmSources: [UUID: AutoOfflineMixdown.Source]? = nil,
         pcmStemSources: [UUID: [AutoStemKind: AutoOfflineMixdown.Source]] = [:]
     ) -> Outcome {
+        guard let tracks = AutoRemixInput.normalizedTracks(tracks) else {
+            return .failure(message: "A song has invalid duration or clip timing. Reimport it or use a source shorter than 24 hours, then try Auto again.")
+        }
         var tuning = tuning
         if let stemsRoot {
             tuning.stemsRoot = stemsRoot
@@ -70,6 +73,7 @@ enum AutoRemixRunner {
             barSec: staged.barSeconds,
             profiles: profiles
         )
+        AutoRemixValidator.balancePreparedHandoffs(&staged, profiles: profiles)
         // The engine LISTENS before handing over: when decoded PCM is
         // available (test harnesses, offline bounce; the app can pass it for
         // export), render the plan, measure the perceptual invariants, and

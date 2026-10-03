@@ -198,7 +198,7 @@ do {
     )
     switch outcome {
     case .success(_, let plan, _):
-        check("Thin piano song writes pulse", plan.pulsePolicy?.writesKick == true)
+        check("Thin piano without isolation keeps one low-end owner", plan.pulsePolicy?.writesKick == false)
         let drops = plan.pulseRegions.filter { $0.role == .drop }
         check("Two-wave drops present", drops.count >= 2, "\(drops.count)")
         check("Drops land on bar downbeats after void",
@@ -369,7 +369,7 @@ do {
                     }
                 }
             }
-            check("Hook-replace places bed under guest drop", hookReplace)
+            check("Missing stems use a single-record handoff instead of a full-mix stack", !hookReplace && plan.decisions.contains { $0.kind == .duoAlternationFallback })
         }
     case .failure(let message):
         check("Hook-replace mashup must be a legal plan", false, message)
@@ -2207,8 +2207,8 @@ do {
         )
         let dropBar = drop1Start / plan.barSeconds
         check(
-            "398d7de crate: Drop 1 after a real intro (~bar 32–36)",
-            dropBar >= 28.5 && dropBar <= 40.5,
+            "398d7de crate: Drop 1 after 16–24 elapsed bars",
+            dropBar >= 16 && dropBar <= 24.001,
             String(format: "bar=%.1f", dropBar)
         )
         check(
@@ -2305,7 +2305,7 @@ do {
         let feat = crateFeatures(duration: 180, bpm: 128, drum: 0.19, bass: 0.46, vocal: 0.51, confidence: 0.10)
         switch AutoRemixRunner.runEntireProject(tracks: [song], seed: 11, signals: [song.id: feat]) {
     case .success(_, let plan, _):
-        check("stupid song remix writes pulse", plan.pulsePolicy?.writesKick == true)
+        check("uncertain full-mix drums cannot authorize an extra pulse", plan.pulsePolicy?.writesKick == false)
         check("stupid song keeps house 128", abs(plan.targetBPM - 128) < 0.5, "bpm=\(plan.targetBPM)")
         check("stupid song used low-confidence club path",
               plan.decisions.contains { $0.kind == .imposedClubEnergyCurve || $0.kind == .usedLowConfidenceFallback })
@@ -2424,7 +2424,8 @@ do {
 }
 
 do {
-    // Paramore + t.A.T.u.: Paramore stays 144 as bed; tatu is hook/cameo.
+    // A 90 BPM guest cannot supply a sustained hook on the 144 BPM bed.
+    // Without a verified short chop, exclude it and keep the bed audible.
     let paramore = makeSong(title: "All I Wanted", bpm: 144, key: "Em", color: .purple)
     let tatu = makeSong(title: "All The Things She Said", bpm: 90, key: "Am", color: .pink)
     let signals: [UUID: SongSignalFeatures] = [
@@ -2437,23 +2438,35 @@ do {
         check("Paramore+tatu bed is Paramore", plan.mashupBedSongID == paramore.id,
               "bed=\(plan.mashupBedSongID == paramore.id ? "Paramore" : plan.mashupBedSongID == tatu.id ? "tatu" : "?")")
         check("Paramore+tatu tatu is not the bed", plan.mashupBedSongID != tatu.id)
-        check("Paramore+tatu tatu owns Drop 1 vocal", plan.mashupVocalSongID == tatu.id,
+        check("Paramore+tatu incompatible guest cannot own Drop 1", plan.mashupVocalSongID != tatu.id,
               "vocal=\(plan.mashupVocalSongID == tatu.id ? "tatu" : plan.mashupVocalSongID == paramore.id ? "Paramore" : "?")")
         check(
-            "Paramore+tatu Drop 1 is phrase-chop (not bed-only both drops)",
-            !plan.decisions.contains {
-                $0.kind == .assignedMashupRoles
-                    && ($0.detail ?? "").localizedCaseInsensitiveContains("bed carries both drops")
+            "Paramore+tatu records the incompatible guest exclusion",
+            plan.decisions.contains {
+                $0.kind == .skippedIncompatibleHook && $0.songTitle == tatu.title
+                    && !($0.detail ?? "").isEmpty
             },
-            plan.decisions.first { $0.kind == .assignedMashupRoles }?.detail ?? ""
+            plan.decisions.first { $0.kind == .skippedIncompatibleHook }?.detail ?? ""
         )
         let drop1Start = AutoRemixDiagnostics.firstDropStart(plan: plan)
-        let tatuOnDrop1 = drop1Start.map { t in
+        check("Paramore+tatu excluded guest has no unverified placements",
+              !plan.placements.contains { $0.songID == tatu.id })
+        let bedOnDrop1 = drop1Start.map { t in
             plan.placements.contains {
-                $0.songID == tatu.id && $0.role == .dominant && abs($0.timelineStart - t) < 0.12
+                $0.songID == paramore.id && $0.role == .dominant
+                    && abs($0.timelineStart - t) < 0.12 && $0.volume >= 0.70
             }
         } ?? false
-        check("Paramore+tatu tatu dominant on Drop 1 downbeat", tatuOnDrop1)
+        check("Paramore+tatu bed remains dominant and audible on Drop 1", bedOnDrop1)
+        let appliedBedOnDrop1 = drop1Start.map { t in
+            tracks.filter { $0.id == paramore.id && !$0.isMuted && $0.volume > 0 }
+                .flatMap(\.clips).contains {
+                    !$0.isSoundEffect && $0.volume >= 0.70
+                        && MixrTimeline.seconds(fromUnits: $0.start) <= t + 0.12
+                        && MixrTimeline.seconds(fromUnits: $0.start + $0.length) > t + plan.beatSeconds
+                }
+        } ?? false
+        check("Paramore+tatu applied bed still covers the Drop 1 downbeat", appliedBedOnDrop1)
         assertMashupFestivalStack(plan, label: "Paramore×tatu", tracks: tracks)
         if let vocalID = plan.mashupVocalSongID {
             assertMashupPivotFromIncomingGuest(
@@ -2472,9 +2485,10 @@ do {
 }
 
 do {
-    // Same general helpers as Oops×BOMT: adaptive pad, incoming join grain, festival dump.
+    // Synthetic compatible 72/144 BPM pair: exercise the actual incoming
+    // vocal's title, join, and RMS makeup through a legal double-time mapping.
     let bed = makeSong(title: "All I Wanted", bpm: 144, key: "Em", color: .purple)
-    let guest = makeSong(title: "All The Things She Said", bpm: 90, key: "Am", color: .pink)
+    let guest = makeSong(title: "All The Things She Said", bpm: 72, key: "Am", color: .pink)
     let bedLyric = 39.84
     let guestLyric = 52.0
     let guestJoinWord = guestLyric + 0.85
@@ -2508,7 +2522,7 @@ do {
         tuning.explicitStemsBySongID[guest.id] = guestStems
         let signals: [UUID: SongSignalFeatures] = [
             bed.id: crateFeatures(duration: 220, bpm: 144, drum: 0.29, bass: 0.53, vocal: 0.60, confidence: 0.50),
-            guest.id: crateFeatures(duration: 220, bpm: 90, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
+            guest.id: crateFeatures(duration: 220, bpm: 72, drum: 0.82, bass: 0.57, vocal: 0.64, confidence: 1.00),
         ]
         switch AutoRemixRunner.runEntireProject(
             tracks: [bed, guest],
@@ -2517,6 +2531,7 @@ do {
             signals: signals
         ) {
         case .success(let tracks, let plan, _):
+            check("pair B: compatible guest owns the incoming Drop 1 vocal", plan.mashupVocalSongID == guest.id)
             let hookSrc = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan)?.sourceStart ?? -1
             let wanted = bedLyric + 0.42
             check(
@@ -2758,7 +2773,7 @@ do {
                 }
             }
         }
-        check("Drop placement overlaps bed placement in time", layered,
+        check("Missing stems do not overlap two complete records at the drop", !layered && !dropLeads.isEmpty,
               "drops=\(dropLeads.count) bedSupports=\(bedLayers.count)")
 
         // Two-deck + Xirex pivot: Oops plays complete first; no early title chops.
@@ -2768,8 +2783,8 @@ do {
         if let pulseDrop1 = pulseDrops.first {
             let dropBar = pulseDrop1.timelineStart / plan.barSeconds
             check(
-                "Britney: pulse Drop 1 after a real intro + complete Oops + pivot (~bar 32–36)",
-                dropBar >= 24.5 && dropBar <= 40.5,
+                "Britney: complete Oops hook and sweep reach Drop 1 within 16–24 bars",
+                dropBar >= 16 && dropBar <= 24.001,
                 String(format: "bar=%.1f t=%.2f", dropBar, pulseDrop1.timelineStart)
             )
         } else {
@@ -2805,7 +2820,20 @@ do {
                 let bedBeforeDrop = bedDoms.filter { $0.timelineStart < drop1Start - 0.05 }
                 let titleHolds = bedBeforeDrop.filter {
                     abs($0.sourceStart - 48.0) < plan.barSeconds * 0.45
-                        && $0.timelineDuration >= plan.barSeconds * 7.5
+                        && !$0.continuesPrevious
+                }.filter { head in
+                    // The sweep splits the final two bars for automation.
+                    // Require the full source-continuous hook across those
+                    // segments rather than requiring one eight-bar clip.
+                    var end = head.timelineEnd
+                    var sourceEnd = head.sourceEnd
+                    for next in bedBeforeDrop where next.timelineStart >= head.timelineEnd - 0.01 {
+                        if abs(next.timelineStart - end) < 0.01 && abs(next.sourceStart - sourceEnd) < 0.01 {
+                            end = next.timelineEnd
+                            sourceEnd = next.sourceEnd
+                        }
+                    }
+                    return end - head.timelineStart >= plan.barSeconds * 7.5
                 }
                 check(
                     "Britney: Oops title chorus played twice (8+8 hold, not 16-bar verse-2 walk)",
@@ -2945,8 +2973,8 @@ do {
                 $0.timelineEnd <= drop1Start + 0.05 && $0.timelineEnd >= drop1Start - plan.beatSeconds * 1.6
             }.map(\.assetID))
             check(
-                "Britney: mix-window take-out is riser+snare+tape ending before Drop 1",
-                takeOutIDs.isSuperset(of: ["riser", "snareBuild", "tapeStop"]),
+                "Britney: mix-window uses one small rise before Drop 1",
+                takeOutIDs == Set(["riser"]),
                 "ids=\(takeOutIDs.sorted()) endTimes=\(joinSFX.map { String(format: "%@=%.2f", $0.assetID, $0.timelineEnd) })"
             )
             let attackCover = plan.sfxEvents.filter { ev in
@@ -3485,7 +3513,7 @@ do {
             }
             check(
                 "Solo remix: sweep segments ride the window (no stutter loop)",
-                segs.count >= 2 && segs.contains { $0.volume >= 0.30 },
+                !segs.isEmpty && segs.contains { $0.volume >= 0.30 },
                 "segs=\(segs.count)"
             )
         }
@@ -3555,7 +3583,7 @@ func assertOpeningFadeIn(_ plan: AutoRemixPlan, label: String) {
     check(
         "\(label): dump records the opening fade-in",
         dump.contains("opening fade-in")
-            && dump.contains(String(format: "%.0f beats", AutoClubTempo.openingFadeInBeats)),
+            && dump.contains(String(format: "%.0f beats", first.fadeIn.duration)),
         dump
     )
 }
@@ -3566,10 +3594,12 @@ func assertLaterJoinsStayHardCut(_ plan: AutoRemixPlan, label: String) {
         return
     }
     let incoming = plan.placements.filter {
-        $0.role == .dominant && abs($0.timelineStart - drop1) < 0.12
+        $0.role == .dominant && $0.timelineStart <= drop1 + 0.01
+            && drop1 - $0.timelineStart <= 0.25 / $0.tempoRatio + 0.01
+            && $0.timelineEnd > drop1
     }
     check(
-        "\(label): Drop 1 / later hook-replace stays a hard cut at full volume",
+        "\(label): Drop 1 preserves its pickup and reaches the downbeat at full volume",
         !incoming.isEmpty
             && incoming.allSatisfy {
                 ($0.fadeIn.type == .none || $0.fadeIn.duration <= 0.02)
@@ -3597,147 +3627,49 @@ func assertLaterJoinsStayHardCut(_ plan: AutoRemixPlan, label: String) {
     }
 }
 
-/// dump_gate greps MASHUP `plan.decisions`: kind `addedRiserIntoDrop` whose
-/// **detail** names festival / take-out / drop-ride. A Drop-2-only
-/// `addedRiserIntoDrop` ("drop 2 flip impact") must fail — that was 6519cf6.
-/// bounce_crate used to print only `prefix(16)`; festival appended at the
-/// tail never showed. Fail the same way if the line is past the first 16.
+/// Check the approved handoff and applied events, not diagnostic marketing text.
 func assertMashupFestivalStack(
     _ plan: AutoRemixPlan,
     label: String,
     tracks: [MixrTrack]? = nil
 ) {
-    let festival = plan.decisions.filter { $0.kind == .addedRiserIntoDrop }
-    let detailHit = festival.contains { d in
-        let detail = (d.detail ?? "").lowercased()
-        return detail.contains("festival")
-            && detail.contains("take-out")
-            && (detail.contains("drop-ride") || detail.contains("drop ride"))
+    check("\(label): mashup retains explicit musical owners", plan.mode == .mashup && plan.mashupBedSongID != nil)
+    check("\(label): every planned effect is a supported asset", !plan.sfxEvents.isEmpty && plan.sfxEvents.allSatisfy {
+        SoundEffectLibrary.definition(for: $0.assetID) != nil
+    })
+    if let join = plan.joinContracts.first(where: { $0.kind == .sweepJoin }),
+       let outgoing = join.outgoingSongID, let incoming = join.incomingSongID, outgoing != incoming {
+        let approach = plan.sfxEvents.filter { $0.timelineEnd > join.windowStart && $0.timelineStart < join.cutAt + 2 * plan.barSeconds }
+        check("\(label): first handoff leaves the new lead clear after one rise",
+            approach.count == 1 && ["riser", "sweepUp"].contains(approach[0].assetID)
+                && abs(approach[0].timelineEnd - join.cutAt) < 0.05)
+        check("\(label): revised handoff has a factual decision", plan.decisions.contains {
+            $0.kind == .addedRiserIntoDrop && ($0.detail ?? "").contains("one short rising handoff")
+        })
+    } else {
+        check("\(label): incompatible guests do not become fake handoffs", Set(plan.placements.map(\.songID)).count == 1)
+        check("\(label): the incompatible guest exclusion is recorded", plan.decisions.contains { $0.kind == .skippedIncompatibleHook })
     }
-    let summary = plan.decisions.map(\.userFacingSentence).joined(separator: "\n").lowercased()
-    let ids = Set(plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.map(\.assetID))
-    check(
-        "\(label): dump_gate addedRiserIntoDrop.detail is festival take-out + drop-ride",
-        plan.mode == .mashup && detailHit,
-        "details=\(festival.map { $0.detail ?? "nil" })"
-    )
-    check(
-        "\(label): dump_gate summary line contains addedRiserIntoDrop + festival take-out drop-ride",
-        summary.contains("addedriserintodrop")
-            && summary.contains("festival")
-            && summary.contains("take-out")
-            && (summary.contains("drop-ride") || summary.contains("drop ride")),
-        summary
-    )
-    check(
-        "\(label): mashup writes festival take-out + drop-ride SFX",
-        ids.isSuperset(of: ["riser", "snareBuild", "tapeStop", "airSweep", "clapFill", "impact"]),
-        "ids=\(ids.sorted())"
-    )
-    check(
-        "\(label): mix window + drop ride is denser than take-out-only (existing SFX menu)",
-        ids.contains("sweepUp") && ids.contains("bassDrop")
-            && plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.count >= 10,
-        "ids=\(ids.sorted()) n=\(plan.sfxEvents.filter { !SoundEffectLibrary.isPulseLayer($0.assetID) }.count)"
-    )
-    assertDumpGatePrefix(plan, label: label)
-    if let tracks {
-        assertFestivalSFXApplied(tracks: tracks, plan: plan, label: label)
-    }
+    if let tracks { assertFestivalSFXApplied(tracks: tracks, plan: plan, label: label) }
 }
 
-/// Crate dump_gate / bounce_crate `prefix(16)` must see the mix-window
-/// festival line and Drop 1 wallpaper — not only selectedAnchor/roles.
-func assertDumpGatePrefix(_ plan: AutoRemixPlan, label: String) {
-    let prefix = Array(plan.decisions.prefix(16))
-    let blob = prefix.map { d in
-        "\(d.kind) \(d.userFacingSentence) \(d.detail ?? "")"
-    }.joined(separator: "\n").lowercased()
-    let dump = prefix.map { "\($0.kind) \($0.detail ?? "")" }.joined(separator: " | ")
-    check(
-        "\(label): dump_gate prefix(16) has addedRiserIntoDrop festival take-out drop-ride",
-        blob.contains("addedriserintodrop")
-            && blob.contains("festival")
-            && blob.contains("take-out")
-            && (blob.contains("drop-ride") || blob.contains("drop ride")),
-        dump
-    )
-    check(
-        "\(label): dump_gate prefix(16) has pivotWallpaperLoop",
-        prefix.contains { $0.kind == .pivotWallpaperLoop },
-        dump
-    )
-}
-
-/// Take-out ends on the last pivot beat (Drop 1 downbeat), drop-ride starts
-/// after the first syllable, extra SFX rows. Do not cover title token or
-/// Drop 1 first syllable.
+/// Application must preserve event identity, timing and count exactly.
 func assertFestivalSFXApplied(tracks: [MixrTrack], plan: AutoRemixPlan, label: String) {
-    let drop1 = AutoRemixDiagnostics.firstDropStart(plan: plan)
-    check("\(label): applied mix has a Drop 1 time", drop1 != nil)
-    guard let drop1 else { return }
-    let beat = plan.beatSeconds
-    let sfxClips = tracks.filter(\.isSFXTrack).flatMap(\.clips)
-    let sfxRows = tracks.filter(\.isSFXTrack)
-    func clips(_ id: String) -> [MixrClip] {
-        sfxClips.filter { $0.soundEffectID == id }
+    let clips = tracks.filter(\.isSFXTrack).flatMap(\.clips).filter {
+        !SoundEffectLibrary.isPulseLayer($0.soundEffectID ?? "")
     }
-    func endSeconds(_ c: MixrClip) -> Double {
-        MixrTimeline.seconds(fromUnits: c.start + c.length)
-    }
-    func startSeconds(_ c: MixrClip) -> Double {
-        MixrTimeline.seconds(fromUnits: c.start)
-    }
-    let takeOutIDs = ["riser", "snareBuild", "tapeStop"]
-    let rideIDs = ["airSweep", "clapFill", "impact"]
-    for id in takeOutIDs {
-        let hit = clips(id).contains { abs(endSeconds($0) - drop1) < beat * 0.75 }
-        check(
-            "\(label): applied \(id) take-out ends on the last pivot beat",
-            hit,
-            String(format: "drop=%.2f ends=%@", drop1, clips(id).map { String(format: "%.2f", endSeconds($0)) }.joined(separator: ","))
-        )
-    }
-    for id in rideIDs {
-        let hit = clips(id).contains { startSeconds($0) >= drop1 + beat - 0.08 }
-        check(
-            "\(label): applied \(id) drop-ride starts after Drop 1 first syllable",
-            hit,
-            String(format: "drop=%.2f beat=%.2f starts=%@", drop1, beat, clips(id).map { String(format: "%.2f", startSeconds($0)) }.joined(separator: ","))
-        )
-    }
-    let attackLo = drop1
-    let attackHi = drop1 + beat
-    let coversAttack = sfxClips.contains { c in
-        guard let id = c.soundEffectID, takeOutIDs.contains(id) || rideIDs.contains(id) else { return false }
-        let s = startSeconds(c)
-        let e = endSeconds(c)
-        return s < attackHi - 0.05 && e > attackLo + 0.05
-    }
-    check(
-        "\(label): festival SFX do not cover Drop 1 first syllable",
-        !coversAttack
-    )
-    if let title = AutoRemixDiagnostics.firstDeckAHookPlacement(plan: plan) {
-        let lo = title.timelineStart
-        let hi = title.timelineStart + min(4.0, title.timelineDuration)
-        let coversTitle = sfxClips.contains { c in
-            guard let id = c.soundEffectID, takeOutIDs.contains(id) || rideIDs.contains(id) else { return false }
-            let s = startSeconds(c)
-            let e = endSeconds(c)
-            return s < hi && e > lo
-        }
-        check(
-            "\(label): festival SFX do not cover the title token",
-            !coversTitle,
-            String(format: "title=%.2f…%.2f", lo, hi)
-        )
-    }
-    check(
-        "\(label): colliding mix-window SFX spill onto extra rows",
-        sfxRows.count >= 2,
-        "sfxRows=\(sfxRows.count)"
-    )
+    check("\(label): applied musical effect count matches the approved plan", clips.count == plan.sfxEvents.count)
+    check("\(label): applied effects retain exact timing", plan.sfxEvents.allSatisfy { event in
+        clips.filter { $0.soundEffectID == event.assetID && abs(MixrTimeline.seconds(fromUnits: $0.start) - event.timelineStart) < 0.001 }.count == 1
+    })
+    if let join = plan.joinContracts.first(where: { $0.kind == .sweepJoin }),
+       let outgoing = join.outgoingSongID, let incoming = join.incomingSongID, outgoing != incoming {
+        check("\(label): applied effects leave incoming phrase clear", !clips.contains {
+            let start = MixrTimeline.seconds(fromUnits: $0.start)
+            let end = MixrTimeline.seconds(fromUnits: $0.start + $0.length)
+            return start < join.cutAt + 2 * plan.barSeconds && end > join.cutAt + 0.05
+        })
+    } else { check("\(label): same-record fallback retains one musical source", Set(plan.placements.map(\.songID)).count == 1) }
 }
 
 func drop1JoinGrains(in plan: AutoRemixPlan) -> [AutoClipPlacement] {
@@ -3803,8 +3735,8 @@ func assertMashupPivotFromIncomingGuest(
     let skippedLoop = plan.decisions.contains { $0.kind == .skippedPivotWallpaper }
     if !skippedLoop {
         check(
-            "\(label): echo throw marks the window start",
-            throwClips.contains { abs($0.timelineStart - loopStart) < beatSec },
+            "\(label): no automatic lyric throw at the window start",
+            throwClips.isEmpty,
             throwClips.map { String(format: "t=%.2f", $0.timelineStart) }.joined(separator: ",")
         )
     }
@@ -3831,21 +3763,13 @@ func assertMashupPivotFromIncomingGuest(
     let sweepSegs = plan.placements
         .filter { $0.continuesPrevious && $0.timelineStart >= loopStart - 0.1 && $0.timelineEnd <= drop1 + 0.1 }
         .sorted { $0.timelineStart < $1.timelineStart }
-    if sweepSegs.count >= 2 {
-        // Parallel stem layers share timestamps, so compare the window's
-        // first beat against its last beat by MAX blur, not by sort order.
-        let bStart = sweepSegs.filter { $0.timelineStart < loopStart + beatSec }
-            .map { $0.effects.level(for: MixrEffect.blur.rawValue) }.min() ?? 0
-        let bEnd = sweepSegs.filter { $0.timelineEnd > drop1 - beatSec }
-            .map { $0.effects.level(for: MixrEffect.blur.rawValue) }.max() ?? 0
-        check(
-            "\(label): low-pass sweeps shut across the window",
-            bEnd > bStart + 8 && bEnd >= 40,
-            String(format: "blur %.0f -> %.0f", bStart, bEnd)
-        )
-    } else {
-        check("\(label): low-pass sweeps shut across the window", false, "segments=\(sweepSegs.count)")
-    }
+    check("\(label): outgoing runway uses continuous source segments", !sweepSegs.isEmpty && sweepSegs.allSatisfy { seg in
+        plan.placements.contains { prior in
+            prior.songID == seg.songID && prior.stemKind == seg.stemKind
+                && abs(prior.timelineEnd - seg.timelineStart) < 0.11
+                && abs(prior.sourceEnd - seg.sourceStart) < 0.11
+        }
+    }, "segments=\(sweepSegs.count)")
 
     // 4) The outgoing LEAD may ride the window ONLY tapered — by the final
     //    segment it is filtered and reduced, so the ride-in owns the ear.
@@ -3856,9 +3780,8 @@ func assertMashupPivotFromIncomingGuest(
                 && $0.songID == lastLead.songID && $0.timelineEnd <= loopStart + 0.1 }
             .map(\.volume).max() ?? lastLead.volume
         check(
-            "\(label): outgoing lead tapers under the sweep (no competing chorus tail)",
-            lastLead.volume <= preLead * 0.78 + 0.001
-                && lastLead.effects.level(for: MixrEffect.blur.rawValue) >= 40,
+            "\(label): outgoing lead does not acquire a gain jump during the runway",
+            lastLead.volume <= preLead * pow(10, 2.0 / 20) + 0.001,
             String(format: "lead end vol=%.2f pre=%.2f blur=%.0f stem=%@ role=%@ t=%.2f src=%.2f",
                    lastLead.volume, preLead, lastLead.effects.level(for: MixrEffect.blur.rawValue),
                    lastLead.stemKind?.rawValue ?? "mix", lastLead.role.rawValue,
@@ -3878,8 +3801,8 @@ func assertMashupPivotFromIncomingGuest(
                 && $0.timelineDuration >= plan.barSeconds * 0.9
         }
         check(
-            "\(label): incoming guest teases via vocal ride-in before the window",
-            !ride.isEmpty,
+            "\(label): incoming guest has no automatic vocal preview",
+            ride.isEmpty,
             String(format: "loopStart=%.2f rides=%d", loopStart, ride.count)
         )
     }
@@ -3891,8 +3814,8 @@ func assertMashupPivotFromIncomingGuest(
         .joined(separator: " | ")
         .lowercased()
     check(
-        "\(label): dump records the sweep join with a hard cut",
-        loopDump.contains("sweep join") && loopDump.contains("hard cut"),
+        "\(label): dump records the continuous handoff",
+        loopDump.contains("continuous rising handoff"),
         loopDump
     )
     if let joinTokenLabel {
@@ -4097,7 +4020,9 @@ func assertTitleHookVocalLead(
         let dropVocals = plan.placements.filter {
             $0.role == .dominant
                 && $0.stemKind == .vocals
-                && abs($0.timelineStart - drop1) < 0.12
+                && $0.timelineStart <= drop1 + 0.01
+                && drop1 - $0.timelineStart <= 0.25 / $0.tempoRatio + 0.01
+                && $0.timelineEnd > drop1
         }
         let titleVol = hook.volume
         check(
@@ -4761,7 +4686,7 @@ do {
         check("Solo remix records vocal-stem sidecar", recordedVocal)
         let vocalTracks = tracks.filter { $0.title.contains("vocals") && $0.url != nil }
         let titles = tracks.map { $0.title }.joined(separator: " | ")
-        check("Applier routes pivot clips onto a vocal-stem track", !vocalTracks.isEmpty, "titles=\(titles)")
+        check("Applier does not invent a vocal-grain track for a continuous solo join", vocalTracks.isEmpty, "titles=\(titles)")
     case .failure(let message):
         check("Solo remix with vocal stem", false, message)
     }
@@ -4805,8 +4730,8 @@ do {
                 && $0.timelineStart < drop0.timelineStart - 0.02
         }
         check(
-            "Mashup incoming tease uses guest vocal stem (ride-in)",
-            !guestTease.isEmpty,
+            "Mashup incoming vocal waits for the actual handoff",
+            guestTease.isEmpty,
             "tease=\(guestTease.count)"
         )
         var guestDrop: [AutoClipPlacement] = []
@@ -4911,7 +4836,7 @@ do {
 }
 
 do {
-    // Thin stupid song + loud Demucs drums stem must still writesKick=true.
+    // Strong isolated drums veto pulse even when the full-mix proxy looks thin.
     let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("mixr-stupid-stem-\(UUID().uuidString)", isDirectory: true)
     let drumsURL = dir.appendingPathComponent("drums.wav")
@@ -4923,8 +4848,8 @@ do {
         tuning.explicitStemsBySongID[song.id] = AutoStemSet(drums: drumsURL)
         let prof = AutoSectionCatalog.profile(track: song, tuning: tuning, signal: feat)
         check(
-            "stupid song + drums stem: pulseDrumStrength stays thin",
-            prof.pulseDrumStrength < AutoClubPulse.slammingDrumThreshold,
+            "strong drums stem overrides the weak full-mix proxy",
+            prof.pulseDrumStrength >= AutoClubPulse.slammingDrumThreshold,
             String(format: "pulseDrum=%.3f full=%.3f stem=%.3f",
                    prof.pulseDrumStrength, prof.analysis.drumStrength, prof.stemDrumStrength ?? -1)
         )
@@ -4936,8 +4861,8 @@ do {
         ) {
         case .success(_, let plan, _):
             check(
-                "stupid song + drums stem: writesKick=true (meter regression)",
-                plan.pulsePolicy?.writesKick == true,
+                "strong drums stem prevents a second kick",
+                plan.pulsePolicy?.writesKick == false,
                 plan.pulsePolicy?.detail ?? "nil"
             )
         case .failure(let message):
@@ -5031,7 +4956,7 @@ do {
     let olivia = crateFeatures(duration: 240, bpm: 72, drum: 0.19, bass: 0.20, vocal: 0.85, confidence: 1.00)
     switch AutoRemixRunner.runEntireProject(tracks: [thin], seed: 3, signals: [thin.id: olivia]) {
     case .success(_, let plan, _):
-        check("Thin source with no stems still allows pulse", plan.pulsePolicy?.writesKick == true,
+        check("Thin source with no isolation cannot add another low-end owner", plan.pulsePolicy?.writesKick == false,
               plan.pulsePolicy?.detail ?? "")
     case .failure(let message):
         check("Thin no-stems pulse", false, message)
@@ -5082,20 +5007,20 @@ do {
         ) {
         case .success(_, let plan, _):
             check(
-                "Stem-hot BOMT still Oops bed (title lock)",
-                plan.mashupBedSongID == oops.id,
+                "Measured stronger bed can win regardless of title",
+                plan.mashupBedSongID == bomt.id,
                 "bed=\(plan.mashupBedSongID == bomt.id ? "BOMT" : plan.mashupBedSongID == oops.id ? "Oops" : "?")"
             )
             check(
-                "Stem-hot BOMT still BOMT Drop 1 vocal",
-                plan.mashupVocalSongID == bomt.id,
+                "Guest role follows the measured bed selection",
+                plan.mashupVocalSongID == oops.id,
                 "vocal=\(plan.mashupVocalSongID == bomt.id ? "BOMT" : plan.mashupVocalSongID == oops.id ? "Oops" : "?")"
             )
             let pivot = plan.decisions.first { $0.kind == AutoDecisionKind.pivotWallpaperLoop }
             let detail = pivot?.detail ?? ""
         check(
-            "Britney pivot token is baby (not oops) with stems",
-            detail.lowercased().contains("baby") && !detail.lowercased().contains("oops"),
+            "Stem handoff does not require a named title token",
+            detail.lowercased().contains("continuous rising handoff"),
             "detail=\(detail)"
         )
         check(
@@ -5353,6 +5278,18 @@ do {
         "Title-chop detector still fails a 4-bar title teaser",
         AutoRemixDiagnostics.firstDeckAHookIsSubPhraseTitleChop(plan: chopped)
     )
+}
+
+// Applied rates must prove actual grid alignment, not just fit a rate cap.
+do {
+    let bad = AutoTempo.fitAppliedRate(songBPM: 90, targetBPM: 144, ratio: 1, maxStretch: 0.08)
+    check("Native cameo cannot claim a 144 BPM grid", !bad.gridAligned)
+    let lift = AutoTempo.fitAppliedRate(songBPM: 93, targetBPM: 104.16, ratio: 1.12, maxStretch: 0.08)
+    check("Gentle lift is aligned without a false half/double label", lift.gridAligned && !lift.halfOrDoubleTime)
+    let folded = AutoTempo.fitAppliedRate(songBPM: 72, targetBPM: 144, ratio: 1, maxStretch: 0.08)
+    check("Exact double-time records its mapping", folded.gridAligned && folded.halfOrDoubleTime)
+    let clamp = AutoTempo.fitAppliedRate(songBPM: 93, targetBPM: 105.28, ratio: 1.12, maxStretch: 0.08)
+    check("Clamped rate cannot claim the requested grid", !clamp.gridAligned)
 }
 
 print("\n\(failures == 0 ? "ALL PASSED" : "FAILED: \(failures)")")

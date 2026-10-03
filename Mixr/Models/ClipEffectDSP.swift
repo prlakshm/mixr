@@ -16,7 +16,7 @@ import AudioToolbox
 //   • MixrExportRenderer — offline: applies ChainTargets per render block.
 //
 // Effect chain order (fixed, per track chain):
-//   player → timePitch (Pitch) → EQ (Blur low-pass)
+//   player → varispeed (clock) → timePitch (pitch compensation + Pitch) → EQ (Blur low-pass)
 //          → flanger (Flanger) → delay (Echo) → reverb (Reverb)
 //          → mixer → peak limiter → out
 //
@@ -34,7 +34,15 @@ nonisolated enum ClipEffectDSP {
     struct ChainTargets {
         // Pitch → AVAudioUnitTimePitch
         var pitchCents: Float
+        /// Smooth only the musical interval. Rate compensation must follow
+        /// the resampling clock synchronously in both live and export paths.
+        var musicalPitchCents: Float
+        var ratePitchCompensationCents: Float
         var playbackRate: Float
+        /// Exact resampling clock plus pitch compensation avoids TimePitch's
+        /// rate drift. Extreme pitch/rate combinations retain the legacy path.
+        var rateNodeRate: Float
+        var timePitchRate: Float
         /// True bypass when Pitch is 0 and the clip plays at normal speed.
         var timePitchBypass: Bool
         /// AVAudioUnitTimePitch.overlap (3…32). Higher = better quality on
@@ -74,7 +82,6 @@ nonisolated enum ClipEffectDSP {
     ) -> ChainTargets {
         let reverbAmount = settings.level(for: MixrEffect.reverb.rawValue) / 100.0
         let echoAmount = settings.level(for: MixrEffect.echo.rawValue) / 100.0
-        let pitchAmount = settings.pitchAmount
         let blurAmount = settings.level(for: MixrEffect.blur.rawValue) / 100.0
         let rate = Float(max(playbackSpeed, 0.03125))
         let timePitchOverlap: Float = abs(playbackSpeed - 1.0) > 0.08 ? 32 : 8
@@ -83,8 +90,13 @@ nonisolated enum ClipEffectDSP {
         // Interval comes from ClipEffectSettings.pitchSemitones (the single
         // authority for the intensity→interval mapping); 100 cents per
         // semitone. Duration preserved.
-        let pitchCents = Float(settings.pitchSemitones * 100.0)
-        let timePitchBypass = pitchAmount <= 0.001 && abs(playbackSpeed - 1.0) < 0.001
+        let requestedPitch = Float(settings.pitchSemitones * 100.0)
+        let compensatedPitch = requestedPitch - 1200 * log2(rate)
+        let exactRatePath = (0.25...4).contains(rate) && abs(compensatedPitch) <= 2400
+        let rateNodeRate: Float = exactRatePath ? rate : 1
+        let timePitchRate: Float = exactRatePath ? 1 : rate
+        let pitchCents = exactRatePath ? compensatedPitch : requestedPitch
+        let timePitchBypass = abs(pitchCents) <= 0.001 && timePitchRate == 1
 
         // ── BLUR (low-pass) ──
         let lowPassBypass = blurAmount <= 0.001
@@ -143,7 +155,11 @@ nonisolated enum ClipEffectDSP {
 
         return ChainTargets(
             pitchCents: pitchCents,
+            musicalPitchCents: requestedPitch,
+            ratePitchCompensationCents: exactRatePath ? -1200 * log2(rate) : 0,
             playbackRate: rate,
+            rateNodeRate: rateNodeRate,
+            timePitchRate: timePitchRate,
             timePitchBypass: timePitchBypass,
             timePitchOverlap: timePitchOverlap,
             lowPassFrequency: lowPassFrequency,
@@ -202,6 +218,7 @@ nonisolated enum ClipEffectDSP {
     /// Configures a clip chain's audio units into their bypassed rest state.
     static func configureRestState(
         timePitch: AVAudioUnitTimePitch,
+        rateNode: AVAudioUnitVarispeed,
         eq: AVAudioUnitEQ,
         flanger: FlangerKernel?,
         delay: AVAudioUnitDelay,
@@ -211,6 +228,7 @@ nonisolated enum ClipEffectDSP {
             wet: 0, feedback: 0, depthSeconds: 0,
             baseDelaySeconds: 0.0006, lfoFrequency: 0.25, phase: 0
         )
+        rateNode.rate = 1
         timePitch.pitch = 0
         timePitch.rate = 1
         timePitch.overlap = 8
@@ -238,6 +256,7 @@ nonisolated enum ClipEffectDSP {
     static func apply(
         _ t: ChainTargets,
         timePitch: AVAudioUnitTimePitch,
+        rateNode: AVAudioUnitVarispeed,
         eq: AVAudioUnitEQ,
         flanger: FlangerKernel?,
         delay: AVAudioUnitDelay,
@@ -247,7 +266,8 @@ nonisolated enum ClipEffectDSP {
         appliedDelayTime: inout TimeInterval
     ) {
         timePitch.pitch = t.pitchCents
-        timePitch.rate = t.playbackRate
+        rateNode.rate = t.rateNodeRate
+        timePitch.rate = t.timePitchRate
         timePitch.overlap = t.timePitchOverlap
         if !t.timePitchBypass { timePitch.bypass = false }
 

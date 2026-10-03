@@ -1,0 +1,83 @@
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.4s)
+
+=== 01-mashup-oops-x-baby ===
+MASTER in=-15.9 LUFS makeup=+1.5 dB sustainedGR=1.5 p90=5.3 limited=14% peakGR=9.4 out=-15.4 LUFS
+MASTER in=-16.0 LUFS makeup=+1.5 dB sustainedGR=1.5 p90=5.3 limited=14% peakGR=9.4 out=-15.6 LUFS
+MASTER in=-16.0 LUFS makeup=+1.5 dB sustainedGR=1.5 p90=5.3 limited=14% peakGR=9.4 out=-15.6 LUFS
+MASTER in=-16.0 LUFS makeup=+1.5 dB sustainedGR=1.5 p90=5.3 limited=14% peakGR=9.4 out=-15.6 LUFS
+  Mashup bpm=105 drops at 1:17, 2:30
+  TITLE_PROBE t=54.71 drop1=77.51 beat=0.570
+  -- drop 1 @77.51 --
+     SFX riser 73.51-77.51
+     SFX snareBuild 73.51-77.51
+     SFX sweepUp 75.51-77.51
+     SFX tapeStop 76.51-77.51
+     CLIP dominant vocals 72.95-75.23 vol=2.20 blur=30
+     CLIP supporting drums 72.95-75.23 vol=2.71 blur=32
+     CLIP supporting bass 72.95-75.23 vol=2.71 blur=32
+     CLIP supporting other 72.95-75.23 vol=2.71 blur=32
+     CLIP supporting vocals 72.95-73.52 vol=2.51 blur=20
+     CLIP supporting other 72.95-77.51 vol=0.42 blur=32
+     CLIP dominant vocals 75.23-77.51 vol=1.88 blur=46
+     CLIP supporting drums 75.23-77.51 vol=2.71 blur=46
+     CLIP supporting bass 75.23-77.51 vol=2.71 blur=46
+     CLIP supporting other 75.23-77.51 vol=2.71 blur=46
+     CLIP dominant vocals 77.51-109.42 vol=5.27 blur=0
+     CLIP supporting drums 77.51-95.74 vol=1.33 blur=0
+     CLIP supporting bass 77.51-95.74 vol=1.33 blur=0
+     CLIP supporting other 77.51-95.74 vol=1.33 blur=0
+  -- drop 2 @150.46 --
+     SFX snareBuild 146.46-150.46
+     SFX riser 146.46-150.46
+     SFX impact 150.46-151.46
+     SFX crash 150.46-151.46
+     CLIP dominant mix 132.22-146.14 vol=0.97 blur=22
+     CLIP dominant mix 146.02-150.58 vol=0.82 blur=22
+     CLIP supporting mix 146.02-152.15 vol=0.60 blur=22
+     CLIP dominant mix 150.46-172.44 vol=1.05 blur=0
+     CLIP supporting mix 150.46-152.15 vol=1.33 blur=22
+MASTER export in=-18.6 LUFS makeup=+6.1 dB sustainedGR=1.5 p90=5.7 limited=13% peakGR=7.4 out=-13.7 LUFS
+  wrote 01-mashup-oops-x-baby.m4a
+  wrote 01-mashup-oops-x-baby.join_manifest.json
+
+=== 02-mashup-paramore-x-tatu ===
+MASTER in=-14.1 LUFS makeup=+0.3 dB sustainedGR=1.5 p90=4.2 limited=11% peakGR=5.7 out=-14.6 LUFS
+MASTER in=-14.6 LUFS makeup=+0.2 dB sustainedGR=1.4 p90=4.2 limited=10% peakGR=5.7 out=-15.0 LUFS
+MASTER in=-14.6 LUFS makeup=+0.2 dB sustainedGR=1.4 p90=4.2 limited=10% peakGR=5.7 out=-15.0 LUFS
+  Mashup bpm=144 drops at 0:56, 1:50
+  TITLE_PROBE t=26.67 drop1=56.67 beat=0.417
+  -- drop 1 @56.67 --
+     SFX riser 52.67-56.67
+     SFX snareBuild 52.67-56.67
+     SFX sweepUp 54.67-56.67
+     SFX tapeStop 55.67-56.67
+     CLIP dominant vocals 53.33-55.00 vol=2.20 blur=30
+     CLIP supporting drums 53.33-55.00 vol=2.71 blur=32
+     CLIP supporting bass 53.33-55.00 vol=2.45 blur=32
+     CLIP supporting other 53.33-55.00 vol=2.14 blur=32
+     CLIP supporting vocals 53.33-53.75 vol=2.51 blur=20
+     CLIP supporting other 53.33-56.67 vol=0.42 blur=32
+     CLIP dominant vocals 55.00-56.67 vol=1.88 blur=46
+     CLIP supporting drums 55.00-56.67 vol=2.71 blur=46
+     CLIP supporting bass 55.00-56.67 vol=2.45 blur=46
+     CLIP supporting other 55.00-56.67 vol=2.14 blur=46
+     CLIP dominant vocals 56.67-76.67 vol=5.27 blur=0
+     CLIP supporting drums 56.67-70.00 vol=1.78 blur=0
+     CLIP supporting bass 56.67-70.00 vol=1.78 blur=0
+     CLIP supporting other 56.67-70.00 vol=1.78 blur=0
+  -- drop 2 @110.00 --
+     SFX snareBuild 106.00-110.00
+     SFX riser 106.00-110.00
+     SFX impact 110.00-111.00
+     SFX crash 110.00-111.00
+     CLIP dominant mix 96.67-110.00 vol=0.82 blur=22
+     CLIP dominant mix 110.00-127.08 vol=1.78 blur=0
+MASTER export in=-16.3 LUFS makeup=+5.0 dB sustainedGR=1.5 p90=4.7 limited=12% peakGR=5.9 out=-12.5 LUFS
+  wrote 02-mashup-paramore-x-tatu.m4a
+  wrote 02-mashup-paramore-x-tatu.join_manifest.json
+
+LISTEN_RENDERS_DONE failures=0

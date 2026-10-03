@@ -1,0 +1,314 @@
+Compiling AutoRemixPipelineTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:884:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 882 |         var placements: [AutoClipPlacement] = []
+ 883 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 884 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 885 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 886 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:886:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 884 |         var joinContracts: [AutoJoinContract] = []
+ 885 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 886 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 887 |         var sfx: [AutoSFXEvent] = []
+ 888 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1545:62: warning: will never be executed
+1543 |             mashupVocalID: drop1?.songID,
+1544 |             mashupBedID: bed.songID,
+1545 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1546 |             vocalTempoRatio: vocalTempoRatio,
+1547 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.yqAMDS/main.swift:206:13: warning: variable 'bass' was never mutated; consider changing to 'let' constant
+204 |         var energy = [Double](repeating: 0.55, count: hops)
+205 |         var vocal = [Double](repeating: 0.5, count: hops)
+206 |         var bass = [Double](repeating: 0.45, count: hops)
+    |             `- warning: variable 'bass' was never mutated; consider changing to 'let' constant
+207 |         for i in 0..<hops {
+208 |             let t = Double(i) * hop
+Running pipeline...
+PASS  Entire Project uses plan pipeline
+PASS  Selected Clip uses arrangement engine
+PASS  Playhead Clips uses arrangement engine
+PASS  Remix mode for one song
+PASS  Summary mode matches plan
+PASS  Summary seed retained for debug
+PASS  Summary BPM matches plan
+PASS  Summary handoffs match plan
+PASS  Summary decisions come from plan records
+PASS  Plan retains seed
+PASS  Applied plan has placements
+PASS  Empty project fails cleanly
+PASS  Failure does not invent tracks
+PASS  No-clip songs fail without applying
+PASS  Input track array identity preserved on failure path
+PASS  Same seed → same mode
+PASS  Same seed → same target BPM
+PASS  Same seed → same sequence
+PASS  Same seed → same handoff count
+PASS  Same seed → same placement count
+PASS  Same seed → same SFX count
+PASS  Same seed → same clip placements
+PASS  Same seed → same effects
+PASS  Same seed → same SFX selections
+PASS  Two songs → Mashup mode
+PASS  Bed owner assigned
+PASS  Drop 1 vocal assigned
+PASS  Drop 2 flip assigned
+PASS  Drop 1 and Drop 2 are different roles — drop1=70F2872B-6A89-4976-83ED-F456C3F9C125 drop2=A9DCEDC9-719A-485C-8AB8-4B3AE427D78E
+PASS  Summary sequence uses song names
+PASS  One-song remix used club phrase grid (not energy-curve only) — decisions include energy-curve=true count=22
+PASS  One-song remix: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  One-song remix musical SFX stays finite (≤ 40/min) — 9.26 events/min
+PASS  One-song remix uses a variety of SFX ids — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Mashup still coordinates SFX moments
+PASS  Mashup has drop/join SFX (not a silent drip) — count=20
+PASS  One-song remix records pulse regions
+PASS  Invalid gaps repaired to ≤ eighth note — largest gap 0.000s, eighth=0.250s
+PASS  Gap repair records a decision
+PASS  Intentional micro-pause preserved
+PASS  No unsupported / retired effects in plan
+PASS  No unsupported effects on applied clips
+PASS  Summary uses applied plan (orphan riser removed)
+PASS  Summary SFX list matches applied plan
+PASS  Successful apply creates one undo entry
+PASS  Undo Auto restores pre-Auto project
+PASS  Failed apply leaves undo stack empty
+PASS  Failed apply restores original timeline
+PASS  Input tracks unchanged after run
+PASS  Input still has one clip
+
+ALL PASSED
+Compiling AutoRemixRenderQualityTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:884:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 882 |         var placements: [AutoClipPlacement] = []
+ 883 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 884 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 885 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 886 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:886:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 884 |         var joinContracts: [AutoJoinContract] = []
+ 885 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 886 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 887 |         var sfx: [AutoSFXEvent] = []
+ 888 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1545:62: warning: will never be executed
+1543 |             mashupVocalID: drop1?.songID,
+1544 |             mashupBedID: bed.songID,
+1545 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1546 |             vocalTempoRatio: vocalTempoRatio,
+1547 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.yqAMDS/main.swift:1333:9: warning: variable 'plan' was never mutated; consider changing to 'let' constant
+1331 |         return y
+1332 |     }
+1333 |     var plan = AutoRemixPlan(
+     |         `- warning: variable 'plan' was never mutated; consider changing to 'let' constant
+1334 |         mode: .remix, targetBPM: bpm, targetDuration: 80,
+1335 |         anchorSongIDs: [song.id], selectedSections: [],
+Running render...
+PASS  Meter: RMS of 0.25 sine ≈ −15 dBFS — -15.05 dB
+PASS  Meter: silence detector finds a 300 ms hole — [(0.9, 1.2)]
+PASS  Meter: click detector finds a 0.9 step
+PASS  Meter: true peak sees inter-sample peaks — sample -3.01 dB, true 0.12 dB
+PASS  Meter: integrated loudness of steady tone tracks RMS — -15.05 dB
+PASS  Equal-power fade midpoint is −3 dB — -3.01 dB
+PASS  Equal-power in²+out² ≡ 1 across the fade
+PASS  Live and export share one envelope model
+PASS  Block-rate envelope steps stay ramp-sized — max step 0.01824
+PASS  One song: every internal cut has a structured record — 4 cuts, 4 records
+PASS  One song: source order monotonic unless a justified return
+PASS  One song: pivoted plan has no pre-drop void gaps — 0 gaps
+PASS  One song: Drop 1 is a pivot hard-cut (no quiet void) — pivot=true voids=0
+PASS  One song: Drop 2 stays a hard cut (no equal-power fade after killing the void) — dropCuts=["sfx:impact", "sfx:impact"]
+PASS  One song: two-wave club drops — got 2 drop regions
+PASS  One song: kick muted in build-out
+PASS  One song: pulse policy recorded
+PASS  One song: club flavor chosen
+PASS  One song: no random pitch section by default — 0 pitched placements
+PASS  One song: plan records the usable source range
+PASS  One song: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  One song: musical SFX density finite (≤ 40/min) — 9.0 events/min
+PASS  One song: build/break clip FX actually fire — fxPlacements=3
+PASS  Render: no clipped samples in pre-encode PCM
+PASS  Render: true peak ≤ −1 dBTP — -1.50 dBTP
+PASS  Render: limiter is safety, not glue (GR ≤ 3 dB) — 0.2 dB reduction
+PASS  Render: no unintended silence ≥ 100 ms inside musical content
+PASS  Render: no join-centered trough > 3 dB — worst 0.3 dB
+PASS  Render: no unexplained join jump > 4 dB — worst 0.0 dB
+PASS  Render: no sample discontinuity above click threshold at Auto joins — 0.348 at 77.42s
+PASS  Render: no fixed silent export tail — last 250 ms at -26.7 dBFS
+PASS  Validator preserves a declared same-song crossfade overlap — [0.00–12.00] [10.00–22.00]
+PASS  Validator keeps the cut record for the masked cut
+PASS  Equal-power overlap holds level through the join (≤ 1.2 dB) — trough 0.00 dB
+PASS  Validator repairs sequential fade-out + fade-in (level hole)
+PASS  Detector flags a mix-window RMS hole before incoming — hole=229.0 dB pre=-240.0 est=-11.0
+PASS  Detector passes a hard cut that holds level through the join — hole=0.0 dB
+PASS  Bad join exposes a song-switch incoming time
+PASS  Rendered fade-to-silence song switch is an RMS hole (previous behavior fails) — hole=11.3 dB @4.00s
+PASS  Britney mashup has a song-switch join
+PASS  Auto mashup song-switch mix window has no RMS hole before incoming — worst hole=1.8 dB @92.17s
+PASS  Auto mashup switches songs by overlap or hard cut at full volume (no dead-air handoff)
+PASS  Auto mashup mix-window RMS is within 1.5 dB of verse (or louder) — verse=-17.07 mix=-9.81 delta=-7.26
+PASS  Auto mashup Drop 1 RMS is within 1.5 dB of verse (or louder) — verse=-17.07 drop=-8.44 delta=-8.63
+PASS  Auto mashup take-out is riser+snare+tape ending before Drop 1 — ids=["riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Auto mashup mix-window SFX rides the drop (air/clap/impact) — ids=["airSweep", "bassDrop", "clapFill", "impact", "sweepUp"]
+PASS  Auto mashup Drop 1 first-bar RMS is within 1.5 dB of verse (or louder) — verse=-17.07 bar1=-8.10 delta=-8.97
+PASS  Analysis: energy curve is measured (non-empty)
+PASS  Analysis: leading silence detected — 3.00s
+PASS  Analysis: first downbeat found away from t = 0 — 3.365s
+PASS  Analysis: beat grid carries confidence — 1.00
+PASS  Analysis: interior quiet region detected — [(15.0, 16.2)]
+PASS  Analysis: overall confidence reflects clean fixture — 1.00
+PASS  Analysis: extraction is deterministic
+PASS  Trim: leading silence removed from usable range — usable start 5.85s
+PASS  Trim: trailing silence removed from usable range — usable end 156.15s
+PASS  Trim: no placement reads the silent edges
+PASS  Trim: usable range recorded
+PASS  Low confidence: only justified hook-return cuts — unjustified=0 totalCuts=0
+PASS  Low confidence: source order monotonic unless hook return
+PASS  Low confidence: still uses low-confidence club path
+PASS  Low confidence: pulse / filter energy present
+PASS  Low confidence: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  Low confidence: musical SFX stays finite (≤ 40/min) — 8.6/min
+PASS  Low confidence: drop has impact
+PASS  Low confidence: Drop 1 by bar 16–36 — bar=24.0
+PASS  Low confidence: cymbal punctuation ≤ 2 — count=1
+PASS  Mixdown uses stemKind source (not always the full mix) — peak=0.401
+PASS  Mixdown falls back to full mix when stem source is omitted — fullPeak=0.050
+
+── Auto Remix quality report ──
+usable source: 0.00s – 160.00s
+internal cuts: 4
+  cut @46.45s  reason=hookReturn masking=sfx:impact conf=0.97 Δ=8.0 dB
+  cut @77.42s  reason=redundantRepeat masking=equal-power crossfade 3.74s conf=0.97 Δ=0.5 dB
+  cut @108.39s  reason=hookReturn masking=sfx:impact conf=0.97 Δ=8.0 dB
+  cut @139.35s  reason=redundantRepeat masking=equal-power crossfade 3.74s conf=0.97 Δ=6.0 dB
+  boundary @46.45s  before=-8.8 center=-7.8 after=-5.9 dBFS (trough 0.0, jump 2.9)
+  boundary @77.42s  before=-9.9 center=-9.7 after=-9.7 dBFS (trough 0.0, jump 0.2)
+  boundary @108.39s  before=-14.3 center=-10.8 after=-7.2 dBFS (trough 0.0, jump 7.1)
+  boundary @139.35s  before=-10.0 center=-12.0 after=-11.7 dBFS (trough 0.3, jump 1.7)
+integrated ≈ -10.9 dB   sample peak -1.50 dBFS   true peak -1.50 dBTP
+limiter reduction 0.2 dB
+analysis confidence 0.97
+PASS  Listen loop: genuine source silence is filled (no residual hole)
+PASS  Listen loop: fill placements cover the silent span — span=20.0–22.5 fills=2
+PASS  Listen loop: a 0.6s breath inside a vocal phrase is exempt (no hole, no fill) — residualHoles=0 fills=0
+PASS  Listen loop: a 2.5s gap is NOT a breath — filled as before — residual=0
+PASS  Master: BS.1770 meter calibration (0 dBFS 1 kHz sine = −3.01 LKFS) — -3.05 LKFS
+FAIL  Master: rare transients do not block makeup (≥ 6 dB) — makeup=4.4 dB in=-17.9 LUFS
+FAIL  Master: delivered loudness within 1 LU of target — out=-13.6 LUFS
+PASS  Master: sample peak never exceeds the limiter ceiling — peak=0.745 ceiling=0.841
+PASS  Master: sustained reduction under policy on a sparse-transient program — sustained=0.00 dB
+PASS  Master: glue guard — makeup stops where sustained reduction hits policy — makeup=2.4 (wanted 11.1) sustained=1.45 p90=2.6
+PASS  Master: glue guard — ceiling still honored — peak=0.841
+PASS  Gate A: worse contract count is not kept
+PASS  Gate A: equal tuple is not kept (no churn)
+PASS  Gate A: strictly better coverage is kept
+PASS  Gate A: equal join tuple keeps a candidate that drops body residuals
+PASS  Gate A: leftover critical score blocks apply
+PASS  Gate A: clean kept score does not block apply
+PASS  Gate A: 9 dB trough inside a labeled sweep window scores a deficit — deficit=3.00
+PASS  Gate A: filtered-but-continuous sweep (~2.5 dB) is within allowance — deficit=0.00
+
+FAILED: 2
+HARNESS_FAILED name=render exit=1 (failure or incomplete evidence)

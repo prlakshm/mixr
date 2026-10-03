@@ -1,0 +1,139 @@
+Compiling AutoRemixPipelineTests.swift…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:905:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 903 |         var placements: [AutoClipPlacement] = []
+ 904 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 905 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 906 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 907 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:907:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 905 |         var joinContracts: [AutoJoinContract] = []
+ 906 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 907 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 908 |         var sfx: [AutoSFXEvent] = []
+ 909 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1566:62: warning: will never be executed
+1564 |             mashupVocalID: drop1?.songID,
+1565 |             mashupBedID: bed.songID,
+1566 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1567 |             vocalTempoRatio: vocalTempoRatio,
+1568 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:275:13: warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 273 |         )
+ 274 | 
+ 275 |         let grainVol = AutoGainPolicy.roleStagingVolume(
+     |             `- warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 276 |             role: .pivotGrain,
+ 277 |             measuredStemRMS: nil,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:67:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         }
+ 66 | 
+ 67 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 68 |         var staged = validated
+ 69 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-auto-tests.uCU649/main.swift:221:13: warning: variable 'bass' was never mutated; consider changing to 'let' constant
+219 |         var energy = [Double](repeating: 0.55, count: hops)
+220 |         var vocal = [Double](repeating: 0.5, count: hops)
+221 |         var bass = [Double](repeating: 0.45, count: hops)
+    |             `- warning: variable 'bass' was never mutated; consider changing to 'let' constant
+222 |         for i in 0..<hops {
+223 |             let t = Double(i) * hop
+Running pipeline...
+PASS  Entire Project uses plan pipeline
+PASS  Selected Clip uses arrangement engine
+PASS  Playhead Clips uses arrangement engine
+PASS  Remix mode for one song
+PASS  Summary mode matches plan
+PASS  Summary seed retained for debug
+PASS  Summary BPM matches plan
+PASS  Summary handoffs match plan
+PASS  Summary decisions come from plan records
+PASS  Plan retains seed
+PASS  Applied plan has placements
+PASS  Empty project fails cleanly
+PASS  Failure does not invent tracks
+PASS  No-clip songs fail without applying
+PASS  Input track array identity preserved on failure path
+PASS  Same seed → same mode
+PASS  Same seed → same target BPM
+PASS  Same seed → same sequence
+PASS  Same seed → same handoff count
+PASS  Same seed → same placement count
+PASS  Same seed → same SFX count
+PASS  Same seed → same clip placements
+PASS  Same seed → same effects
+PASS  Same seed → same SFX selections
+PASS  Two songs → Mashup mode
+PASS  Bed owner assigned
+PASS  Drop 1 vocal assigned
+PASS  Drop 2 flip assigned
+PASS  Drop 1 and Drop 2 are different roles — drop1=81E468F8-5230-452E-B00B-8DA0F6F55B02 drop2=C6182253-0C57-4491-9C86-4E0B7073CEA9
+PASS  Summary sequence uses song names
+PASS  One-song remix used club phrase grid (not energy-curve only) — decisions include energy-curve=true count=22
+PASS  One-song remix: no SFX wallpaper outside mix windows — wallpaper=[]
+PASS  One-song remix musical SFX stays finite (≤ 40/min) — 9.26 events/min
+PASS  One-song remix uses a variety of SFX ids — ids=["airSweep", "bassDrop", "clapFill", "crash", "downlifter", "impact", "riser", "snareBuild", "sweepUp", "tapeStop"]
+PASS  Mashup still coordinates SFX moments
+PASS  Mashup has drop/join SFX (not a silent drip) — count=14
+PASS  One-song remix records pulse regions
+PASS  Invalid gaps repaired to ≤ eighth note — largest gap 0.000s, eighth=0.250s
+PASS  Gap repair records a decision
+PASS  Intentional micro-pause preserved
+PASS  No unsupported / retired effects in plan
+PASS  No unsupported effects on applied clips
+PASS  Summary uses applied plan (orphan riser removed)
+PASS  Summary SFX list matches applied plan
+PASS  Successful apply creates one undo entry
+PASS  Undo Auto restores pre-Auto project
+PASS  Failed apply leaves undo stack empty
+PASS  Failed apply restores original timeline
+PASS  Input tracks unchanged after run
+PASS  Input still has one clip
+
+ALL PASSED
+HARNESS_SUMMARY completed=1 expected=1

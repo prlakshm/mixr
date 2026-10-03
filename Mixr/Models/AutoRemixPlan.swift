@@ -94,6 +94,10 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case skippedPivotWallpaper
     /// Offline Demucs sidecar used (vocal grain, drums kick, or bed instrumental).
     case usedStemSidecar
+    /// Outgoing source end sat inside a lyric line; clip extended to the last word.
+    case finishedLyricLine
+    /// Two lead switches inside ~5s were turned into an overlap with volume rides.
+    case layeredRapidSwitch
 }
 
 struct AutoDecision: Sendable, Equatable {
@@ -181,6 +185,10 @@ struct AutoDecision: Sendable, Equatable {
             return "Skipped the pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
         case .usedStemSidecar:
             return "Used stem sidecar for \(song)\(detail.map { " — \($0)" } ?? "")."
+        case .finishedLyricLine:
+            return "Extended \(song)'s vocal passage\(detail.map { " — \($0)" } ?? "")."
+        case .layeredRapidSwitch:
+            return "Layered a rapid song switch on \(song)\(detail.map { " — \($0)" } ?? "")."
         }
     }
 }
@@ -566,16 +574,7 @@ struct AutoRemixPlan: Sendable {
             seen.insert(key)
             return true
         }
-        if !hot.contains(where: isFestival) {
-            hot.insert(
-                AutoDecision(
-                    kind: .addedRiserIntoDrop,
-                    songTitle: nil,
-                    detail: AutoFestivalMixWindow.festivalDetail
-                ),
-                at: 0
-            )
-        }
+        // Reordering diagnostics must never invent an effect decision.
         let rolesIdx = decisions.firstIndex { $0.kind == .assignedMashupRoles } ?? 0
         let insertAt = min(rolesIdx + 1, decisions.count)
         var block: [AutoDecision] = []

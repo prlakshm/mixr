@@ -1,0 +1,628 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project Mixr.xcodeproj -scheme Mixr -destination "generic/platform=iOS Simulator" -derivedDataPath /tmp/mixr-general-build CODE_SIGNING_ALLOWED=NO build
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'Mixr' in project 'Mixr' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/pranavi/Documents/GitHub/mixr/Mixr/AppIcon.icon /Users/pranavi/Documents/GitHub/mixr/Mixr/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 3c1b7e67c76ae16eaaefd4acc68fb2fb
+Build description path: /tmp/mixr-general-build/Build/Intermediates.noindex/XCBuildData/3c1b7e67c76ae16eaaefd4acc68fb2fb.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache
+    cd /Users/pranavi/Documents/GitHub/mixr/Mixr.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -o /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache
+
+SwiftDriver Mixr normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Mixr -Onone @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.SwiftFileList -DDEBUG -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios26.5-simulator -g -module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/mixr-general-build/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/mixr-general-build/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -sdk-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/mixr-general-build/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-generated-files.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-own-target-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-project-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources-normal/x86_64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources/x86_64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-Swift.h -working-directory /Users/pranavi/Documents/GitHub/mixr -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver Mixr normal arm64 com.apple.xcode.tools.swift.compiler (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Mixr -Onone @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.SwiftFileList -DDEBUG -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios26.5-simulator -g -module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/mixr-general-build/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/mixr-general-build/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -sdk-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/mixr-general-build/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-generated-files.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-own-target-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-project-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources-normal/arm64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources/arm64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-Swift.h -working-directory /Users/pranavi/Documents/GitHub/mixr -experimental-emit-module-separately -disable-cmo
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ Mixr (in target 'Mixr' from project 'Mixr')
+
+EmitSwiftModule normal arm64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoOfflineMixdown.swift:200:36: warning: call to main actor-isolated static method 'masterize(channels:companions:sampleRate:targetLUFS:maxMakeupDB:maxCutDB:ceilingDB:maxSustainedDB:)' in a synchronous nonisolated context
+        let master = AutoMasterBus.masterize(
+                                   ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoMasterBus.swift:277:17: note: calls to static method 'masterize(channels:companions:sampleRate:targetLUFS:maxMakeupDB:maxCutDB:ceilingDB:maxSustainedDB:)' from outside of its actor context are implicitly asynchronous
+    static func masterize(
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoOfflineMixdown.swift:50:17: note: add '@MainActor' to make static method 'render(plan:sources:stemSources:sampleRate:trackVolume:sfxTrackVolume:includeTail:)' part of global actor 'MainActor'
+    static func render(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:905:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+        var joinContracts: [AutoJoinContract] = []
+        ~~~ ^
+        let
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:907:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+        var cutRecords: [AutoCutRecord] = []
+        ~~~ ^
+        let
+
+SwiftCompile normal arm64 Compiling\ AutoRemixPlan.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal arm64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ Mixr (in target 'Mixr' from project 'Mixr')
+
+EmitSwiftModule normal x86_64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoOfflineMixdown.swift:200:36: warning: call to main actor-isolated static method 'masterize(channels:companions:sampleRate:targetLUFS:maxMakeupDB:maxCutDB:ceilingDB:maxSustainedDB:)' in a synchronous nonisolated context
+        let master = AutoMasterBus.masterize(
+                                   ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoMasterBus.swift:277:17: note: calls to static method 'masterize(channels:companions:sampleRate:targetLUFS:maxMakeupDB:maxCutDB:ceilingDB:maxSustainedDB:)' from outside of its actor context are implicitly asynchronous
+    static func masterize(
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoOfflineMixdown.swift:50:17: note: add '@MainActor' to make static method 'render(plan:sources:stemSources:sampleRate:trackVolume:sfxTrackVolume:includeTail:)' part of global actor 'MainActor'
+    static func render(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:905:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+        var joinContracts: [AutoJoinContract] = []
+        ~~~ ^
+        let
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:907:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+        var cutRecords: [AutoCutRecord] = []
+        ~~~ ^
+        let
+
+SwiftCompile normal x86_64 Compiling\ AutoRemixPlan.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal x86_64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+
+SwiftCompile normal arm64 Compiling\ AutoRemixValidator.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift (in target 'Mixr' from project 'Mixr')
+SwiftCompile normal arm64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:46:46: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+            p.effects = AutoSupportedEffects.sanitize(p.effects)
+                                             ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:15:17: note: add '@MainActor' to make static method 'validate(_:profiles:tuning:)' part of global actor 'MainActor'
+    static func validate(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:416:24: warning: main actor-isolated property 'pulseDrumStrength' can not be referenced from a nonisolated autoclosure
+            && (owner?.pulseDrumStrength ?? 1) < AutoClubPulse.thinDrumThreshold
+                       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoSectionCatalog.swift:80:9: note: property declared here
+    var pulseDrumStrength: Double {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:427:53: warning: call to main actor-isolated instance method 'url(for:)' in a synchronous nonisolated context
+                  profiles[placement.songID]?.stems.url(for: kind) != nil else { return true }
+                                                    ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoStemSidecar.swift:49:10: note: calls to instance method 'url(for:)' from outside of its actor context are implicitly asynchronous
+    func url(for kind: AutoStemKind) -> URL? {
+         ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:434:44: warning: main actor-isolated property 'pulseDrumStrength' can not be referenced from a nonisolated context
+        policy.sourceHasClubKick = (owner?.pulseDrumStrength ?? 0) >= AutoClubPulse.slammingDrumThreshold
+                                           ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoSectionCatalog.swift:80:9: note: property declared here
+    var pulseDrumStrength: Double {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:402:25: note: add '@MainActor' to make static method 'enforcePulseOwnership(_:profiles:decisions:warnings:)' part of global actor 'MainActor'
+    private static func enforcePulseOwnership(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:464:100: warning: main actor-isolated static property 'festivalDetail' can not be referenced from a nonisolated autoclosure
+        decisions.removeAll { $0.kind == .addedRiserIntoDrop && $0.detail == AutoFestivalMixWindow.festivalDetail }
+                                                                                                   ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:385:16: note: static property declared here
+    static let festivalDetail =
+               ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:639:77: warning: main actor-isolated property 'beatSeconds' can not be referenced from a nonisolated context
+              bars.contains(where: { abs($0 - sourceCut) < profile.analysis.beatSeconds * 0.12 }),
+                                                                            ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift:106:9: note: property declared here
+    var beatSeconds: Double { 60.0 / bpm }
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:723:122: warning: main actor-isolated property 'beatSeconds' can not be referenced from a nonisolated autoclosure
+                      let word = signal.lyricWords.filter({ $0.t >= sourceAtCut && $0.t < sourceAtCut + profile.analysis.beatSeconds * 2 })
+                                                                                                                         ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift:106:9: note: property declared here
+    var beatSeconds: Double { 60.0 / bpm }
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:725:48: warning: main actor-isolated property 'beatSeconds' can not be referenced from a nonisolated context
+                let missing = profile.analysis.beatSeconds + 0.15 - (word.t - sourceAtCut)
+                                               ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift:106:9: note: property declared here
+    var beatSeconds: Double { 60.0 / bpm }
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:713:25: note: add '@MainActor' to make static method 'preserveIncomingPickup(_:profiles:)' part of global actor 'MainActor'
+    private static func preserveIncomingPickup(_ plan: inout AutoRemixPlan, profiles: [UUID: AutoSongProfile]) {
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1439:52: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                seg.effects = AutoSupportedEffects.sanitize(fx)
+                                                   ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1373:25: note: add '@MainActor' to make static method 'shapeTrailingOutro(_:profiles:decisions:)' part of global actor 'MainActor'
+    private static func shapeTrailingOutro(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1510:71: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                    plan.placements[i].effects = AutoSupportedEffects.sanitize(fx)
+                                                                      ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1469:25: note: add '@MainActor' to make static method 'transformVerbatimRepeats(_:decisions:)' part of global actor 'MainActor'
+    private static func transformVerbatimRepeats(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1519:72: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                    plan.placements[ai].effects = AutoSupportedEffects.sanitize(fx)
+                                                                       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1469:25: note: add '@MainActor' to make static method 'transformVerbatimRepeats(_:decisions:)' part of global actor 'MainActor'
+    private static func transformVerbatimRepeats(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1546:56: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                    seg.effects = AutoSupportedEffects.sanitize(fx)
+                                                       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1469:25: note: add '@MainActor' to make static method 'transformVerbatimRepeats(_:decisions:)' part of global actor 'MainActor'
+    private static func transformVerbatimRepeats(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1904:35: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+        fx = AutoSupportedEffects.sanitize(fx)
+                                  ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1843:25: note: add '@MainActor' to make static method 'addIncomingVocalRideIn(_:decisions:)' part of global actor 'MainActor'
+    private static func addIncomingVocalRideIn(
+                        ^
+    @MainActor 
+
+SwiftCompile normal x86_64 Compiling\ AutoRemixValidator.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal x86_64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:46:46: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+            p.effects = AutoSupportedEffects.sanitize(p.effects)
+                                             ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:15:17: note: add '@MainActor' to make static method 'validate(_:profiles:tuning:)' part of global actor 'MainActor'
+    static func validate(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:416:24: warning: main actor-isolated property 'pulseDrumStrength' can not be referenced from a nonisolated autoclosure
+            && (owner?.pulseDrumStrength ?? 1) < AutoClubPulse.thinDrumThreshold
+                       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoSectionCatalog.swift:80:9: note: property declared here
+    var pulseDrumStrength: Double {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:427:53: warning: call to main actor-isolated instance method 'url(for:)' in a synchronous nonisolated context
+                  profiles[placement.songID]?.stems.url(for: kind) != nil else { return true }
+                                                    ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoStemSidecar.swift:49:10: note: calls to instance method 'url(for:)' from outside of its actor context are implicitly asynchronous
+    func url(for kind: AutoStemKind) -> URL? {
+         ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:434:44: warning: main actor-isolated property 'pulseDrumStrength' can not be referenced from a nonisolated context
+        policy.sourceHasClubKick = (owner?.pulseDrumStrength ?? 0) >= AutoClubPulse.slammingDrumThreshold
+                                           ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoSectionCatalog.swift:80:9: note: property declared here
+    var pulseDrumStrength: Double {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:402:25: note: add '@MainActor' to make static method 'enforcePulseOwnership(_:profiles:decisions:warnings:)' part of global actor 'MainActor'
+    private static func enforcePulseOwnership(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:464:100: warning: main actor-isolated static property 'festivalDetail' can not be referenced from a nonisolated autoclosure
+        decisions.removeAll { $0.kind == .addedRiserIntoDrop && $0.detail == AutoFestivalMixWindow.festivalDetail }
+                                                                                                   ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:385:16: note: static property declared here
+    static let festivalDetail =
+               ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:639:77: warning: main actor-isolated property 'beatSeconds' can not be referenced from a nonisolated context
+              bars.contains(where: { abs($0 - sourceCut) < profile.analysis.beatSeconds * 0.12 }),
+                                                                            ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift:106:9: note: property declared here
+    var beatSeconds: Double { 60.0 / bpm }
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:723:122: warning: main actor-isolated property 'beatSeconds' can not be referenced from a nonisolated autoclosure
+                      let word = signal.lyricWords.filter({ $0.t >= sourceAtCut && $0.t < sourceAtCut + profile.analysis.beatSeconds * 2 })
+                                                                                                                         ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift:106:9: note: property declared here
+    var beatSeconds: Double { 60.0 / bpm }
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:725:48: warning: main actor-isolated property 'beatSeconds' can not be referenced from a nonisolated context
+                let missing = profile.analysis.beatSeconds + 0.15 - (word.t - sourceAtCut)
+                                               ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift:106:9: note: property declared here
+    var beatSeconds: Double { 60.0 / bpm }
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:713:25: note: add '@MainActor' to make static method 'preserveIncomingPickup(_:profiles:)' part of global actor 'MainActor'
+    private static func preserveIncomingPickup(_ plan: inout AutoRemixPlan, profiles: [UUID: AutoSongProfile]) {
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1439:52: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                seg.effects = AutoSupportedEffects.sanitize(fx)
+                                                   ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1373:25: note: add '@MainActor' to make static method 'shapeTrailingOutro(_:profiles:decisions:)' part of global actor 'MainActor'
+    private static func shapeTrailingOutro(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1510:71: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                    plan.placements[i].effects = AutoSupportedEffects.sanitize(fx)
+                                                                      ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1469:25: note: add '@MainActor' to make static method 'transformVerbatimRepeats(_:decisions:)' part of global actor 'MainActor'
+    private static func transformVerbatimRepeats(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1519:72: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                    plan.placements[ai].effects = AutoSupportedEffects.sanitize(fx)
+                                                                       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1469:25: note: add '@MainActor' to make static method 'transformVerbatimRepeats(_:decisions:)' part of global actor 'MainActor'
+    private static func transformVerbatimRepeats(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1546:56: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                    seg.effects = AutoSupportedEffects.sanitize(fx)
+                                                       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1469:25: note: add '@MainActor' to make static method 'transformVerbatimRepeats(_:decisions:)' part of global actor 'MainActor'
+    private static func transformVerbatimRepeats(
+                        ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1904:35: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+        fx = AutoSupportedEffects.sanitize(fx)
+                                  ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift:1843:25: note: add '@MainActor' to make static method 'addIncomingVocalRideIn(_:decisions:)' part of global actor 'MainActor'
+    private static func addIncomingVocalRideIn(
+                        ^
+    @MainActor 
+
+SwiftDriverJobDiscovery normal x86_64 Compiling AutoRemixPlan.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriverJobDiscovery normal arm64 Compiling AutoRemixPlan.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling AutoRemixValidator.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal x86_64 Compiling\ AutoRemixRunner.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift (in target 'Mixr' from project 'Mixr')
+SwiftCompile normal x86_64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:67:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+        var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+        ~~~ ^
+        let
+
+SwiftCompile normal x86_64 Compiling\ AutoRemixPlanner.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift (in target 'Mixr' from project 'Mixr')
+SwiftCompile normal x86_64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:905:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+        var joinContracts: [AutoJoinContract] = []
+        ~~~ ^
+        let
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:907:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+        var cutRecords: [AutoCutRecord] = []
+        ~~~ ^
+        let
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1566:62: warning: will never be executed
+            bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+                                                             ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1566:37: note: condition always evaluates to true
+            bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+                                    ^
+
+SwiftCompile normal x86_64 Compiling\ AutoListenLoop.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal x86_64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:58:44: warning: main actor-isolated property 'isClean' can not be referenced from a nonisolated context
+        var blocksApply: Bool { !keptScore.isClean }
+                                           ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:447:9: note: property declared here
+    var isClean: Bool {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:70:22: warning: call to main actor-isolated operator function '<' in a synchronous nonisolated context
+        if candidate < original { return true }
+                     ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:454:17: note: calls to operator function '<' from outside of its actor context are implicitly asynchronous
+    static func < (lhs: AutoPreApplyScore, rhs: AutoPreApplyScore) -> Bool {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:64:17: note: add '@MainActor' to make static method 'keepCandidate(original:candidate:originalResidualCount:candidateResidualCount:)' part of global actor 'MainActor'
+    static func keepCandidate(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:71:21: warning: call to main actor-isolated operator function '<' in a synchronous nonisolated context
+        if original < candidate { return false }
+                    ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:454:17: note: calls to operator function '<' from outside of its actor context are implicitly asynchronous
+    static func < (lhs: AutoPreApplyScore, rhs: AutoPreApplyScore) -> Bool {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:64:17: note: add '@MainActor' to make static method 'keepCandidate(original:candidate:originalResidualCount:candidateResidualCount:)' part of global actor 'MainActor'
+    static func keepCandidate(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:258:17: warning: call to main actor-isolated initializer 'init()' in a synchronous nonisolated context
+        var s = AutoPreApplyScore()
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:440:8: note: calls to initializer 'init()' from outside of its actor context are implicitly asynchronous
+struct AutoPreApplyScore: Sendable, Equatable, Comparable {
+       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:253:17: note: add '@MainActor' to make static method 'score(plan:mix:sampleRate:)' part of global actor 'MainActor'
+    static func score(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:381:43: warning: main actor-isolated property 'isClean' can not be referenced from a nonisolated autoclosure
+        if first.isEmpty && originalScore.isClean {
+                                          ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:447:9: note: property declared here
+    var isClean: Bool {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:667:55: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                        effects: AutoSupportedEffects.sanitize(ClipEffectSettings()),
+                                                      ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:534:25: note: add '@MainActor' to make static method 'fillSourceSilence(plan:holes:sources:stemSources:decisions:)' part of global actor 'MainActor'
+    private static func fillSourceSilence(
+                        ^
+    @MainActor 
+
+SwiftDriverJobDiscovery normal arm64 Compiling AutoRemixValidator.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal arm64 Compiling\ AutoRemixPlanner.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift (in target 'Mixr' from project 'Mixr')
+SwiftCompile normal arm64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:905:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+        var joinContracts: [AutoJoinContract] = []
+        ~~~ ^
+        let
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:907:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+        var cutRecords: [AutoCutRecord] = []
+        ~~~ ^
+        let
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1566:62: warning: will never be executed
+            bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+                                                             ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1566:37: note: condition always evaluates to true
+            bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+                                    ^
+
+SwiftCompile normal arm64 Compiling\ AutoRemixRunner.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal arm64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:67:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+        var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+        ~~~ ^
+        let
+
+SwiftCompile normal arm64 Compiling\ AutoListenLoop.swift /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftCompile normal arm64 /Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:58:44: warning: main actor-isolated property 'isClean' can not be referenced from a nonisolated context
+        var blocksApply: Bool { !keptScore.isClean }
+                                           ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:447:9: note: property declared here
+    var isClean: Bool {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:70:22: warning: call to main actor-isolated operator function '<' in a synchronous nonisolated context
+        if candidate < original { return true }
+                     ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:454:17: note: calls to operator function '<' from outside of its actor context are implicitly asynchronous
+    static func < (lhs: AutoPreApplyScore, rhs: AutoPreApplyScore) -> Bool {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:64:17: note: add '@MainActor' to make static method 'keepCandidate(original:candidate:originalResidualCount:candidateResidualCount:)' part of global actor 'MainActor'
+    static func keepCandidate(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:71:21: warning: call to main actor-isolated operator function '<' in a synchronous nonisolated context
+        if original < candidate { return false }
+                    ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:454:17: note: calls to operator function '<' from outside of its actor context are implicitly asynchronous
+    static func < (lhs: AutoPreApplyScore, rhs: AutoPreApplyScore) -> Bool {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:64:17: note: add '@MainActor' to make static method 'keepCandidate(original:candidate:originalResidualCount:candidateResidualCount:)' part of global actor 'MainActor'
+    static func keepCandidate(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:258:17: warning: call to main actor-isolated initializer 'init()' in a synchronous nonisolated context
+        var s = AutoPreApplyScore()
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:440:8: note: calls to initializer 'init()' from outside of its actor context are implicitly asynchronous
+struct AutoPreApplyScore: Sendable, Equatable, Comparable {
+       ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:253:17: note: add '@MainActor' to make static method 'score(plan:mix:sampleRate:)' part of global actor 'MainActor'
+    static func score(
+                ^
+    @MainActor 
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:381:43: warning: main actor-isolated property 'isClean' can not be referenced from a nonisolated autoclosure
+        if first.isEmpty && originalScore.isClean {
+                                          ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:447:9: note: property declared here
+    var isClean: Bool {
+        ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:667:55: warning: call to main actor-isolated static method 'sanitize' in a synchronous nonisolated context
+                        effects: AutoSupportedEffects.sanitize(ClipEffectSettings()),
+                                                      ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift:700:17: note: calls to static method 'sanitize' from outside of its actor context are implicitly asynchronous
+    static func sanitize(_ settings: ClipEffectSettings) -> ClipEffectSettings {
+                ^
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift:534:25: note: add '@MainActor' to make static method 'fillSourceSilence(plan:holes:sources:stemSources:decisions:)' part of global actor 'MainActor'
+    private static func fillSourceSilence(
+                        ^
+    @MainActor 
+
+SwiftDriverJobDiscovery normal x86_64 Compiling AutoRemixRunner.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriverJobDiscovery normal arm64 Compiling AutoRemixRunner.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling AutoListenLoop.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriverJobDiscovery normal arm64 Compiling AutoListenLoop.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling AutoRemixPlanner.swift (in target 'Mixr' from project 'Mixr')
+
+SwiftDriver\ Compilation Mixr normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Mixr -Onone @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.SwiftFileList -DDEBUG -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios26.5-simulator -g -module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/mixr-general-build/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/mixr-general-build/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -sdk-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/mixr-general-build/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-generated-files.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-own-target-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-project-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources-normal/x86_64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources/x86_64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-Swift.h -working-directory /Users/pranavi/Documents/GitHub/mixr -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for Mixr (in target 'Mixr' from project 'Mixr')
+
+SwiftDriver\ Compilation\ Requirements Mixr normal arm64 com.apple.xcode.tools.swift.compiler (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Mixr -Onone @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.SwiftFileList -DDEBUG -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios26.5-simulator -g -module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/mixr-general-build/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/mixr-general-build/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -sdk-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/mixr-general-build/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-generated-files.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-own-target-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-project-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources-normal/arm64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources/arm64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-Swift.h -working-directory /Users/pranavi/Documents/GitHub/mixr -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal x86_64 Emitting module for Mixr (in target 'Mixr' from project 'Mixr')
+
+SwiftDriver\ Compilation\ Requirements Mixr normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Mixr -Onone @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.SwiftFileList -DDEBUG -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios26.5-simulator -g -module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/mixr-general-build/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/mixr-general-build/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -sdk-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/mixr-general-build/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-generated-files.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-own-target-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-project-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources-normal/x86_64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources/x86_64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-Swift.h -working-directory /Users/pranavi/Documents/GitHub/mixr -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Compiling AutoRemixPlanner.swift (in target 'Mixr' from project 'Mixr')
+
+Ld /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr.debug.dylib normal x86_64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target x86_64-apple-ios26.5-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/mixr-general-build/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F/tmp/mixr-general-build/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -filelist /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.LinkFileList -install_name @rpath/Mixr.debug.dylib -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftmodule @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr-linker-args.resp -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -o /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr.debug.dylib
+
+SwiftDriver\ Compilation Mixr normal arm64 com.apple.xcode.tools.swift.compiler (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Mixr -Onone @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.SwiftFileList -DDEBUG -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios26.5-simulator -g -module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/mixr-general-build/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/mixr-general-build/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/mixr-general-build/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -sdk-module-cache-path /tmp/mixr-general-build/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/mixr-general-build/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-generated-files.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-own-target-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-project-headers.hmap -Xcc -I/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources-normal/arm64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources/arm64 -Xcc -I/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-Swift.h -working-directory /Users/pranavi/Documents/GitHub/mixr -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr.debug.dylib normal arm64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios26.5-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/mixr-general-build/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F/tmp/mixr-general-build/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -filelist /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.LinkFileList -install_name @rpath/Mixr.debug.dylib -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftmodule @/tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr-linker-args.resp -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -o /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr.debug.dylib
+
+Copy /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/x86_64-apple-ios-simulator.swiftmodule /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftmodule (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftmodule /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/x86_64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/x86_64-apple-ios-simulator.abi.json /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.abi.json (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.abi.json /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/x86_64-apple-ios-simulator.abi.json
+
+Copy /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftsourceinfo (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.swiftsourceinfo /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo
+
+Copy /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftsourceinfo (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftsourceinfo /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+Copy /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.abi.json (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.abi.json /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+Copy /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftmodule (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.swiftmodule /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+ConstructStubExecutorLinkFileList /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-ExecutorLinkFileList-normal-x86_64.txt (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    construct-stub-executor-link-file-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-ExecutorLinkFileList-normal-x86_64.txt
+note: Using stub executor library with Swift entry point. (in target 'Mixr' from project 'Mixr')
+
+CreateUniversalBinary /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Mixr.debug.dylib normal arm64\ x86_64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo -create /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr.debug.dylib /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr.debug.dylib -output /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Mixr.debug.dylib
+
+ConstructStubExecutorLinkFileList /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-ExecutorLinkFileList-normal-arm64.txt (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    construct-stub-executor-link-file-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'Mixr' from project 'Mixr')
+
+Ld /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr normal x86_64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target x86_64-apple-ios26.5-simulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @executable_path/Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-DebugDylibPath-normal-x86_64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-DebugDylibInstallName-normal-x86_64.txt -Xlinker -filelist -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-ExecutorLinkFileList-normal-x86_64.txt /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr.debug.dylib -o /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr
+
+Ld /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr normal arm64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios26.5-simulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -F/tmp/mixr-general-build/Build/Products/Debug-iphonesimulator -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @executable_path/Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr-ExecutorLinkFileList-normal-arm64.txt /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr.debug.dylib -o /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr
+
+CreateUniversalBinary /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Mixr normal arm64\ x86_64 (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo -create /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Binary/Mixr /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Binary/Mixr -output /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Mixr
+
+ExtractAppIntentsMetadata (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name Mixr --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 26.5 --bundle-identifier com.pranavi.Mixr --output /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app --target-triple arm64-apple-ios26.5-simulator --target-triple x86_64-apple-ios26.5-simulator --binary-file /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Mixr --dependency-file /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr_dependency_info.dat --dependency-file /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr_dependency_info.dat --stringsdata-file /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --stringsdata-file /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.SwiftFileList --source-file-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.SwiftFileList --metadata-file-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr.DependencyMetadataFileList --static-metadata-file-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Mixr.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/arm64/Mixr.SwiftConstValuesFileList --swift-const-vals-list /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/Objects-normal/x86_64/Mixr.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-09-12 21:52:28.413 appintentsmetadataprocessor[82554:2363358] Starting appintentsmetadataprocessor export
+2026-09-12 21:52:28.420 appintentsmetadataprocessor[82554:2363358] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+ProcessInfoPlistFile /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Info.plist /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/empty-Mixr.plist (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-infoPlistUtility /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/empty-Mixr.plist -producttype com.apple.product-type.application -genpkginfo /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/assetcatalog_generated_info.plist -o /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Info.plist
+
+CopySwiftLibs /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app (in target 'Mixr' from project 'Mixr')
+    cd /Users/pranavi/Documents/GitHub/mixr
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Mixr.debug.dylib --scan-folder /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Frameworks --scan-folder /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/PlugIns --scan-folder /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/SystemExtensions --scan-folder /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/mixr-general-build/Build/Products/Debug-iphonesimulator/Mixr.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/mixr-general-build/Build/Intermediates.noindex/Mixr.build/Debug-iphonesimulator/Mixr.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+** BUILD SUCCEEDED **
+

@@ -25,6 +25,9 @@ nonisolated enum AutoRemixValidator {
         let beatSec = plan.beatSeconds
         let echoMinLen = max(0.12, beatSec * 0.4)
 
+        // Remove covered tails before overlap repair can shorten their lead.
+        removeCoveredVocalTails(&plan)
+
         // Short supporting DJ echo throws OR 1-beat pivot wallpaper grains
         // may sit below the global clip minimum.
         func isHookEchoThrow(_ p: AutoClipPlacement) -> Bool {
@@ -261,7 +264,7 @@ nonisolated enum AutoRemixValidator {
         if ProcessInfo.processInfo.environment["MIXR_NO_INVARIANTS"] != "1" {
             enforceArrangementInvariants(&plan, profiles: profiles, warnings: &warnings, decisions: &decisions)
         }
-        addIncomingVocalRideIn(&plan, decisions: &decisions)
+        // No automatic incoming vocal preview: it creates a second handoff.
         addPivotBlendFloor(&plan, decisions: &decisions)
         coverPivotWallpaperSeam(&plan, decisions: &decisions)
 
@@ -380,6 +383,16 @@ nonisolated enum AutoRemixValidator {
             warnings.append("Arrangement runs long; consider removing a song.")
         }
 
+        // Run after generic repairs: preserve the outgoing continuation,
+        // then prepare one handoff without stacked take-out effects.
+        makeRoomForOutgoingContinuation(&plan, profiles: profiles, decisions: &decisions, warnings: &warnings)
+        compactInstrumentalOpening(&plan, profiles: profiles, decisions: &decisions)
+        finishRisingHandoff(&plan, profiles: profiles, decisions: &decisions)
+        preserveIncomingPickup(&plan, profiles: profiles)
+        prepareInstrumentalHandoffs(&plan, profiles: profiles, decisions: &decisions)
+        removeCoveredVocalTails(&plan)
+        enforcePulseOwnership(&plan, profiles: profiles, decisions: &decisions, warnings: &warnings)
+
         // ── 10. Recompute handoff count from dominant slot sequence ──
         plan.handoffCount = recomputedHandoffs(plan.placements)
 
@@ -387,6 +400,547 @@ nonisolated enum AutoRemixValidator {
         plan.decisions = decisions
         plan.targetDuration = plan.placements.map(\.timelineEnd).max() ?? plan.targetDuration
         return plan
+    }
+
+    /// Pulse eligibility is only a proposal until the arranged source has
+    /// actually yielded kick and bass. Low-pass blur does not remove them.
+    private static func enforcePulseOwnership(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        decisions: inout [AutoDecision],
+        warnings: inout [String]
+    ) {
+        guard var policy = plan.pulsePolicy, policy.writesKick || policy.writesBass else { return }
+        let ownerID = plan.mashupBedSongID ?? plan.anchorSongIDs.first
+        let owner = ownerID.flatMap { profiles[$0] }
+        let signal = owner?.analysis.signal
+        let measuredThin = (signal?.overallConfidence ?? 0) >= 0.4
+            && (signal?.beatConfidence ?? 0) > 0.35
+            && signal?.downbeatOffsetSeconds?.isFinite == true
+            && owner?.analysis.bpmIsReal == true
+            && (owner?.pulseDrumStrength ?? 1) < AutoClubPulse.thinDrumThreshold
+        let hits = AutoClubPulse.scheduleHits(regions: plan.pulseRegions, policy: policy,
+            beatSeconds: plan.beatSeconds, barSeconds: plan.barSeconds,
+            halfTimeDrop: plan.clubFlavor?.bias.halfTimeDrop ?? false)
+        let lowEndStillPresent = plan.placements.contains { placement in
+            guard placement.volume > 0, hits.contains(where: {
+                $0.timelineStart < placement.timelineEnd
+                    && $0.timelineStart + (SoundEffectLibrary.definition(for: $0.assetID)?.durationSeconds ?? 0.3) > placement.timelineStart
+            }) else { return false }
+            guard let kind = placement.stemKind,
+                  kind == .vocals || kind == .other,
+                  profiles[placement.songID]?.stems.url(for: kind) != nil else { return true }
+            return false
+        }
+        guard !measuredThin || lowEndStillPresent else { return }
+        policy.writesKick = false
+        policy.writesBass = false
+        policy.duckSourceLowEnd = false
+        policy.sourceHasClubKick = (owner?.pulseDrumStrength ?? 0) >= AutoClubPulse.slammingDrumThreshold
+        policy.detail = measuredThin
+            ? "extra kick/bass skipped because the arranged source still owns its low end"
+            : "extra kick/bass skipped because weak drums and a reliable beat grid were not established"
+        plan.pulsePolicy = policy
+        decisions.removeAll { $0.kind == .wroteClubPulse }
+        decisions.append(AutoDecision(kind: .skippedSecondKick, detail: policy.detail))
+        warnings.append(policy.detail)
+    }
+
+    /// A continuation tail already covered by a dominant clip on the same
+    /// source clock is duplicate audio, not an additional vocal idea.
+    private static func removeCoveredVocalTails(_ plan: inout AutoRemixPlan) {
+        let leads = plan.placements.filter { $0.role == .dominant && $0.stemKind == .vocals }
+        plan.placements.removeAll { tail in
+            tail.role == .supporting && tail.stemKind == .vocals && tail.continuesPrevious
+                && leads.contains { lead in
+                    lead.songID == tail.songID && lead.timelineStart <= tail.timelineStart+0.001
+                        && lead.timelineEnd >= tail.timelineEnd-0.001
+                        && abs(lead.tempoRatio-tail.tempoRatio)<0.0001
+                        && abs(lead.sourceStart+(tail.timelineStart-lead.timelineStart)*lead.tempoRatio-tail.sourceStart)<0.005
+                }
+        }
+    }
+
+    /// Prepare actual music, not a louder effect over a source dropout.
+    /// Only an already-approved complete stem bed may be brought forward.
+    /// Its source clock at the drop and every vocal placement stay unchanged.
+    private static func prepareInstrumentalHandoffs(_ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile], decisions: inout [AutoDecision]) {
+        for join in plan.joinContracts where join.kind == .sweepJoin {
+            let incoming = plan.placements.indices.filter { i in
+                let p = plan.placements[i]
+                return p.role == .supporting && p.stemKind != nil && p.stemKind != .vocals
+                    && abs(p.timelineStart - join.cutAt) < 0.01
+            }
+            guard incoming.count == 3,
+                  Set(incoming.compactMap { plan.placements[$0].stemKind }).count == 3,
+                  let first = incoming.first.map({ plan.placements[$0] }),
+                  let profile = profiles[first.songID], profile.stems.hasCompleteInstrumental,
+                  profile.analysis.analysisConfidence >= 0.65,
+                  let energy = profile.instrumentalEnergy,
+                  incoming.allSatisfy({
+                      let p = plan.placements[$0]
+                      return p.songID == first.songID && abs(p.sourceStart-first.sourceStart) < 0.01
+                          && abs(p.tempoRatio-first.tempoRatio) < 0.0001
+                  }) else { continue }
+
+            // Prefer the longer useful runway, but never extrapolate into
+            // unavailable audio or replace a full record with fake isolation.
+            for bars in [2.0, 1.0] {
+                let start = join.cutAt - bars * plan.barSeconds
+                guard start >= join.windowStart - 0.01 else { continue }
+                let duration = join.cutAt - start
+                let source = first.sourceStart - duration * first.tempoRatio
+                let outgoing = plan.placements.indices.filter { i in
+                    let p = plan.placements[i]
+                    return p.timelineStart < join.cutAt - 0.01 && p.timelineEnd > start + 0.01
+                        && p.stemKind != .vocals
+                }
+                guard outgoing.count == 3,
+                      Set(outgoing.compactMap { plan.placements[$0].stemKind }).count == 3,
+                      let old = outgoing.first.map({ plan.placements[$0] }),
+                      let oldEnergy = profiles[old.songID]?.instrumentalEnergy,
+                      outgoing.allSatisfy({
+                          let p = plan.placements[$0]
+                          return p.role == .supporting && p.stemKind != nil
+                              && p.songID == old.songID && p.timelineStart <= start + 0.01
+                              && abs(p.timelineEnd - join.cutAt) < 0.05
+                              && abs(p.sourceStart-old.sourceStart) < 0.01
+                              && abs(p.timelineStart-old.timelineStart) < 0.01
+                              && abs(p.tempoRatio-old.tempoRatio) < 0.0001
+                      }) else { continue }
+                let oldStart = old.sourceStart + (start-old.timelineStart) * old.tempoRatio
+                guard let before = oldEnergy.floor(from: oldStart, duration: duration*old.tempoRatio, beat: plan.beatSeconds*old.tempoRatio),
+                      let beforeDrums = oldEnergy.floor(from: oldStart, duration: duration*old.tempoRatio, beat: plan.beatSeconds*old.tempoRatio, drums: true),
+                      let after = energy.floor(from: source, duration: duration*first.tempoRatio, beat: plan.beatSeconds*first.tempoRatio),
+                      let afterDrums = energy.floor(from: source, duration: duration*first.tempoRatio, beat: plan.beatSeconds*first.tempoRatio, drums: true),
+                      after > before + 3, afterDrums > beforeDrums + 3,
+                      after > -40, afterDrums > -45 else { continue }
+
+                // One low-end owner: drums and bass meet at a microfaded
+                // edge. Harmony alone gets a short real temporal overlap.
+                for i in incoming {
+                    plan.placements[i].timelineStart = start
+                    plan.placements[i].sourceStart = source
+                    plan.placements[i].timelineDuration += duration
+                    plan.placements[i].continuesPrevious = false
+                    if plan.placements[i].stemKind == .other {
+                        plan.placements[i].fadeIn = ClipTransition(type: .crossfade, duration: 0.5, curve: AutoTransitionEnvelope.equalPowerCurveName)
+                    } else { plan.placements[i].fadeIn = .none }
+                }
+                for i in outgoing {
+                    let harmony = plan.placements[i].stemKind == .other
+                    let overlap = harmony ? 0.5 * plan.beatSeconds : 0
+                    plan.placements[i].timelineDuration = start + overlap - plan.placements[i].timelineStart
+                    plan.placements[i].fadeOut = harmony
+                        ? ClipTransition(type: .crossfade, duration: 0.5, curve: AutoTransitionEnvelope.equalPowerCurveName) : .none
+                }
+                plan.placements.removeAll { $0.timelineDuration <= 0.001 }
+                decisions.append(AutoDecision(kind: .imposedClubEnergyCurve, songTitle: profile.title,
+                    detail: String(format: "prepared %.0f bars of continuous backing; measured quietest beat improves %.1f dB", bars, after-before)))
+                break
+            }
+        }
+    }
+
+    /// Balance after generic staging has established the actual clip gains.
+    /// The nonzero fade endpoint retains the base gain across repeated calls.
+    static func balancePreparedHandoffs(_ plan: inout AutoRemixPlan, profiles: [UUID: AutoSongProfile]) {
+        for join in plan.joinContracts where join.kind == .sweepJoin {
+            let start = join.windowStart
+            let duration = join.cutAt-start
+            guard duration > 0,
+                  let first = plan.placements.first(where: { p in
+                      p.stemKind == .drums && p.role == .supporting && abs(p.timelineStart-start)<0.01 && p.timelineEnd > join.cutAt
+                  }), let energy = profiles[first.songID]?.instrumentalEnergy,
+                  let old = plan.placements.first(where: { p in
+                      p.stemKind == .drums && p.timelineStart <= start-2*plan.barSeconds+0.05
+                          && abs(p.timelineEnd-start)<0.05
+                  }), let oldProfile = profiles[old.songID], let oldEnergy = oldProfile.instrumentalEnergy,
+                  let after = energy.floor(from: first.sourceStart, duration: duration*first.tempoRatio, beat: plan.beatSeconds*first.tempoRatio)
+            else { continue }
+            let oldEnd = old.sourceStart + (start-old.timelineStart)*old.tempoRatio
+            let referenceStart = max(0, oldEnd-2*plan.barSeconds*old.tempoRatio)
+            guard let backing = oldEnergy.level(from: referenceStart, to: oldEnd) else { continue }
+            var referencePower = pow(10, backing/10)*old.volume*old.volume
+            if let voice = plan.placements.first(where: { p in
+                p.songID == old.songID && p.role == .dominant && p.stemKind == .vocals
+                    && p.timelineStart <= start-2*plan.barSeconds+0.05 && p.timelineEnd >= start
+                    && abs(p.sourceStart+(start-p.timelineStart)*p.tempoRatio-oldEnd)<0.05
+            }), let signal = oldProfile.analysis.signal, !signal.stemVocalRMSCurveDB.isEmpty {
+                referencePower += pow(10, signal.meanStemVocalRMSDB(from: referenceStart, to: oldEnd)/10)*voice.volume*voice.volume
+            }
+            let base = first.volume*(first.fadeIn.floorGain ?? 1)
+            guard base > 0 else { continue }
+            let needed = 10*log10(max(referencePower, 1e-12))-3-after-20*log10(base)
+            let gain = min(AutoGainPolicy.maxClipVolume, base*pow(10, min(4, max(0, needed))/20))
+            guard gain > base*1.01 else { continue }
+            let dropEnd = plan.pulseRegions.first { $0.role == .drop && abs($0.timelineStart-join.cutAt)<0.05 }?.timelineEnd ?? first.timelineEnd
+            for i in plan.placements.indices {
+                let p = plan.placements[i]
+                guard p.songID == first.songID, p.role == .supporting,
+                      p.stemKind != nil, p.stemKind != .vocals,
+                      p.timelineStart >= start-0.01, p.timelineStart < dropEnd else { continue }
+                plan.placements[i].volume = gain
+                if abs(p.timelineStart-start)<0.01, p.stemKind != .other {
+                    plan.placements[i].fadeIn = ClipTransition(type: .crossfade, duration: 4,
+                        curve: AutoTransitionEnvelope.equalPowerCurveName, floorGain: base/gain)
+                }
+            }
+        }
+        preserveForegroundBalance(&plan, profiles: profiles)
+    }
+
+    /// Compare a voiced phrase with its own original backing, rather than
+    /// treating a louder replacement bed as sufficient evidence of energy.
+    /// This estimates dry-stem contrast; final DSP and audition still matter.
+    private static func preserveForegroundBalance(_ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile]) {
+        for i in plan.placements.indices {
+            let lead = plan.placements[i]
+            guard lead.role == .dominant, lead.stemKind == .vocals,
+                  lead.timelineDuration >= 4*plan.beatSeconds, lead.volume > 0,
+                  let profile = profiles[lead.songID], let native = profile.instrumentalEnergy,
+                  let signal = profile.analysis.signal, signal.hopSeconds > 0,
+                  let peak = signal.stemVocalRMSCurveDB.filter({ $0.isFinite }).max(),
+                  peak > -50 else { continue }
+            let voicedFloor = max(-40, peak-18)
+            var corrections: [Double] = []
+            let window = 0.4
+            var time = lead.timelineStart
+            while time+window <= lead.timelineEnd {
+                defer { time += 0.2 }
+                let source = lead.sourceStart+(time-lead.timelineStart)*lead.tempoRatio
+                let end = source+window*lead.tempoRatio
+                guard source >= 0, end <= Double(signal.stemVocalRMSCurveDB.count)*signal.hopSeconds,
+                      signal.meanStemVocalRMSDB(from: source, to: end) >= voicedFloor,
+                      let nativeDB = native.level(from: source, to: end), nativeDB > -45 else { continue }
+                let bed = plan.placements.filter { p in
+                    p.role == .supporting && p.stemKind != nil && p.stemKind != .vocals
+                        && p.timelineStart <= time && p.timelineEnd >= time+window
+                }
+                // Only a measured, coherent complete instrumental owner.
+                // Unequal stem balances require individual measurements.
+                guard bed.count == 3, Set(bed.compactMap(\.stemKind)).count == 3,
+                      let first = bed.first, first.volume > 0,
+                      bed.allSatisfy({ p in
+                          p.songID == first.songID && abs(p.volume-first.volume)<0.001
+                              && abs(p.tempoRatio-first.tempoRatio)<0.0001
+                              && abs(p.sourceStart+(time-p.timelineStart)*p.tempoRatio
+                                  - first.sourceStart-(time-first.timelineStart)*first.tempoRatio)<0.01
+                      }), let backing = profiles[first.songID]?.instrumentalEnergy else { continue }
+                let bedSource = first.sourceStart+(time-first.timelineStart)*first.tempoRatio
+                guard let bedDB = backing.level(from: bedSource, to: bedSource+window*first.tempoRatio),
+                      bedDB > -45 else { continue }
+                corrections.append(bedDB+20*log10(first.volume)-nativeDB-20*log10(lead.volume))
+            }
+            guard corrections.count >= 5 else { continue }
+            corrections.sort()
+            let correction = corrections[corrections.count/2]
+            guard correction > 0.5 else { continue }
+            let gain = min(AutoGainPolicy.maxClipVolume, lead.volume*pow(10, min(6,correction)/20))
+            guard gain > lead.volume*1.01 else { continue }
+            plan.placements[i].volume = gain
+            if lead.continuesPrevious {
+                plan.placements[i].fadeIn = ClipTransition(type: .crossfade, duration: 1,
+                    curve: AutoTransitionEnvelope.equalPowerCurveName, floorGain: lead.volume/gain)
+            }
+        }
+    }
+
+    /// Shape the handoff effects without shortening a scheduled vocal line.
+    /// Quiet valleys and word-onset gaps cannot establish phrase endings.
+    private static func finishRisingHandoff(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        decisions: inout [AutoDecision]
+    ) {
+        guard plan.mode == .mashup,
+              let join = plan.joinContracts.filter({ $0.kind == .sweepJoin })
+                .min(by: { $0.cutAt < $1.cutAt }),
+              let outgoing = join.outgoingSongID,
+              let incoming = join.incomingSongID, outgoing != incoming else { return }
+
+        // One ascent, followed by room for the incoming line. A riser's
+        // rendered waveform rises continuously; no stepped music filter is
+        // required. Keep subsequent arrangement effects outside this window.
+        let protectedEnd = join.cutAt + 2 * plan.barSeconds
+        plan.sfxEvents.removeAll {
+            $0.timelineEnd > join.windowStart && $0.timelineStart < protectedEnd
+        }
+        decisions.removeAll { $0.kind == .addedRiserIntoDrop && $0.detail == AutoFestivalMixWindow.festivalDetail }
+        if let riser = SoundEffectLibrary.definition(for: "riser"),
+           riser.durationSeconds <= join.cutAt - join.windowStart + 0.05 {
+            plan.sfxEvents.append(AutoSFXEvent(assetID: "riser",
+                timelineStart: join.cutAt - riser.durationSeconds,
+                purpose: "small continuous ascension into one handoff"))
+        } else if let sweep = SoundEffectLibrary.definition(for: "sweepUp"),
+                  sweep.durationSeconds <= join.cutAt - join.windowStart + 0.05 {
+            plan.sfxEvents.append(AutoSFXEvent(assetID: "sweepUp",
+                timelineStart: join.cutAt - sweep.durationSeconds,
+                purpose: "short ascension into one handoff"))
+        }
+        if plan.sfxEvents.contains(where: { abs($0.timelineEnd - join.cutAt) < 0.05 }) {
+            decisions.append(AutoDecision(kind: .addedRiserIntoDrop,
+                detail: "one short rising handoff; room for the incoming phrase"))
+        }
+    }
+
+    /// A late outgoing pickup is evidence to allow more time, never evidence
+    /// to cut a line at a quiet valley. Preserve the whole source clock and
+    /// move the incoming phrase and every later event together.
+    private static func makeRoomForOutgoingContinuation(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        decisions: inout [AutoDecision],
+        warnings: inout [String]
+    ) {
+        guard plan.mode == .mashup,
+              let index = plan.joinContracts.indices.filter({ plan.joinContracts[$0].kind == .sweepJoin })
+                .min(by: { plan.joinContracts[$0].cutAt < plan.joinContracts[$1].cutAt }) else { return }
+        let join = plan.joinContracts[index]
+        guard let outgoing = join.outgoingSongID, let incoming = join.incomingSongID, outgoing != incoming,
+              let profile = profiles[outgoing], let signal = profile.analysis.signal,
+              signal.overallConfidence >= 0.65,
+              let tail = plan.placements.filter({
+                  $0.songID == outgoing && $0.role == .dominant
+                      && $0.timelineStart >= join.windowStart - 0.05
+                      && $0.timelineStart < join.cutAt && $0.timelineEnd >= join.cutAt - 0.08
+              }).max(by: { $0.timelineEnd < $1.timelineEnd }) else { return }
+        let sourceEnd = tail.sourceStart + (join.cutAt - tail.timelineStart) * tail.tempoRatio
+        let sourceBeat = plan.beatSeconds * tail.tempoRatio
+        let words = signal.lyricWords.filter { $0.t.isFinite }.sorted { $0.t < $1.t }
+        let latePickup = zip(words, words.dropFirst()).first { previous, next in
+            next.t >= sourceEnd - sourceBeat && next.t < sourceEnd
+                && next.t - previous.t > sourceBeat * 1.2
+        }
+        guard let latePickup else { return }
+        // A fixed extension can land inside the following line. Require a
+        // later pause in the isolated vocal, corroborated by the word clock.
+        // This can extend an existing passage; it can never shorten one.
+        let earliestExit = max(sourceEnd, latePickup.1.t + 4 * sourceBeat)
+        let latestExit = min(profile.analysis.durationSeconds - 0.05, sourceEnd + 8 * plan.barSeconds * tail.tempoRatio)
+        let barExit = continuationBarEntrance(after: earliestExit, before: latestExit,
+            sourceBeat: sourceBeat, profile: profile)
+        guard let vocalExit = barExit ?? continuationPause(after: earliestExit, before: latestExit,
+                sourceBeat: sourceBeat, signal: signal) else {
+            let warning = "Could not verify the outgoing continuation's ending; the handoff needs phrase review."
+            if !warnings.contains(warning) { warnings.append(warning) }
+            return
+        }
+        let vocalExitTimeline = tail.timelineStart + (vocalExit - tail.sourceStart) / tail.tempoRatio
+        // Leave room for the bounded incoming consonant pickup. The music
+        // bed continues to the next bar; no following outgoing lyric starts.
+        let delay = max(plan.barSeconds,
+            ceil((vocalExitTimeline + 0.3 - join.cutAt) / plan.barSeconds) * plan.barSeconds)
+        let carry = plan.placements.indices.filter {
+            let p = plan.placements[$0]
+            return p.songID == outgoing && p.timelineStart < join.cutAt
+                && p.timelineEnd >= join.cutAt - 0.08
+        }
+        // A full mix cannot yield its vocal separately from its groove.
+        // Such cases need an independently legal full-record handoff.
+        guard tail.stemKind == .vocals, carry.contains(where: {
+            let kind = plan.placements[$0].stemKind
+            return kind == .other || kind == .drums
+        }), carry.allSatisfy({ plan.placements[$0].stemKind != nil }), carry.allSatisfy({
+            let p = plan.placements[$0]
+            return p.sourceStart + (join.cutAt + delay - p.timelineStart) * p.tempoRatio <= profile.analysis.durationSeconds - 0.05
+        }) else { return }
+        // Generic lyric repair may already have split a tail at the old
+        // cut. Its source is now inside the extended passage; moving that
+        // tail with the guest would replay a fragment over the new lead.
+        let coveredTailIndices = Set(plan.placements.indices.filter {
+            let p = plan.placements[$0]
+            return p.songID == outgoing && p.stemKind == .vocals
+                && p.role == .supporting && p.continuesPrevious
+                && abs(p.timelineStart - join.cutAt) < 0.15
+                && abs(p.sourceStart - sourceEnd) < 0.15
+                && p.sourceEnd <= vocalExit + 0.01
+        })
+        let protectedEnd = join.cutAt + delay
+        plan.sfxEvents.removeAll { $0.timelineEnd > join.windowStart && $0.timelineStart < protectedEnd }
+        for i in plan.placements.indices {
+            if plan.placements[i].timelineStart >= join.cutAt - 0.01 {
+                plan.placements[i].timelineStart += delay
+            } else if carry.contains(i) {
+                let end = plan.placements[i].stemKind == .vocals ? vocalExitTimeline : join.cutAt + delay
+                plan.placements[i].timelineDuration = end - plan.placements[i].timelineStart
+                plan.placements[i].fadeOut = .none
+            }
+        }
+        plan.placements = plan.placements.enumerated()
+            .filter { !coveredTailIndices.contains($0.offset) }.map(\.element)
+        for i in plan.sfxEvents.indices where plan.sfxEvents[i].timelineStart >= join.cutAt { plan.sfxEvents[i].timelineStart += delay }
+        for i in plan.pulseRegions.indices {
+            if plan.pulseRegions[i].timelineStart >= join.cutAt - 0.01 {
+                plan.pulseRegions[i].timelineStart += delay
+                plan.pulseRegions[i].timelineEnd += delay
+            } else if abs(plan.pulseRegions[i].timelineEnd - join.cutAt) < 0.05 {
+                plan.pulseRegions[i].timelineEnd += delay
+                if plan.pulseRegions[i].role == .buildOut { plan.pulseRegions[i].timelineStart += delay }
+            }
+        }
+        plan.pulseRegions.append(.init(role: .groove, timelineStart: join.windowStart, timelineEnd: join.windowStart + delay))
+        for i in plan.joinContracts.indices where plan.joinContracts[i].cutAt >= join.cutAt - 0.01 {
+            plan.joinContracts[i].cutAt += delay
+            plan.joinContracts[i].windowStart += delay
+        }
+        for i in plan.cutRecords.indices where plan.cutRecords[i].timelineAt >= join.cutAt - 0.01 {
+            if abs(plan.cutRecords[i].timelineAt - join.cutAt) < 0.05 { plan.cutRecords[i].sourceFrom += delay * tail.tempoRatio }
+            plan.cutRecords[i].timelineAt += delay
+        }
+        for i in plan.intentionalGaps.indices where plan.intentionalGaps[i].start >= join.cutAt {
+            plan.intentionalGaps[i].start += delay; plan.intentionalGaps[i].end += delay
+        }
+        plan.targetDuration += delay
+        decisions.append(AutoDecision(kind: .finishedLyricLine, songTitle: profile.title,
+            detail: String(format: "kept the outgoing continuation to %@; delayed the handoff %.1f bars",
+                barExit == nil ? "a measured vocal pause" : "a measured bar before the following lyric", delay / plan.barSeconds)))
+        let reviewWarning = "Review the delayed handoff: measured timing does not confirm a complete lyric phrase."
+        if !warnings.contains(reviewWarning) { warnings.append(reviewWarning) }
+    }
+
+    /// Prefer an independently measured source bar where the next word
+    /// enters, after allowing the current continuation at least one bar.
+    /// Unlike a quiet valley, this can distinguish a phrase pickup from a
+    /// pause inside the line. Keep the timing evidence separate from audition.
+    private static func continuationBarEntrance(after start: Double, before end: Double,
+        sourceBeat: Double, profile: AutoSongProfile) -> Double? {
+        guard let signal = profile.analysis.signal, signal.beatConfidence >= 0.65,
+              let bars = profile.loudness?.downbeats, bars.count >= 3 else { return nil }
+        let words = signal.lyricWords.filter { $0.t.isFinite }.sorted { $0.t < $1.t }
+        for bar in bars.filter({ $0.isFinite && $0 >= start && $0 <= end }).sorted() {
+            guard let next = words.first(where: { $0.t >= bar }),
+                  next.t - bar <= min(0.15, sourceBeat * 0.25),
+                  let previous = words.last(where: { $0.t < bar }),
+                  bar - previous.t >= max(0.25, sourceBeat * 0.45) else { continue }
+            return bar
+        }
+        return nil
+    }
+
+    /// Reserve time for a preserved continuation by shortening only the
+    /// instrumental opening, in complete two-bar units. The retained exit
+    /// needs a measured downbeat, a quiet isolated vocal and no earlier word.
+    private static func compactInstrumentalOpening(_ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile], decisions: inout [AutoDecision]) {
+        guard let drop = plan.joinContracts.filter({ $0.kind == .sweepJoin }).map(\.cutAt).min(),
+              drop > 24 * plan.barSeconds + 0.05,
+              let first = plan.placements.filter({ $0.role == .dominant }).min(by: { $0.timelineStart < $1.timelineStart }),
+              first.timelineStart < 0.01, first.stemKind == nil,
+              let profile = profiles[first.songID], let signal = profile.analysis.signal,
+              signal.overallConfidence >= 0.65, !signal.stemVocalRMSCurveDB.isEmpty,
+              let bars = profile.loudness?.downbeats, !bars.isEmpty,
+              let firstWord = signal.lyricWords.filter({ $0.t >= first.sourceStart }).map(\.t).min(),
+              let handoff = plan.placements.filter({ $0.role == .dominant && $0.timelineStart > 0.05 })
+                .map(\.timelineStart).min() else { return }
+        let remove = ceil((drop / plan.barSeconds - 24) / 2) * 2 * plan.barSeconds
+        let kept = handoff - remove
+        let sourceCut = first.sourceStart + kept * first.tempoRatio
+        guard kept >= 4 * plan.barSeconds - 0.05,
+              plan.placements.filter({ $0.timelineStart < handoff - 0.01 }).allSatisfy({
+                  $0.songID == first.songID && abs($0.sourceStart - (first.sourceStart + $0.timelineStart * first.tempoRatio)) < 0.1
+              }),
+              sourceCut + 0.25 < firstWord,
+              bars.contains(where: { abs($0 - sourceCut) < profile.analysis.beatSeconds * 0.12 }),
+              signal.meanStemVocalRMSDB(from: sourceCut - 0.2, to: sourceCut + 0.2) < -38 else { return }
+        // Remove only continuation tails of the now-omitted intro material.
+        plan.placements.removeAll { p in
+            (p.timelineStart >= kept && p.timelineStart < handoff - 0.01)
+                || (p.songID == first.songID && p.stemKind == first.stemKind && p.continuesPrevious
+                && abs(p.timelineStart - handoff) < 0.15
+                && abs(p.sourceStart - (first.sourceStart + p.timelineStart * first.tempoRatio)) < 0.1)
+        }
+        for i in plan.placements.indices {
+            if plan.placements[i].timelineStart >= handoff - 0.01 {
+                plan.placements[i].timelineStart -= remove
+            } else if plan.placements[i].timelineEnd > kept {
+                let end = plan.placements[i].timelineEnd >= handoff - 0.01 ? plan.placements[i].timelineEnd - remove : kept
+                plan.placements[i].timelineDuration = end - plan.placements[i].timelineStart
+                plan.placements[i].fadeIn.duration = min(plan.placements[i].fadeIn.duration, kept / plan.beatSeconds * 0.75)
+            }
+        }
+        if let opening = plan.placements.first(where: { $0.timelineStart < 0.01 && $0.role == .dominant }) {
+            for i in decisions.indices where decisions[i].detail?.contains("opening fade-in") == true {
+                decisions[i].detail = String(format: "opening fade-in %.0f beats on the shortened instrumental opening", opening.fadeIn.duration)
+            }
+        }
+        plan.sfxEvents.removeAll { $0.timelineStart >= kept && $0.timelineStart < handoff }
+        for i in plan.sfxEvents.indices where plan.sfxEvents[i].timelineStart >= handoff { plan.sfxEvents[i].timelineStart -= remove }
+        for i in plan.pulseRegions.indices {
+            if plan.pulseRegions[i].timelineStart >= handoff - 0.01 { plan.pulseRegions[i].timelineStart -= remove }
+            if plan.pulseRegions[i].timelineEnd >= handoff - 0.01 { plan.pulseRegions[i].timelineEnd -= remove }
+        }
+        for i in plan.joinContracts.indices where plan.joinContracts[i].cutAt >= handoff - 0.01 {
+            plan.joinContracts[i].cutAt -= remove; plan.joinContracts[i].windowStart -= remove
+        }
+        for i in plan.cutRecords.indices where plan.cutRecords[i].timelineAt >= handoff - 0.01 {
+            if abs(plan.cutRecords[i].timelineAt - handoff) < 0.05 { plan.cutRecords[i].sourceFrom = sourceCut }
+            plan.cutRecords[i].timelineAt -= remove
+        }
+        for i in plan.intentionalGaps.indices where plan.intentionalGaps[i].start >= handoff {
+            plan.intentionalGaps[i].start -= remove; plan.intentionalGaps[i].end -= remove
+        }
+        decisions.append(AutoDecision(kind: .skippedIntro, songTitle: profile.title,
+            detail: "shortened the vocal-free opening on a measured bar to leave room for the continuation"))
+    }
+
+    /// Word timestamps are onsets, not offsets. Require at least two quiet
+    /// stem windows inside a corroborating word gap, after a minimum dwell.
+    /// This is conservative boundary evidence, not semantic lyric parsing.
+    private static func continuationPause(after start: Double, before end: Double,
+        sourceBeat: Double, signal: SongSignalFeatures) -> Double? {
+        let hop = signal.hopSeconds
+        let rms = signal.stemVocalRMSCurveDB
+        guard hop.isFinite, hop > 0, hop <= 0.1, start < end, !rms.isEmpty else { return nil }
+        let words = signal.lyricWords.filter { $0.t.isFinite }.sorted { $0.t < $1.t }
+        let threshold = min(-38, signal.meanStemVocalRMSDB(from: max(0, start - 4 * sourceBeat), to: start) - 18)
+        let quietCount = max(2, Int(ceil(0.2 / hop)))
+        for (previous, next) in zip(words, words.dropFirst()) {
+            guard next.t - previous.t >= max(0.7, 1.2 * sourceBeat) else { continue }
+            let lower = max(0, start, previous.t + 0.35)
+            let upper = min(end, next.t - 0.15, Double(rms.count) * hop)
+            guard lower.isFinite, upper.isFinite, lower < upper else { continue }
+            let lo = Int(ceil(lower / hop))
+            let hi = min(rms.count, Int(floor(upper / hop)))
+            guard hi - lo >= quietCount else { continue }
+            var quiet = 0
+            for i in lo..<hi {
+                quiet = rms[i].isFinite && rms[i] <= threshold ? quiet + 1 : 0
+                if quiet >= quietCount { return Double(i - quietCount + 2) * hop }
+            }
+        }
+        return nil
+    }
+
+    /// Retain a small, continuous consonant pickup before the scheduled
+    /// phrase boundary. Move source and timeline starts together so its beat
+    /// mapping and end remain unchanged; this is not a repeated preview.
+    private static func preserveIncomingPickup(_ plan: inout AutoRemixPlan, profiles: [UUID: AutoSongProfile]) {
+        guard plan.mode == .mashup else { return }
+        for join in plan.joinContracts where join.kind == .sweepJoin {
+            guard let incoming = join.incomingSongID,
+                  let profile = profiles[incoming], let signal = profile.analysis.signal else { continue }
+            for i in plan.placements.indices {
+                let p = plan.placements[i]
+                let sourceAtCut = p.sourceStart + (join.cutAt - p.timelineStart) * p.tempoRatio
+                guard p.songID == incoming, p.stemKind == .vocals, p.role == .dominant,
+                      abs(p.timelineStart - join.cutAt) < plan.beatSeconds * 0.5,
+                      let word = signal.lyricWords.filter({ $0.t >= sourceAtCut && $0.t < sourceAtCut + profile.analysis.beatSeconds * 2 })
+                        .min(by: { $0.t < $1.t }) else { continue }
+                let missing = profile.analysis.beatSeconds + 0.15 - (word.t - sourceAtCut)
+                let desiredStart = sourceAtCut - min(0.25, sourceAtCut, max(0, missing))
+                let extraSource = p.sourceStart - desiredStart
+                guard extraSource > 0.001 else { continue }
+                let extraTime = extraSource / p.tempoRatio
+                guard p.timelineStart >= extraTime else { continue }
+                plan.placements[i].sourceStart -= extraSource
+                plan.placements[i].timelineStart -= extraTime
+                plan.placements[i].timelineDuration += extraTime
+                plan.placements[i].fadeIn = .none
+            }
+        }
     }
 
     // MARK: - Coverage helpers
@@ -609,9 +1163,11 @@ nonisolated enum AutoRemixValidator {
     ///    mix. A third verbatim appearance retargets to an unused chorus
     ///    island of the same song when one exists; otherwise it is surfaced
     ///    as a warning (never silently deleted — a hole is worse).
-    ///  • LYRIC-LINE INTEGRITY — a dominant cut may not land inside a word:
-    ///    when the sidecar has word onsets, a clip whose source end falls
-    ///    mid-word is extended to the word's end (bounded, collision-checked).
+    ///  • LYRIC-LINE INTEGRITY — a vocal cut may not land inside a sung line.
+    ///    Extend to the last word of the current line (0.7s word-gap). When
+    ///    that collides with the next clip, layer and ride volumes instead
+    ///    of flushing the lyric. Rapid different-song lead switches inside
+    ///    ~5s become the same overlap + volume ride (Drop 1 stays a hard cut).
     private static func enforceArrangementInvariants(
         _ plan: inout AutoRemixPlan,
         profiles: [UUID: AutoSongProfile],
@@ -667,40 +1223,304 @@ nonisolated enum AutoRemixValidator {
             )
         }
 
-        // ── Lyric-line integrity ──
-        let sortedIdx = plan.placements.indices.sorted {
-            plan.placements[$0].timelineStart < plan.placements[$1].timelineStart
+        // ── Lyric-line integrity + rapid-switch layering ──
+        finishLyricLines(&plan, profiles: profiles, decisions: &decisions)
+        layerRapidSongSwitches(&plan, profiles: profiles, decisions: &decisions)
+    }
+
+    /// Whisper word-gap grouping. A new line starts after ~0.7s of silence
+    /// between onsets — the same split `keepGuestFirstLineClear` uses.
+    private enum LyricLine {
+        static let wordGapSeconds = 0.7
+        static let lineTailSeconds = 0.35
+        static let minLeadSwitchSeconds = 5.0
+
+        static func lineEnd(
+            containing t: Double,
+            words: [(t: Double, word: String)]
+        ) -> Double? {
+            let sorted = words.sorted { $0.t < $1.t }
+            guard !sorted.isEmpty else { return nil }
+            var start = sorted[0].t
+            var last = sorted[0].t
+            for w in sorted.dropFirst() {
+                if w.t - last > wordGapSeconds {
+                    let end = last + lineTailSeconds
+                    if t >= start - 0.02 && t < end - 0.04 { return end }
+                    start = w.t
+                }
+                last = w.t
+            }
+            let end = last + lineTailSeconds
+            if t >= start - 0.02 && t < end - 0.04 { return end }
+            return nil
         }
+    }
+
+    private static func isChainTail(_ p: AutoClipPlacement, in plan: AutoRemixPlan) -> Bool {
+        !plan.placements.contains { q in
+            q.continuesPrevious
+                && q.songID == p.songID
+                && q.stemKind == p.stemKind
+                && abs(q.timelineStart - p.timelineEnd) < 0.08
+        }
+    }
+
+    private static func isLockedDropStart(_ t: Double, plan: AutoRemixPlan) -> Bool {
+        let beat = plan.beatSeconds
+        if plan.joinContracts.contains(where: {
+            $0.kind == .sweepJoin && abs($0.cutAt - t) < beat * 0.5
+        }) {
+            return true
+        }
+        return AutoRemixDiagnostics.incomingIsClubDrop(
+            pulseRegions: plan.pulseRegions,
+            timelineStart: t
+        )
+    }
+
+    /// Extend a chain-tail cut that lands inside a lyric line to the last
+    /// word. If the next clip is already on the timeline, overlap it and
+    /// ride volumes — do not skip the extend, and do not fade-in Drop 1.
+    private static func finishLyricLines(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        decisions: inout [AutoDecision]
+    ) {
+        let barSec = plan.barSeconds
+        guard barSec > 0.05 else { return }
+        let maxExtend = barSec * 2
+
         for i in plan.placements.indices {
             let p = plan.placements[i]
-            guard p.role == .dominant, p.timelineDuration >= barSec * 2 else { continue }
+            guard p.role == .dominant || p.stemKind == .vocals else { continue }
+            guard p.timelineDuration >= plan.beatSeconds * 4 else { continue }
+            guard isChainTail(p, in: plan) else { continue }
             guard let words = profiles[p.songID]?.analysis.signal?.lyricWords,
                   !words.isEmpty else { continue }
-            // Next placement on the timeline (for collision checks).
-            let nextStart = sortedIdx
-                .compactMap { plan.placements[$0].timelineStart > p.timelineStart + 0.05
-                    ? plan.placements[$0].timelineStart : nil }
-                .min() ?? .infinity
-            let srcEnd = p.sourceEnd
-            guard let word = words.first(where: {
-                srcEnd > $0.t + 0.06 && srcEnd < $0.t + 0.34
-            }) else { continue }
-            let extendSrc = (word.t + 0.38) - srcEnd
-            let extendTimeline = extendSrc / max(p.tempoRatio, 0.001)
-            guard extendTimeline > 0.02, extendTimeline < 0.6 else { continue }
-            guard p.timelineEnd + extendTimeline < nextStart + 0.25 else { continue }
+            // A later repair pass must not overrule the measured bar chosen
+            // for an outgoing continuation with the weaker onset-gap guess.
+            if p.stemKind == .vocals, p.role == .dominant,
+               let profile = profiles[p.songID],
+               plan.joinContracts.contains(where: {
+                   $0.outgoingSongID == p.songID && p.timelineEnd > $0.windowStart
+                       && p.timelineEnd < $0.cutAt
+               }), continuationBarEntrance(after: p.sourceEnd-0.01, before: p.sourceEnd+0.01,
+                    sourceBeat: plan.beatSeconds*p.tempoRatio, profile: profile) != nil { continue }
+            guard let lineEnd = LyricLine.lineEnd(containing: p.sourceEnd, words: words)
+            else { continue }
+
+            let songDur = profiles[p.songID]?.analysis.durationSeconds ?? .infinity
+            let wantedSrc = min(lineEnd, songDur - 0.05)
+            let extendSrc = wantedSrc - p.sourceEnd
+            let extendTimeline = min(maxExtend, extendSrc / max(p.tempoRatio, 0.001))
+            guard extendTimeline > 0.04 else { continue }
+
             plan.placements[i].timelineDuration += extendTimeline
+            let next = plan.placements.enumerated()
+                .filter {
+                    $0.offset != i
+                        && $0.element.role == .dominant
+                        && ($0.element.stemKind == nil || $0.element.stemKind == .vocals)
+                        && $0.element.timelineStart > p.timelineStart + 0.05
+                        && !($0.element.continuesPrevious
+                             && $0.element.songID == p.songID
+                             && $0.element.stemKind == p.stemKind)
+                }
+                .min { $0.element.timelineStart < $1.element.timelineStart }
+            if let next, plan.placements[i].timelineEnd > next.element.timelineStart + 0.05 {
+                rideLayerVolumes(
+                    &plan,
+                    outgoingIndex: i,
+                    incomingIndex: next.offset,
+                    keepIncomingHardCut: isLockedDropStart(next.element.timelineStart, plan: plan)
+                )
+            }
             decisions.append(
                 AutoDecision(
-                    kind: .shortenedForMaterial,
+                    kind: .finishedLyricLine,
                     songTitle: profiles[p.songID]?.title,
-                    detail: String(
-                        format: "cut nudged off mid-word “%@” (+%.2fs so the line finishes)",
-                        word.word, extendTimeline
-                    )
+                    detail: String(format: "extended +%.2fs to finish the line", extendTimeline)
                 )
             )
         }
+    }
+
+    /// A→B then another song (or back to A) inside 5s is a ping-pong cut.
+    /// Keep the first lead playing through the layered clip, ride volumes.
+    /// Drop 1 sweep / club-drop slams stay hard cuts.
+    private static func layerRapidSongSwitches(
+        _ plan: inout AutoRemixPlan,
+        profiles: [UUID: AutoSongProfile],
+        decisions: inout [AutoDecision]
+    ) {
+        let minGap = LyricLine.minLeadSwitchSeconds
+        var leadIdx = plan.placements.indices.filter {
+            plan.placements[$0].role == .dominant && !plan.placements[$0].continuesPrevious
+        }.sorted { plan.placements[$0].timelineStart < plan.placements[$1].timelineStart }
+
+        var i = 0
+        while i < leadIdx.count {
+            let aIdx = leadIdx[i]
+            let a = plan.placements[aIdx]
+            guard i + 1 < leadIdx.count else { break }
+            let bIdx = leadIdx[i + 1]
+            let b = plan.placements[bIdx]
+            if a.songID == b.songID {
+                i += 1
+                continue
+            }
+            let dt = b.timelineStart - a.timelineStart
+            if dt >= minGap - 0.05 || isLockedDropStart(b.timelineStart, plan: plan) {
+                i += 1
+                continue
+            }
+
+            let laterIdx = Array(leadIdx.dropFirst(i + 2))
+            let pingPong = laterIdx.contains { k in
+                let c = plan.placements[k]
+                return c.songID != b.songID
+                    && c.timelineStart - b.timelineStart < minGap - 0.05
+            }
+            let songDur = profiles[a.songID]?.analysis.durationSeconds ?? .infinity
+            let maxEnd = a.timelineStart + max(0, songDur - 0.05 - a.sourceStart) / max(a.tempoRatio, 0.001)
+            var coverUntil = max(
+                plan.placements[aIdx].timelineEnd,
+                a.timelineStart + minGap,
+                b.timelineStart + 0.6
+            )
+            if pingPong {
+                coverUntil = max(coverUntil, b.timelineEnd)
+                if let cIdx = laterIdx.first(where: { plan.placements[$0].songID != b.songID }) {
+                    coverUntil = max(coverUntil, plan.placements[cIdx].timelineStart + 0.15)
+                }
+            }
+            coverUntil = min(coverUntil, maxEnd)
+            if coverUntil > plan.placements[aIdx].timelineEnd + 0.04 {
+                plan.placements[aIdx].timelineDuration = coverUntil - plan.placements[aIdx].timelineStart
+            }
+            rideLayerVolumes(
+                &plan,
+                outgoingIndex: aIdx,
+                incomingIndex: bIdx,
+                keepIncomingHardCut: false
+            )
+
+            if pingPong {
+                plan.placements[bIdx].role = .supporting
+                plan.placements[bIdx].volume = min(
+                    max(plan.placements[bIdx].volume, 0.62),
+                    0.85
+                )
+                let aCoverEnd = plan.placements
+                    .filter { $0.songID == a.songID }
+                    .map(\.timelineEnd).max() ?? 0
+                if let cIdx = laterIdx.first(where: { plan.placements[$0].songID == a.songID }) {
+                    plan.placements[cIdx].overlapsPreviousSeconds = max(
+                        plan.placements[cIdx].overlapsPreviousSeconds,
+                        max(0, aCoverEnd - plan.placements[cIdx].timelineStart)
+                    )
+                }
+            }
+
+            decisions.append(
+                AutoDecision(
+                    kind: .layeredRapidSwitch,
+                    songTitle: profiles[b.songID]?.title,
+                    detail: String(format: "switch at %.1fs was %.1fs after the previous lead", b.timelineStart, dt)
+                )
+            )
+            leadIdx = plan.placements.indices.filter {
+                plan.placements[$0].role == .dominant && !plan.placements[$0].continuesPrevious
+            }.sorted { plan.placements[$0].timelineStart < plan.placements[$1].timelineStart }
+            i += 1
+        }
+    }
+
+    /// Outgoing keeps playing under the incoming clip; tail is quieter so
+    /// the new lead can take the foreground without a flush cut.
+    private static func rideLayerVolumes(
+        _ plan: inout AutoRemixPlan,
+        outgoingIndex: Int,
+        incomingIndex: Int,
+        keepIncomingHardCut: Bool
+    ) {
+        let splitAt = plan.placements[incomingIndex].timelineStart
+        let outVol = plan.placements[outgoingIndex].volume
+        splitOutgoingTail(
+            &plan,
+            index: outgoingIndex,
+            at: splitAt,
+            tailVolume: max(0.45, outVol * 0.62)
+        )
+        if keepIncomingHardCut {
+            plan.placements[incomingIndex].fadeIn = .none
+            plan.placements[incomingIndex].volume = max(
+                plan.placements[incomingIndex].volume,
+                AutoGainPolicy.incomingDropVolume
+            )
+        } else {
+            plan.placements[incomingIndex].volume = max(
+                plan.placements[incomingIndex].volume,
+                min(1.0, outVol * 0.92)
+            )
+        }
+        let outSong = plan.placements[outgoingIndex].songID
+        if plan.placements[incomingIndex].songID == outSong {
+            let coverEnd = plan.placements
+                .filter { $0.songID == outSong }
+                .map(\.timelineEnd).max() ?? 0
+            let overlap = max(0, coverEnd - splitAt)
+            plan.placements[incomingIndex].overlapsPreviousSeconds = max(
+                plan.placements[incomingIndex].overlapsPreviousSeconds,
+                overlap
+            )
+        }
+    }
+
+    private static func splitOutgoingTail(
+        _ plan: inout AutoRemixPlan,
+        index: Int,
+        at t: Double,
+        tailVolume: Double
+    ) {
+        var head = plan.placements[index]
+        let originalEnd = head.timelineEnd
+        guard t > head.timelineStart + 0.12, t < originalEnd - 0.05 else {
+            if t < originalEnd - 0.05, t > head.timelineStart {
+                let beats = max(0.5, (originalEnd - t) / max(plan.beatSeconds, 0.001))
+                head.fadeOut = ClipTransition(
+                    type: .crossfade,
+                    duration: beats,
+                    curve: AutoTransitionEnvelope.equalPowerCurveName
+                )
+                plan.placements[index] = head
+            }
+            return
+        }
+        // Leave a hair of head overlap so consecutive-dominant grammar still
+        // sees a real overlap (head→incoming) rather than a flush 0s splice.
+        let headEnd = min(originalEnd, t + 0.12)
+        let headDur = headEnd - head.timelineStart
+        var tail = head
+        tail.timelineStart = t
+        tail.timelineDuration = originalEnd - t
+        tail.sourceStart = head.sourceStart + (t - head.timelineStart) * head.tempoRatio
+        tail.volume = min(head.volume, tailVolume)
+        tail.continuesPrevious = true
+        tail.role = .supporting
+        tail.overlapsPreviousSeconds = max(tail.overlapsPreviousSeconds, headEnd - t)
+        tail.fadeIn = .none
+        tail.fadeOut = ClipTransition(
+            type: .crossfade,
+            duration: max(0.5, tail.timelineDuration / max(plan.beatSeconds, 0.001)),
+            curve: AutoTransitionEnvelope.equalPowerCurveName
+        )
+        tail.continuationShape = tail.volume / max(head.volume, 0.05)
+        head.timelineDuration = headDur
+        head.fadeOut = .none
+        plan.placements[index] = head
+        plan.placements.append(tail)
     }
 
     /// Sample-continuous neighbors may not STEP in volume ("jumps louder,
@@ -1057,6 +1877,12 @@ nonisolated enum AutoRemixValidator {
         profiles: [UUID: AutoSongProfile],
         decisions: inout [AutoDecision]
     ) {
+        // This path retains the original continuous performance. Equalizing
+        // its already-shaped clip levels cancels the intended build/break
+        // curve, and repeated validation raises every quiet segment again.
+        if plan.mode == .remix && plan.decisions.contains(where: { $0.kind == .usedLowConfidenceFallback }) {
+            return
+        }
         let barSec = plan.barSeconds
         guard barSec > 0.05 else { return }
 
@@ -1914,7 +2740,7 @@ nonisolated enum AutoRemixValidator {
             slotSong.append((p.slotIndex, p.songID))
         }
         var n = 0
-        for i in 1..<slotSong.count where slotSong[i].song != slotSong[i - 1].song {
+        for (previous, next) in zip(slotSong, slotSong.dropFirst()) where previous.song != next.song {
             n += 1
         }
         return n

@@ -1,0 +1,17 @@
+{
+  "review_date": "2026-09-13",
+  "reviewer": "owner",
+  "candidate": "Exports/Audit-2026-09-04/listening-owner-sep12-r3/revised.wav",
+  "musical_approval": false,
+  "observations": [
+    "Pause around excerpt 0:11",
+    "End of this 26-second excerpt is too quiet"
+  ],
+  "engineering_observations": [
+    "Half-second RMS falls about 15dB at excerpt11s; low band nearly disappears.",
+    "Outgoing source drums and bass thin out in this passage; coverage presence is insufficient.",
+    "Final four seconds approximately2dB below the initial incoming passage."
+  ],
+  "direction": "Protect lyrics while preparing a stable instrumental groove; judge the complete transition and following phrase. Musical recipes may change per owner authorization; numerical acceptance remains frozen.",
+  "monitoring_device": "unspecified"
+}

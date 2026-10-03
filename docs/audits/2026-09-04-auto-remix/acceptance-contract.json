@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "frozen_on": "2026-09-05",
+  "status": "preimplementation acceptance specification; not measured passes",
+  "origin": "Engineering acceptance choices, not claimed universal perceptual thresholds. Freeze before tuning; validate independent positive and negative controls.",
+  "time_convention": "Bars are elapsed 4/4 mix bars from verified phrase origin; bar 0 is the origin. Source pickups precede their annotated downbeats.",
+  "change_policy": "Versioned change with independently reviewed reference evidence, before retuning; rerun baseline and controls. Candidate performance alone is not justification.",
+  "gates": {
+    "beat_alignment": {
+      "window": "Every sustained hook/overlap; onset errors on each annotated beat; report worst 16-bar window and complete span",
+      "limit": "Realized mapped tempos differ <=0.1%; p95 onset error <=20 ms, maximum <=40 ms; cumulative first-to-last drift <=20 ms per 16 bars",
+      "exception": "Expressive source timing requires independent per-beat annotation; test mapping against that grid, never inferred candidate grid. Native short chops tested separately."
+    },
+    "live_export_parity": {
+      "window": "Actual engine capture and export at 128, 256, 1024 frames; every event, transition +/-8 bars and full render",
+      "limit": "After one independently measured constant device/codec latency correction, event onset error <=2 ms, accumulated end drift <=2 ms, 400ms loudness envelope difference <=0.5 LU (100ms hop)",
+      "exception": "Stochastic/modulated tails may differ samplewise; timing and loudness tolerances remain. Missing live capture is inconclusive."
+    },
+    "join_loudness": {
+      "window": "Ungated BS.1770 K-weighted 400ms windows, 100ms hop, every join +/-4 bars; reference medians 2 bars before/after excluding annotated transition. Log short-term 3s loudness too.",
+      "limit": "Neutral joins: no unplanned trough >3 LU below the quieter reference for >=200ms; no overshoot >3 LU above louder reference for >=200ms. Adjacent steady passages within 2 LU after normalization.",
+      "exception": "Independently annotated build/break/void has an explicit pre-render loudness envelope and +/-2 LU tolerance; exception interval only, never whole title/join labels."
+    },
+    "limiter": {
+      "window": "Actual mix-bus gain-reduction telemetry per <=10ms frame, every 1-second rolling window and entire render",
+      "limit": "No reduction >3 dB sustained >=500ms; <=1% of program time above 3dB; maximum reduction <=6dB",
+      "exception": "None; missing telemetry is inconclusive. Meter cannot be inferred from output waveform."
+    },
+    "peak_headroom": {
+      "window": "Whole pre-SFX bus and whole post-master PCM plus decoded delivery encode; true peak >=4x oversampling",
+      "limit": "Pre-SFX sample peak <=-6dBFS; output true peak <=-1.0dBTP; no clipped PCM samples",
+      "exception": "None; encoded overshoot requires rendering headroom, not waived clipping."
+    },
+    "silence": {
+      "window": "20ms RMS windows with 10ms hop; internal program excluding source-supported ending decay",
+      "limit": "No unowned interval below -60dBFS lasting >=50ms while mapped source is above -45dBFS; run separate loudness gate for shallower holes",
+      "exception": "Preannotated non-pivot void exactly one mix beat +/-2ms. Pivot has no void. Source silence must match original source interval and duration."
+    },
+    "native_chop": {
+      "window": "Every incompatible guest event and rolling 8 mix bars",
+      "limit": "Duration <=min(60/BPM,0.75) seconds; max2 events/8 bars; no repetition, foreground lead conflict or kick/bass contribution; breakdown/outro after Drop1 only",
+      "exception": "No exception; longer cameos are sustained hooks and require tempo/key eligibility."
+    }
+  },
+  "required_evidence": "Missing measurement, decoder, telemetry, annotation or required audition = inconclusive, never pass."
+}

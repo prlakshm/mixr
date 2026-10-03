@@ -1,0 +1,6 @@
+PASS pair-vocal: 64 markers, target=104.1600, measured=104.1594, drift=0.2ms, p95=0.7ms, pitch=0.0c, negative=False
+PASS pair-bed: 64 markers, target=104.1600, measured=104.1594, drift=0.2ms, p95=0.7ms, pitch=0.0c, negative=False
+PASS native-control: 64 markers, target=93.0000, measured=92.9989, drift=0.5ms, p95=0.9ms, pitch=0.0c, negative=False
+PASS negative-drift: 64 markers, target=104.1600, measured=103.2285, drift=327.5ms, p95=310.8ms, pitch=0.0c, negative=True
+PASS pitch-up: 64 markers, target=104.1600, measured=104.1594, drift=0.2ms, p95=1.0ms, pitch=-0.3c, negative=False
+PASS slowdown: 64 markers, target=117.7600, measured=117.7605, drift=-0.1ms, p95=0.9ms, pitch=0.4c, negative=False

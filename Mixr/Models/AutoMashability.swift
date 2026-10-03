@@ -72,30 +72,6 @@ nonisolated enum AutoStemRoleProxy: String, Sendable {
     }
 }
 
-// MARK: - Locked mashup pair (title/groove)
-
-/// Product locks that measurement must not invert. Stem kick energy is for
-/// pulse/one-kick only — it does not crown the club bed.
-nonisolated enum AutoMashupRoleLock {
-    static func isOopsTitle(_ title: String) -> Bool {
-        let t = title.lowercased()
-        return t.contains("oops") || t.contains("did it again")
-    }
-
-    static func isBOMTTitle(_ title: String) -> Bool {
-        let t = title.lowercased()
-        return t.contains("baby one more time") || t.contains("hit me baby")
-    }
-
-    /// Oops I Did It Again = bed when paired with Baby One More Time.
-    static func britneyBed(in pool: [AutoSongProfile]) -> AutoSongProfile? {
-        let oops = pool.first { isOopsTitle($0.title) }
-        let bomt = pool.first { isBOMTTitle($0.title) }
-        guard let oops, bomt != nil else { return nil }
-        return oops
-    }
-}
-
 // MARK: - Local mashability (AutoMashUpper 2014)
 
 /// Best 8–16 bar island pairing between a guest hook phrase and a bed
@@ -241,28 +217,46 @@ nonisolated enum AutoMashability {
         return best
     }
 
-    /// Drop 1 vocal: same title-hook entrance as the bed chorus (isolated-vocal
-    /// title/hook onset after the prechorus). Mashability may still choose a
-    /// bed offset; it must not slide the guest into verse or prechorus.
+    /// A complete measured vocal island, not the title token within it.
+    static func measuredGuestSection(guest: AutoSongProfile, at time: Double)
+        -> AutoLoudnessSidecar.VocalSection? {
+        guard time.isFinite, guest.analysis.analysisConfidence >= 0.65,
+              let measured = guest.loudness else { return nil }
+        return measured.vocalSections.filter { section in
+            section.startSeconds.isFinite && section.endSeconds.isFinite
+                && section.startSeconds >= 0 && section.endSeconds <= guest.analysis.durationSeconds
+                && section.endSeconds > section.startSeconds && (8...32).contains(section.bars)
+                && section.vocalScore >= 0.65
+                && time >= section.startSeconds-0.05 && time < section.endSeconds
+                && measured.downbeats.contains { abs($0-section.startSeconds)<0.05 }
+        }.min { ($0.endSeconds-$0.startSeconds) < ($1.endSeconds-$1.startSeconds) }
+    }
+
+    /// Sustained guest entrance. A title near a chorus ending identifies the
+    /// containing section; it cannot independently certify its beginning.
     static func drop1GuestStart(
         guest: AutoSongProfile,
         island: AutoMashabilityIsland?
     ) -> Double {
+        if let island, let section = measuredGuestSection(guest: guest, at: island.guestStart) {
+            return section.startSeconds
+        }
+        // A selected complete phrase can lead the handoff even when its
+        // opening words are not the title. Reject off-grid alternatives
+        // here; a title onset remains a fallback, not a mandatory preview.
+        if let island, island.bars >= 8,
+           guest.analysis.analysisConfidence >= 0.65,
+           guest.analysis.phraseBoundaries.contains(where: {
+               abs($0 - island.guestStart) <= guest.analysis.barSeconds * 0.05
+           }) {
+            return island.guestStart
+        }
+        if let title = guest.analysis.signal?.lyricTitleHookStart,
+           let section = measuredGuestSection(guest: guest, at: title) {
+            return section.startSeconds
+        }
         let phrase = phraseSeconds(for: guest)
         let introEnd = guest.analysis.introCandidate?.endSeconds ?? guest.analysis.barSeconds * 8
-        if let signal = guest.analysis.signal,
-           let hit = AutoChorusIsland.titleHookOnset(
-               signal: signal,
-               downbeats: guest.analysis.downbeats,
-               barSeconds: guest.analysis.barSeconds,
-               duration: guest.analysis.durationSeconds,
-               introEnd: introEnd,
-               phraseSeconds: phrase,
-               title: guest.title,
-               leadIn: .oneBeat
-           ) {
-            return hit
-        }
         let afterPrechorus = introEnd + phrase * 0.85
         let laterChorus = guest.analysis.chorusOrDropCandidates
             .filter { $0.startSeconds >= afterPrechorus }

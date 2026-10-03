@@ -1,0 +1,12 @@
+{
+  "reviewer": "owner",
+  "prior_candidate": "Exports/Audit-2026-09-04/listening-foreground-sep13/revised.wav",
+  "accepted_aspect": "The brief dip/transition is acceptable.",
+  "rejected_aspects": [
+    "Unexplained prolonged quiet",
+    "Incoming passage begins within the chorus/line rather than at its beginning"
+  ],
+  "direction": "Final implementation pass: full measured phrase selection, sustained interior energy, thorough verification with frugal compute.",
+  "whole_candidate_approved": false,
+  "numerical_contract_changed": false
+}

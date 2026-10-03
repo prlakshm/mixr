@@ -1,0 +1,21 @@
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.4s)
+
+=== crate-0-1 ===
+  LISTEN first loudnessStep @72.00 dur=0.00 depth=0.0
+  LISTEN first loudnessStep @73.00 dur=0.00 depth=0.0
+  LISTEN first loudnessStep @88.00 dur=0.00 depth=0.0
+  LISTEN first loudnessStep @121.00 dur=0.00 depth=0.0
+  LISTEN first dropDip @55.30 dur=0.00 depth=0.0
+  LISTEN first titleOverDrop @13.82 dur=4.00 depth=1.2
+  LISTEN residual loudnessStep @13.00 dur=0.00 depth=0.0 — +10.0 dB between adjacent seconds
+  LISTEN residual loudnessStep @72.00 dur=0.00 depth=0.0 — +6.5 dB between adjacent seconds
+  LISTEN residual loudnessStep @121.00 dur=0.00 depth=0.0 — -6.6 dB between adjacent seconds
+  LISTEN residual loudnessStep @136.00 dur=0.00 depth=0.0 — -6.9 dB between adjacent seconds
+  LISTEN residual dropDip @55.30 dur=0.00 depth=0.0 — approach dips 6.2 dB into the drop
+  FAIL runner: Auto join failed Gate A (critical structural residual). contracts=0 coverage=0 trough=0.0 dB approach=0.6 dB. Repair kept.
+
+LISTEN_RENDERS_DONE cases=1 failures=1

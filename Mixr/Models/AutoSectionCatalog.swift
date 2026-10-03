@@ -72,23 +72,14 @@ struct AutoSongProfile: Sendable {
     /// Offline BS.1770-4 loudness from `analysis.json` (nil when absent).
     /// Lets gain staging use MEASURED stem makeup instead of a constant.
     var loudness: AutoLoudnessSidecar? = nil
+    var instrumentalEnergy: AutoInstrumentalEnergy? = nil
 
     var lowConfidence: Bool { analysis.analysisConfidence < AutoTuning.standard.lowConfidenceThreshold }
 
-    /// One-kick pulse input. Full-mix drum strength owns the decision when the
-    /// source is thin — a loud Demucs drums.wav must not skip pulse on sparse
-    /// pop (stupid song). Stem only raises the reading when full-mix is already
-    /// mid/strong (Britney-class beds stay no-pulse).
+    /// Either measured view can establish existing drums. A weak proxy
+    /// cannot overrule a strong isolated kit and authorize a second kick.
     var pulseDrumStrength: Double {
-        let full = analysis.drumStrength
-        let stem = stemDrumStrength ?? 0
-        if full < AutoClubPulse.thinDrumThreshold {
-            return full
-        }
-        if full >= AutoClubPulse.slammingDrumThreshold {
-            return max(full, stem)
-        }
-        return max(full, stem * 0.35)
+        max(analysis.drumStrength, stemDrumStrength ?? 0)
     }
 
     /// Best unused candidate for a label, by SectionValue. `used` ranges
@@ -285,7 +276,8 @@ enum AutoSectionCatalog {
             featureScore: featureScore,
             stems: stems,
             stemDrumStrength: stemDrumStrength,
-            loudness: loudness
+            loudness: loudness,
+            instrumentalEnergy: AutoInstrumentalEnergy.load(stems: stems, duration: duration)
         )
     }
 }

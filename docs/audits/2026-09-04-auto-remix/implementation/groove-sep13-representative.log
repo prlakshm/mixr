@@ -1,0 +1,39 @@
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.5s)
+
+=== crate-0 ===
+  Remix bpm=104 drops at 0:55, 2:09
+  wrote crate-0.m4a
+  wrote crate-0.join_manifest.json
+
+LISTEN_RENDERS_DONE cases=1 failures=0
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.4s)
+
+=== crate-0-1-2 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=13.82 drop1=55.30 beat=0.576
+  wrote crate-0-1-2.m4a
+  wrote crate-0-1-2.join_manifest.json
+
+LISTEN_RENDERS_DONE cases=1 failures=0
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.4s)
+
+=== crate-0-1-2-3-4 ===
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=13.82 drop1=55.30 beat=0.576
+  wrote crate-0-1-2-3-4.m4a
+  wrote crate-0-1-2-3-4.join_manifest.json
+
+LISTEN_RENDERS_DONE cases=1 failures=0
+REPRESENTATIVE_DONE cases=3 failures=0

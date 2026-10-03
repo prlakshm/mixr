@@ -1,0 +1,87 @@
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:905:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 903 |         var placements: [AutoClipPlacement] = []
+ 904 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 905 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 906 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 907 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:907:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 905 |         var joinContracts: [AutoJoinContract] = []
+ 906 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 907 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 908 |         var sfx: [AutoSFXEvent] = []
+ 909 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1566:62: warning: will never be executed
+1564 |             mashupVocalID: drop1?.songID,
+1565 |             mashupBedID: bed.songID,
+1566 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1567 |             vocalTempoRatio: vocalTempoRatio,
+1568 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         joinContracts: inout [AutoJoinContract]
+177 |     ) {
+178 |         let repeats = tuning.pivotWallpaperBeats
+    |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+180 |         let loopStart = dropTimelineStart - loopDur
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:275:13: warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+273 |         )
+274 | 
+275 |         let grainVol = AutoGainPolicy.roleStagingVolume(
+    |             `- warning: initialization of immutable value 'grainVol' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+276 |             role: .pivotGrain,
+277 |             measuredStemRMS: nil,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:67:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         }
+ 66 | 
+ 67 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 68 |         var staged = validated
+ 69 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+PASS low confidence preserves continuous source order
+PASS low confidence does not invent hook cut evidence
+PASS low confidence retains deliberate energy contrast
+PASS energy Drop 1 does not acquire an extra two-bar runway
+PASS source bounds remain valid
+ENERGY planner [1.0, 1.0, 0.7899999999999999, 1.58, 0.748, 0.8739999999999999, 0.7816, 1.58, 0.7689999999999999]
+ENERGY validator [1.0, 1.0, 0.7899999999999999, 1.58, 0.748, 0.8739999999999999, 0.7816, 1.58, 0.7689999999999999, 0.9953376294169497, 1.2540468310548776, 1.2314173187715811, 0.9597396284623985, 0.9882695085597645, 1.2495862609377666, 1.2428350843212086, 0.9776196498858896]
+ENERGY staging [1.58, 1.58, 0.7899999999999999, 1.58, 1.2540468310548776, 1.58, 1.2314173187715811, 0.9597396284623985, 0.748, 0.8739999999999999, 0.7816, 1.58, 1.2495862609377666, 1.58, 1.2428350843212086, 0.9776196498858896, 0.7689999999999999]
+PASS thin-song energy contrast survives validation and staging
+ALL PASSED
