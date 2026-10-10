@@ -35,6 +35,10 @@ struct TLVolumeSlider: View {
                     .offset(x: thumbX)
             }
             .frame(width: width, height: thumbHeight + 2, alignment: .center)
+            // 32pt-tall touch band (the bar is 16): easier to grab, still
+            // inside the 46pt row. Horizontal stays exact so the speaker
+            // icon beside it never sets the level.
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -52,6 +56,7 @@ struct TLVolumeSlider: View {
                     }
             )
         }
+        .padding(.vertical, -8)
         .frame(height: thumbHeight + 2)
         .accessibilityElement()
         .accessibilityLabel(accessibilityName)

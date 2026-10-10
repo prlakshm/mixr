@@ -121,6 +121,8 @@ enum MixrColors {
 
     // Dark navy glass tints — reference ~#0E1322, not gray-blue
     static let glassNavyDefault = Color(hex: "050810")
+    /// Delete / destructive actions everywhere (system red: #FF453A in dark).
+    static let destructive = Color(.systemRed)
     static let glassNavyElevated = Color(hex: "0A0F1A")
     static let glassNavyStrong = Color(hex: "0E1322")
     static let glassClipNavy = Color(hex: "080C14")

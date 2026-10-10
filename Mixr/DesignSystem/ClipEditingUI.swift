@@ -98,11 +98,11 @@ struct TLClipActionPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressedFill =
             isDestructive
-            ? Color.red.opacity(0.18)
+            ? MixrColors.destructive.opacity(0.18)
             : Color.black.opacity(0.34)
         let hoverFill =
             isDestructive
-            ? Color.red.opacity(0.10)
+            ? MixrColors.destructive.opacity(0.10)
             : Color.black.opacity(0.18)
 
         let label = Group {
@@ -144,7 +144,7 @@ private struct TLClipToolbarAction: View {
     var isDestructive: Bool = false
     let action: () -> Void
 
-    private static let destructiveRed = Color(hex: "FF453A")
+    private static let destructiveRed = MixrColors.destructive
 
     var body: some View {
         Button(action: action) {
@@ -599,7 +599,7 @@ struct TLClipContextToolbar: View {
                     style: .continuous
                 )
                 shape
-                    .fill(Color(hex: "050810").opacity(0.68))
+                    .fill(MixrColors.glassNavyDefault.opacity(0.90))
                     .background {
                         shape
                             .fill(.ultraThinMaterial)
@@ -645,7 +645,7 @@ struct TLClipContextToolbar: View {
             )
 
             TLToolbarPointer()
-                .fill(Color(hex: "050810").opacity(0.68))
+                .fill(MixrColors.glassNavyDefault.opacity(0.90))
                 .overlay {
                     TLToolbarPointer()
                         .fill(
@@ -1092,7 +1092,7 @@ struct TLTransitionMenu: View {
         )
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(hex: "050810").opacity(0.68))
+                .fill(MixrColors.glassNavyDefault.opacity(0.90))
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(.ultraThinMaterial)

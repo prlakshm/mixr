@@ -301,7 +301,7 @@ struct DeleteProjectConfirmDialog: View {
         }
         .frame(width: MixrAlertChrome.alertWidth * scale)
         .fixedSize(horizontal: true, vertical: true)
-        .background { MixrAlertChrome.background() }
+        .background { MixrAlertChrome.background(cornerRadius: MixrAlertChrome.cornerRadius * scale) }
         .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius * scale, style: .continuous))
         .partyModeBorder(
             shape: RoundedRectangle(

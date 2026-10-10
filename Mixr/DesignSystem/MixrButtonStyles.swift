@@ -61,6 +61,15 @@ struct MixrGlassButtonChrome: View {
     }
 }
 
+/// The glass buttons' press: the same 0.85 dim Export uses, for buttons
+/// that draw their own glass label (Import Songs, sfx).
+struct MixrGlassPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
 struct MixrSecondaryGlassButtonStyle: ButtonStyle {
     var partyRole: PartyModeSurfaceRole = .button
     /// Toolbar chrome scale — 1.0 on a phone, larger on tablets and desktop.
@@ -199,9 +208,14 @@ struct MixrCompactTrackToggleButtonStyle: ButtonStyle {
             )
             .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
             .opacity(configuration.isPressed ? 0.85 : 1)
-            // Hit-test only the circle: decoration (the Party Mode glint)
-            // must not widen M over its neighbour S.
-            .contentShape(Circle())
+            // Explicit touch area: the circle plus half the 5pt gap on each
+            // side, 44pt tall. Decoration can't widen M over S, and the
+            // small visual stays an easy target.
+            .padding(.horizontal, 2.5)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -2.5)
+            .padding(.vertical, -8)
     }
 }
 

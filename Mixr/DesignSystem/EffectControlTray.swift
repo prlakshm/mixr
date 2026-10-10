@@ -8,9 +8,6 @@ enum EffectTrayMetrics {
     static let presetWidth: CGFloat = 236
     static let height: CGFloat = EffectCardMetrics.height
     static let cornerRadius: CGFloat = EffectCardMetrics.cornerRadius
-    /// Expanded tray fills remaining panel width after the focused card.
-    /// (Legacy fraction kept only as documentation — tray uses leftover space.)
-    static let expandedSectionWidthFraction: CGFloat = 1.0
     /// Slider row occupies this fraction of the tray content width, centered.
     static let sliderRowWidthFraction: CGFloat = 0.75
     /// Preset track width — scaled by option count so Pitch (2) and

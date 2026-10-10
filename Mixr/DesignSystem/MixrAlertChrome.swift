@@ -95,6 +95,34 @@ struct MixrAlertHeader: View {
     }
 }
 
+/// A title, a message and OK: Mixr's chrome for errors (Auto, Export).
+struct MixrMessageAlert: View {
+    let title: String
+    let message: String
+    /// 1.0 on a phone; roomier screens pass the layout's alert scale.
+    var scale: CGFloat = 1
+    var onDismiss: () -> Void = {}
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius * scale, style: .continuous)
+        VStack(spacing: 0) {
+            MixrAlertHeader(title: title, message: message, scale: scale)
+            MixrAlertDivider()
+            Button("OK", action: onDismiss)
+                .buttonStyle(MixrAlertActionPressStyle(kind: .primary, scale: scale))
+                .frame(height: MixrAlertChrome.actionHeight * scale)
+        }
+        .frame(width: MixrAlertChrome.alertWidth * scale)
+        .fixedSize(horizontal: true, vertical: true)
+        .background { MixrAlertChrome.background(cornerRadius: MixrAlertChrome.cornerRadius * scale) }
+        .clipShape(shape)
+        .partyModeBorder(shape: shape, role: .dialog, lighting: .counterClockwise, glintOffset: .near)
+        .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+    }
+}
+
 /// Hairline between an alert's header and its actions, or between actions.
 struct MixrAlertDivider: View {
     var axis: Axis = .horizontal
@@ -118,8 +146,8 @@ enum MixrAlertPressColors {
     static let whiteResting = Color.white
     static let whitePressed = Color.white.opacity(pressFactor)
 
-    static let redResting = Color.red
-    static let redPressed = Color.red.opacity(pressFactor)
+    static let redResting = MixrColors.destructive
+    static let redPressed = MixrColors.destructive.opacity(pressFactor)
 
     /// Cancel / Playhead Clips resting gray.
     static let cancelRestingOpacity: Double = 0.74

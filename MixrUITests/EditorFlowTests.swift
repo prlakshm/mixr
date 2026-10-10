@@ -218,7 +218,7 @@ final class EditorFlowTests: MixrUITestCase {
         let finished = NSPredicate(format: "exists == false")
         expectation(for: finished, evaluatedWith: running)
         waitForExpectations(timeout: 90)
-        XCTAssertFalse(app.staticTexts["Auto couldn’t finish"].exists, "Auto finished without an error")
+        XCTAssertFalse(app.staticTexts["Auto Couldn’t Finish"].exists, "Auto finished without an error")
         XCTAssertTrue(undo.isEnabled)
     }
 

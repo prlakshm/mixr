@@ -23,6 +23,16 @@ enum MixrRadius {
 
 // MARK: - Layout
 
+// MARK: - Motion
+
+enum MixrMotion {
+    /// Every floating overlay (menus, dialogs, the SFX panel) opens and
+    /// closes on this one spring, so they all feel like one system.
+    static let overlay = Animation.spring(response: 0.25, dampingFraction: 0.85)
+}
+
+// MARK: - Layout (spacing, sizes)
+
 enum MixrLayout {
     static let buttonPaddingH: CGFloat = 16
     static let buttonPaddingV: CGFloat = 10

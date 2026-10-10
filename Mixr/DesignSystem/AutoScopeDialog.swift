@@ -44,7 +44,7 @@ struct AutoScopeDialog: View {
         }
         .frame(width: MixrAlertChrome.alertWidth * scale)
         .fixedSize(horizontal: true, vertical: true)
-        .background { MixrAlertChrome.background() }
+        .background { MixrAlertChrome.background(cornerRadius: MixrAlertChrome.cornerRadius * scale) }
         .clipShape(RoundedRectangle(cornerRadius: MixrAlertChrome.cornerRadius * scale, style: .continuous))
         .partyModeBorder(
             shape: RoundedRectangle(
@@ -61,48 +61,36 @@ struct AutoScopeDialog: View {
     }
 }
 
-// MARK: - Action Style
-
-private struct AutoScopeAlertActionStyle: ButtonStyle {
-    var weight: Font.Weight = .regular
-    var isPreferred: Bool = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        let resting = isPreferred
-            ? MixrAlertPressColors.whiteResting
-            : MixrAlertPressColors.cancelResting
-        let pressed = isPreferred
-            ? MixrAlertPressColors.whitePressed
-            : MixrAlertPressColors.cancelPressed
-
-        configuration.label
-            .font(.system(size: MixrAlertChrome.actionFontSize, weight: weight))
-            .foregroundStyle(configuration.isPressed ? pressed : resting)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .offset(y: configuration.isPressed ? 1.17 : 0)
-            .animation(
-                .spring(response: 0.17, dampingFraction: 0.82),
-                value: configuration.isPressed
-            )
-    }
-}
-
 // MARK: - Auto Loading Overlay
 
 /// Simple circular spinner on a black screen (Auto, Export, etc.).
 struct MixrAutoLoadingOverlay: View {
     var accessibilityLabelText: String = "Loading"
+    /// Shown under the spinner, e.g. "Remixing…".
+    var title: String = "Working…"
 
     var body: some View {
+        // The editor stays visible under the tour's dim, so the wait reads
+        // as part of the same screen rather than a blackout.
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black.opacity(0.62).ignoresSafeArea()
 
-            ProgressView()
-                .controlSize(.large)
-                .tint(.white)
+            VStack(spacing: 12) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+                Text(title)
+                    .font(.system(size: MixrAlertChrome.messageFontSize, weight: .medium))
+                    .foregroundStyle(MixrColors.textSecondary)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
+            .background { MixrAlertChrome.background() }
+            .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabelText)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 
