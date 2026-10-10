@@ -19,8 +19,28 @@ final class EditorFlowTests: MixrUITestCase {
         app.descendants(matching: .any)[label]
     }
 
+    /// A point on empty timeline: just below the last song's lane, in the
+    /// middle of the visible lanes (works on every phone size).
+    private func tapEmptyTimeline() {
+        let laneEnd = app.staticTexts["Controls"].frame.minX
+        let lanes = app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip, '"))
+            .allElementsBoundByIndex.filter { $0.frame.midX > 0 && $0.frame.midX < laneEnd }
+        let bottom = lanes.map(\.frame.maxY).max() ?? 250
+        let midX = lanes.map(\.frame.midX).reduce(0, +) / CGFloat(max(lanes.count, 1))
+        tapPoint(midX, bottom + 12)
+    }
+
     private func selectFirstClip(of title: String = "Night Signals") -> XCUIElement {
-        let clip = clips(of: title).firstMatch
+        // The first clip whose centre is in the visible lane (Duplicate
+        // scrolls to the copy, which can park earlier clips under the song
+        // list). The lane runs from the song rows to the Controls column.
+        let laneStart = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(title), "))
+            .firstMatch.frame.maxX
+        let laneEnd = app.staticTexts["Controls"].frame.minX
+        let clip = clips(of: title).allElementsBoundByIndex
+            .filter { $0.frame.midX > laneStart && $0.frame.midX < laneEnd }
+            .min { $0.frame.minX < $1.frame.minX }
+            ?? clips(of: title).firstMatch
         tap(clip)
         XCTAssertTrue(app.buttons["Split"].waitForExistence(timeout: 3), "clip toolbar did not open")
         return clip
@@ -62,7 +82,7 @@ final class EditorFlowTests: MixrUITestCase {
     func testRevealedDeleteClosesOnTapElsewhere() {
         songTitle("Paper Suns").swipeLeft()
         XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 2))
-        tapPoint(600, 250) // empty timeline
+        tapEmptyTimeline()
         let hidden = NSPredicate(format: "exists == false")
         expectation(for: hidden, evaluatedWith: app.buttons["Delete"])
         waitForExpectations(timeout: 3)
@@ -156,7 +176,7 @@ final class EditorFlowTests: MixrUITestCase {
         _ = selectFirstClip()
         tap(app.buttons["Echo"])
         XCTAssertTrue(element("Echo level").waitForExistence(timeout: 3))
-        tapPoint(600, 250) // empty timeline deselects
+        tapEmptyTimeline() // empty timeline deselects
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: element("Echo level"))
         waitForExpectations(timeout: 3)
@@ -235,7 +255,7 @@ final class EditorFlowTests: MixrUITestCase {
     }
 
     func testTapTimelineMovesPlayhead() {
-        tapPoint(650, 250)
+        tapEmptyTimeline()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES '^[1-9]:[0-9]{2}$' OR label MATCHES '^0:[1-5][0-9]$'"))
             .firstMatch.waitForExistence(timeout: 2))
         tap(app.buttons["Skip to Start"])
