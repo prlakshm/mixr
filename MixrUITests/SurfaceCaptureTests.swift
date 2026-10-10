@@ -32,7 +32,9 @@ final class SurfaceCaptureTests: MixrUITestCase {
         tap(app.buttons["Reverb"])
         sleep(1)
         capture("\(d)-04-effect-tray")
-        tapPoint(app.frame.width * 0.6, app.frame.height * 0.55)
+        // Deselect: tap the empty timeline just below the last lane.
+        let lastClip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Paper Suns clip'")).firstMatch
+        tapPoint(lastClip.frame.midX, lastClip.frame.maxY + 14)
         sleep(1)
 
         tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Project, '")).firstMatch)
@@ -58,13 +60,28 @@ final class SurfaceCaptureTests: MixrUITestCase {
         capture("\(d)-08-swipe-delete")
     }
 
-    /// One empty-editor capture per Import Songs style (design review).
-    func testCaptureImportStyles() {
-        for style in ["quiet", "glass", "frosted", "violetRim", "tinted", "brightOutline"] {
-            launch(fresh: true, tourDone: true, extra: ["-MixrImportStyle", style])
-            sleep(1)
-            capture("import-\(style)")
-            app.terminate()
+    /// The empty editor's Import Songs pulse, sampled across one breath.
+    func testCaptureImportPulse() {
+        launch(fresh: true, tourDone: true)
+        sleep(1)
+        for i in 0..<4 {
+            capture("pulse-\(i)")
+            usleep(600_000)
         }
+    }
+
+    /// Effect cards' level rings after giving a clip some Reverb and Echo.
+    func testCaptureEffectLevels() {
+        launch(fresh: true, tourDone: true, songs: true)
+        tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Night Signals clip'")).firstMatch)
+        for effect in ["Reverb", "Echo"] {
+            tap(app.buttons[effect])
+            let level = app.descendants(matching: .any)["\(effect) level"]
+            XCTAssertTrue(level.waitForExistence(timeout: 3))
+            level.coordinate(withNormalizedOffset: CGVector(dx: effect == "Reverb" ? 0.7 : 0.35, dy: 0.5)).tap()
+            tap(app.buttons[effect]) // close the tray
+            sleep(1)
+        }
+        capture("effect-levels")
     }
 }

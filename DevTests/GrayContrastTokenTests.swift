@@ -47,24 +47,11 @@ check(
         && timelineSource.contains("private final class TLProjectNameTextField: UITextField")
         && timelineSource.contains("initialCaretX")
         && timelineSource.contains("placeInitialCaret(in:")
-        && timelineSource.contains("titleLabel.lineBreakMode = .byTruncatingTail")
-        && timelineSource.contains("private struct TLNativeProjectMenuButton: UIViewRepresentable")
-        && timelineSource.contains("static let width: CGFloat = 76")
-        && timelineSource.contains("static var controlWidth: CGFloat")
+        // Tap opens the project menu, long-press (or the menu's Rename) edits.
+        && timelineSource.contains("TLProjectTitleInteractionModifier(")
+        && timelineSource.contains("onRenameProject:")
         && matches(
-            #"private var projectTitleControl:[\s\S]{0,5000}\.frame\(\s*width:\s*TLProjectTitleMetrics\.controlWidth"#,
-            in: timelineSource
-        )
-        && matches(
-            #"private var projectTitleControl:[\s\S]{0,4000}\.fixedSize\(horizontal: true, vertical: true\)"#,
-            in: timelineSource
-        )
-        && !matches(
-            #"if isRenamingProject \{[\s\S]{0,80}TextField\([\s\n]*"Project name""#,
-            in: timelineSource
-        )
-        && !matches(
-            #"isRenamingProject[\s\S]{0,400}RoundedRectangle\(cornerRadius: 6"#,
+            #"private var projectTitleControl:[\s\S]{0,6000}\.frame\(\s*width:\s*titleMetrics\.controlWidth"#,
             in: timelineSource
         )
 )

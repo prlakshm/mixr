@@ -18,6 +18,49 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Frosted glass pill shared by Export, Import Songs and sfx, so the
+/// editor's buttons are one family. `isPulsing` breathes the rim to say
+/// "start here" (a held, brighter rim under Reduce Motion). The pulse is
+/// driven per frame, not by a repeating animation, so it costs nothing when
+/// off and never keeps the app from going idle.
+struct MixrGlassButtonChrome: View {
+    var cornerRadius: CGFloat = MixrRadius.button
+    var isPulsing: Bool = false
+
+    /// One slow breath (seconds): an invitation, not an alert.
+    static let breathPeriod: Double = 2.4
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        GlassBackground(level: .default, cornerRadius: cornerRadius)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6) }
+            .overlay {
+                if isPulsing {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+                        let level = reduceMotion ? 1 : Self.breath(at: context.date)
+                        shape
+                            .strokeBorder(Color.white.opacity(0.12 + 0.30 * level), lineWidth: 0.8)
+                            .shadow(
+                                color: MixrColors.secondaryPurple.opacity(0.42 * level),
+                                radius: 3 + 6 * level
+                            )
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.25), value: isPulsing)
+    }
+
+    /// 0…1, eased (raised cosine).
+    static func breath(at date: Date) -> Double {
+        let phase = date.timeIntervalSinceReferenceDate / breathPeriod * 2 * .pi
+        return (1 - cos(phase)) / 2
+    }
+}
+
 struct MixrSecondaryGlassButtonStyle: ButtonStyle {
     var partyRole: PartyModeSurfaceRole = .button
     /// Toolbar chrome scale — 1.0 on a phone, larger on tablets and desktop.
@@ -35,14 +78,7 @@ struct MixrSecondaryGlassButtonStyle: ButtonStyle {
             .foregroundStyle(MixrColors.textPrimary)
             .padding(.horizontal, MixrLayout.buttonPaddingH * scale)
             .padding(.vertical, MixrLayout.buttonPaddingV * scale)
-            .background {
-                GlassBackground(level: .default, cornerRadius: MixrRadius.button)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
-            .overlay {
-                shape
-                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
-            }
+            .background { MixrGlassButtonChrome() }
             .partyModeBorder(
                 shape: shape,
                 role: partyRole,

@@ -32,14 +32,6 @@ enum UITestLaunchHooks {
         }
     }
 
-    /// `-MixrImportStyle <name>`: previews an empty-project Import Songs
-    /// style (design review).
-    static var importStyle: TLImportEmphasis? {
-        guard let i = arguments.firstIndex(of: "-MixrImportStyle"),
-              arguments.indices.contains(i + 1) else { return nil }
-        return TLImportEmphasis(rawValue: arguments[i + 1])
-    }
-
     /// Audio files to import once the editor's project has loaded.
     static var songURLs: [URL] {
         guard let i = arguments.firstIndex(of: "-MixrUITestSongs"),

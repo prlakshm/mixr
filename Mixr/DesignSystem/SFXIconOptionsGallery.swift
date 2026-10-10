@@ -90,17 +90,15 @@ struct MixrSFXOutlineButtonLabel: View {
             .frame(width: layoutMarkWidth * 1.10, height: layoutMarkHeight)
             .padding(.horizontal, 5)
             .padding(.vertical, MixrLayout.buttonPaddingV)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(MixrColors.divider, lineWidth: 0.5)
-            }
+            // Same glass as Import Songs beside it (and Export).
+            .background { MixrGlassButtonChrome() }
             .partyModeBorder(
-                shape: RoundedRectangle(cornerRadius: 8, style: .continuous),
+                shape: RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous),
                 role: .compactControl,
                 lighting: .violetTrailing,
                 glintOffset: .far
             )
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
     }
 }
 // MARK: - Gallery

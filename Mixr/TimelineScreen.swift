@@ -616,7 +616,8 @@ struct TimelineScreen: View {
             onTimelineTapped: { unit in
                 isPlayheadDragging = false
                 playback.seek(to: MixrTimeline.seconds(fromUnits: unit))
-            }
+            },
+            suppressesImportPulse: tour.activeStep != nil
         )
     }
 
@@ -2114,6 +2115,8 @@ private struct TLTrackArea: View {
     let onPlayheadDragChanged: (CGFloat) -> Void
     let onPlayheadDragEnded: (CGFloat) -> Void
     let onTimelineTapped: (CGFloat) -> Void
+    /// True while the tour is showing (it points at Import Songs itself).
+    var suppressesImportPulse: Bool = false
 
     @State private var draggingID: UUID?        = nil
     @State private var dragTranslation: CGFloat = 0
@@ -3420,15 +3423,9 @@ private struct TLTrackArea: View {
         .padding(.horizontal, TLK.importFooterHorizontalPadding)
     }
 
-    /// On an empty project Import Songs is the only next step, so it is
-    /// lifted (see `TLImportEmphasis`); once songs exist it steps back to
-    /// the quiet outline beside sfx.
-    private var importIsPrimary: Bool {
-        !tracks.contains { !$0.isSFXTrack }
-    }
-
-    private var importEmphasis: TLImportEmphasis {
-        importIsPrimary ? TLImportEmphasis.emptyProject : .quiet
+    /// An empty project's only next step is Import Songs.
+    private var importPulses: Bool {
+        !suppressesImportPulse && !tracks.contains { !$0.isSFXTrack }
     }
 
     private var importSongsButton: some View {
@@ -3443,14 +3440,15 @@ private struct TLTrackArea: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
-            .foregroundStyle(importEmphasis.labelColor)
+            .foregroundStyle(MixrColors.textPrimary)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, MixrSpacing.sm)
             .padding(.vertical, MixrLayout.buttonPaddingV)
-            .background { TLImportButtonChrome(emphasis: importEmphasis) }
-            .animation(.easeOut(duration: 0.25), value: importIsPrimary)
+            // Export's glass, so the file actions read as a pair; breathes
+            // on an empty project (not while the tour points at it).
+            .background { MixrGlassButtonChrome(isPulsing: importPulses) }
             .partyModeBorder(
-                shape: RoundedRectangle(cornerRadius: 8),
+                shape: RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous),
                 role: .button,
                 lighting: .coolLeading,
                 glintOffset: .near
@@ -3551,97 +3549,6 @@ private struct TLExportLabelStyle: LabelStyle {
         } else {
             TitleAndIconLabelStyle().makeBody(configuration: configuration)
         }
-    }
-}
-
-/// How the Import Songs button presents itself. The empty-project look is
-/// a design choice under review; every option is built from existing Mixr
-/// chrome (DEBUG builds can preview each with `-MixrImportStyle <name>`).
-enum TLImportEmphasis: String, CaseIterable {
-    /// Hairline outline, muted label: the resting state beside sfx.
-    case quiet
-    /// Export's frosted glass pill: the two file actions share one style.
-    case glass
-    /// The earlier empty-state CTA: violet-tinted frosted glass.
-    case frosted
-    /// Outline with a thin violet rim and soft glow (the tour ring's color).
-    case violetRim
-    /// iOS "tinted" button: a low-opacity violet fill and rim.
-    case tinted
-    /// Outline a step brighter, full-white label.
-    case brightOutline
-
-    static var emptyProject: TLImportEmphasis {
-#if DEBUG
-        if let style = UITestLaunchHooks.importStyle { return style }
-#endif
-        return .glass
-    }
-
-    var labelColor: Color {
-        self == .quiet ? MixrColors.textMuted.opacity(0.82) : MixrColors.textPrimary
-    }
-}
-
-private struct TLImportButtonChrome: View {
-    let emphasis: TLImportEmphasis
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        ZStack {
-            switch emphasis {
-            case .quiet:
-                shape.strokeBorder(MixrColors.divider, lineWidth: 0.5)
-            case .glass:
-                GlassBackground(level: .default, cornerRadius: 8)
-                    .clipShape(shape)
-                    .overlay { shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6) }
-            case .frosted:
-                TLFrostedImportGlass()
-                    .overlay {
-                        shape.strokeBorder(MixrColors.importCTABorder.opacity(0.52), lineWidth: 0.6)
-                    }
-            case .violetRim:
-                shape
-                    .strokeBorder(MixrColors.primaryPurple.opacity(0.9), lineWidth: 0.8)
-                    .shadow(color: MixrColors.primaryPurple.opacity(0.45), radius: 6)
-            case .tinted:
-                shape
-                    .fill(MixrColors.primaryPurple.opacity(0.18))
-                    .overlay { shape.strokeBorder(MixrColors.primaryPurple.opacity(0.45), lineWidth: 0.6) }
-            case .brightOutline:
-                shape.strokeBorder(Color.white.opacity(0.24), lineWidth: 0.6)
-            }
-        }
-        .animation(.easeOut(duration: 0.25), value: emphasis)
-    }
-}
-
-/// Violet-tinted frosted glass (the earlier empty-state Import CTA).
-private struct TLFrostedImportGlass: View {
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        shape
-            .fill(MixrColors.importCTAFill.opacity(0.86))
-            .background {
-                shape
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.14)
-                    .environment(\.colorScheme, .dark)
-            }
-            .overlay {
-                shape.fill(
-                    LinearGradient(
-                        colors: [
-                            MixrColors.importCTAGlow.opacity(0.20),
-                            MixrColors.importCTAGlow.opacity(0.075),
-                            Color.clear,
-                        ],
-                        startPoint: .top,
-                        endPoint: UnitPoint(x: 0.5, y: 0.72)
-                    )
-                )
-            }
     }
 }
 
@@ -4044,7 +3951,12 @@ private struct TLRuler: View {
                             .foregroundStyle(MixrColors.textSecondary)
                     )
                     if seconds == 0 {
-                        ctx.draw(resolved, at: CGPoint(x: 2, y: 5), anchor: .topLeading)
+                        // Clear of the playhead handle, which parks on 0:00.
+                        ctx.draw(
+                            resolved,
+                            at: CGPoint(x: TLK.playheadHandleWidth / 2 + 3, y: 5),
+                            anchor: .topLeading
+                        )
                     } else {
                         ctx.draw(resolved, at: CGPoint(x: x, y: 5), anchor: .top)
                     }
@@ -5099,6 +5011,7 @@ private struct TLEffectsPanel: View {
                                 TLCompactEffectCard(
                                     effect: effect,
                                     isSelected: isFocus,
+                                    level: selectedClipLevel(for: effect),
                                     width: cardWidth,
                                     height: cardHeight
                                 )
@@ -5110,7 +5023,7 @@ private struct TLEffectsPanel: View {
                                 isAway ? siblingFadeOutAnimation : siblingFadeInAnimation,
                                 value: isAway
                             )
-                            .accessibilityValue(isFocus ? "Selected" : "Not selected")
+                            .accessibilityValue(effectAccessibilityValue(effect, isFocus: isFocus))
 
                             // Only on the focused card — grows right and pushes trailing cards out.
                             if isFocus, effect.isAdjustable {
@@ -5194,6 +5107,20 @@ private struct TLEffectsPanel: View {
             )
         )
         .allowsHitTesting(visible)
+    }
+
+    /// The selected clip's level for an adjustable effect (nil otherwise).
+    private func selectedClipLevel(for effect: MixrEffect) -> Double? {
+        guard effect.isAdjustable, selectedClipID != nil, let clip = targetClip else { return nil }
+        return clip.effects.level(for: effect.rawValue)
+    }
+
+    private func effectAccessibilityValue(_ effect: MixrEffect, isFocus: Bool) -> String {
+        var parts = [isFocus ? "Selected" : "Not selected"]
+        if let level = selectedClipLevel(for: effect), level > 0.5 {
+            parts.append("\(Int(level.rounded())) percent on this clip")
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func handleCardTap(_ effect: MixrEffect) {
@@ -5324,6 +5251,7 @@ private struct TLEffectsPanel: View {
 private struct TLCompactEffectCard: View {
     let effect: MixrEffect
     var isSelected: Bool
+    var level: Double? = nil
     /// Target size on this screen — the card's art direction is tuned at the
     /// phone baseline and scaled as a whole so every glow and inset keeps its
     /// proportions.
@@ -5335,7 +5263,7 @@ private struct TLCompactEffectCard: View {
     }
 
     var body: some View {
-        EffectCard(effect: effect, isSelected: isSelected)
+        EffectCard(effect: effect, isSelected: isSelected, level: level)
             .scaleEffect(scale, anchor: .topLeading)
             .frame(width: width, height: height, alignment: .topLeading)
     }
