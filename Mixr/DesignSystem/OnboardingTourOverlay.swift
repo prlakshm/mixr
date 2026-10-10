@@ -17,10 +17,11 @@ struct OnboardingTargetKey: PreferenceKey {
 }
 
 extension View {
-    /// Reports this view's frame as a tour spotlight target.
+    /// Reports this view's frame as a tour spotlight target. Merges with
+    /// targets inside it (a plain anchorPreference would replace them).
     func onboardingTarget(_ target: OnboardingTarget, isActive: Bool = true) -> some View {
-        anchorPreference(key: OnboardingTargetKey.self, value: .bounds) { anchor in
-            isActive ? [target: anchor] : [:]
+        transformAnchorPreference(key: OnboardingTargetKey.self, value: .bounds) { value, anchor in
+            if isActive { value[target] = anchor }
         }
     }
 }

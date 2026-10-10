@@ -915,7 +915,7 @@ struct TimelineScreen: View {
             GeometryReader { proxy in
                 OnboardingTourOverlay(
                     step: step,
-                    targetFrame: anchors[step.target].map { proxy[$0] },
+                    targetFrame: tourTargetFrame(step.target, anchors: anchors, proxy: proxy),
                     containerSize: proxy.size,
                     onNext: {
                         withAnimation(.easeOut(duration: 0.2)) { tour.next(hasSongs: tourHasSongs) }
@@ -928,6 +928,20 @@ struct TimelineScreen: View {
             .transition(.opacity)
             .zIndex(1000)
         }
+    }
+
+    /// The target's frame, clipped to the part of its scroll view on screen
+    /// (a long clip runs past the timeline under the Controls column).
+    private func tourTargetFrame(
+        _ target: OnboardingTarget,
+        anchors: [OnboardingTarget: Anchor<CGRect>],
+        proxy: GeometryProxy
+    ) -> CGRect? {
+        guard let frame = anchors[target].map({ proxy[$0] }) else { return nil }
+        guard let bounds = target.visibleBounds,
+              let visible = anchors[bounds].map({ proxy[$0] }) else { return frame }
+        let clipped = frame.intersection(visible)
+        return clipped.isNull || clipped.isEmpty ? nil : clipped
     }
 
     /// Persists progress and shows each step's real UI: the clip toolbar on
@@ -1384,7 +1398,7 @@ private struct TLTransportBar: View {
                     : 7
             ) {
                 VStack(spacing: 0) {
-                    Text(library.projectBPMDisplay)
+                    Text(library.displayBPM)
                         .mixrScaledFont(
                             size: 14 * toolbarScale,
                             weight: .bold,
@@ -2730,6 +2744,7 @@ private struct TLTrackArea: View {
                             }
                         }
                         .frame(width: laneVW, height: totalH)
+                        .onboardingTarget(.timelineViewport)
                         .zIndex(1)
                         .overlay {
                             // Drop-target highlight only. The idle border this

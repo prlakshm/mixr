@@ -13,6 +13,15 @@ nonisolated enum OnboardingTarget: Hashable, Sendable {
     case firstClip
     case effectsPanel
     case soundEffectsButton
+    /// The visible part of the horizontally scrolling timeline. Not a step
+    /// target: clips can run past it, so their spotlight is clipped to it.
+    case timelineViewport
+
+    /// The container a target's spotlight is clipped to, if it can scroll
+    /// out of view.
+    var visibleBounds: OnboardingTarget? {
+        self == .firstClip ? .timelineViewport : nil
+    }
 }
 
 /// The motion the animated finger demonstrates over a target.

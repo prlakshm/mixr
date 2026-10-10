@@ -76,8 +76,21 @@ final class TrackLibrary: ObservableObject {
         return tracks.first(where: { $0.key != nil })?.keyDisplay ?? "--"
     }
 
-    var projectBPMDisplay: String {
-        projectBPM.map(String.init) ?? "--"
+    /// Header tempo, read the same way as `displayKey`: the selected song,
+    /// else the first song that has one, else the project fallback.
+    var displayBPM: String {
+        if let selectedTrackID,
+           let bpm = tracks.first(where: { $0.id == selectedTrackID })?.bpm {
+            return String(bpm)
+        }
+        let first = tracks.first { !$0.isSFXTrack && $0.bpm != nil }?.bpm
+        return (first ?? projectBPM).map(String.init) ?? "--"
+    }
+
+    /// The first song's tempo (track order), so the project fallback does
+    /// not depend on which import finishes analysing first.
+    private var leadSongBPM: Int? {
+        tracks.first { !$0.isSFXTrack && $0.bpm != nil }?.bpm
     }
 
     // MARK: - Import
@@ -136,7 +149,7 @@ final class TrackLibrary: ObservableObject {
                 if let bpm = metadata.bpm {
                     tracks[idx].bpm           = bpm
                     tracks[idx].bpmConfidence = nil  // from embedded metadata, fully trusted
-                    if projectBPM == nil { projectBPM = bpm }
+                    projectBPM = leadSongBPM
                 }
                 if let key = metadata.key {
                     tracks[idx].key           = key
@@ -166,7 +179,7 @@ final class TrackLibrary: ObservableObject {
                    let conf = analysis.bpmConfidence, conf >= bpmThreshold {
                     tracks[idx2].bpm           = bpm
                     tracks[idx2].bpmConfidence = conf
-                    if projectBPM == nil { projectBPM = bpm }
+                    projectBPM = leadSongBPM
                 }
 
                 if needsKey,
@@ -493,6 +506,13 @@ final class TrackLibrary: ObservableObject {
         Task { @MainActor in
             await Task.yield()
             loadProjects()
+#if DEBUG
+            // UI tests: seed an empty project with demo songs.
+            let seedURLs = UITestLaunchHooks.songURLs
+            if !seedURLs.isEmpty, !tracks.contains(where: { !$0.isSFXTrack }) {
+                addTracks(from: seedURLs)
+            }
+#endif
         }
     }
 
