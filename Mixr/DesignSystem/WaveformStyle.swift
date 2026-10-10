@@ -86,6 +86,16 @@ enum WaveformMockData {
 // MARK: - Silhouette Path
 
 enum WaveformSilhouettePath {
+    /// Where the bars start and stop inside a clip (points from each edge).
+    /// Real waveforms ask for exactly the audio under this strip, so every
+    /// bar sits at its true time on the ruler.
+    static func drawableInsets(
+        padding: CGFloat = WaveformMetrics.innerPadding,
+        tailWidth: CGFloat = WaveformMetrics.tailWidth
+    ) -> (leading: CGFloat, trailing: CGFloat) {
+        (padding, padding + tailWidth * 0.35)
+    }
+
     static func build(
         amplitudes: [CGFloat],
         size: CGSize,
@@ -97,8 +107,8 @@ enum WaveformSilhouettePath {
 
         let centerY = size.height / 2
         let maxHalfHeight = (size.height - padding * 2) / 2 * WaveformSilhouetteStyle.maxFill
-        let tailInset = tailWidth * 0.35
-        let drawableWidth = max(1, size.width - padding * 2 - tailInset)
+        let insets = drawableInsets(padding: padding, tailWidth: tailWidth)
+        let drawableWidth = max(1, size.width - insets.leading - insets.trailing)
 
         func xPosition(for index: Int) -> CGFloat {
             padding + drawableWidth * CGFloat(index) / CGFloat(count - 1)

@@ -111,6 +111,7 @@ final class TrackLibrary: ObservableObject {
             let songCount = tracks.filter { !$0.isSFXTrack }.count
             let color   = colorCycle[songCount % colorCycle.count]
             let trackID = UUID()
+            let placeholderClipID = UUID()
             let parsed  = Self.parsedFilenameMetadata(from: url)
             let title   = parsed.title ?? url.deletingPathExtension().lastPathComponent
 
@@ -127,7 +128,7 @@ final class TrackLibrary: ObservableObject {
                 isMuted: false,
                 url: url,
                 artworkData: nil,
-                clips: [MixrClip(id: UUID(), start: 0, length: 48)]
+                clips: [MixrClip(id: placeholderClipID, start: 0, length: 48)]
             )
             // Keep the SFX track pinned below all song tracks.
             if let sfxIdx = tracks.firstIndex(where: { $0.isSFXTrack }) {
@@ -162,7 +163,13 @@ final class TrackLibrary: ObservableObject {
                 if let seconds = metadata.durationSeconds {
                     tracks[idx].duration        = Self.formattedDuration(seconds)
                     tracks[idx].durationSeconds = seconds
-                    tracks[idx].clips[0].length = Self.clipUnits(for: seconds)
+                    // Size only the untouched placeholder clip: by now the
+                    // song may have been split, edited or rearranged by Auto.
+                    if let ci = tracks[idx].clips.firstIndex(where: { $0.id == placeholderClipID }),
+                       tracks[idx].clips[ci].start == 0, tracks[idx].clips[ci].length == 48,
+                       tracks[idx].clips[ci].sourceOffsetSeconds == 0 {
+                        tracks[idx].clips[ci].length = Self.clipUnits(for: seconds)
+                    }
                 }
                 scheduleAutosave()
 
@@ -480,7 +487,11 @@ final class TrackLibrary: ObservableObject {
 
     /// Gesture edits (clip drag, sliders): capture when the gesture begins…
     func beginGestureEdit(_ name: String, scope: TimelineEditScope) {
-        guard pendingEdit == nil, let before = captureState(for: scope) else { return }
+        // A gesture the system cancelled (Control Center, a call) can leave
+        // its edit open. Close it out rather than letting it swallow this
+        // edit's undo step.
+        if pendingEdit != nil { commitGestureEdit() }
+        guard let before = captureState(for: scope) else { return }
         pendingEdit = (name, before)
     }
 
@@ -631,8 +642,11 @@ final class TrackLibrary: ObservableObject {
         refreshProjectSummaries()
     }
 
+    static let maxProjectNameLength = 60
+
     func renameCurrentProject(to newName: String) {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Capped so a pasted paragraph can't become a project title.
+        let trimmed = String(newName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxProjectNameLength))
         guard !trimmed.isEmpty, trimmed != projectName else { return }
         performEdit("Rename Project", scope: .projectName) {
             projectName = trimmed
@@ -888,11 +902,11 @@ final class TrackLibrary: ObservableObject {
         return FilenameMetadata(title: filename.isEmpty ? nil : filename, artist: nil)
     }
 
-    /// Maps audio duration to timeline clip length in units.
-    /// Assumes the full 130-unit timeline spans ~240 seconds.
+    /// Timeline length for a whole song: its real duration. (The timeline
+    /// widens to fit — MixrTimeline.contentUnits — so long songs are no
+    /// longer cut at 3:41, nor short ones padded with silence.)
     static func clipUnits(for seconds: Double) -> CGFloat {
-        let units = CGFloat(seconds / 240.0) * 130
-        return min(max(units, 10), 120)
+        max(MixrTimeline.minClipLengthUnits, MixrTimeline.units(fromSeconds: seconds))
     }
 }
 

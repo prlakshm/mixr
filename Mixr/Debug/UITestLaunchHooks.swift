@@ -32,14 +32,7 @@ enum UITestLaunchHooks {
         }
     }
 
-    /// `-MixrShockwave <name>`: previews a Import Songs shockwave style.
-    static var shockwaveStyle: MixrShockwaveStyle? {
-        guard let i = arguments.firstIndex(of: "-MixrShockwave"),
-              arguments.indices.contains(i + 1) else { return nil }
-        return MixrShockwaveStyle(rawValue: arguments[i + 1])
-    }
-
-    /// `-MixrSlowMotion <factor>`: slows frame-driven effects (the shockwave)
+    /// `-MixrSlowMotion <factor>`: slows frame-driven effects (the Import halo)
     /// so a test can capture them frame by frame.
     static let animationTimeScale: Double = {
         guard let i = arguments.firstIndex(of: "-MixrSlowMotion"),

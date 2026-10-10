@@ -25,6 +25,7 @@ SOURCES=(
   "$ROOT/Mixr/Models/MixrTimeline.swift"
   "$ROOT/Mixr/Models/ClipEffects.swift"
   "$ROOT/Mixr/Models/MixrTrack.swift"
+  "$ROOT/Mixr/Models/ImportedAudioStore.swift"
   "$ROOT/Mixr/Models/SongAnalysis.swift"
   "$ROOT/Mixr/Models/SongSignalAnalysis.swift"
   "$ROOT/Mixr/Models/SongStructureAnalysis.swift"

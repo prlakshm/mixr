@@ -334,6 +334,7 @@ struct TimelineScreen: View {
     @StateObject private var playback = MixrPlaybackEngine()
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var envUndoManager
+    @Environment(\.scenePhase) private var scenePhase
 #if DEBUG
     @Environment(AppAppearanceState.self) private var visualQAAppearanceState
 #endif
@@ -505,14 +506,19 @@ struct TimelineScreen: View {
         .onChange(of: tour) { _, state in
             tourDidChange(state)
         }
+        // Leaving the app: save now (autosave is debounced), and pause on
+        // background — Mixr doesn't play in the background, so the UI must
+        // not keep claiming it does.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { library.saveCurrentProject() }
+            if phase == .background { playback.pause() }
+        }
         // The window's UndoManager can arrive/change after first render.
         .onChange(of: envUndoManager.map(ObjectIdentifier.init)) { _, _ in
             library.attachUndoManager(envUndoManager)
         }
         // Track list or clip geometry changed → full sync (may add/remove players)
-        .onChange(of: library.tracks.map { track in
-            track.clips.map { "\($0.start):\($0.length)" }.joined(separator: ",")
-        }.joined(separator: "|")) { _, _ in
+        .onChange(of: trackGeometrySignature) { _, _ in
             playback.syncTracks(library.tracks, projectBPM: library.projectBPM)
             library.scheduleAutosave()
         }
@@ -686,6 +692,18 @@ struct TimelineScreen: View {
 
     private var closeRevealedDeleteMask: GestureMask {
         revealedDeleteRowID == nil ? .subviews : .all
+    }
+
+    /// Changes whenever the set of tracks or any clip's placement changes.
+    /// Track and clip IDs are part of it: two projects whose clips happen to
+    /// share positions (every untrimmed song starts at 0) must still resync
+    /// the audio graph when you switch between them.
+    private var trackGeometrySignature: String {
+        library.tracks.map { track in
+            "\(track.id)@\(track.url?.path ?? "-"):" + track.clips.map {
+                "\($0.id):\($0.start):\($0.length):\($0.sourceOffsetSeconds):\($0.playbackSpeed)"
+            }.joined(separator: ",")
+        }.joined(separator: "|")
     }
 
     /// Changes whenever any clip's effects, volume or transitions change.
@@ -1121,17 +1139,31 @@ struct TimelineScreen: View {
 
         switch outcome {
         case .success(let tracks, _, _):
+            // Song info (BPM, key, title, length) can finish loading while
+            // Auto analyses; keep what arrived meanwhile instead of the
+            // snapshot Auto started from.
+            let latest = Dictionary(library.tracks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let merged = tracks.map { track -> MixrTrack in
+                guard let now = latest[track.id] else { return track }
+                var t = track
+                t.title = now.title; t.artist = now.artist
+                t.duration = now.duration; t.durationSeconds = now.durationSeconds
+                t.bpm = now.bpm; t.bpmConfidence = now.bpmConfidence
+                t.key = now.key; t.keyConfidence = now.keyConfidence
+                t.artworkData = now.artworkData
+                return t
+            }
             library.beginGestureEdit("Auto Remix", scope: .tracks)
             withAnimation(MixrMotion.overlay) {
-                library.tracks = tracks
+                library.tracks = merged
                 isAutoRunning = false
             }
             library.commitGestureEdit()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         case .failure(let message):
-            library.tracks = originalTracks
-            library.cancelGestureEdit()
+            // Nothing was applied, so there is nothing to revert (reverting
+            // would also discard song info that loaded during analysis).
             withAnimation(MixrMotion.overlay) {
                 isAutoRunning = false
                 autoErrorMessage = message
@@ -3364,7 +3396,16 @@ private struct TLTrackArea: View {
                 TLTrackControlRow(
                     track: track,
                     availableWidth: controlsWidth,
-                    volume: $tracks[idx].volume,
+                    // Bound by ID, not index: a row can outlive its index
+                    // while a delete animates.
+                    volume: Binding(
+                        get: { tracks.first(where: { $0.id == track.id })?.volume ?? track.volume },
+                        set: { value in
+                            if let i = tracks.firstIndex(where: { $0.id == track.id }) {
+                                tracks[i].volume = value
+                            }
+                        }
+                    ),
                     onToggleSolo: { onToggleSolo(track.id) },
                     onToggleMute: { onToggleMute(track.id) },
                     onVolumeEditingChanged: { editing in
@@ -3510,7 +3551,7 @@ private struct TLTrackArea: View {
             provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
                 guard
                     let url,
-                    let importedURL = TLAudioDrop.temporaryCopy(of: url)
+                    let importedURL = TLAudioDrop.importedCopy(of: url)
                 else { return }
 
                 DispatchQueue.main.async {
@@ -3586,12 +3627,24 @@ private struct TLClipWaveform: View {
         WaveformClip(waveformColor: track.color, bars: bars)
     }
 
-    private var bars: ((Int) -> [CGFloat]?)? {
+    private var bars: ((Int, CGFloat) -> [CGFloat]?)? {
         guard !clip.isSoundEffect, let url = track.url,
               let peaks = cache.peaks(for: url) else { return nil }
         let start = clip.sourceOffsetSeconds
         let duration = MixrTimeline.seconds(fromUnits: clip.length) * clip.playbackSpeed
-        return { count in peaks.bars(start: start, duration: duration, count: count) }
+        let insets = WaveformSilhouettePath.drawableInsets()
+        return { count, width in
+            // Only the seconds under the drawn strip, so a peak you see is
+            // where it plays (the clip's inner padding isn't compressed in).
+            guard width > insets.leading + insets.trailing else { return nil }
+            let lead = Double(insets.leading / width)
+            let trail = Double(insets.trailing / width)
+            return peaks.bars(
+                start: start + duration * lead,
+                duration: duration * (1 - lead - trail),
+                count: count
+            )
+        }
     }
 }
 
@@ -4626,29 +4679,11 @@ private enum TLAudioDrop {
         UTType.aiff.identifier,
     ]
 
-    static func temporaryCopy(of sourceURL: URL) -> URL? {
-        let fileManager = FileManager.default
-        let dropDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("MixrDroppedAudio", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-
-        do {
-            try fileManager.createDirectory(
-                at: dropDirectory,
-                withIntermediateDirectories: true
-            )
-
-            let destination = dropDirectory.appendingPathComponent(sourceURL.lastPathComponent)
-
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-
-            try fileManager.copyItem(at: sourceURL, to: destination)
-            return destination
-        } catch {
-            return nil
-        }
+    /// Keeps the app's own copy (the dropped file's URL is only valid
+    /// during the drop). Stored in Application Support, not tmp, so the
+    /// song is still there after iOS cleans up temporary files.
+    static func importedCopy(of sourceURL: URL) -> URL? {
+        ImportedAudioStore.copy(sourceURL)
     }
 }
 

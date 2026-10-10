@@ -14,7 +14,7 @@ fi
 TESTS=("$@")
 if [[ ${#TESTS[@]} -eq 0 ]]; then
   TESTS=(ClipEditingUILayoutTests SFXUILayoutTests TimelineEmptyStateUILayoutTests
-         GrayContrastTokenTests PartyModeArchitectureTests)
+         GrayContrastTokenTests PartyModeArchitectureTests AppIconAssetTests)
 fi
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 STATUS=0

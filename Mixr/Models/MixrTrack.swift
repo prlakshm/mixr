@@ -230,8 +230,13 @@ extension MixrTrack: Codable {
             _ = bookmark   // security-scoped bookmarks are Apple-only
             #endif
         }
-        if url == nil, let path = try c.decodeIfPresent(String.self, forKey: .urlPath) {
-            url = URL(fileURLWithPath: path)
+        let path = try c.decodeIfPresent(String.self, forKey: .urlPath)
+        if let current = url, !FileManager.default.fileExists(atPath: current.path),
+           let moved = ImportedAudioStore.relocated(current.path) {
+            url = moved
+        }
+        if url == nil, let path {
+            url = ImportedAudioStore.relocated(path) ?? URL(fileURLWithPath: path)
         }
     }
 

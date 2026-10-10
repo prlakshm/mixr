@@ -11,6 +11,9 @@ struct TLVolumeSlider: View {
     var onEditingChanged: (Bool) -> Void = { _ in }
 
     @State private var isEditing = false
+    /// True only while a drag is live; resets on its own if the system
+    /// cancels the gesture (onEnded doesn't run then).
+    @GestureState private var isDragging = false
 
     private let trackHeight: CGFloat = 2.5
     private let fillHeight: CGFloat = 5
@@ -42,6 +45,7 @@ struct TLVolumeSlider: View {
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
+                    .updating($isDragging) { _, state, _ in state = true }
                     .onChanged { gesture in
                         if !isEditing {
                             isEditing = true
@@ -51,13 +55,22 @@ struct TLVolumeSlider: View {
                         value = x / travel
                     }
                     .onEnded { _ in
-                        isEditing = false
-                        onEditingChanged(false)
+                        if isEditing {
+                            isEditing = false
+                            onEditingChanged(false)
+                        }
                     }
             )
         }
         .padding(.vertical, -8)
         .frame(height: thumbHeight + 2)
+        .onChange(of: isDragging) { _, dragging in
+            // Ended or cancelled: close the edit exactly once.
+            if !dragging, isEditing {
+                isEditing = false
+                onEditingChanged(false)
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel(accessibilityName)
         .accessibilityValue("\(Int((min(max(value, 0), 1) * 100).rounded())) percent")
