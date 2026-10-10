@@ -52,6 +52,11 @@ struct EditorSafeArea: Equatable {
 /// desktop window or a tablet in portrait; `large` is a full tablet or a big
 /// desktop window.
 enum EditorLayoutDensity: Equatable {
+    /// SE-class phones (667pt landscape, no side insets): the one-row bar
+    /// fits by showing the waveform mark without the wordmark and an
+    /// icon-only Export — far cheaper than a second toolbar row on a
+    /// 375pt-tall screen.
+    case narrow
     case tight
     case roomy
     case large
@@ -60,6 +65,7 @@ enum EditorLayoutDensity: Equatable {
     /// and Export must never be pushed off the bar.
     var toolbarEdgePadding: CGFloat {
         switch self {
+        case .narrow: 8
         case .tight: 10
         case .roomy: 14
         case .large: 18
@@ -68,6 +74,7 @@ enum EditorLayoutDensity: Equatable {
 
     var toolbarLogoGap: CGFloat {
         switch self {
+        case .narrow: 10
         case .tight: 12
         case .roomy: 22
         case .large: 26
@@ -76,6 +83,7 @@ enum EditorLayoutDensity: Equatable {
 
     var toolbarTitleGap: CGFloat {
         switch self {
+        case .narrow: 8
         case .tight: 8
         case .roomy: 16
         case .large: 18
@@ -84,6 +92,7 @@ enum EditorLayoutDensity: Equatable {
 
     var transportSpacing: CGFloat {
         switch self {
+        case .narrow: 6
         case .tight: 8
         case .roomy: 12
         case .large: 14
@@ -92,7 +101,7 @@ enum EditorLayoutDensity: Equatable {
 
     var readoutKeyWidth: CGFloat {
         switch self {
-        case .tight: 46
+        case .narrow, .tight: 46
         case .roomy: 56
         case .large: 60
         }
@@ -152,6 +161,8 @@ enum EditorPresentationRules {
 enum EditorTransportMetrics {
     /// Waveform mark + "Mixr" wordmark.
     static let logoWidth: CGFloat = 66
+    /// Waveform mark alone (narrow bars).
+    static let markOnlyLogoWidth: CGFloat = 24
     /// Project title column + chevron (see TLProjectTitleMetrics.controlWidth).
     static let projectTitleWidth: CGFloat = 96.25
     /// Undo + redo hit areas and the gap between them.
@@ -162,6 +173,16 @@ enum EditorTransportMetrics {
     static let bpmWidth: CGFloat = 30
     static let readoutGap: CGFloat = 10
     static let exportWidth: CGFloat = 96
+    /// Icon-only Export (narrow bars) — still a 44pt target.
+    static let iconExportWidth: CGFloat = 44
+
+    static func logoWidth(_ density: EditorLayoutDensity) -> CGFloat {
+        density == .narrow ? markOnlyLogoWidth : logoWidth
+    }
+
+    static func exportWidth(_ density: EditorLayoutDensity) -> CGFloat {
+        density == .narrow ? iconExportWidth : exportWidth
+    }
     /// Clearance the centre cluster keeps from the side groups.
     static let minimumClusterGap: CGFloat = 10
     /// The bar keeps the same share of the editor's height on every screen, so
@@ -180,7 +201,7 @@ enum EditorTransportMetrics {
         scale: CGFloat = 1
     ) -> CGFloat {
         density.toolbarEdgePadding
-            + (logoWidth + projectTitleWidth + historyWidth) * scale
+            + (logoWidth(density) + projectTitleWidth + historyWidth) * scale
             + density.toolbarLogoGap
             + density.toolbarTitleGap
     }
@@ -189,7 +210,7 @@ enum EditorTransportMetrics {
         _ density: EditorLayoutDensity,
         scale: CGFloat = 1
     ) -> CGFloat {
-        exportWidth * scale + density.toolbarEdgePadding
+        exportWidth(density) * scale + density.toolbarEdgePadding
     }
 
     /// Cluster width splits into parts that scale with the toolbar and gaps
@@ -262,10 +283,10 @@ struct EditorTransportLayout: Equatable {
             + density.toolbarTitleGap
             + gapAllowance
         let scalable = EditorTransportMetrics.clusterScalableWidth(density)
-            + EditorTransportMetrics.logoWidth
+            + EditorTransportMetrics.logoWidth(density)
             + EditorTransportMetrics.projectTitleWidth
             + EditorTransportMetrics.historyWidth
-            + EditorTransportMetrics.exportWidth
+            + EditorTransportMetrics.exportWidth(density)
         let fittingScale = scalable > 0
             ? (contentWidth - fixed) / scalable
             : desiredScale
@@ -275,7 +296,7 @@ struct EditorTransportLayout: Equatable {
         // side for the largest scale that still allows it, and let a slightly
         // smaller toolbar win over an off-centre play button.
         let half = contentWidth / 2
-        let sideGroups = EditorTransportMetrics.logoWidth
+        let sideGroups = EditorTransportMetrics.logoWidth(density)
             + EditorTransportMetrics.projectTitleWidth
             + EditorTransportMetrics.historyWidth
         let playHalfSpan = EditorTransportMetrics.transportButtonWidth * 1.5
@@ -293,7 +314,7 @@ struct EditorTransportLayout: Equatable {
         let leadingCentringScale = leadingHeadroom / (playHalfSpan + sideGroups)
         let trailingCentringScale = trailingHeadroom
             / (EditorTransportMetrics.clusterScalableWidth(density)
-                + EditorTransportMetrics.exportWidth
+                + EditorTransportMetrics.exportWidth(density)
                 - playHalfSpan)
         let centringScale = min(leadingCentringScale, trailingCentringScale)
 
@@ -459,10 +480,17 @@ struct EditorLayoutMetrics: Equatable {
     init(containerSize: CGSize, effectsState: EditorEffectsState) {
         let width = max(0, containerSize.width)
         let height = max(0, containerSize.height)
+        // Below the full one-row width, a narrow bar (no wordmark, icon
+        // Export) still fits on SE-class phones; only narrower than that does
+        // the toolbar take two rows.
+        let isNarrow = width < Self.regularTransportMinimumWidth
+            && width >= EditorTransportMetrics.minimumOneRowWidth(.narrow)
         let mode: EditorLayoutMode =
-            width >= Self.regularTransportMinimumWidth ? .regular : .compact
+            width >= Self.regularTransportMinimumWidth || isNarrow ? .regular : .compact
         let density: EditorLayoutDensity =
-            if mode == .compact || width < Self.roomyDensityWidth {
+            if isNarrow {
+                .narrow
+            } else if mode == .compact || width < Self.roomyDensityWidth {
                 .tight
             } else if width < Self.largeDensityWidth {
                 .roomy
@@ -479,7 +507,7 @@ struct EditorLayoutMetrics: Equatable {
 
         let tracksWidth: CGFloat
         let controlsWidth: CGFloat
-        if mode == .regular {
+        if mode == .regular, !isNarrow {
             // Never narrower than the phone's ideals, never wider than the caps.
             tracksWidth = min(
                 Self.maximumTracksWidth,

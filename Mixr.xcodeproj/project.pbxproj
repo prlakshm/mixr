@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		8343FA072FE6227D00951AF8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 834306A62FE6227D00951AF8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 834306AD2FE6227D00951AF8;
+			remoteInfo = Mixr;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		834306AE2FE6227D00951AF8 /* Mixr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mixr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8343FA012FE6227D00951AF8 /* MixrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MixrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,9 +27,21 @@
 			path = Mixr;
 			sourceTree = "<group>";
 		};
+		8343FA022FE6227D00951AF8 /* MixrUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MixrUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		8343FA052FE6227D00951AF8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		834306AB2FE6227D00951AF8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				834306B02FE6227D00951AF8 /* Mixr */,
+				8343FA022FE6227D00951AF8 /* MixrUITests */,
 				834306AF2FE6227D00951AF8 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				834306AE2FE6227D00951AF8 /* Mixr.app */,
+				8343FA012FE6227D00951AF8 /* MixrUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = 834306AE2FE6227D00951AF8 /* Mixr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		8343FA032FE6227D00951AF8 /* MixrUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8343FA112FE6227D00951AF8 /* Build configuration list for PBXNativeTarget "MixrUITests" */;
+			buildPhases = (
+				8343FA042FE6227D00951AF8 /* Sources */,
+				8343FA052FE6227D00951AF8 /* Frameworks */,
+				8343FA062FE6227D00951AF8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8343FA082FE6227D00951AF8 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8343FA022FE6227D00951AF8 /* MixrUITests */,
+			);
+			name = MixrUITests;
+			packageProductDependencies = (
+			);
+			productName = MixrUITests;
+			productReference = 8343FA012FE6227D00951AF8 /* MixrUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					834306AD2FE6227D00951AF8 = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					8343FA032FE6227D00951AF8 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 834306AD2FE6227D00951AF8;
 					};
 				};
 			};
@@ -100,11 +152,19 @@
 			projectRoot = "";
 			targets = (
 				834306AD2FE6227D00951AF8 /* Mixr */,
+				8343FA032FE6227D00951AF8 /* MixrUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		8343FA062FE6227D00951AF8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		834306AC2FE6227D00951AF8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +175,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		8343FA042FE6227D00951AF8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		834306AA2FE6227D00951AF8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -123,6 +190,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8343FA082FE6227D00951AF8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 834306AD2FE6227D00951AF8 /* Mixr */;
+			targetProxy = 8343FA072FE6227D00951AF8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		834306B72FE6227E00951AF8 /* Debug */ = {
@@ -270,14 +345,14 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,6";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -307,14 +382,50 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,6";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		8343FA092FE6227D00951AF8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RQ84W55P8T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pranavi.MixrUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Mixr;
+			};
+			name = Debug;
+		};
+		8343FA102FE6227D00951AF8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RQ84W55P8T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pranavi.MixrUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Mixr;
 			};
 			name = Release;
 		};
@@ -335,6 +446,15 @@
 			buildConfigurations = (
 				834306BA2FE6227E00951AF8 /* Debug */,
 				834306BB2FE6227E00951AF8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8343FA112FE6227D00951AF8 /* Build configuration list for PBXNativeTarget "MixrUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8343FA092FE6227D00951AF8 /* Debug */,
+				8343FA102FE6227D00951AF8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

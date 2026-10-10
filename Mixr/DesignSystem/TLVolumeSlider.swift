@@ -5,11 +5,15 @@ struct TLVolumeSlider: View {
     @Binding var value: Double
     let accentColor: Color
     let trackColor: Color
+    var accessibilityName: String = "Volume"
     /// Called with `true` on the first drag event, `false` on release —
     /// lets callers commit a single undo snapshot per drag.
     var onEditingChanged: (Bool) -> Void = { _ in }
 
     @State private var isEditing = false
+    /// True only while a drag is live; resets on its own if the system
+    /// cancels the gesture (onEnded doesn't run then).
+    @GestureState private var isDragging = false
 
     private let trackHeight: CGFloat = 2.5
     private let fillHeight: CGFloat = 5
@@ -34,9 +38,14 @@ struct TLVolumeSlider: View {
                     .offset(x: thumbX)
             }
             .frame(width: width, height: thumbHeight + 2, alignment: .center)
+            // 32pt-tall touch band (the bar is 16): easier to grab, still
+            // inside the 46pt row. Horizontal stays exact so the speaker
+            // icon beside it never sets the level.
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
+                    .updating($isDragging) { _, state, _ in state = true }
                     .onChanged { gesture in
                         if !isEditing {
                             isEditing = true
@@ -46,12 +55,37 @@ struct TLVolumeSlider: View {
                         value = x / travel
                     }
                     .onEnded { _ in
-                        isEditing = false
-                        onEditingChanged(false)
+                        if isEditing {
+                            isEditing = false
+                            onEditingChanged(false)
+                        }
                     }
             )
         }
+        .padding(.vertical, -8)
         .frame(height: thumbHeight + 2)
+        .onChange(of: isDragging) { _, dragging in
+            // Ended or cancelled: close the edit exactly once.
+            if !dragging, isEditing {
+                isEditing = false
+                onEditingChanged(false)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityName)
+        .accessibilityValue("\(Int((min(max(value, 0), 1) * 100).rounded())) percent")
+        .accessibilityAdjustableAction { direction in
+            let step = 0.05
+            let next: Double
+            switch direction {
+            case .increment: next = value + step
+            case .decrement: next = value - step
+            @unknown default: return
+            }
+            onEditingChanged(true)
+            value = min(max(next, 0), 1)
+            onEditingChanged(false)
+        }
     }
 
     private func sliderTrack(width: CGFloat) -> some View {

@@ -228,7 +228,7 @@ check(
     "Song chips preserve semantic color and current SFX pearl treatment",
     songChipSource.contains("semanticColor: color.color")
         && songChipSource.contains("semanticColor: MixrColors.sfxGlow")
-        && songChipSource.contains("SFXIconBoxSurface")
+        && songChipSource.contains("SFXCard.pearlIconFill")
 )
 
 check(

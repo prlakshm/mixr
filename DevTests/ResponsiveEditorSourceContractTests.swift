@@ -178,11 +178,12 @@ check(
 )
 
 check(
-    "Import remains wired to a native file importer from both editor entry points",
+    "Import is wired to a native file importer from the one Import Songs button",
     timelineSource.contains(".fileImporter(")
         && timelineSource.contains("private var importSongsButton")
-        && timelineSource.contains("onImport: { showFilePicker = true }")
         && timelineSource.contains("showFilePicker = true")
+        // The empty timeline points at that button instead of repeating it.
+        && !timelineSource.contains("onImport: { showFilePicker = true }")
 )
 
 check(

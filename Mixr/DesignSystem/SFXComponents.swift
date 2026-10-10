@@ -577,6 +577,17 @@ struct SFXLibraryPanel: View {
             .padding(.top, SFXMetrics.panelCloseTopInset)
             .padding(.trailing, SFXMetrics.panelCloseTrailingInset)
         }
+        // Titled like the Effects panel, in line with the close button and
+        // the card grid's leading edge.
+        .overlay(alignment: .topLeading) {
+            Text("Sound Effects")
+                .mixrScaledFont(size: 13, weight: .semibold, relativeTo: .headline)
+                .foregroundStyle(MixrColors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+                .frame(height: MixrLayout.iconButtonSize)
+                .padding(.top, SFXMetrics.panelCloseTopInset)
+                .padding(.leading, SFXMetrics.panelPadH)
+        }
         .overlay(alignment: .bottom) {
             HStack(spacing: SFXMetrics.pageIndicatorSpacing) {
                 ForEach(Self.pages.indices, id: \.self) { page in

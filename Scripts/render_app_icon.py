@@ -16,6 +16,8 @@ Two things the hand-built artwork got wrong and this fixes:
 Bar order is deliberately unchanged; it matches the app logo.
 
     python3 Scripts/render_app_icon.py "Mixr/AppIcon.icon/Assets/mixr logo 4.png"
+
+Geometry is exact and whole-pixel (see ICON_* below).
 """
 
 import sys
@@ -78,25 +80,32 @@ def ramp(stops, locs, t):
     return out
 
 
+# Exact whole-pixel geometry (1254 canvas). Earlier passes placed bars at
+# fractional positions and nudged the group toward its area centroid; at
+# icon size that read as spacing that alternated 116/117 px and a mark sitting
+# 9 px right of centre. Now:
+#   * 72 px bars on a constant 120 px pitch (48 px gaps),
+#   * the group geometrically centred: 291 px margins on both sides,
+#   * every bar centred on the canvas mid-line (627 px), even heights so
+#     tops and bottoms land on whole pixels,
+#   * taller bars to match the waveform beside "Mixr" in the app: the peak
+#     is 768 px, ~10.7× the bar width (was ~9.7×).
+ICON_BAR_WIDTH = 72
+ICON_PITCH = 120
+ICON_PEAK = 768
+ICON_RELATIVE_HEIGHTS = [0.29, 0.72, 1.0, 0.45, 0.72, 0.29]   # app-logo order
+
+
 def solve_geometry():
-    """Scale the spec to icon size, then offset it to its optical centre."""
-    span = (BAR_CENTRES[-1] + BAR_WIDTH / 2) - (BAR_CENTRES[0] - BAR_WIDTH / 2)
-    scale = (MARK_WIDTH_FRACTION * CANVAS) / span
-    mid = CANVAS / 2.0
-
-    centres = mid + (BAR_CENTRES - mid) * scale
-    width = BAR_WIDTH * scale
-    tops = mid + (BAR_TOPS - mid) * scale
-    heights = BAR_HEIGHTS * scale
-
-    if ALIGN_BAR_CENTRES:
-        axis = (tops + heights / 2.0).mean()
-        tops = axis - heights / 2.0
-
-    # Optical centring: balance area, not bounding box.
-    area_x = (centres * heights).sum() / heights.sum()
-    centres = centres + (mid - area_x)
-    tops = tops + (mid - (tops + heights / 2.0).mean())
+    n = len(ICON_RELATIVE_HEIGHTS)
+    span = n * ICON_BAR_WIDTH + (n - 1) * ICON_PITCH - (n - 1) * ICON_BAR_WIDTH
+    left = (CANVAS - span) // 2
+    assert CANVAS - span - 2 * left == 0, "group must centre on whole pixels"
+    centres = np.array([left + ICON_BAR_WIDTH / 2 + i * ICON_PITCH for i in range(n)], dtype=float)
+    heights = np.array([2 * round(h * ICON_PEAK / 2) for h in ICON_RELATIVE_HEIGHTS], dtype=float)
+    tops = CANVAS / 2 - heights / 2
+    width = float(ICON_BAR_WIDTH)
+    scale = width / BAR_WIDTH          # sheen and shadow scale with the bars
     return centres, width, tops, heights, scale
 
 

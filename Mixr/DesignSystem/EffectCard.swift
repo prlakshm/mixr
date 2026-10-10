@@ -243,7 +243,6 @@ enum EffectCardMetrics {
     static let iconSize: CGFloat       = 22
     static let titleFontSize: CGFloat  = 11
     static let titleGap: CGFloat       = 9
-    static let glassBubbleSize: CGFloat    = 13
     static let reflectionArcSize: CGFloat  = 28
 
     /// Icon tile occupies the leading foreground — keep blobs out of this rect.
@@ -306,6 +305,9 @@ private enum EffectRimGlow {
 struct EffectCard: View {
     let effect: MixrEffect
     var isSelected: Bool = false
+    /// This effect's level (0…100) on the clip being edited; nil when no
+    /// clip is selected. Drawn as the corner ring.
+    var level: Double? = nil
 
     @State private var isHovered = false
 
@@ -319,7 +321,9 @@ struct EffectCard: View {
             EffectLightingLayer(effect: effect, isSelected: isActive)
             foregroundContent
                 .zIndex(1)
-            glassBubbleDecoration
+            if !isAuto {
+                levelRing
+            }
         }
         .frame(width: EffectCardMetrics.width, height: EffectCardMetrics.height)
         .clipShape(RoundedRectangle(cornerRadius: EffectCardMetrics.cornerRadius, style: .continuous))
@@ -458,44 +462,38 @@ struct EffectCard: View {
         .padding(.top, EffectCardMetrics.inset - 1)
     }
 
-    private var glassBubbleDecoration: some View {
-        GeometryReader { geo in
-            let bx = geo.size.width  - 24
-            let by = geo.size.height - 15
-
+    /// Corner dial: how much of this effect the selected clip has. A faint
+    /// track alone means "off" (or no clip selected); the arc fills in the
+    /// effect's color as the level rises, so the row shows at a glance
+    /// which effects a clip uses.
+    private var levelRing: some View {
+        let size = EffectCardMetrics.reflectionArcSize
+        let fraction = min(max((level ?? 0) / 100, 0), 1)
+        return GeometryReader { geo in
             ZStack {
-                ClearGlassBubble()
-                    .frame(
-                        width: EffectCardMetrics.reflectionArcSize,
-                        height: EffectCardMetrics.reflectionArcSize
-                    )
-                    .position(x: bx + 7, y: by - 1)
-
-                EffectReflectionArc()
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.24),
-                                effect.color.opacity(0.18),
-                                Color.white.opacity(0.03),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        style: StrokeStyle(lineWidth: 0.9, lineCap: .round)
-                    )
-                    .frame(
-                        width: EffectCardMetrics.reflectionArcSize,
-                        height: EffectCardMetrics.reflectionArcSize
-                    )
-                    .shadow(color: effect.color.opacity(0.10), radius: 2)
-                    .position(x: bx + 7, y: by - 1)
-
-                GlassMarble()
-                    .position(x: bx, y: by)
+                Circle()
+                    .stroke(Color.white.opacity(level == nil ? 0.07 : 0.12), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: fraction)
+                    .stroke(effect.color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .shadow(color: effect.color.opacity(0.55), radius: 3)
+                    .opacity(fraction > 0 ? 1 : 0)
+                Circle()
+                    .fill(effect.color)
+                    .frame(width: 5, height: 5)
+                    .shadow(color: effect.color.opacity(0.7), radius: 2)
+                    .opacity(fraction > 0 ? 1 : 0)
             }
+            .frame(width: size, height: size)
+            .position(
+                x: geo.size.width - EffectCardMetrics.inset - size / 2,
+                y: geo.size.height - EffectCardMetrics.inset - size / 2
+            )
+            .animation(.easeOut(duration: 0.2), value: fraction)
         }
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1064,73 +1062,7 @@ private struct GlassIconTile: View {
     }
 }
 
-// MARK: - Glass Marble
 
-private struct GlassMarble: View {
-    var body: some View {
-        let s = EffectCardMetrics.glassBubbleSize
-
-        ZStack {
-            // Dark rim / outer shadow ring
-            Circle()
-                .fill(Color.black.opacity(0.52))
-                .frame(width: s + 3, height: s + 3)
-                .blur(radius: 0.8)
-
-            // Base sphere — bright white
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color.white.opacity(0.98),
-                            Color.white.opacity(0.88),
-                            Color.white.opacity(0.78),
-                        ],
-                        center: UnitPoint(x: 0.45, y: 0.40),
-                        startRadius: 0,
-                        endRadius: s * 0.55
-                    )
-                )
-                .frame(width: s, height: s)
-                .shadow(color: .black.opacity(0.50), radius: 3, x: 0, y: 1.5)
-                .overlay {
-                    Circle()
-                        .stroke(Color.white.opacity(0.55), lineWidth: 0.6)
-                }
-
-            // Top-left specular glint — small, sharp
-            Circle()
-                .fill(Color.white)
-                .frame(width: s * 0.24, height: s * 0.24)
-                .offset(x: -(s * 0.20), y: -(s * 0.20))
-                .blur(radius: 0.3)
-        }
-        .frame(width: s, height: s)
-    }
-}
-
-private struct ClearGlassBubble: View {
-    var body: some View {
-        Circle()
-            .strokeBorder(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.18),
-                        Color.white.opacity(0.055),
-                        Color.white.opacity(0.02),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
-            .background {
-                Circle()
-                    .fill(Color.white.opacity(0.018))
-            }
-            .shadow(color: .black.opacity(0.30), radius: 2, x: 0, y: 1)
-    }
-}
 
 // MARK: - Lighting Layer
 
@@ -1300,19 +1232,6 @@ private struct AutoLightParticle: View {
 
 // MARK: - Reflection Arc
 
-private struct EffectReflectionArc: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addArc(
-            center: CGPoint(x: rect.midX, y: rect.midY),
-            radius: rect.width / 2,
-            startAngle: .degrees(195),
-            endAngle: .degrees(345),
-            clockwise: false
-        )
-        return path
-    }
-}
 
 #Preview("Effect Cards") {
     ScrollView(.horizontal, showsIndicators: false) {

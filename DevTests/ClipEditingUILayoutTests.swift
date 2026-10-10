@@ -26,7 +26,9 @@ check(
     "Speed bubble shares the toolbar and transition-menu background",
     !matches(#"mode\s*==\s*\.speed[\s\S]*?glassEffect\s*\(\s*\.regular\.tint"#)
         && !source.contains("speedSurfaceFillOpacity")
-        && source.contains("Color(hex: \"050810\").opacity(0.68)")
+        // One fill for toolbar, speed bubble and transition menu, as solid
+        // as the project menu so the playhead doesn't show through.
+        && source.components(separatedBy: "MixrColors.glassNavyDefault.opacity(0.90)").count - 1 == 3
 )
 check(
     "Speed toolbar has a dedicated compact height",

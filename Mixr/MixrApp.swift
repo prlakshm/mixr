@@ -12,6 +12,12 @@ import SwiftData
 struct MixrApp: App {
     @State private var appearanceState = AppAppearanceState()
 
+#if DEBUG
+    init() {
+        UITestLaunchHooks.prepareLaunch()
+    }
+#endif
+
     var body: some Scene {
         WindowGroup {
             ContentView()

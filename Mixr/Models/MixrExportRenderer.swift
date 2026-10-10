@@ -28,11 +28,15 @@ nonisolated enum MixrExportRenderer {
     enum ExportError: LocalizedError {
         case nothingToExport
         case renderFailed(String)
+        /// A song's file can't be opened (moved, deleted, or not downloaded).
+        case songUnavailable(String)
 
         var errorDescription: String? {
             switch self {
             case .nothingToExport: "Add a song to the timeline before exporting."
             case .renderFailed(let reason): "Export failed — \(reason)"
+            case .songUnavailable(let title):
+                "“\(title)” can’t be opened. It may have been moved, deleted or not downloaded yet. Import it again, then export."
             }
         }
     }
@@ -103,9 +107,13 @@ nonisolated enum MixrExportRenderer {
         defer { for url in scopedURLs { url.stopAccessingSecurityScopedResource() } }
 
         for track in tracks where !track.isSFXTrack && !track.clips.isEmpty {
-            guard let url = track.url else { continue }
+            // A missing song must stop the export, never silently drop out
+            // of the mix.
+            guard let url = track.url else { throw ExportError.songUnavailable(track.title) }
             if url.startAccessingSecurityScopedResource() { scopedURLs.append(url) }
-            guard let file = try? AVAudioFile(forReading: url) else { continue }
+            guard let file = try? AVAudioFile(forReading: url) else {
+                throw ExportError.songUnavailable(track.title)
+            }
 
             let chain = ExportChain(file: file)
             ClipEffectDSP.configureRestState(
@@ -528,8 +536,11 @@ nonisolated enum MixrExportRenderer {
     }
 
     private static func safeFileName(_ name: String) -> String {
+        // No leading dots (hidden files) and a sane length (file systems
+        // cap names at 255 bytes).
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = trimmed.isEmpty ? "Mixr Remix" : trimmed
+            .drop(while: { $0 == "." })
+        let base = trimmed.isEmpty ? "Mixr Remix" : String(trimmed.prefix(100))
         let invalid = CharacterSet(charactersIn: "/\\?%*|\"<>:")
         return String(base.unicodeScalars.map { invalid.contains($0) ? "-" : Character($0) })
     }

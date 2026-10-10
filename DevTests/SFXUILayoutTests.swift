@@ -63,10 +63,10 @@ check(
 )
 
 check(
-    "SFX menu uses adaptive native presentation with compact sheet adaptation",
-    sfxOverlaySource.contains("content.popover(")
-        && sfxOverlaySource.contains("content.sheet(isPresented:")
-        && sfxOverlaySource.contains(".presentationCompactAdaptation(.sheet)")
+    "SFX library is an in-app glass panel over a dimmed timeline",
+    sfxOverlaySource.contains("SFXLibraryPanel(")
+        && sfxOverlaySource.contains("Color.black.opacity(0.52)")
+        && sfxOverlaySource.contains(".onTapGesture { dismissSFXPanel() }")
         && matches(#"panelOpticalOffsetY\s*:\s*CGFloat\s*=\s*-10"#)
 )
 
@@ -126,7 +126,6 @@ check(
         && cardSource.contains("Color(hex: \"101421\").opacity(0.95)")
         && cardSource.contains("Color(hex: \"9B78C5\").opacity(0.10)")
         && cardSource.contains("Color(hex: \"C27DA6\").opacity(0.045)")
-        && !cardSource.contains(".fill(.ultraThinMaterial)")
         && !cardSource.contains("cardPearlGlowRadius")
 )
 
@@ -165,28 +164,24 @@ check(
         && cardSource.contains("private var iconTile: some View")
         && cardSource.contains("struct SFXIconBoxSurface: View")
         && cardSource.contains("SFXIconBoxSurface(")
-        && cardSource.contains("Color(hex: \"272337\").opacity(0.90)")
         && cardSource.contains("var profile: SFXIconBoxRenderingProfile = .standard")
         && cardSource.contains("tileShape.strokeBorder(profile.borderColor, lineWidth: 0.75)")
-        && iconProfileSource.contains("radialPrimaryOpacity: 0.13")
-        && iconProfileSource.contains("radialSecondaryOpacity: 0.07")
+        && iconProfileSource.contains("baseTopColor: Color(hex: \"272337\")")
+        && iconProfileSource.contains("radialPrimaryOpacity: 0.10")
+        && iconProfileSource.contains("radialSecondaryOpacity: 0.05")
         && iconProfileSource.contains("borderOpacity: 0.14")
         && iconProfileSource.contains("usesActiveColorwayBorder: true")
 )
 
 check(
-    "SFX song chip uses compact optical compensation at its original icon size",
+    "SFX song chip is a miniature effects tile with the footer button's sfx glyph",
     songChipSource.contains("if usesSFXMark && artworkData == nil")
         && songChipSource.contains("private var sfxChipContent: some View")
-        && songChipSource.contains("let profile = SFXIconBoxRenderingProfile.compact")
-        && songChipSource.contains("profile: profile")
+        && songChipSource.contains("let s = size / EffectCardMetrics.iconTileSize")
         && songChipSource.contains("SFXCard.pearlIconFill")
-        && songChipSource.contains("profile.iconBloomColor")
-        && songChipSource.contains("MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95")
-        && songChipSource.contains("Color.white.opacity(profile.iconCoreGlowOpacity)")
-        && songChipSource.contains("radius: profile.iconCoreGlowRadius")
-        && songChipSource.contains("radius: profile.iconBloomRadius")
-        && songChipSource.contains(".frame(width: 34, height: 34)")
+        && songChipSource.contains("MixrSFXMarkGlyph(size: 13 * 0.95 * 0.95 * (size / 34)")
+        && songChipSource.contains(".shadow(color: Color.white.opacity(0.42), radius: 1.6)")
+        && songChipSource.contains(".shadow(color: Color(hex: \"A281BC\").opacity(0.35), radius: 2.5)")
 )
 
 check(
@@ -194,71 +189,41 @@ check(
     timelineSource.contains(
         ".background(MixrTrackRowBackground(isSFXTrack: track.isSFXTrack))"
     )
-        && timelineSource.contains(".frame(maxWidth: .infinity, alignment: .leading)")
         && designPreviewSource.contains(
             ".background(MixrTrackRowBackground(isSFXTrack: true))"
         )
         && trackRowBackgroundSource.contains("struct MixrTrackRowBackground: View")
         && trackRowBackgroundSource.contains("RoundedRectangle(cornerRadius: 9")
         && matches(
-            #"Color\(hex: \"241A39\"\)\.opacity\(0\.96\)[\s\S]*?location: 0[\s\S]*?Color\(hex: \"090B13\"\)\.opacity\(0\.98\)[\s\S]*?location: 0\.5325[\s\S]*?Color\(hex: \"162239\"\)\.opacity\(0\.96\)[\s\S]*?location: 1"#,
+            #"Color\(hex: \"241A39\"\)\.opacity\(0\.48\)[\s\S]*?location: 0[\s\S]*?Color\(hex: \"090B13\"\)\.opacity\(0\.56\)[\s\S]*?location: 0\.5325[\s\S]*?Color\(hex: \"162239\"\)\.opacity\(0\.50\)[\s\S]*?location: 1"#,
             in: trackRowBackgroundSource
         )
-        && trackRowBackgroundSource.contains("Color(hex: \"A281BC\").opacity(0.34)")
-        && trackRowBackgroundSource.contains("lineWidth: 0.6")
-        && trackRowBackgroundSource.contains(".padding(.leading, 19.5)")
-        && trackRowBackgroundSource.contains(".padding(.trailing, 5)")
-        && trackRowBackgroundSource.contains(".padding(.vertical, 2)")
-        && !trackRowBackgroundSource.contains(".offset(x: -0.5)")
-        && trackRowBackgroundSource.contains("Color.black.opacity(0.32)")
-        && trackRowBackgroundSource.contains("radius: 3")
+        && trackRowBackgroundSource.contains("Color(hex: \"A281BC\").opacity(0.38 * rim)")
 )
 
 check(
-    "SFX compact profile balances full-strength color with the menu navy",
+    "SFX compact profile is the library panel's glossy navy, not the row's purple",
     iconProfileSource.contains("struct SFXIconBoxRenderingProfile")
         && iconProfileSource.contains("static let standard")
-        && iconProfileSource.contains("static let compact")
-        && iconProfileSource.contains("navyWashColor: Color(hex: \"172238\")")
-        && iconProfileSource.contains("navyWashOpacity: 0.16")
-        && iconProfileSource.contains("luminanceWashOpacity: 0.12")
-        && compactProfileSource.contains("radialPrimaryOpacity: 0.28")
-        && compactProfileSource.contains("radialSecondaryOpacity: 0.16")
-        && compactProfileSource.contains("borderOpacity: 0.32")
-        && compactProfileSource.contains("iconCoreGlowOpacity: 0.34")
+        && compactProfileSource.contains("baseTopColor: Color(hex: \"171927\")")
+        && compactProfileSource.contains("baseBottomColor: Color(hex: \"0B0E19\")")
+        && compactProfileSource.contains("navyWashColor: MixrColors.glassNavyDefault")
+        && compactProfileSource.contains("radialPrimaryOpacity: 0.14")
+        && compactProfileSource.contains("radialSecondaryOpacity: 0.08")
+        && compactProfileSource.contains("borderOpacity: 0.14")
+        && compactProfileSource.contains("iconCoreGlowOpacity: 0.42")
         && compactProfileSource.contains("iconCoreGlowRadius: 1.6")
         && compactProfileSource.contains("iconBloomRadius: 2.5")
         && cardSource.contains("var profile: SFXIconBoxRenderingProfile = .standard")
-        && cardSource.contains("profile.navyWashColor.opacity(profile.navyWashOpacity)")
-        && cardSource.contains("profile.luminanceWashColor.opacity(profile.luminanceWashOpacity)")
-        && cardSource.contains("Color(hex: \"C78BC4\").opacity(profile.radialPrimaryOpacity)")
-        && cardSource.contains("profile.radialSecondaryColor.opacity(profile.radialSecondaryOpacity)")
-        && cardSource.contains("tileShape.strokeBorder(profile.borderColor, lineWidth: 0.75)")
-        && iconProfileSource.contains("borderTint.opacity(borderOpacity)")
 )
 
 check(
-    "SFX compact profile keeps the pink-purple edge but matches the menu icon glow",
-    iconProfileSource.contains("luminanceWashColor: Color(hex: \"D88BC8\")")
-        && iconProfileSource.contains("radialSecondaryColor: Color(hex: \"A98BE8\")")
-        && iconProfileSource.contains("borderTint: Color(hex: \"D9B6EE\")")
-        && compactProfileSource.contains(
-            "iconBloomColor: SFXCard.iconBloomColor.opacity(0.35)"
-        )
-        && !compactProfileSource.contains(
-            "iconBloomColor: Color(hex: \"D88BC8\").opacity(0.40)"
-        )
-        && !compactProfileSource.contains("iconCoreGlowOpacity: 0.56")
-        && iconProfileSource.contains(
-            "outerGlowColor: Color(hex: \"D88BC8\").opacity(0.10)"
-        )
-        && compactProfileSource.contains("outerGlowRadius: 3.5")
-        && cardSource.contains("profile.luminanceWashColor.opacity")
-        && cardSource.contains("profile.radialSecondaryColor.opacity")
-        && cardSource.contains("color: profile.outerGlowColor")
-        && cardSource.contains("radius: profile.outerGlowRadius")
-        && songChipSource.contains("color: profile.iconBloomColor")
-        && !songChipSource.contains("color: SFXCard.iconBloomColor")
+    "SFX compact profile keeps a cool lavender bloom and a full-strength rim",
+    compactProfileSource.contains("iconBloomColor: Color(hex: \"A281BC\").opacity(0.35)")
+        && compactProfileSource.contains("outerGlowColor: Color(hex: \"8C7DAA\").opacity(0.10)")
+        && compactProfileSource.contains("outerGlowRadius: 4")
+        && compactProfileSource.contains("rimStrength: 1.0")
+        && compactProfileSource.contains("usesActiveColorwayBorder: false")
 )
 
 check(
@@ -297,10 +262,11 @@ check(
     colorsSource.contains("static let sfxClipBodyTint = Color(hex: \"8A839D\")")
         && colorsSource.contains("static let sfxClipInnerTint = Color(hex: \"B9B0D2\")")
         && colorsSource.contains("static let sfxWaveformTop = Color(hex: \"E4DBFA\")")
-        && colorsSource.contains("static let sfxWaveformBottom = Color(hex: \"CFC6EE\")")
-        && colorsSource.contains("static let sfxOutline = Color(hex: \"CDC2F4\")")
-        && colorsSource.contains("static let sfxWaveformGlow = Color(hex: \"E6E1F4\")")
         && colorsSource.contains("static let sfxMenuLavender = Color(hex: \"C9B9F4\")")
+        // Near-duplicates folded onto the identity lavender / waveform top.
+        && colorsSource.contains("static let sfxOutline = sfxMenuLavender")
+        && colorsSource.contains("static let sfxWaveformBottom = sfxMenuLavender")
+        && colorsSource.contains("static let sfxWaveformGlow = sfxWaveformTop")
 )
 
 check(
@@ -353,10 +319,9 @@ check(
 )
 
 check(
-    "SFX uses the system presentation backdrop without a custom blur overlay",
-    sfxOverlaySource.contains(".presentationBackground(.clear)")
-        && !sfxOverlaySource.contains("Color.black.opacity(0.52)")
-        && !sfxOverlaySource.contains(".fill(.ultraThinMaterial)")
+    "SFX panel dims the timeline with the editor's shared 0.52 scrim",
+    sfxOverlaySource.contains("Color.black.opacity(0.52)")
+        && sfxOverlaySource.contains(".ignoresSafeArea()")
 )
 
 check(

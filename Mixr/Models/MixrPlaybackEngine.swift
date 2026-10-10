@@ -53,6 +53,42 @@ final class MixrPlaybackEngine: ObservableObject {
     /// Project tempo for echo sync + flanger sweep rate (fallback 124).
     private var projectBPM: Double = 124
     private var audioSessionReady = false
+    private var systemObservers: [NSObjectProtocol] = []
+
+    init() {
+        let center = NotificationCenter.default
+        // Calls, Siri, alarms: the system stops our audio. Pause so the UI
+        // and the playhead match what you hear.
+        systemObservers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw.flatMap(AVAudioSession.InterruptionType.init) == .began else { return }
+            MainActor.assumeIsolated { self?.handleSystemStop() }
+        })
+        // Headphones unplugged / AirPods disconnected: pause, as iOS
+        // expects, rather than continuing out of the speaker.
+        systemObservers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            guard raw.flatMap(AVAudioSession.RouteChangeReason.init) == .oldDeviceUnavailable else { return }
+            MainActor.assumeIsolated { self?.handleSystemStop() }
+        })
+        // The engine stops itself when the hardware format changes.
+        systemObservers.append(center.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleSystemStop() }
+        })
+    }
+
+    /// The system stopped (or will stop) audio: pause cleanly and make the
+    /// next Play reactivate the session.
+    private func handleSystemStop() {
+        pause()
+        audioSessionReady = false
+    }
 
     /// Visual QA runs with a populated project in Simulator, where the current
     /// CoreAudio host can abort on an output-node RPC timeout. This Debug-only
@@ -246,7 +282,8 @@ final class MixrPlaybackEngine: ObservableObject {
 
     private func addChain(for track: MixrTrack) {
         guard let url = track.url else { return }
-        setupAudioSession()
+        // No audio-session activation here: loading a project must not stop
+        // the user's Music. Play activates it (startPlayback).
         installLimiterIfNeeded()
         let scoped = url.startAccessingSecurityScopedResource()
         do {
@@ -742,11 +779,15 @@ final class MixrPlaybackEngine: ObservableObject {
 
     private func startTicker() {
         ticker?.invalidate()
-        ticker = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.tick()
             }
         }
+        // Common modes: keep fades and the playhead moving while a scroll
+        // view is being dragged (tracking mode).
+        RunLoop.main.add(timer, forMode: .common)
+        ticker = timer
     }
 
     private func stopTicker() {

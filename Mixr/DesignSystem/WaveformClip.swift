@@ -4,6 +4,9 @@ struct WaveformClip: View {
     let waveformColor: MixrWaveformColor
     var amplitudes: [CGFloat]?
     var height: CGFloat = WaveformMetrics.height
+    /// Real bars for a bar count and clip width (the clip's slice of its
+    /// song); nil until the song's peaks are read.
+    var bars: ((_ count: Int, _ width: CGFloat) -> [CGFloat]?)? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -55,6 +58,9 @@ struct WaveformClip: View {
 
     private func resolvedAmplitudes(for width: CGFloat) -> [CGFloat] {
         let count = WaveformMockData.sampleCount(for: width)
+        if let real = bars?(count, width), real.count == count {
+            return real
+        }
         if let amplitudes, amplitudes.count >= count {
             return Array(amplitudes.prefix(count))
         }

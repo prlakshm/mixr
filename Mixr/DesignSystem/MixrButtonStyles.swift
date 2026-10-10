@@ -18,6 +18,54 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Frosted glass pill shared by Export, Import Songs and sfx, so the
+/// editor's buttons are one family. `isPulsing` adds the breathing violet
+/// halo (ImportHaloPulse) to say "start here"; Reduce Motion gets a still,
+/// lit rim instead.
+struct MixrGlassButtonChrome: View {
+    var cornerRadius: CGFloat = MixrRadius.button
+    var isPulsing: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        GlassBackground(level: .default, cornerRadius: cornerRadius)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6) }
+            .overlay {
+                if isPulsing {
+                    if reduceMotion {
+                        // Still, but clearly lit: the halo at rest.
+                        shape.strokeBorder(MixrColors.secondaryPurple.opacity(0.55), lineWidth: 1)
+                            .transition(.opacity)
+                    } else {
+                        ImportHaloPulse(cornerRadius: cornerRadius, timeScale: Self.timeScale)
+                            .transition(.opacity)
+                    }
+                }
+            }
+            .animation(.easeOut(duration: 0.25), value: isPulsing)
+    }
+
+    private static var timeScale: Double {
+#if DEBUG
+        UITestLaunchHooks.animationTimeScale
+#else
+        1
+#endif
+    }
+}
+
+/// The glass buttons' press: the same 0.85 dim Export uses, for buttons
+/// that draw their own glass label (Import Songs, sfx).
+struct MixrGlassPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
 struct MixrSecondaryGlassButtonStyle: ButtonStyle {
     var partyRole: PartyModeSurfaceRole = .button
     /// Toolbar chrome scale — 1.0 on a phone, larger on tablets and desktop.
@@ -35,14 +83,7 @@ struct MixrSecondaryGlassButtonStyle: ButtonStyle {
             .foregroundStyle(MixrColors.textPrimary)
             .padding(.horizontal, MixrLayout.buttonPaddingH * scale)
             .padding(.vertical, MixrLayout.buttonPaddingV * scale)
-            .background {
-                GlassBackground(level: .default, cornerRadius: MixrRadius.button)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous))
-            .overlay {
-                shape
-                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
-            }
+            .background { MixrGlassButtonChrome() }
             .partyModeBorder(
                 shape: shape,
                 role: partyRole,
@@ -163,6 +204,14 @@ struct MixrCompactTrackToggleButtonStyle: ButtonStyle {
             )
             .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
             .opacity(configuration.isPressed ? 0.85 : 1)
+            // Explicit touch area: the circle plus half the 5pt gap on each
+            // side, 44pt tall. Decoration can't widen M over S, and the
+            // small visual stays an easy target.
+            .padding(.horizontal, 2.5)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -2.5)
+            .padding(.vertical, -8)
     }
 }
 

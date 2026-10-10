@@ -16,58 +16,39 @@ func matches(_ pattern: String) -> Bool {
 }
 
 check(
-    "Empty timeline adds a working import action while keeping the group centered",
-    matches(
-        #"TLEmptyTimelineState\(\s*isDropTarget:\s*isTimelineDropTarget,\s*maximumButtonWidth:[\s\S]{0,180}onImport:\s*\{\s*showFilePicker\s*=\s*true\s*\}\s*\)"#
-    )
+    "Empty timeline is copy only, centred, and lets drops through",
+    source.contains("TLEmptyTimelineState(isDropTarget: isTimelineDropTarget)")
+        && matches(
+            #"TLEmptyTimelineState\(isDropTarget: isTimelineDropTarget\)\s*\.allowsHitTesting\(false\)"#
+        )
         && source.contains(
             ".position(x: min(contentW, viewportW) / 2, y: lanesH / 2)"
         )
-        && !matches(
-            #"TLEmptyTimelineState\([\s\S]{0,220}\.allowsHitTesting\(false\)"#
-        )
+        && !source.contains("let onImport: () -> Void")
 )
 
 check(
-    "Empty timeline CTA uses the existing Party Mode button treatment",
-    source.contains("let onImport: () -> Void")
-        && source.contains("Button(action: onImport)")
-        && matches(
-            #"Button\(action:\s*onImport\)[\s\S]{0,2800}\.partyModeBorder\([\s\S]{0,260}role:\s*\.button,[\s\S]{0,160}lighting:\s*\.coolLeading,[\s\S]{0,160}glintOffset:\s*\.near"#
-        )
+    "Empty timeline points at the one Import Songs button instead of repeating it",
+    source.contains("Text(\"Tap Import Songs on the left, or drag audio files here\")")
+        && !source.contains("Button(action: onImport)")
 )
 
 check(
-    "Empty timeline CTA is slightly lighter than the left import button",
+    "Import Songs wears Export's glass and breathes only on an empty project",
     matches(
-        #"Button\(action:\s*onImport\)[\s\S]{0,520}\.foregroundStyle\(MixrColors\.textMuted\.opacity\(0\.84\)\)"#
+        #"private var importSongsButton:[\s\S]{0,1400}\.background \{ MixrGlassButtonChrome\(isPulsing: importPulses\) \}"#
     )
-)
-
-check(
-    "Left import button remains at its existing opacity",
-    matches(
-        #"private var importSongsButton:[\s\S]{0,900}\.foregroundStyle\(MixrColors\.textMuted\.opacity\(0\.82\)\)"#
-    )
-)
-
-check(
-    "Empty timeline keeps a twelve-point gap between its copy and import button",
-    matches(
-        #"Text\(\"Drag audio files here or use Import Songs\"\)[\s\S]{0,600}Button\(action:\s*onImport\)[\s\S]{0,3200}\.padding\(\.top,\s*MixrSpacing\.md\)"#
-    )
+        && source.contains("!suppressesImportPulse && !tracks.contains { !$0.isSFXTrack }")
+        && source.contains("suppressesImportPulse: tour.activeStep != nil")
 )
 
 check(
     "Approved text colors move only to the measured contrast thresholds",
     source.contains(
-        ".foregroundStyle(MixrColors.textSecondary.opacity(0.73))"
+        ".foregroundStyle(MixrColors.textSecondary.opacity(isDropTarget ? 0.86 : 0.73))"
     )
-        && source.contains(
-            ".foregroundStyle(MixrColors.textSecondary.opacity(isDropTarget ? 0.86 : 0.73))"
-        )
         && matches(
-            #"Text\(\"Drag audio files here or use Import Songs\"\)[\s\S]{0,360}textSecondary\.opacity\(0\.73\)"#
+            #"Text\(\"Tap Import Songs on the left, or drag audio files here\"\)[\s\S]{0,360}textSecondary\.opacity\(0\.73\)"#
         )
         && matches(
             #"Text\(\"Select a clip to shape its effects\"\)[\s\S]{0,420}textSecondary\.opacity\(0\.87\)"#

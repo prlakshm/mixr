@@ -98,11 +98,11 @@ struct TLClipActionPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressedFill =
             isDestructive
-            ? Color.red.opacity(0.18)
+            ? MixrColors.destructive.opacity(0.18)
             : Color.black.opacity(0.34)
         let hoverFill =
             isDestructive
-            ? Color.red.opacity(0.10)
+            ? MixrColors.destructive.opacity(0.10)
             : Color.black.opacity(0.18)
 
         let label = Group {
@@ -144,7 +144,7 @@ private struct TLClipToolbarAction: View {
     var isDestructive: Bool = false
     let action: () -> Void
 
-    private static let destructiveRed = Color(hex: "FF453A")
+    private static let destructiveRed = MixrColors.destructive
 
     var body: some View {
         Button(action: action) {
@@ -528,6 +528,9 @@ struct TLClipContextToolbar: View {
     let onDelete: () -> Void
     let onSpeedBack: () -> Void
     let onSpeedCommit: (Double) -> Void
+    /// Slides the glass body sideways (to stay inside the timeline near its
+    /// edges) while the pointer stays on the playhead.
+    var bodyShift: CGFloat = 0
 
     @State private var speedText: String = "1.0"
     /// Driven by the UIKit speed field — used for focus chrome + commit.
@@ -596,7 +599,7 @@ struct TLClipContextToolbar: View {
                     style: .continuous
                 )
                 shape
-                    .fill(Color(hex: "050810").opacity(0.68))
+                    .fill(MixrColors.glassNavyDefault.opacity(0.90))
                     .background {
                         shape
                             .fill(.ultraThinMaterial)
@@ -636,13 +639,13 @@ struct TLClipContextToolbar: View {
             .shadow(color: .black.opacity(0.20), radius: 4 * s, x: 0, y: 2 * s)
             // Glass shifts for content alignment; pointer stays on the playhead.
             .offset(
-                x: mode == .actions
+                x: bodyShift + (mode == .actions
                     ? TLClipEditingMetrics.toolbarActionsHorizontalOffset
-                    : TLClipEditingMetrics.toolbarBodyHorizontalOffset
+                    : TLClipEditingMetrics.toolbarBodyHorizontalOffset)
             )
 
             TLToolbarPointer()
-                .fill(Color(hex: "050810").opacity(0.68))
+                .fill(MixrColors.glassNavyDefault.opacity(0.90))
                 .overlay {
                     TLToolbarPointer()
                         .fill(
@@ -889,7 +892,16 @@ private struct TLSpeedValueField: UIViewRepresentable {
             action: #selector(Coordinator.textChanged(_:)),
             for: .editingChanged
         )
+        field.inputAccessoryView = context.coordinator.makeAccessoryBar()
         return field
+    }
+
+    /// Common speeds, one tap each, above the decimal pad (which has no
+    /// return key of its own).
+    static let presetSpeeds: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
+    static func presetTitle(_ speed: Double) -> String {
+        "\(String(format: "%g", speed))\u{00D7}"
     }
 
     func updateUIView(_ field: TLSpeedPasteTextField, context: Context) {
@@ -925,7 +937,52 @@ private struct TLSpeedValueField: UIViewRepresentable {
             parent.text = field.text ?? ""
         }
 
+        private weak var field: UITextField?
+
+        func makeAccessoryBar() -> UIToolbar {
+            let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
+            bar.overrideUserInterfaceStyle = .dark
+            bar.tintColor = .white
+            var items: [UIBarButtonItem] = []
+            for (index, speed) in TLSpeedValueField.presetSpeeds.enumerated() {
+                let item = UIBarButtonItem(
+                    title: TLSpeedValueField.presetTitle(speed),
+                    style: .plain,
+                    target: self,
+                    action: #selector(presetTapped(_:))
+                )
+                item.tag = index
+                item.accessibilityLabel = "\(String(format: "%g", speed)) times speed"
+                items.append(item)
+            }
+            items.append(UIBarButtonItem(systemItem: .flexibleSpace))
+            items.append(UIBarButtonItem(
+                title: "Done",
+                style: .prominent,
+                target: self,
+                action: #selector(doneTapped)
+            ))
+            bar.items = items
+            bar.sizeToFit()
+            return bar
+        }
+
+        @objc private func presetTapped(_ item: UIBarButtonItem) {
+            let speed = TLSpeedValueField.presetSpeeds[item.tag]
+            let text = String(format: "%g", speed)
+            field?.text = text
+            parent.text = text
+            parent.onSubmit()
+            field?.resignFirstResponder()
+        }
+
+        @objc private func doneTapped() {
+            parent.onSubmit()
+            field?.resignFirstResponder()
+        }
+
         func textFieldDidBeginEditing(_ textField: UITextField) {
+            field = textField
             DispatchQueue.main.async {
                 self.parent.isFocused = true
             }
@@ -1035,7 +1092,7 @@ struct TLTransitionMenu: View {
         )
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(hex: "050810").opacity(0.68))
+                .fill(MixrColors.glassNavyDefault.opacity(0.90))
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(.ultraThinMaterial)
