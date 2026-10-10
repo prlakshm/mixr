@@ -163,6 +163,7 @@ struct EffectControlTray: View {
                 ),
                 accentColor: effect.color,
                 trackColor: effect.color.opacity(0.7),
+                accessibilityName: "\(effect.title) level",
                 onEditingChanged: { editing in
                     if editing { hasDragged = true }
                     onEditingChanged(editing)

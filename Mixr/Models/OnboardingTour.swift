@@ -116,7 +116,8 @@ nonisolated enum OnboardingCopy {
 nonisolated enum OnboardingProgress: String, Sendable {
     /// Never seen (or asked to replay): step 1 shows on the next editor visit.
     case notStarted
-    /// Saw step 1 on an empty editor; steps 2–6 continue once a song exists.
+    /// Paused: steps 2–6 continue (at `resumeStep`) once a song exists.
+    /// Also what a relaunch mid-tour restores.
     case awaitingFirstSong
     /// Finished or skipped.
     case finished
@@ -127,10 +128,26 @@ nonisolated enum OnboardingProgress: String, Sendable {
 nonisolated struct OnboardingTourState: Equatable, Sendable {
     var progress: OnboardingProgress
     var activeStep: OnboardingStep?
+    /// Where a paused tour picks up (default: step 2).
+    var resumeStep: OnboardingStep?
 
-    init(progress: OnboardingProgress, activeStep: OnboardingStep? = nil) {
+    init(
+        progress: OnboardingProgress,
+        activeStep: OnboardingStep? = nil,
+        resumeStep: OnboardingStep? = nil
+    ) {
         self.progress = progress
         self.activeStep = activeStep
+        self.resumeStep = resumeStep
+    }
+
+    /// What survives a relaunch: an open song step (2–6) is restored to
+    /// the same step; step 1 starts over.
+    var persisted: (progress: OnboardingProgress, resumeStep: OnboardingStep?) {
+        if let step = activeStep, step != .importSongs {
+            return (.awaitingFirstSong, step)
+        }
+        return (progress, progress == .awaitingFirstSong ? resumeStep : nil)
     }
 
     /// Call when the editor appears and whenever the song list changes.
@@ -140,9 +157,11 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
                 // They imported straight from step 1: carry on with the song.
                 activeStep = .deleteSong
             } else if step.needsSongs, !hasSongs {
-                // The last song was removed mid-tour: pause until one is back.
+                // The last song was removed mid-tour: pause here until one
+                // is back.
                 activeStep = nil
                 progress = .awaitingFirstSong
+                resumeStep = step
             }
             return
         }
@@ -150,7 +169,12 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
         case .notStarted:
             activeStep = .importSongs
         case .awaitingFirstSong:
-            if hasSongs { activeStep = .deleteSong }
+            let step = resumeStep ?? .deleteSong
+            if hasSongs || !step.needsSongs {
+                activeStep = step
+                progress = .notStarted
+                resumeStep = nil
+            }
         case .finished:
             break
         }
@@ -167,6 +191,7 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
             // Step 1 on an empty editor: wait for the first import.
             activeStep = nil
             progress = .awaitingFirstSong
+            resumeStep = following
         } else {
             activeStep = following
         }
@@ -177,11 +202,13 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
     mutating func replay(hasSongs: Bool) {
         progress = .notStarted
         activeStep = nil
+        resumeStep = nil
         update(hasSongs: hasSongs)
     }
 
     private mutating func finish() {
         activeStep = nil
+        resumeStep = nil
         progress = .finished
     }
 }
@@ -189,13 +216,33 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
 /// UserDefaults-backed storage for the tour's progress.
 nonisolated struct OnboardingTourStore {
     static let defaultsKey = "mixr.onboardingTour.progress"
+    static let resumeStepKey = "mixr.onboardingTour.resumeStep"
     var defaults: UserDefaults = .standard
 
     func load() -> OnboardingProgress {
         defaults.string(forKey: Self.defaultsKey).flatMap(OnboardingProgress.init(rawValue:)) ?? .notStarted
     }
 
+    /// The saved tour, ready to pick up where it was left.
+    func loadState() -> OnboardingTourState {
+        let progress = load()
+        let resume = progress == .awaitingFirstSong
+            ? (defaults.object(forKey: Self.resumeStepKey) as? Int).flatMap(OnboardingStep.init(rawValue:))
+            : nil
+        return OnboardingTourState(progress: progress, resumeStep: resume)
+    }
+
     func save(_ progress: OnboardingProgress) {
         defaults.set(progress.rawValue, forKey: Self.defaultsKey)
+    }
+
+    func save(_ state: OnboardingTourState) {
+        let persisted = state.persisted
+        save(persisted.progress)
+        if let step = persisted.resumeStep {
+            defaults.set(step.rawValue, forKey: Self.resumeStepKey)
+        } else {
+            defaults.removeObject(forKey: Self.resumeStepKey)
+        }
     }
 }

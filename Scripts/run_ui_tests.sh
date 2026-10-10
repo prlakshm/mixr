@@ -12,6 +12,7 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null
 python3 "$ROOT/Scripts/generate_demo_songs.py" "$ROOT/output/demo-songs" >/dev/null
 "$ROOT/Scripts/stage_demo_songs.sh" "$UDID" >/dev/null
 export TEST_RUNNER_MIXR_DEMO_SONGS_DIR="$ROOT/output/demo-songs"
+export TEST_RUNNER_MIXR_DESIGN_CAPTURE="${MIXR_DESIGN_CAPTURE:-0}"
 export TEST_RUNNER_MIXR_SCREENSHOT_DIR="${MIXR_SCREENSHOT_DIR:-$ROOT/output/ui-test-screenshots}"
 STATUS=0
 xcodebuild test -project "$ROOT/Mixr.xcodeproj" -scheme Mixr \

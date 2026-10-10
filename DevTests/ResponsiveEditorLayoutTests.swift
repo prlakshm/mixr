@@ -228,11 +228,30 @@ check(
     !EditorLayoutMetrics.prefersStatusBarHidden(containerHeight: 0)
 )
 
+// MARK: - SE-class phone (667 × 375 landscape, no side insets)
+
+let sePhone = EditorLayoutMetrics(
+    containerSize: CGSize(width: 667, height: 375),
+    effectsState: .expanded
+)
+check("SE-class phone keeps a one-row toolbar", sePhone.mode == .regular)
+check("SE-class phone uses the narrow toolbar density", sePhone.density == .narrow)
+check("SE-class toolbar is the 50pt one-row bar", sePhone.transportHeight == 50)
+check("SE-class footer keeps Import and sfx on one row",
+      sePhone.importFooterHeight == EditorLayoutMetrics.regularImportFooterHeight)
+check("SE-class timeline shows three 46pt rows under the ruler and footer",
+      sePhone.timelineHeight - 20 - sePhone.importFooterHeight >= 3 * 46)
+check("SE-class side columns stay compact so the timeline keeps its width",
+      sePhone.tracksWidth < EditorLayoutMetrics.idealTracksWidth
+        && sePhone.timelineWidth >= 340)
+check("The 852pt phone (iPhone 16) keeps the full tight bar",
+      EditorLayoutMetrics(containerSize: CGSize(width: 734, height: 393), effectsState: .expanded).density == .tight)
+
 // MARK: - Transport placement sweep
 
 var overlaps: [CGFloat] = []
 var offCentre: [CGFloat] = []
-var width: CGFloat = EditorLayoutMetrics.regularTransportMinimumWidth
+var width: CGFloat = EditorTransportMetrics.minimumOneRowWidth(.narrow).rounded(.up)
 while width <= 1600 {
     let metrics = EditorLayoutMetrics(
         containerSize: CGSize(width: width, height: 900),

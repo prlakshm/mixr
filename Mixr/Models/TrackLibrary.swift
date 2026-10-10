@@ -51,6 +51,9 @@ final class TrackLibrary: ObservableObject {
     // Project state
     @Published var projectName: String = "My Remix"
     @Published private(set) var projects: [ProjectSummary] = []
+    /// False until the saved project has loaded, so first-launch UI (the
+    /// tour) doesn't react to the empty placeholder state.
+    @Published private(set) var hasLoadedProject = false
 
     // Undo / redo — Foundation UndoManager (window-provided, session-only).
     @Published private(set) var canUndo = false
@@ -506,6 +509,7 @@ final class TrackLibrary: ObservableObject {
         Task { @MainActor in
             await Task.yield()
             loadProjects()
+            hasLoadedProject = true
 #if DEBUG
             // UI tests: seed an empty project with demo songs.
             let seedURLs = UITestLaunchHooks.songURLs

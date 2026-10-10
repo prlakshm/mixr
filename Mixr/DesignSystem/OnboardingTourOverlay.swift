@@ -198,10 +198,12 @@ private struct OnboardingFinger: View {
                 .strokeBorder(Color.white.opacity(0.8), lineWidth: 2)
                 .scaleEffect(gesture == .tap && phase ? 2.1 : 1)
                 .opacity(gesture == .tap && phase ? 0 : 0.9)
+            // Translucent, like iOS touch indicators, so a small target
+            // (the sfx button) stays readable under the finger.
             Circle()
-                .fill(Color.white.opacity(0.92))
+                .fill(Color.white.opacity(0.42))
                 .padding(3)
-                .shadow(color: .black.opacity(0.45), radius: 5, y: 2)
+                .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
                 .scaleEffect(gesture == .tap && phase ? 0.78 : 1)
         }
         .frame(width: 26, height: 26)

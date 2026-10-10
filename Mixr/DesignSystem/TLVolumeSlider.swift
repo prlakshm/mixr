@@ -5,6 +5,7 @@ struct TLVolumeSlider: View {
     @Binding var value: Double
     let accentColor: Color
     let trackColor: Color
+    var accessibilityName: String = "Volume"
     /// Called with `true` on the first drag event, `false` on release —
     /// lets callers commit a single undo snapshot per drag.
     var onEditingChanged: (Bool) -> Void = { _ in }
@@ -52,6 +53,21 @@ struct TLVolumeSlider: View {
             )
         }
         .frame(height: thumbHeight + 2)
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityName)
+        .accessibilityValue("\(Int((min(max(value, 0), 1) * 100).rounded())) percent")
+        .accessibilityAdjustableAction { direction in
+            let step = 0.05
+            let next: Double
+            switch direction {
+            case .increment: next = value + step
+            case .decrement: next = value - step
+            @unknown default: return
+            }
+            onEditingChanged(true)
+            value = min(max(next, 0), 1)
+            onEditingChanged(false)
+        }
     }
 
     private func sliderTrack(width: CGFloat) -> some View {

@@ -3,47 +3,44 @@ import SwiftUI
 // MARK: - Auto Scope Dialog
 
 /// Compact Apple-style alert shown before Auto touches the timeline.
-/// The presenter dims the background and dismisses on outside taps.
+/// Says what Auto does, offers the two scopes, and always has Cancel; the
+/// presenter also dismisses on outside taps. Three actions stack, as in a
+/// system alert.
 struct AutoScopeDialog: View {
     /// 1.0 on a phone; roomier screens pass the layout's alert scale.
     var scale: CGFloat = 1
-    /// When a clip is selected the left action targets it; otherwise it
-    /// targets the clips around the playhead.
+    /// When a clip is selected the focused action targets it; otherwise it
+    /// targets the clips under the playhead.
     var hasSelectedClip: Bool
     var onChooseFocused: () -> Void = {}
     var onChooseEntireProject: () -> Void = {}
+    var onCancel: () -> Void = {}
+
+    static let title = "Auto Remix"
+    static let message = "Rebuild your songs as a club mix with builds, drops and transitions. You can undo it."
 
     private var focusedTitle: String {
-        hasSelectedClip ? "Selected Clip" : "Playhead Clips"
+        hasSelectedClip ? "Selected Clip" : "Clips at Playhead"
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("What should Auto remix?")
-                .font(.system(size: MixrAlertChrome.titleFontSize * scale, weight: .semibold))
-                .foregroundStyle(MixrColors.textPrimary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, MixrAlertChrome.horizontalPadding * scale)
-                .frame(maxWidth: .infinity)
-                .frame(height: MixrAlertChrome.titleHeight * scale)
-                .padding(.bottom, MixrAlertChrome.titleBottomExtraPadding * scale)
+            MixrAlertHeader(title: Self.title, message: Self.message, scale: scale)
 
-            Rectangle()
-                .fill(Color.white.opacity(0.12))
-                .frame(height: 0.5)
+            MixrAlertDivider()
+            Button("Entire Project", action: onChooseEntireProject)
+                .buttonStyle(MixrAlertActionPressStyle(kind: .primary, scale: scale))
+                .frame(height: MixrAlertChrome.actionHeight * scale)
 
-            HStack(spacing: 0) {
-                Button(focusedTitle, action: onChooseFocused)
-                    .buttonStyle(AutoScopeAlertActionStyle(weight: .regular, isPreferred: false))
+            MixrAlertDivider()
+            Button(focusedTitle, action: onChooseFocused)
+                .buttonStyle(MixrAlertActionPressStyle(kind: .primary, weight: .regular, scale: scale))
+                .frame(height: MixrAlertChrome.actionHeight * scale)
 
-                Rectangle()
-                    .fill(Color.white.opacity(0.12))
-                    .frame(width: 0.5)
-
-                Button("Entire Project", action: onChooseEntireProject)
-                    .buttonStyle(AutoScopeAlertActionStyle(weight: .semibold, isPreferred: true))
-            }
-            .frame(height: MixrAlertChrome.actionHeight * scale)
+            MixrAlertDivider()
+            Button("Cancel", action: onCancel)
+                .buttonStyle(MixrAlertActionPressStyle(kind: .cancel, scale: scale))
+                .frame(height: MixrAlertChrome.actionHeight * scale)
         }
         .frame(width: MixrAlertChrome.alertWidth * scale)
         .fixedSize(horizontal: true, vertical: true)
@@ -60,7 +57,7 @@ struct AutoScopeDialog: View {
         )
         .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("What should Auto remix?")
+        .accessibilityAddTraits(.isModal)
     }
 }
 

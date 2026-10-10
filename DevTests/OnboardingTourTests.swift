@@ -79,12 +79,12 @@ do {
 }
 
 do {
-    // Deleting the last song mid-tour pauses; the tour resumes at step 2.
+    // Deleting the last song mid-tour pauses; the tour resumes where it was.
     var t = OnboardingTourState(progress: .notStarted, activeStep: .clipTools)
     t.update(hasSongs: false)
     check("Removing the last song pauses the tour", t.activeStep == nil && t.progress == .awaitingFirstSong)
     t.update(hasSongs: true)
-    check("…and resumes at step 2", t.activeStep == .deleteSong)
+    check("…and resumes at the same step", t.activeStep == .clipTools)
 
     var sfx = OnboardingTourState(progress: .notStarted, activeStep: .soundEffects)
     sfx.update(hasSongs: false)
@@ -118,6 +118,25 @@ do {
     check("Waiting-for-a-song survives relaunch", OnboardingTourStore(defaults: defaults).load() == .awaitingFirstSong)
     store.save(.finished)
     check("Finished survives relaunch", OnboardingTourStore(defaults: defaults).load() == .finished)
+
+    // Relaunch mid-tour: each song step comes back as the same step.
+    for step in OnboardingStep.allCases {
+        store.save(OnboardingTourState(progress: .notStarted, activeStep: step))
+        var relaunched = OnboardingTourStore(defaults: defaults).loadState()
+        relaunched.update(hasSongs: true)
+        let expected: OnboardingStep = step == .importSongs ? .importSongs : step
+        check("Relaunch on step \(step.rawValue + 1) returns to step \(expected.rawValue + 1)",
+              relaunched.activeStep == expected)
+    }
+    // Relaunch while waiting for the first song: nothing until a song lands.
+    var waiting = OnboardingTourState(progress: .notStarted, activeStep: .importSongs)
+    waiting.next(hasSongs: false)
+    store.save(waiting)
+    var restored = OnboardingTourStore(defaults: defaults).loadState()
+    restored.update(hasSongs: false)
+    check("Relaunch while waiting shows nothing on an empty editor", restored.activeStep == nil)
+    restored.update(hasSongs: true)
+    check("…and step 2 once a song lands", restored.activeStep == .deleteSong)
     defaults.removePersistentDomain(forName: suite)
 }
 
@@ -137,8 +156,9 @@ for target in ["importSongs", "firstSongRow", "volumeControls", "firstClip", "ef
 }
 check("Overlay reads target frames at the editor root", timeline.contains(".overlayPreferenceValue(OnboardingTargetKey.self)"))
 check("Tour starts after the project loads and follows song changes",
-      timeline.contains("tour.update(hasSongs: tourHasSongs)") && timeline.contains(".onChange(of: tourHasSongs)"))
-check("Progress is persisted on every change", timeline.contains("OnboardingTourStore().save(state.progress)"))
+      timeline.contains(".onChange(of: [library.hasLoadedProject, tourHasSongs])")
+        && timeline.contains("tour.update(hasSongs: inputs[1])"))
+check("Progress is persisted on every change", timeline.contains("OnboardingTourStore().save(state)"))
 check("Project menu offers Replay tour", menu.contains("OnboardingCopy.replay") && timeline.contains("onReplayTour:"))
 check("Next button uses the approved purples (rest / hover / pressed)",
       overlay.contains("\"7231DD\"") && overlay.contains("\"8244E9\"") && overlay.contains("\"682BCF\""))

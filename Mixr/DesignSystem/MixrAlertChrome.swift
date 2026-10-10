@@ -33,8 +33,10 @@ enum MixrAlertChrome {
 
     static func background(cornerRadius: CGFloat = cornerRadius) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        // As solid as the project menu: an alert interrupts, so the timeline
+        // (and the bright playhead line) must not show through its actions.
         return shape
-            .fill(Color(hex: "050810").opacity(0.68))
+            .fill(Color(hex: "050810").opacity(0.90))
             .background {
                 shape
                     .fill(.ultraThinMaterial)
@@ -57,6 +59,53 @@ enum MixrAlertChrome {
             .overlay {
                 shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
             }
+    }
+}
+
+/// Title plus an optional one- or two-line message, as in a system alert.
+struct MixrAlertHeader: View {
+    let title: String
+    var message: String? = nil
+    var scale: CGFloat = 1
+
+    var body: some View {
+        VStack(spacing: 5 * scale) {
+            Text(title)
+                .font(.system(size: MixrAlertChrome.titleFontSize * scale, weight: .semibold))
+                .foregroundStyle(MixrColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            if let message {
+                Text(message)
+                    .font(.system(size: MixrAlertChrome.messageFontSize * scale, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.74))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(1.5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, MixrAlertChrome.horizontalPadding * scale)
+        .padding(.top, MixrAlertChrome.messageVerticalPadding * scale)
+        .padding(
+            .bottom,
+            (MixrAlertChrome.messageVerticalPadding + MixrAlertChrome.titleBottomExtraPadding) * scale
+        )
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Hairline between an alert's header and its actions, or between actions.
+struct MixrAlertDivider: View {
+    var axis: Axis = .horizontal
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.12))
+            .frame(
+                width: axis == .vertical ? 0.5 : nil,
+                height: axis == .horizontal ? 0.5 : nil
+            )
     }
 }
 

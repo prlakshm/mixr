@@ -163,6 +163,9 @@ struct MixrCompactTrackToggleButtonStyle: ButtonStyle {
             )
             .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 1.5)
             .opacity(configuration.isPressed ? 0.85 : 1)
+            // Hit-test only the circle: decoration (the Party Mode glint)
+            // must not widen M over its neighbour S.
+            .contentShape(Circle())
     }
 }
 

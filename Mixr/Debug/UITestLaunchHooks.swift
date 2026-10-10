@@ -25,10 +25,19 @@ enum UITestLaunchHooks {
                 }
             }
             UserDefaults.standard.removeObject(forKey: OnboardingTourStore.defaultsKey)
+            UserDefaults.standard.removeObject(forKey: OnboardingTourStore.resumeStepKey)
         }
         if arguments.contains("-MixrUITestTourDone") {
             OnboardingTourStore().save(.finished)
         }
+    }
+
+    /// `-MixrImportStyle <name>`: previews an empty-project Import Songs
+    /// style (design review).
+    static var importStyle: TLImportEmphasis? {
+        guard let i = arguments.firstIndex(of: "-MixrImportStyle"),
+              arguments.indices.contains(i + 1) else { return nil }
+        return TLImportEmphasis(rawValue: arguments[i + 1])
     }
 
     /// Audio files to import once the editor's project has loaded.

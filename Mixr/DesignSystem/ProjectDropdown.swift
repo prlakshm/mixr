@@ -2,9 +2,10 @@ import SwiftUI
 
 // MARK: - Project Dropdown Menu
 
-/// Apple-style dark pull-down menu for the project title — switch projects,
-/// delete the current one, or create a new one. Presented as a floating
-/// overlay under the toolbar; rename lives on the nav title (long-press).
+/// Apple-style dark pull-down menu for the project title. Order follows the
+/// system pull-down pattern: the projects, then everyday actions (New,
+/// Rename, Replay tour), and the destructive Delete last in its own group.
+/// Rename is also a long-press on the nav title.
 struct ProjectDropdownMenu: View {
     let projects: [ProjectSummary]
     let currentProjectID: UUID?
@@ -12,6 +13,7 @@ struct ProjectDropdownMenu: View {
     var onSelectProject: (UUID) -> Void = { _ in }
     var onCreateProject: () -> Void = {}
     var onDeleteProject: () -> Void = {}
+    var onRenameProject: () -> Void = {}
     var onReplayTour: () -> Void = {}
     var onDismiss: () -> Void = {}
 
@@ -42,16 +44,6 @@ struct ProjectDropdownMenu: View {
             }
 
             actionRow(
-                title: "Delete Project",
-                icon: "trash",
-                isDestructive: true
-            ) {
-                onDeleteProject()
-            }
-
-            rowDivider
-
-            actionRow(
                 title: "New Project",
                 icon: "plus",
                 isDestructive: false
@@ -63,11 +55,31 @@ struct ProjectDropdownMenu: View {
             rowDivider
 
             actionRow(
+                title: "Rename",
+                icon: "pencil",
+                isDestructive: false
+            ) {
+                onRenameProject()
+            }
+
+            rowDivider
+
+            actionRow(
                 title: OnboardingCopy.replay,
                 icon: "questionmark.circle",
                 isDestructive: false
             ) {
                 onReplayTour()
+            }
+
+            sectionDivider
+
+            actionRow(
+                title: "Delete Project",
+                icon: "trash",
+                isDestructive: true
+            ) {
+                onDeleteProject()
             }
         }
         .padding(.vertical, 3.5)
@@ -264,28 +276,23 @@ struct DeleteProjectConfirmDialog: View {
     var onCancel: () -> Void = {}
     var onDelete: () -> Void = {}
 
+    static let message = "This project’s edits can’t be recovered. Your song files aren’t deleted."
+
     var body: some View {
         VStack(spacing: 0) {
-            Text("Delete “\(projectName)”?")
-                .font(.system(size: MixrAlertChrome.titleFontSize * scale, weight: .semibold))
-                .foregroundStyle(MixrColors.textPrimary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, MixrAlertChrome.horizontalPadding * scale)
-                .frame(maxWidth: .infinity)
-                .frame(height: MixrAlertChrome.titleHeight * scale)
-                .padding(.bottom, MixrAlertChrome.titleBottomExtraPadding * scale)
+            MixrAlertHeader(
+                title: "Delete “\(projectName)”?",
+                message: Self.message,
+                scale: scale
+            )
 
-            Rectangle()
-                .fill(Color.white.opacity(0.12))
-                .frame(height: 0.5)
+            MixrAlertDivider()
 
             HStack(spacing: 0) {
                 Button("Cancel", action: onCancel)
                     .buttonStyle(MixrAlertActionPressStyle(kind: .cancel, scale: scale))
 
-                Rectangle()
-                    .fill(Color.white.opacity(0.12))
-                    .frame(width: 0.5)
+                MixrAlertDivider(axis: .vertical)
 
                 Button("Delete", action: onDelete)
                     .buttonStyle(MixrAlertActionPressStyle(kind: .destructive, scale: scale))
@@ -307,7 +314,7 @@ struct DeleteProjectConfirmDialog: View {
         )
         .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 9)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Delete \(projectName)?")
+        .accessibilityAddTraits(.isModal)
     }
 }
 

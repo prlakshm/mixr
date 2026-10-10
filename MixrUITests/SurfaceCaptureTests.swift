@@ -1,0 +1,70 @@
+import XCTest
+
+/// Design-review captures of every editor surface on the current device.
+/// Opt-in: runs only when MIXR_DESIGN_CAPTURE=1 (Scripts/run_ui_tests.sh
+/// forwards it), so the regular suite stays fast.
+final class SurfaceCaptureTests: MixrUITestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["MIXR_DESIGN_CAPTURE"] == "1",
+                          "set MIXR_DESIGN_CAPTURE=1 to capture design-review screenshots")
+    }
+
+    private var device: String {
+        let size = XCUIScreen.main.screenshot().image.size
+        return "\(Int(max(size.width, size.height)))"
+    }
+
+    func testCaptureSurfaces() {
+        launch(fresh: true, tourDone: true)
+        let d = device
+        capture("\(d)-01-empty")
+
+        app.terminate()
+        launch(fresh: true, tourDone: true, songs: true)
+        sleep(1)
+        capture("\(d)-02-editor")
+
+        tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Night Signals clip'")).firstMatch)
+        sleep(1)
+        capture("\(d)-03-clip-toolbar")
+
+        tap(app.buttons["Reverb"])
+        sleep(1)
+        capture("\(d)-04-effect-tray")
+        tapPoint(app.frame.width * 0.6, app.frame.height * 0.55)
+        sleep(1)
+
+        tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Project, '")).firstMatch)
+        sleep(1)
+        capture("\(d)-05-project-menu")
+        tapPoint(app.frame.width * 0.9, app.frame.height * 0.9)
+        sleep(1)
+
+        tap(app.buttons["Sound Effects"])
+        sleep(1)
+        capture("\(d)-06-sfx")
+        tap(app.buttons["Close"])
+        sleep(1)
+
+        tap(app.buttons["Auto"])
+        sleep(1)
+        capture("\(d)-07-auto")
+        tap(app.buttons["Cancel"])
+        sleep(1)
+
+        songTitle("Paper Suns").swipeLeft()
+        sleep(1)
+        capture("\(d)-08-swipe-delete")
+    }
+
+    /// One empty-editor capture per Import Songs style (design review).
+    func testCaptureImportStyles() {
+        for style in ["quiet", "glass", "frosted", "violetRim", "tinted", "brightOutline"] {
+            launch(fresh: true, tourDone: true, extra: ["-MixrImportStyle", style])
+            sleep(1)
+            capture("import-\(style)")
+            app.terminate()
+        }
+    }
+}
