@@ -32,8 +32,23 @@ enum OnboardingTourTokens {
     static let scrim = Color.black.opacity(0.62)
     static let ring = Color(hex: "9873EB")
     static let ringGlow = Color(hex: "9873EB", opacity: 0.55)
-    static let spotlightPadding: CGFloat = 6
-    static let spotlightRadius: CGFloat = 12
+    /// Gap between a control and its spotlight ring: close enough to read
+    /// as an outline of that control, not a box around its area.
+    static let spotlightPadding: CGFloat = 3
+
+    /// The control's own corner radius, so ring and control are concentric.
+    static func controlRadius(for target: OnboardingTarget) -> CGFloat {
+        switch target {
+        case .importSongs, .soundEffectsButton: MixrRadius.button
+        case .firstClip: WaveformMetrics.cornerRadius
+        case .firstSongRow, .volumeControls, .timelineViewport: 8
+        case .effectsPanel: 12
+        }
+    }
+
+    static func spotlightRadius(for target: OnboardingTarget) -> CGFloat {
+        controlRadius(for: target) + spotlightPadding
+    }
 
     static let cardWidth: CGFloat = 262
     static let cardRadius: CGFloat = 14
@@ -73,7 +88,7 @@ struct OnboardingTourOverlay: View {
             scrim(hole: hole)
 
             if let hole {
-                RoundedRectangle(cornerRadius: OnboardingTourTokens.spotlightRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: OnboardingTourTokens.spotlightRadius(for: step.target), style: .continuous)
                     .strokeBorder(OnboardingTourTokens.ring, lineWidth: 1.5)
                     .shadow(color: OnboardingTourTokens.ringGlow, radius: 9)
                     .frame(width: hole.width, height: hole.height)
@@ -107,7 +122,10 @@ struct OnboardingTourOverlay: View {
     // swallows them so the editor isn't edited by accident mid-tour.
     @ViewBuilder
     private func scrim(hole: CGRect?) -> some View {
-        let shape = SpotlightScrimShape(hole: hole, cornerRadius: OnboardingTourTokens.spotlightRadius)
+        let shape = SpotlightScrimShape(
+            hole: hole,
+            cornerRadius: OnboardingTourTokens.spotlightRadius(for: step.target)
+        )
         let base = shape
             .fill(OnboardingTourTokens.scrim, style: FillStyle(eoFill: true))
             .accessibilityHidden(true)

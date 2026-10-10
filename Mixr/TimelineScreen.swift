@@ -3393,6 +3393,8 @@ private struct TLTrackArea: View {
                 .zIndex(draggingID == track.id ? 1 : 0)
             }
         }
+        // The tour outlines the rows of S / M / volume, not the padded column.
+        .onboardingTarget(.volumeControls)
         .padding(.leading, 7.5)
         .padding(.trailing, 8)
         .frame(width: controlsWidth)
@@ -3400,7 +3402,6 @@ private struct TLTrackArea: View {
         .overlay(alignment: .leading) {
             MixrColors.divider.frame(width: 0.5)
         }
-        .onboardingTarget(.volumeControls)
     }
 
     /// The song row / clip the onboarding tour points at.
@@ -4422,7 +4423,12 @@ private struct TLTrackLane: View {
                 // events continue to fire even after clipDragState is set.
                 Color.clear
                     .frame(width: origClipW, height: rowHeight)
-                    .onboardingTarget(.firstClip, isActive: clip.id == onboardingClipID)
+                    // The tour outlines the drawn clip, not its taller lane.
+                    .background {
+                        Color.clear
+                            .frame(width: origClipW, height: waveformHeight)
+                            .onboardingTarget(.firstClip, isActive: clip.id == onboardingClipID)
+                    }
                     .contentShape(Rectangle())
                     .overlay {
                         GeometryReader { proxy in

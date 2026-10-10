@@ -33,6 +33,10 @@ class MixrUITestCase: XCTestCase {
     }
 
     override func tearDown() {
+        // Close the app first: rotating a running app makes XCUITest wait
+        // for it to idle, which never happens while a looping animation
+        // (the tour's touch indicator) is on screen.
+        app?.terminate()
         XCUIDevice.shared.orientation = .landscapeLeft
         super.tearDown()
     }

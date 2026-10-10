@@ -60,13 +60,13 @@ final class SurfaceCaptureTests: MixrUITestCase {
         capture("\(d)-08-swipe-delete")
     }
 
-    /// The empty editor's Import Songs pulse, sampled across one breath.
+    /// The empty editor's Import Songs pulse, sampled across two breaths.
     func testCaptureImportPulse() {
         launch(fresh: true, tourDone: true)
         sleep(1)
-        for i in 0..<4 {
-            capture("pulse-\(i)")
-            usleep(600_000)
+        for i in 0..<16 {
+            capture(String(format: "pulse-%02d", i))
+            usleep(150_000)
         }
     }
 
@@ -83,5 +83,18 @@ final class SurfaceCaptureTests: MixrUITestCase {
             sleep(1)
         }
         capture("effect-levels")
+    }
+
+    /// Each Import Songs shockwave option, filmed at half speed (the GIF
+    /// script plays the frames back at real speed).
+    func testCaptureShockwaves() {
+        for style in ["breathe", "sonar", "halo", "soundRings", "heartbeat"] {
+            launch(fresh: true, tourDone: true, extra: ["-MixrShockwave", style, "-MixrSlowMotion", "0.5"])
+            sleep(1)
+            for i in 0..<56 {
+                capture(String(format: "wave-%@-%02d", style, i))
+            }
+            app.terminate()
+        }
     }
 }

@@ -19,16 +19,14 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
 }
 
 /// Frosted glass pill shared by Export, Import Songs and sfx, so the
-/// editor's buttons are one family. `isPulsing` breathes the rim to say
-/// "start here" (a held, brighter rim under Reduce Motion). The pulse is
-/// driven per frame, not by a repeating animation, so it costs nothing when
-/// off and never keeps the app from going idle.
+/// editor's buttons are one family. `isPulsing` keeps a breathing
+/// shockwave around the button to say "start here" (a held, brighter rim
+/// under Reduce Motion). The wave is driven per frame, not by a repeating animation, so
+/// it costs nothing when off and never keeps the app from going idle.
 struct MixrGlassButtonChrome: View {
     var cornerRadius: CGFloat = MixrRadius.button
     var isPulsing: Bool = false
-
-    /// One slow breath (seconds): an invitation, not an alert.
-    static let breathPeriod: Double = 2.4
+    var shockwave: MixrShockwaveStyle = .current
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -39,25 +37,139 @@ struct MixrGlassButtonChrome: View {
             .overlay { shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6) }
             .overlay {
                 if isPulsing {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
-                        let level = reduceMotion ? 1 : Self.breath(at: context.date)
-                        shape
-                            .strokeBorder(Color.white.opacity(0.12 + 0.30 * level), lineWidth: 0.8)
-                            .shadow(
-                                color: MixrColors.secondaryPurple.opacity(0.42 * level),
-                                radius: 3 + 6 * level
-                            )
+                    if reduceMotion {
+                        shape.strokeBorder(Color.white.opacity(0.42), lineWidth: 0.8)
+                            .transition(.opacity)
+                    } else {
+                        MixrShockwave(style: shockwave, cornerRadius: cornerRadius)
+                            .transition(.opacity)
                     }
-                    .transition(.opacity)
                 }
             }
             .animation(.easeOut(duration: 0.25), value: isPulsing)
     }
+}
 
-    /// 0…1, eased (raised cosine).
-    static func breath(at date: Date) -> Double {
-        let phase = date.timeIntervalSinceReferenceDate / breathPeriod * 2 * .pi
-        return (1 - cos(phase)) / 2
+/// How the always-on shockwave around a button moves (design review).
+/// A ring is always visible; it grows out and shrinks back, faintest at
+/// its widest.
+enum MixrShockwaveStyle: String, CaseIterable {
+    /// One crisp ring breathing out and in.
+    case breathe
+    /// Two rings breathing half a cycle apart.
+    case sonar
+    /// A soft, blurred violet halo breathing.
+    case halo
+    /// Three fine rings rolling outward, staggered so one is always there.
+    case soundRings
+    /// Rests close, beats twice, rests.
+    case heartbeat
+
+    static var current: MixrShockwaveStyle {
+#if DEBUG
+        if let style = UITestLaunchHooks.shockwaveStyle { return style }
+#endif
+        return .breathe
+    }
+
+    /// One ring's look at time `t` (seconds): how far out it sits and how
+    /// visible it is.
+    struct Ring {
+        var distance: CGFloat
+        var opacity: Double
+    }
+
+    struct Look {
+        var lineWidth: CGFloat
+        var blur: CGFloat
+        var color: Color
+    }
+
+    var look: Look {
+        switch self {
+        case .breathe, .sonar, .heartbeat: Look(lineWidth: 1.2, blur: 0, color: .white)
+        case .halo: Look(lineWidth: 5, blur: 4, color: MixrColors.secondaryPurple)
+        case .soundRings: Look(lineWidth: 1, blur: 0, color: MixrColors.secondaryPurple)
+        }
+    }
+
+    func rings(at t: Double) -> [Ring] {
+        /// 0…1…0 over `period`, eased (raised cosine).
+        func breath(_ t: Double, period: Double, phase: Double = 0) -> Double {
+            (1 - cos((t / period + phase) * 2 * .pi)) / 2
+        }
+        func ring(_ w: Double, near: CGFloat, far: CGFloat, nearOpacity: Double, farOpacity: Double) -> Ring {
+            Ring(
+                distance: near + (far - near) * CGFloat(w),
+                opacity: nearOpacity + (farOpacity - nearOpacity) * w
+            )
+        }
+        switch self {
+        case .breathe:
+            return [ring(breath(t, period: 2.4), near: 2, far: 9, nearOpacity: 0.55, farOpacity: 0.18)]
+        case .sonar:
+            return [0, 0.5].map {
+                ring(breath(t, period: 2.6, phase: $0), near: 2, far: 11, nearOpacity: 0.5, farOpacity: 0.12)
+            }
+        case .halo:
+            return [ring(breath(t, period: 2.4), near: 1, far: 9, nearOpacity: 0.6, farOpacity: 0.25)]
+        case .soundRings:
+            // Continuous outward travel; each ring fades in off the button
+            // and out at the edge, a third of a cycle apart.
+            return [0, 1.0 / 3, 2.0 / 3].map { offset in
+                let p = (t / 1.8 + offset).truncatingRemainder(dividingBy: 1)
+                let fade = sin(p * .pi)
+                return Ring(distance: 1 + 9 * CGFloat(p), opacity: 0.55 * fade)
+            }
+        case .heartbeat:
+            // Two quick beats in the first 0.6 s of every 1.8 s, then rest.
+            let p = t.truncatingRemainder(dividingBy: 1.8)
+            let beat: Double = p < 0.6
+                ? pow(sin(p / 0.3 * .pi), 2) * (p < 0.3 ? 1 : 0.7)
+                : 0
+            return [ring(beat, near: 2, far: 7, nearOpacity: 0.4, farOpacity: 0.75)]
+        }
+    }
+}
+
+/// The always-on rings around a button, drawn per frame.
+struct MixrShockwave: View {
+    let style: MixrShockwaveStyle
+    var cornerRadius: CGFloat = MixrRadius.button
+
+    /// The footer leaves ~6pt above and below the button: rings spread fully
+    /// sideways but stay inside vertically, so the panels never cut them.
+    static let maxVerticalSpread: CGFloat = 5
+
+    var body: some View {
+        let look = style.look
+        TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
+            let rings = style.rings(at: Self.clock(context.date))
+            ZStack {
+                ForEach(rings.indices, id: \.self) { i in
+                    let ring = rings[i]
+                    let rise = min(ring.distance, Self.maxVerticalSpread)
+                    RoundedRectangle(cornerRadius: cornerRadius + rise, style: .continuous)
+                        .stroke(look.color, lineWidth: look.lineWidth)
+                        .blur(radius: look.blur)
+                        .padding(.horizontal, -ring.distance)
+                        .padding(.vertical, -rise)
+                        .opacity(ring.opacity)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Wall-clock seconds (DEBUG captures can slow it down).
+    static func clock(_ date: Date) -> Double {
+        let t = date.timeIntervalSinceReferenceDate
+#if DEBUG
+        return t * UITestLaunchHooks.animationTimeScale
+#else
+        return t
+#endif
     }
 }
 
