@@ -51,19 +51,19 @@ struct MixrGlassButtonChrome: View {
 }
 
 /// How the always-on shockwave around a button moves (design review).
-/// A ring is always visible; it grows out and shrinks back, faintest at
-/// its widest.
+/// Something is always visible: rings grow out and settle back (or roll
+/// outward over a resting rim), faintest at their widest.
 enum MixrShockwaveStyle: String, CaseIterable {
-    /// One crisp ring breathing out and in.
+    /// One crisp white ring that breathes out, back in, and rests.
     case breathe
-    /// Two rings breathing half a cycle apart.
+    /// Two fine white rings on the same breath, half a cycle apart: one is
+    /// always heading out while the other comes home.
     case sonar
-    /// A soft, blurred violet halo breathing.
+    /// A soft violet halo breathing on the same rhythm.
     case halo
-    /// Three fine rings rolling outward, staggered so one is always there.
+    /// Fine violet rings launched from a resting rim, a third of a cycle
+    /// apart, decelerating and thinning as they spread.
     case soundRings
-    /// Rests close, beats twice, rests.
-    case heartbeat
 
     static var current: MixrShockwaveStyle {
 #if DEBUG
@@ -72,92 +72,131 @@ enum MixrShockwaveStyle: String, CaseIterable {
         return .breathe
     }
 
-    /// One ring's look at time `t` (seconds): how far out it sits and how
-    /// visible it is.
+    /// One ring at a moment: how far past the button it sits, how visible
+    /// it is, and how thick its core line is.
     struct Ring {
         var distance: CGFloat
         var opacity: Double
-    }
-
-    struct Look {
         var lineWidth: CGFloat
-        var blur: CGFloat
-        var color: Color
     }
 
-    var look: Look {
-        switch self {
-        case .breathe, .sonar, .heartbeat: Look(lineWidth: 1.2, blur: 0, color: .white)
-        case .halo: Look(lineWidth: 5, blur: 4, color: MixrColors.secondaryPurple)
-        case .soundRings: Look(lineWidth: 1, blur: 0, color: MixrColors.secondaryPurple)
-        }
+    /// Strong ease-in-out for on-screen movement (the breath).
+    static let breathCurve = UnitCurve.bezier(
+        startControlPoint: UnitPoint(x: 0.77, y: 0),
+        endControlPoint: UnitPoint(x: 0.175, y: 1)
+    )
+    /// Strong ease-out: a wave leaves fast and settles as it spreads.
+    static let waveCurve = UnitCurve.bezier(
+        startControlPoint: UnitPoint(x: 0.23, y: 1),
+        endControlPoint: UnitPoint(x: 0.32, y: 1)
+    )
+
+    /// 0 at rest … 1 fully out. Out 1.3 s, back 1.3 s, rest 0.4 s.
+    static func breath(at t: Double) -> Double {
+        let cycle = 3.0, out = 1.3, back = 1.3
+        let p = t.truncatingRemainder(dividingBy: cycle)
+        if p < out { return breathCurve.value(at: p / out) }
+        if p < out + back { return 1 - breathCurve.value(at: (p - out) / back) }
+        return 0
     }
 
     func rings(at t: Double) -> [Ring] {
-        /// 0…1…0 over `period`, eased (raised cosine).
-        func breath(_ t: Double, period: Double, phase: Double = 0) -> Double {
-            (1 - cos((t / period + phase) * 2 * .pi)) / 2
-        }
-        func ring(_ w: Double, near: CGFloat, far: CGFloat, nearOpacity: Double, farOpacity: Double) -> Ring {
-            Ring(
-                distance: near + (far - near) * CGFloat(w),
-                opacity: nearOpacity + (farOpacity - nearOpacity) * w
-            )
-        }
         switch self {
         case .breathe:
-            return [ring(breath(t, period: 2.4), near: 2, far: 9, nearOpacity: 0.55, farOpacity: 0.18)]
+            let w = Self.breath(at: t)
+            return [Ring(
+                distance: 1.5 + 7.5 * CGFloat(w),
+                opacity: 0.6 - 0.45 * w,
+                lineWidth: 1.25 - 0.5 * CGFloat(w)
+            )]
         case .sonar:
-            return [0, 0.5].map {
-                ring(breath(t, period: 2.6, phase: $0), near: 2, far: 11, nearOpacity: 0.5, farOpacity: 0.12)
+            return [0.0, 1.5].map { offset in
+                let w = Self.breath(at: t + offset)
+                return Ring(
+                    distance: 1.5 + 8.5 * CGFloat(w),
+                    opacity: 0.5 - 0.38 * w,
+                    lineWidth: 1.0 - 0.4 * CGFloat(w)
+                )
             }
         case .halo:
-            return [ring(breath(t, period: 2.4), near: 1, far: 9, nearOpacity: 0.6, farOpacity: 0.25)]
+            let w = Self.breath(at: t)
+            return [Ring(
+                distance: 1 + 6 * CGFloat(w),
+                opacity: 1 - 0.55 * w,
+                lineWidth: 1
+            )]
         case .soundRings:
-            // Continuous outward travel; each ring fades in off the button
-            // and out at the edge, a third of a cycle apart.
-            return [0, 1.0 / 3, 2.0 / 3].map { offset in
-                let p = (t / 1.8 + offset).truncatingRemainder(dividingBy: 1)
-                let fade = sin(p * .pi)
-                return Ring(distance: 1 + 9 * CGFloat(p), opacity: 0.55 * fade)
+            let travel = 2.1
+            // The resting rim: always there, right on the button.
+            var rings = [Ring(distance: 1, opacity: 0.24, lineWidth: 1)]
+            for k in 0..<3 {
+                let p = (t / travel + Double(k) / 3).truncatingRemainder(dividingBy: 1)
+                let spread = Self.waveCurve.value(at: p)
+                let appear = min(1, p / 0.12)
+                rings.append(Ring(
+                    distance: 1 + 11 * CGFloat(spread),
+                    opacity: 0.6 * appear * pow(1 - p, 1.5),
+                    lineWidth: 1.2 - 0.7 * CGFloat(p)
+                ))
             }
-        case .heartbeat:
-            // Two quick beats in the first 0.6 s of every 1.8 s, then rest.
-            let p = t.truncatingRemainder(dividingBy: 1.8)
-            let beat: Double = p < 0.6
-                ? pow(sin(p / 0.3 * .pi), 2) * (p < 0.3 ? 1 : 0.7)
-                : 0
-            return [ring(beat, near: 2, far: 7, nearOpacity: 0.4, farOpacity: 0.75)]
+            return rings
+        }
+    }
+
+    var color: Color {
+        self == .breathe || self == .sonar ? .white : MixrColors.secondaryPurple
+    }
+
+    /// Glow layers drawn around each ring's core line (width multiplier,
+    /// opacity multiplier) — a halo from stacked strokes, no blur pass.
+    var glowLayers: [(width: CGFloat, opacity: Double)] {
+        switch self {
+        case .breathe, .sonar, .soundRings: [(1, 1)]
+        case .halo: [(1, 0.55), (3.5, 0.22), (7, 0.08)]
         }
     }
 }
 
-/// The always-on rings around a button, drawn per frame.
+/// The always-on rings around a button. Drawn into one Canvas per frame:
+/// a frame repaints but never re-lays out.
 struct MixrShockwave: View {
     let style: MixrShockwaveStyle
     var cornerRadius: CGFloat = MixrRadius.button
 
+    /// Furthest a ring travels sideways.
+    static let reach: CGFloat = 13
     /// The footer leaves ~6pt above and below the button: rings spread fully
     /// sideways but stay inside vertically, so the panels never cut them.
     static let maxVerticalSpread: CGFloat = 5
 
     var body: some View {
-        let look = style.look
         TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in
             let rings = style.rings(at: Self.clock(context.date))
-            ZStack {
-                ForEach(rings.indices, id: \.self) { i in
-                    let ring = rings[i]
+            Canvas { g, size in
+                let button = CGRect(origin: .zero, size: size)
+                    .insetBy(dx: Self.reach, dy: Self.maxVerticalSpread + 4)
+                for ring in rings where ring.opacity > 0.005 {
                     let rise = min(ring.distance, Self.maxVerticalSpread)
-                    RoundedRectangle(cornerRadius: cornerRadius + rise, style: .continuous)
-                        .stroke(look.color, lineWidth: look.lineWidth)
-                        .blur(radius: look.blur)
-                        .padding(.horizontal, -ring.distance)
-                        .padding(.vertical, -rise)
-                        .opacity(ring.opacity)
+                    let rect = button.insetBy(dx: -ring.distance, dy: -rise)
+                    let path = Path(
+                        roundedRect: rect,
+                        cornerRadius: cornerRadius + rise,
+                        style: .continuous
+                    )
+                    for layer in style.glowLayers {
+                        g.stroke(
+                            path,
+                            with: .color(style.color.opacity(ring.opacity * layer.opacity)),
+                            lineWidth: ring.lineWidth * layer.width
+                        )
+                    }
                 }
             }
         }
+        // A fixed canvas larger than the button (room for the reach and the
+        // halo's widest stroke); only its pixels change per frame.
+        .padding(.horizontal, -Self.reach)
+        .padding(.vertical, -(Self.maxVerticalSpread + 4))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

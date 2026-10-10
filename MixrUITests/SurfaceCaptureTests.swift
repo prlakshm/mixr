@@ -88,10 +88,11 @@ final class SurfaceCaptureTests: MixrUITestCase {
     /// Each Import Songs shockwave option, filmed at half speed (the GIF
     /// script plays the frames back at real speed).
     func testCaptureShockwaves() {
-        for style in ["breathe", "sonar", "halo", "soundRings", "heartbeat"] {
+        let only = ProcessInfo.processInfo.environment["MIXR_SHOCKWAVE"]
+        for style in ["breathe", "sonar", "halo", "soundRings"] where only == nil || only == style {
             launch(fresh: true, tourDone: true, extra: ["-MixrShockwave", style, "-MixrSlowMotion", "0.5"])
             sleep(1)
-            for i in 0..<56 {
+            for i in 0..<64 {
                 capture(String(format: "wave-%@-%02d", style, i))
             }
             app.terminate()

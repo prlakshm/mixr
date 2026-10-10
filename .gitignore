@@ -4,3 +4,7 @@ output/ui-test-screenshots/
 output/tour-screenshots/
 .build/
 xcuserdata/
+output/app-icon-options/
+output/*.gif
+output/import-*.png
+output/shockwave-*.png

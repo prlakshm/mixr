@@ -33,11 +33,10 @@ class MixrUITestCase: XCTestCase {
     }
 
     override func tearDown() {
-        // Close the app first: rotating a running app makes XCUITest wait
-        // for it to idle, which never happens while a looping animation
-        // (the tour's touch indicator) is on screen.
+        // No orientation reset here: setUp sets it for every test, and
+        // rotating during teardown waits for the app (or SpringBoard) to
+        // go idle, which a looping animation can hold off indefinitely.
         app?.terminate()
-        XCUIDevice.shared.orientation = .landscapeLeft
         super.tearDown()
     }
 
@@ -52,6 +51,10 @@ class MixrUITestCase: XCTestCase {
         if tourDone { args.append("-MixrUITestTourDone") }
         if songs { args += ["-MixrUITestSongs", DemoSongs.hostFolder] }
         app.launchArguments = args + extra
+        // Force a real rotation: if a previous run was interrupted the
+        // simulator can be in portrait while XCUIDevice still reports the
+        // old landscape value, which makes a plain assignment a no-op.
+        XCUIDevice.shared.orientation = orientation == .landscapeLeft ? .landscapeRight : .landscapeLeft
         XCUIDevice.shared.orientation = orientation
         app.launch()
         XCTAssertTrue(app.buttons["Export"].waitForExistence(timeout: 10), "editor did not load")
