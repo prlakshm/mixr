@@ -368,6 +368,11 @@ struct TimelineScreen: View {
     @State private var projectTitleFrame: CGRect = .zero
     @State private var showDeleteProjectConfirm = false
 
+    // First-launch spotlight tour (Models/OnboardingTour.swift)
+    @State private var tour = OnboardingTourState(progress: OnboardingTourStore().load())
+    /// Selection to restore after the tour's clip steps (outer nil = untouched).
+    @State private var tourSavedSelection: UUID?? = nil
+
     // Playhead drag state
     @State private var isPlayheadDragging = false
     @State private var dragPlayheadUnit: CGFloat = 0
@@ -529,6 +534,7 @@ struct TimelineScreen: View {
                         }
                     )
                     .frame(height: layout.effectsHeight)
+                    .onboardingTarget(.effectsPanel)
                     .clipped()
                     .zIndex(0)
                 }
@@ -563,6 +569,9 @@ struct TimelineScreen: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+                onboardingTourLayer(anchors: anchors, isHidden: isPhonePortrait)
+            }
             .coordinateSpace(name: "timelineScreen")
             .onChange(of: geo.size.height, initial: true) { _, height in
                 containerHeight = height
@@ -588,6 +597,13 @@ struct TimelineScreen: View {
         .task {
             library.attachPersistence(context: modelContext)
             library.attachUndoManager(envUndoManager)
+            tour.update(hasSongs: tourHasSongs)
+        }
+        .onChange(of: tourHasSongs) { _, hasSongs in
+            tour.update(hasSongs: hasSongs)
+        }
+        .onChange(of: tour) { _, state in
+            tourDidChange(state)
         }
         // The window's UndoManager can arrive/change after first render.
         .onChange(of: envUndoManager.map(ObjectIdentifier.init)) { _, _ in
@@ -672,6 +688,7 @@ struct TimelineScreen: View {
                         dismissProjectMenu()
                         showDeleteProjectConfirm = true
                     },
+                    onReplayTour: { replayTour() },
                     onDismiss: { dismissProjectMenu() }
                 )
                 .offset(x: menuX, y: layout.transportHeight - 4)
@@ -876,6 +893,65 @@ struct TimelineScreen: View {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             showProjectMenu = false
         }
+    }
+
+    // MARK: - Onboarding tour
+
+    /// The tour's song steps need a real song with a clip to point at.
+    private var tourHasSongs: Bool {
+        library.tracks.contains { !$0.isSFXTrack && !$0.clips.isEmpty }
+    }
+
+    private var tourClipID: UUID? {
+        library.tracks.first { !$0.isSFXTrack && !$0.clips.isEmpty }?.clips.first?.id
+    }
+
+    @ViewBuilder
+    private func onboardingTourLayer(
+        anchors: [OnboardingTarget: Anchor<CGRect>],
+        isHidden: Bool
+    ) -> some View {
+        if let step = tour.activeStep, !isHidden {
+            GeometryReader { proxy in
+                OnboardingTourOverlay(
+                    step: step,
+                    targetFrame: anchors[step.target].map { proxy[$0] },
+                    containerSize: proxy.size,
+                    onNext: {
+                        withAnimation(.easeOut(duration: 0.2)) { tour.next(hasSongs: tourHasSongs) }
+                    },
+                    onSkip: {
+                        withAnimation(.easeOut(duration: 0.2)) { tour.skip() }
+                    }
+                )
+            }
+            .transition(.opacity)
+            .zIndex(1000)
+        }
+    }
+
+    /// Persists progress and shows each step's real UI: the clip toolbar on
+    /// the clip steps (selection restored afterwards) and an open effects panel.
+    private func tourDidChange(_ state: OnboardingTourState) {
+        OnboardingTourStore().save(state.progress)
+        let step = state.activeStep
+        if let step, step.selectsClip, let clipID = tourClipID {
+            if tourSavedSelection == nil { tourSavedSelection = .some(selectedClipID) }
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                selectedClipID = clipID
+                if step == .tuneSound { isEffectsCollapsed = false }
+            }
+        } else if let saved = tourSavedSelection {
+            tourSavedSelection = nil
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                selectedClipID = saved
+            }
+        }
+    }
+
+    private func replayTour() {
+        dismissProjectMenu()
+        withAnimation(.easeOut(duration: 0.2)) { tour.replay(hasSongs: tourHasSongs) }
     }
 
     // MARK: - Auto
@@ -2845,6 +2921,7 @@ private struct TLTrackArea: View {
                     }
                 )
                 .frame(height: rowHeight)
+                .onboardingTarget(.firstSongRow, isActive: track.id == onboardingSongID)
                 .overlay(alignment: .bottom) {
                     MixrColors.divider.frame(height: 0.5)
                 }
@@ -2917,6 +2994,7 @@ private struct TLTrackArea: View {
                         isScrimmed:     isDraggingClip && !isThisDragTrack,
                         isActiveForDrag: isDraggingClip && isThisDragTrack,
                         isInaudible:    !TrackLibrary.isAudible(track, in: tracks),
+                        onboardingClipID: track.id == onboardingSongID ? track.clips.first?.id : nil,
                         onClipTapped:   { clipID, tapX in
                             guard !isDraggingClip else { return }
                             let unit = (tapX / contentW) * contentUnits
@@ -3180,6 +3258,12 @@ private struct TLTrackArea: View {
         .overlay(alignment: .leading) {
             MixrColors.divider.frame(width: 0.5)
         }
+        .onboardingTarget(.volumeControls)
+    }
+
+    /// The song row / clip the onboarding tour points at.
+    private var onboardingSongID: UUID? {
+        tracks.first { !$0.isSFXTrack && !$0.clips.isEmpty }?.id
     }
 
     // MARK: Import button
@@ -3248,6 +3332,7 @@ private struct TLTrackArea: View {
         }
         .buttonStyle(.plain)
         .layoutPriority(1)
+        .onboardingTarget(.importSongs)
     }
 
     private var sfxButton: some View {
@@ -3259,6 +3344,7 @@ private struct TLTrackArea: View {
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel("Sound Effects")
+        .onboardingTarget(.soundEffectsButton)
     }
 
     // MARK: Audio drop importing
@@ -4046,6 +4132,8 @@ private struct TLTrackLane: View {
     var isActiveForDrag: Bool          = false
     /// Muted, or excluded by another track's solo — clips render dimmed.
     var isInaudible:    Bool           = false
+    /// The clip the onboarding tour spotlights (first clip of the first song).
+    var onboardingClipID: UUID?        = nil
     var onClipTapped:   ((UUID, CGFloat) -> Void)?          = nil
     var onGripTapped:   ((ActiveGrip) -> Void)?             = nil
     var onClipDragArmed:   ((UUID, CGFloat, CGFloat) -> Void)?                     = nil
@@ -4161,6 +4249,7 @@ private struct TLTrackLane: View {
                 // events continue to fire even after clipDragState is set.
                 Color.clear
                     .frame(width: origClipW, height: rowHeight)
+                    .onboardingTarget(.firstClip, isActive: clip.id == onboardingClipID)
                     .contentShape(Rectangle())
                     .overlay {
                         GeometryReader { proxy in

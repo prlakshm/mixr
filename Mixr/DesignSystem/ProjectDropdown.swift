@@ -12,6 +12,7 @@ struct ProjectDropdownMenu: View {
     var onSelectProject: (UUID) -> Void = { _ in }
     var onCreateProject: () -> Void = {}
     var onDeleteProject: () -> Void = {}
+    var onReplayTour: () -> Void = {}
     var onDismiss: () -> Void = {}
 
     /// Public so the presenter can align menu label leading with the nav title.
@@ -57,6 +58,16 @@ struct ProjectDropdownMenu: View {
             ) {
                 onCreateProject()
                 onDismiss()
+            }
+
+            rowDivider
+
+            actionRow(
+                title: OnboardingCopy.replay,
+                icon: "questionmark.circle",
+                isDestructive: false
+            ) {
+                onReplayTour()
             }
         }
         .padding(.vertical, 3.5)
