@@ -36,6 +36,10 @@ enum OnboardingTourTokens {
     /// as an outline of that control, not a box around its area.
     static let spotlightPadding: CGFloat = 3
 
+    static func padding(for target: OnboardingTarget) -> CGFloat {
+        spotlightPadding
+    }
+
     /// The control's own corner radius, so ring and control are concentric.
     static func controlRadius(for target: OnboardingTarget) -> CGFloat {
         switch target {
@@ -47,7 +51,7 @@ enum OnboardingTourTokens {
     }
 
     static func spotlightRadius(for target: OnboardingTarget) -> CGFloat {
-        controlRadius(for: target) + spotlightPadding
+        controlRadius(for: target) + padding(for: target)
     }
 
     static let cardWidth: CGFloat = 262
@@ -77,12 +81,16 @@ struct OnboardingTourOverlay: View {
     let containerSize: CGSize
     var onNext: () -> Void
     var onSkip: () -> Void
+    var onBack: () -> Void = {}
 
     @State private var cardSize = CGSize(width: OnboardingTourTokens.cardWidth, height: 150)
 
     var body: some View {
         let hole = targetFrame.map {
-            $0.insetBy(dx: -OnboardingTourTokens.spotlightPadding, dy: -OnboardingTourTokens.spotlightPadding)
+            $0.insetBy(
+                dx: -OnboardingTourTokens.padding(for: step.target),
+                dy: -OnboardingTourTokens.padding(for: step.target)
+            )
         }
         ZStack(alignment: .topLeading) {
             scrim(hole: hole)
@@ -97,13 +105,13 @@ struct OnboardingTourOverlay: View {
                     .accessibilityHidden(true)
 
                 OnboardingFinger(gesture: step.gesture, travel: fingerTravel(in: hole))
-                    .position(fingerPoint(in: hole))
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                    .id(step)
+                .position(fingerPoint(in: hole))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .id(step)
             }
 
-            OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip)
+            OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                 .offset(cardOrigin(hole: hole))
                 .id(step)
@@ -250,6 +258,7 @@ private struct OnboardingTipCard: View {
     let step: OnboardingStep
     var onNext: () -> Void
     var onSkip: () -> Void
+    var onBack: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -279,6 +288,13 @@ private struct OnboardingTipCard: View {
                         .accessibilityHint("Ends the tour")
                 }
                 Spacer(minLength: 8)
+                // Quiet Back beside the primary Next (Skip, which ends the
+                // tour, stays apart on the left). None on step 1.
+                if step.rawValue > 0 {
+                    Button(OnboardingCopy.back, action: onBack)
+                        .buttonStyle(OnboardingSkipButtonStyle())
+                        .accessibilityHint("Previous tip")
+                }
                 Button(step.isLast ? OnboardingCopy.finish : OnboardingCopy.next, action: onNext)
                     .buttonStyle(OnboardingNextButtonStyle())
             }
@@ -307,13 +323,14 @@ private struct OnboardingTipCard: View {
     }
 
     private var progressDots: some View {
-        HStack(spacing: 4) {
-            ForEach(OnboardingStep.allCases, id: \.self) { s in
-                Capsule()
-                    .fill(s == step ? OnboardingTourTokens.ring : Color.white.opacity(0.25))
-                    .frame(width: s == step ? 14 : 4, height: 4)
-            }
-        }
+        MixrPageDots(
+            count: OnboardingStep.allCases.count,
+            current: step.rawValue,
+            accent: OnboardingTourTokens.ring,
+            dot: 5,
+            currentWidth: 8,
+            spacing: 4
+        )
         .accessibilityHidden(true)
     }
 }
@@ -340,6 +357,9 @@ struct OnboardingNextButtonStyle: ButtonStyle {
             configuration.label
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
+                // One line always ("Start mixing" beside Back must not wrap).
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 18)
                 .frame(minWidth: 84, minHeight: 36)
                 .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

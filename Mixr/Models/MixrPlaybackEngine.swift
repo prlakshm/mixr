@@ -351,12 +351,7 @@ final class MixrPlaybackEngine: ObservableObject {
         if let cached = sfxBufferCache[definition.id] { return cached }
 
         var buffer: AVAudioPCMBuffer?
-        let base = (definition.assetName as NSString).deletingPathExtension
-        let url = Bundle.main.url(forResource: base, withExtension: "wav")
-            ?? Bundle.main.url(forResource: base, withExtension: "wav", subdirectory: "SFX")
-            ?? Bundle.main.url(forResource: base, withExtension: "wav", subdirectory: "Resources/SFX")
-
-        if let url,
+        if let url = definition.bundledURL,
            let file = try? AVAudioFile(forReading: url),
            let loaded = AVAudioPCMBuffer(
             pcmFormat: file.processingFormat,

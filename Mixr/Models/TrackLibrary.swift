@@ -70,22 +70,14 @@ final class TrackLibrary: ObservableObject {
 
     private let colorCycle: [MixrWaveformColor] = [.pink, .purple, .red, .yellow, .blue]
 
+    /// Header key: the lead (first) song's. Rows have no visible selection,
+    /// so tapping one must not quietly change the readout.
     var displayKey: String {
-        if let selectedTrackID,
-           let track = tracks.first(where: { $0.id == selectedTrackID }),
-           track.key != nil {
-            return track.keyDisplay
-        }
-        return tracks.first(where: { $0.key != nil })?.keyDisplay ?? "--"
+        tracks.first(where: { !$0.isSFXTrack && $0.key != nil })?.keyDisplay ?? "--"
     }
 
-    /// Header tempo, read the same way as `displayKey`: the selected song,
-    /// else the first song that has one, else the project fallback.
+    /// Header tempo: the lead (first) song's, else the project fallback.
     var displayBPM: String {
-        if let selectedTrackID,
-           let bpm = tracks.first(where: { $0.id == selectedTrackID })?.bpm {
-            return String(bpm)
-        }
         let first = tracks.first { !$0.isSFXTrack && $0.bpm != nil }?.bpm
         return (first ?? projectBPM).map(String.init) ?? "--"
     }

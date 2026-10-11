@@ -17,6 +17,9 @@ let trackRowBackgroundURL = URL(fileURLWithPath: FileManager.default.currentDire
 let trackRowBackgroundSource = (
     try? String(contentsOf: trackRowBackgroundURL, encoding: .utf8)
 ) ?? ""
+let panelURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("Mixr/DesignSystem/SFXLibraryPanel.swift")
+let panelSource = try String(contentsOf: panelURL, encoding: .utf8)
 let designPreviewURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     .appendingPathComponent("Mixr/DesignSystem/DesignSystemPreviewView.swift")
 let designPreviewSource = try String(contentsOf: designPreviewURL, encoding: .utf8)
@@ -55,69 +58,11 @@ func matches(_ pattern: String, in text: String = source) -> Bool {
 }
 
 check(
-    "SFX panel keeps the reference base geometry with a five percent display scale",
-    matches(#"panelScreenWidthFraction\s*:\s*CGFloat\s*=\s*0\.637"#)
-        && matches(#"panelDisplayScale\s*:\s*CGFloat\s*=\s*1\.05"#)
-        && !source.contains("panelBaseWidthFraction")
-        && !source.contains("panelScale")
-)
-
-check(
-    "SFX library is an in-app glass panel over a dimmed timeline",
-    sfxOverlaySource.contains("SFXLibraryPanel(")
-        && sfxOverlaySource.contains("Color.black.opacity(0.52)")
-        && sfxOverlaySource.contains(".onTapGesture { dismissSFXPanel() }")
-        && matches(#"panelOpticalOffsetY\s*:\s*CGFloat\s*=\s*-10"#)
-)
-
-check(
-    "SFX cards match the reference grid geometry",
-    matches(#"cardRadius\s*:\s*CGFloat\s*=\s*14"#)
-        && matches(#"panelCardSpacing\s*:\s*CGFloat\s*=\s*10"#)
-        && matches(
-            #"return\s+\(width\s*-\s*panelPadH\s*\*\s*2\s*-\s*panelCardSpacing\s*\*\s*\(columns\s*-\s*1\)\)\s*/\s*columns"#
-        )
-        && !source.contains("cardScaleWithinPanel")
-)
-
-check(
-    "SFX grid uses the reference outer and internal padding",
-    matches(#"panelPadH\s*:\s*CGFloat\s*=\s*MixrSpacing\.xl"#)
-        && matches(#"panelPadV\s*:\s*CGFloat\s*=\s*MixrSpacing\.lg"#)
-        && source.contains("let spacing = SFXMetrics.panelCardSpacing")
-        && source.contains("let padH = SFXMetrics.panelPadH")
-        && source.contains(".padding(.horizontal, padH)")
-        && source.contains(".padding(.top, SFXMetrics.panelCloseClearance + padV)")
-        && source.contains(
-            ".padding(.bottom, padV + SFXMetrics.pageIndicatorCardLift)"
-        )
-)
-
-check(
     "SFX icons sit closer to their titles",
     matches(#"cardIconVerticalOffsetFraction\s*:\s*CGFloat\s*=\s*0\.055"#)
         && cardSource.contains(
             ".offset(y: height * SFXMetrics.cardIconVerticalOffsetFraction)"
         )
-)
-
-check(
-    "SFX modal uses subdued frosted navy glass",
-    source.contains("Color(hex: \"171927\").opacity(0.88)")
-        && source.contains("Color(hex: \"0B0E19\").opacity(0.94)")
-        && matches(#"fill\(\.ultraThinMaterial\)[\s\S]*?\.opacity\(0\.16\)"#)
-        && source.contains("Color.white.opacity(0.14), lineWidth: 0.75")
-        && source.contains(".shadow(color: .black.opacity(0.42), radius: 18, x: 0, y: 8)")
-)
-
-check(
-    "SFX modal returns to its neutral lavender ambient wash",
-    source.contains("Color(hex: \"8C7DAA\").opacity(0.055)")
-        && source.contains(
-            ".shadow(color: Color(hex: \"8C7DAA\").opacity(0.06), radius: 16)"
-        )
-        && !source.contains("Color(hex: \"A36FC7\").opacity(0.10)")
-        && !source.contains("Color(hex: \"D07CAD\").opacity(0.045)")
 )
 
 check(
@@ -325,27 +270,68 @@ check(
 )
 
 check(
-    "SFX menu tracks its two horizontal pages",
-    source.contains("@State private var selectedPage: Int? = 0")
-        && source.contains(".scrollPosition(id: $selectedPage)")
-        && matches(
-            #"ForEach\(Array\(Self\.pages\.enumerated\(\)\), id:\s*\\\.offset\)\s*\{\s*index, page in"#
-        )
-        && source.contains(".id(index)")
+    "SFX library is one glass panel over the dimmed timeline, sized to its grid",
+    sfxOverlaySource.contains("SFXLibraryPanel(")
+        && sfxOverlaySource.contains("Color.black.opacity(0.52)")
+        && sfxOverlaySource.contains(".onTapGesture { dismissSFXPanel() }")
+        && sfxOverlaySource.contains(".frame(width: min(geo.size.width - 48, 456))")
+        && sfxOverlaySource.contains(".fixedSize(horizontal: false, vertical: true)")
+        && !timelineSource.contains("sfxPanelWidth")
 )
 
 check(
-    "SFX menu shows exactly one small dot per available page at the bottom",
-    matches(#"pageIndicatorDotSize\s*:\s*CGFloat\s*=\s*4"#)
-        && matches(#"pageIndicatorSpacing\s*:\s*CGFloat\s*=\s*5"#)
-        && matches(#"pageIndicatorBottomInset\s*:\s*CGFloat\s*=\s*6"#)
-        && source.contains(".overlay(alignment: .bottom)")
-        && matches(
-            #"ForEach\(Self\.pages\.indices, id:\s*\\\.self\)\s*\{\s*page in"#
-        )
-        && matches(
-            #"\.frame\(\s*width:\s*SFXMetrics\.pageIndicatorDotSize,\s*height:\s*SFXMetrics\.pageIndicatorDotSize\s*\)"#
-        )
+    "SFX panel glass is system material with a navy coat, hairline rim and soft shadow",
+    panelSource.contains("shape.fill(.ultraThinMaterial)")
+        && panelSource.contains("MixrColors.glassNavyDefault.opacity(0.55)")
+        && panelSource.contains("Color.white.opacity(0.12), lineWidth: 0.6")
+        && panelSource.contains(".shadow(color: .black.opacity(0.4), radius: 24, y: 10)")
+)
+
+check(
+    "SFX tiles all share the Import / Export glass with a light lavender tint",
+    panelSource.contains("GlassBackground(level: .default, cornerRadius: 17)")
+        && panelSource.contains("MixrColors.sfxMenuLavender.opacity(0.10)")
+        && panelSource.contains("SFXCard.pearlIconFill")
+        && panelSource.contains(".frame(width: 68, height: 68)")
+        && !panelSource.contains("family.color")
+)
+
+check(
+    "SFX library shows six per page and pages horizontally",
+    panelSource.contains("stride(from: 0, to: all.count, by: 6)")
+        && panelSource.contains("count: 3")
+        && panelSource.contains(".scrollTargetBehavior(.paging)")
+        && panelSource.contains(".scrollPosition(id: $page)")
+        && panelSource.contains(".id(index)")
+)
+
+check(
+    "SFX pages use the shared minimal page dots in menu lavender",
+    panelSource.contains("MixrPageDots(count: pages.count, current: page ?? 0, accent: MixrColors.sfxMenuLavender)")
+        && panelSource.contains("Page \\((page ?? 0) + 1) of \\(pages.count)")
+)
+
+check(
+    "SFX close is a bare secondary X with a full 44 pt target",
+    panelSource.contains("Image(systemName: \"xmark\")")
+        && panelSource.contains(".frame(width: 44, height: 44)")
+        && panelSource.contains(".accessibilityLabel(\"Close\")")
+        && !panelSource.contains("Circle()")
+)
+
+check(
+    "Only one SFX library exists (no preview styles left behind)",
+    !source.contains("struct SFXLibraryPanel")
+        && !panelSource.contains("SFXLibraryStyle")
+        && !panelSource.contains("SFXLiquidGlassMenu")
+        && !timelineSource.contains("sfxPreviewStyle")
+)
+
+check(
+    "Clips only ever draw real waveforms: songs and sound effects read their audio, nothing generated while loading",
+    timelineSource.contains("WaveformClip(waveformColor: track.color, bars: bars, showsMockWhileLoading: false)")
+        && timelineSource.contains("SoundEffectLibrary.definition(for: id)?.bundledURL")
+        && !timelineSource.contains("guard !clip.isSoundEffect, let url = track.url")
 )
 
 if failures > 0 {

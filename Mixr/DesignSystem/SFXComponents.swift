@@ -12,46 +12,12 @@ enum SFXMetrics {
     /// Width ÷ height — a little longer than tall.
     static let cardAspectRatio: CGFloat = cardDefaultWidth / cardDefaultHeight
     static let cardRadius: CGFloat = 14
-    static let panelScreenWidthFraction: CGFloat = 0.637
-    static let panelDisplayScale: CGFloat = 1.05
-    static let panelOpticalOffsetY: CGFloat = -10
     static let cardBorderLineWidth: CGFloat = 0.85
     static let cardIconTileSizeFraction: CGFloat = 0.47
     static let cardIconTileCornerRadius: CGFloat = 12
     static let cardIconCoreGlowRadius: CGFloat = 2.8
     static let cardIconBloomRadius: CGFloat = 6
     static let cardIconVerticalOffsetFraction: CGFloat = 0.055
-    static let libraryColumns: Int = 3
-    static let libraryVisibleRows: Int = 2
-    static let libraryPageSize: Int = libraryColumns * libraryVisibleRows
-    static let panelPadH: CGFloat = MixrSpacing.xl
-    static let panelPadV: CGFloat = MixrSpacing.lg
-    static let panelCardSpacing: CGFloat = 10
-    /// Space above the card grid so the close control sits in panel chrome.
-    static let panelCloseClearance: CGFloat = 28
-    static let panelCloseTopInset: CGFloat = 4
-    static let panelCloseTrailingInset: CGFloat = 6
-    static let pageIndicatorDotSize: CGFloat = 4
-    static let pageIndicatorSpacing: CGFloat = 5
-    static let pageIndicatorBottomInset: CGFloat = 6
-    /// Extra space under the card grid so page dots have breathing room.
-    static let pageIndicatorCardLift: CGFloat = 5
-
-    static func cardWidth(forPanelWidth width: CGFloat) -> CGFloat {
-        let columns = CGFloat(libraryColumns)
-        return (width - panelPadH * 2 - panelCardSpacing * (columns - 1)) / columns
-    }
-
-    /// Panel height for a given width so a centered 3 × 2 page fits exactly.
-    static func panelHeight(forWidth width: CGFloat) -> CGFloat {
-        let rows = CGFloat(libraryVisibleRows)
-        let cardHeight = cardWidth(forPanelWidth: width) / cardAspectRatio
-        return panelCloseClearance
-            + panelPadV * 2
-            + pageIndicatorCardLift
-            + cardHeight * rows
-            + panelCardSpacing * (rows - 1)
-    }
 }
 
 // MARK: - SFX Tile Mark
@@ -491,173 +457,6 @@ struct SFXIconBoxSurface: View {
     }
 }
 
-// MARK: - SFX Library Panel
-
-/// Headerless SFX library — 3 × 2 card pages in a restrained modal glass,
-/// with horizontal paging for the remaining effects.
-struct SFXLibraryPanel: View {
-    var onSelect: (SoundEffectDefinition) -> Void = { _ in }
-    var onClose: () -> Void = {}
-
-    @State private var selectedPage: Int? = 0
-
-    /// Display order — first page matches the reference set; remaining
-    /// effects follow on the next horizontal page.
-    private static let displayOrder: [String] = [
-        "riser", "downlifter", "impact",
-        "crash", "snareBuild", "clapFill",
-    ]
-
-    private static var orderedEffects: [SoundEffectDefinition] {
-        let front = displayOrder.compactMap { SoundEffectLibrary.definition(for: $0) }
-        let rest = SoundEffectLibrary.all.filter { !displayOrder.contains($0.id) }
-        return front + rest
-    }
-
-    private static var pages: [[SoundEffectDefinition]] {
-        let all = orderedEffects
-        let size = SFXMetrics.libraryPageSize
-        guard !all.isEmpty else { return [] }
-        return stride(from: 0, to: all.count, by: size).map {
-            Array(all[$0..<min($0 + size, all.count)])
-        }
-    }
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            GeometryReader { geo in
-                let spacing = SFXMetrics.panelCardSpacing
-                let padV = SFXMetrics.panelPadV
-                let padH = SFXMetrics.panelPadH
-                let cardWidth = SFXMetrics.cardWidth(forPanelWidth: geo.size.width)
-                let cardHeight = cardWidth / SFXMetrics.cardAspectRatio
-                let pageWidth = geo.size.width
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 0) {
-                        ForEach(Array(Self.pages.enumerated()), id: \.offset) { index, page in
-                            LazyVGrid(
-                                columns: Array(
-                                    repeating: GridItem(.fixed(cardWidth), spacing: spacing),
-                                    count: SFXMetrics.libraryColumns
-                                ),
-                                spacing: spacing
-                            ) {
-                                ForEach(page) { effect in
-                                    SFXCard(effect: effect, width: cardWidth, height: cardHeight) {
-                                        onSelect(effect)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, padH)
-                            .padding(.top, SFXMetrics.panelCloseClearance + padV)
-                            .padding(.bottom, padV + SFXMetrics.pageIndicatorCardLift)
-                            .frame(width: pageWidth, height: geo.size.height)
-                            .id(index)
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: $selectedPage)
-            }
-
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(MixrColors.textSecondary)
-                    .frame(
-                        width: MixrLayout.iconButtonSize,
-                        height: MixrLayout.iconButtonSize
-                    )
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(SFXPlainIconPressStyle())
-            .accessibilityLabel("Close")
-            .padding(.top, SFXMetrics.panelCloseTopInset)
-            .padding(.trailing, SFXMetrics.panelCloseTrailingInset)
-        }
-        // Titled like the Effects panel, in line with the close button and
-        // the card grid's leading edge.
-        .overlay(alignment: .topLeading) {
-            Text("Sound Effects")
-                .mixrScaledFont(size: 13, weight: .semibold, relativeTo: .headline)
-                .foregroundStyle(MixrColors.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-                .frame(height: MixrLayout.iconButtonSize)
-                .padding(.top, SFXMetrics.panelCloseTopInset)
-                .padding(.leading, SFXMetrics.panelPadH)
-        }
-        .overlay(alignment: .bottom) {
-            HStack(spacing: SFXMetrics.pageIndicatorSpacing) {
-                ForEach(Self.pages.indices, id: \.self) { page in
-                    Circle()
-                        .fill(
-                            page == (selectedPage ?? 0)
-                                ? MixrColors.textPrimary.opacity(0.86)
-                                : MixrColors.sfxMenuLavender.opacity(0.34)
-                        )
-                        .frame(
-                            width: SFXMetrics.pageIndicatorDotSize,
-                            height: SFXMetrics.pageIndicatorDotSize
-                        )
-                }
-            }
-            .padding(.bottom, SFXMetrics.pageIndicatorBottomInset)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
-        .background { panelGlass }
-        .clipShape(RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous))
-        .partyModeBorder(
-            shape: RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous),
-            role: .dialog,
-            lighting: .clockwise,
-            glintOffset: .near
-        )
-        .shadow(color: Color(hex: "8C7DAA").opacity(0.06), radius: 16)
-        .shadow(color: .black.opacity(0.42), radius: 18, x: 0, y: 8)
-    }
-
-    /// A restrained, heavier modal material over the dimmed timeline.
-    private var panelGlass: some View {
-        let shape = RoundedRectangle(cornerRadius: MixrRadius.glass, style: .continuous)
-        return shape
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(hex: "171927").opacity(0.88),
-                        Color(hex: "0B0E19").opacity(0.94),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .background {
-                shape
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.16)
-                    .environment(\.colorScheme, .dark)
-            }
-            .overlay {
-                shape.fill(
-                    RadialGradient(
-                        colors: [
-                            Color(hex: "8C7DAA").opacity(0.055),
-                            Color.clear,
-                        ],
-                        center: UnitPoint(x: 0.5, y: 0.08),
-                        startRadius: 0,
-                        endRadius: 460
-                    )
-                )
-            }
-            .overlay {
-                shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
-            }
-    }
-}
-
 // MARK: - Press Styles
 
 private struct SFXCardPressStyle: ButtonStyle {
@@ -667,23 +466,4 @@ private struct SFXCardPressStyle: ButtonStyle {
             .opacity(configuration.isPressed ? 0.92 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
     }
-}
-
-/// Bare secondary-gray icon button — no glass chrome, standard press dim.
-private struct SFXPlainIconPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
-    }
-}
-
-#Preview("SFX Library Panel") {
-    ZStack {
-        MixrGradients.backgroundLinear.ignoresSafeArea()
-        let width: CGFloat = 800
-        SFXLibraryPanel()
-            .frame(width: width, height: SFXMetrics.panelHeight(forWidth: width))
-    }
-    .frame(width: 932, height: 430)
-    .preferredColorScheme(.dark)
 }

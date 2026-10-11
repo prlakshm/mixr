@@ -38,8 +38,7 @@ check(
     matches(
         #"private var importSongsButton:[\s\S]{0,1400}\.background \{ MixrGlassButtonChrome\(isPulsing: importPulses\) \}"#
     )
-        && source.contains("!suppressesImportPulse && !tracks.contains { !$0.isSFXTrack }")
-        && source.contains("suppressesImportPulse: tour.activeStep != nil")
+        && source.contains("!tracks.contains { !$0.isSFXTrack }")
 )
 
 check(

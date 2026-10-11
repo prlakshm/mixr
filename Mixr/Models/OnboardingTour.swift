@@ -108,6 +108,7 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
 nonisolated enum OnboardingCopy {
     static let skip = "Skip"
     static let next = "Next"
+    static let back = "Back"
     static let finish = "Start mixing"
     static let replay = "Replay tour"
 }
@@ -195,6 +196,13 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
         } else {
             activeStep = following
         }
+    }
+
+    /// One step back (none from step 1).
+    mutating func back() {
+        guard let step = activeStep, step.rawValue > 0,
+              let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
+        activeStep = previous
     }
 
     mutating func skip() { finish() }

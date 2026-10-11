@@ -140,6 +140,16 @@ do {
     defaults.removePersistentDomain(forName: suite)
 }
 
+do {
+    // Back walks one step back, never past step 1.
+    var t = OnboardingTourState(progress: .notStarted, activeStep: .clipTools)
+    t.back()
+    check("Back from step 4 shows step 3", t.activeStep == .volume)
+    var first = OnboardingTourState(progress: .notStarted, activeStep: .importSongs)
+    first.back()
+    check("Back on step 1 does nothing", first.activeStep == .importSongs)
+}
+
 // MARK: - Wiring (source contracts): every spotlight target is attached
 // to the real control, so a refactor can't silently orphan a step.
 
@@ -168,6 +178,7 @@ check("Skip sits left of Next", {
     guard let skip = overlay.range(of: "OnboardingCopy.skip"), let next = overlay.range(of: "OnboardingCopy.next") else { return false }
     return skip.lowerBound < next.lowerBound
 }())
+check("The primary button never wraps (\"Start mixing\" beside Back)", overlay.contains(".lineLimit(1)\n                .fixedSize()"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")
 exit(failures == 0 ? 0 : 1)

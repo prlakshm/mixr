@@ -7,6 +7,10 @@ struct WaveformClip: View {
     /// Real bars for a bar count and clip width (the clip's slice of its
     /// song); nil until the song's peaks are read.
     var bars: ((_ count: Int, _ width: CGFloat) -> [CGFloat]?)? = nil
+    /// Design previews draw a generated shape when no real data is given.
+    /// The editor passes false: until real bars exist the clip is empty, and
+    /// the true waveform fades in once it has been read.
+    var showsMockWhileLoading: Bool = true
 
     var body: some View {
         GeometryReader { geometry in
@@ -17,8 +21,12 @@ struct WaveformClip: View {
 
             ZStack {
                 WaveformClipBackground(waveformColor: waveformColor)
-                WaveformSilhouetteCanvas(waveformColor: waveformColor, amplitudes: samples)
+                if let samples {
+                    WaveformSilhouetteCanvas(waveformColor: waveformColor, amplitudes: samples)
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeOut(duration: 0.25), value: samples != nil)
             .clipShape(shape)
             .mask { Rectangle().fill(WaveformFade.mask(width: size.width)) }
             // Subtle tail guide lines inside the rounded clip.
@@ -56,7 +64,7 @@ struct WaveformClip: View {
         )
     }
 
-    private func resolvedAmplitudes(for width: CGFloat) -> [CGFloat] {
+    private func resolvedAmplitudes(for width: CGFloat) -> [CGFloat]? {
         let count = WaveformMockData.sampleCount(for: width)
         if let real = bars?(count, width), real.count == count {
             return real
@@ -64,6 +72,7 @@ struct WaveformClip: View {
         if let amplitudes, amplitudes.count >= count {
             return Array(amplitudes.prefix(count))
         }
+        guard showsMockWhileLoading else { return nil }
         return WaveformMockData.amplitudes(count: count, seed: waveformColor.seed)
     }
 }

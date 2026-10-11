@@ -94,4 +94,50 @@ final class SurfaceCaptureTests: MixrUITestCase {
             capture(String(format: "halo-%02d", i))
         }
     }
+
+    /// The sound-effects library, both pages.
+    func testCaptureSFXLibrary() {
+        launch(fresh: true, tourDone: true, songs: true)
+        tap(app.buttons["Sound Effects"])
+        sleep(1)
+        capture("sfx-library")
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.62, dy: 0.45))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.45))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        sleep(1)
+        capture("sfx-library-page2")
+    }
+
+    /// Waveforms at load (empty clips until the real peaks are read, never a
+    /// generated shape) and on a sound-effect clip (its own audio file).
+    func testCaptureRealWaveforms() {
+        launch(fresh: true, tourDone: true, songs: true)
+        capture("waveforms-at-load")
+        sleep(2)
+        capture("waveforms-ready")
+        tap(app.buttons["Sound Effects"])
+        tap(app.buttons["Riser, 4s"])
+        sleep(1)
+        capture("waveforms-sfx")
+    }
+
+    /// The clip toolbar on its own, for optical-alignment review.
+    func testCaptureClipToolbar() {
+        launch(fresh: true, tourDone: true, songs: true)
+        tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Night Signals clip'")).firstMatch)
+        sleep(1)
+        capture("clip-toolbar")
+        let split = app.buttons["Split"].frame, delete = app.buttons["Delete"].frame
+        print("TOOLBAR-FRAMES split=\(split) delete=\(delete)")
+    }
+
+    /// Speed editing: the toolbar morphs into the ×-field and the keypad
+    /// opens with the preset-speed bar above it.
+    func testCaptureSpeedEditor() {
+        launch(fresh: true, tourDone: true, songs: true)
+        tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Night Signals clip'")).firstMatch)
+        tap(app.buttons["Speed"])
+        sleep(2)
+        capture("speed-editor")
+    }
 }
