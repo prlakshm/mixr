@@ -240,10 +240,11 @@ check(
 )
 
 check(
-    "SFX library scales with the editor beyond phones",
-    timelineSource.contains("func sfxPanelWidth(")
-        && timelineSource.contains("0.72 - 0.09 * narrow - 0.02 * wide")
-        && !timelineSource.contains("min(560, max(300, geo.size.width")
+    // Tiles are a fixed 68 pt, so the panel hugs its 3 × 2 grid on every
+    // surface instead of stretching with the editor (which only widened gaps).
+    "SFX library hugs its grid on every surface, inset from narrow editors",
+    timelineSource.contains(".frame(width: min(geo.size.width - 48, 456))")
+        && !timelineSource.contains("func sfxPanelWidth(")
 )
 
 let bridgeURL = root.appendingPathComponent("Mixr/DesignSystem/EditorPointerScrollBridge.swift")

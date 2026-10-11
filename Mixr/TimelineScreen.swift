@@ -623,9 +623,13 @@ struct TimelineScreen: View {
                 isPlayheadDragging = false
                 playback.seek(to: MixrTimeline.seconds(fromUnits: unit))
             },
-            suppressesImportPulse: tour.activeStep != nil
+            suppressesImportPulse: tourPausesImportHalo
         )
     }
+
+    /// The tour's own spotlight and finger point at Import Songs, so its
+    /// halo waits until the tour is done (one cue at a time).
+    private var tourPausesImportHalo: Bool { tour.activeStep != nil }
 
     /// The effects panel (split out of `body` to keep the type checker fast).
     private func effectsPanel(layout: EditorLayoutMetrics, safeArea: EditorSafeArea) -> some View {
@@ -789,29 +793,18 @@ struct TimelineScreen: View {
                     .onTapGesture { dismissSFXPanel() }
 
                 GeometryReader { geo in
-                    let width = sfxPanelWidth(
-                        editorWidth: geo.size.width,
-                        editorHeight: geo.size.height
-                    )
-
+                    // Sized to the 3 × 2 grid, not the screen, so the tiles
+                    // sit close as a family.
                     SFXLibraryPanel(
                         onSelect: { effect in
-                            library.addSoundEffect(
-                                effect,
-                                atPlayheadUnit: effectivePlayheadUnit
-                            )
+                            library.addSoundEffect(effect, atPlayheadUnit: effectivePlayheadUnit)
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             dismissSFXPanel()
                         },
                         onClose: { dismissSFXPanel() }
                     )
-                    .frame(
-                        width: width,
-                        height: min(
-                            geo.size.height - 24,
-                            SFXMetrics.panelHeight(forWidth: width)
-                        )
-                    )
+                    .frame(width: min(geo.size.width - 48, 456))
+                    .fixedSize(horizontal: false, vertical: true)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 }
             }
@@ -954,43 +947,6 @@ struct TimelineScreen: View {
     }
 #endif
 
-    /// SFX library width for the current surface.
-    ///
-    /// Phones keep the original screen-fraction size — the panel already fills
-    /// a phone well. Tablets and desktop scale with the editor instead of
-    /// stopping at the old 560pt cap, which left the panel looking like a
-    /// phone artifact in a desktop window: roughly 80% of the editor in a
-    /// windowed / narrow layout, easing to 60% at full-screen widths, with the
-    /// ramp between them keeping resize continuous. Cards derive from panel
-    /// width, so they grow in step.
-    private func sfxPanelWidth(
-        editorWidth: CGFloat,
-        editorHeight: CGFloat
-    ) -> CGFloat {
-        let phoneWidth = min(560, max(300, editorWidth * SFXMetrics.panelScreenWidthFraction))
-        guard UIDevice.current.userInterfaceIdiom != .phone else {
-            return phoneWidth
-        }
-
-        // ~64% of the editor at typical desktop widths. The narrowest windows
-        // ease toward 0.72 so the panel never collapses with its window, and
-        // very wide (full-screen) editors settle a touch lower so the panel
-        // stops short of billboard.
-        let narrow = min(1, max(0, (editorWidth - 820) / 204))
-        let wide = min(1, max(0, (editorWidth - 1200) / 300))
-        let fraction = 0.72 - 0.09 * narrow - 0.02 * wide
-        var width = editorWidth * fraction
-
-        // Never taller than the editor allows — shrink to fit, since height
-        // follows width through the fixed 3 × 2 card page.
-        let available = editorHeight - 24
-        let height = SFXMetrics.panelHeight(forWidth: width)
-        if height > available, height > 0 {
-            width *= available / height
-        }
-        return max(phoneWidth, width)
-    }
-
     private func dismissProjectMenu() {
         withAnimation(MixrMotion.overlay) {
             showProjectMenu = false
@@ -1024,6 +980,9 @@ struct TimelineScreen: View {
                     },
                     onSkip: {
                         withAnimation(.easeOut(duration: 0.2)) { tour.skip() }
+                    },
+                    onBack: {
+                        withAnimation(.easeOut(duration: 0.2)) { tour.back() }
                     }
                 )
             }
@@ -2168,7 +2127,7 @@ private struct TLTrackArea: View {
     let onPlayheadDragChanged: (CGFloat) -> Void
     let onPlayheadDragEnded: (CGFloat) -> Void
     let onTimelineTapped: (CGFloat) -> Void
-    /// True while the tour is showing (it points at Import Songs itself).
+    /// True while the tour shows (it points at Import Songs itself).
     var suppressesImportPulse: Bool = false
 
     @State private var draggingID: UUID?        = nil
@@ -3615,21 +3574,29 @@ private struct TLExportLabelStyle: LabelStyle {
     }
 }
 
-/// A clip's waveform drawn from its song's real peaks: the slice it plays
+/// A clip's waveform drawn from its audio's real peaks: the slice it plays
 /// (source offset, length and speed), so splits and speed changes show the
-/// audio that is actually there. Sound effects keep the generated shape.
+/// audio that is actually there. Sound effects read their bundled file the
+/// same way. Until the peaks are read the clip shows no waveform at all,
+/// never a made-up one.
 private struct TLClipWaveform: View {
     let track: MixrTrack
     let clip: MixrClip
     @ObservedObject private var cache = WaveformPeakCache.shared
 
     var body: some View {
-        WaveformClip(waveformColor: track.color, bars: bars)
+        WaveformClip(waveformColor: track.color, bars: bars, showsMockWhileLoading: false)
+    }
+
+    private var audioURL: URL? {
+        if let id = clip.soundEffectID {
+            return SoundEffectLibrary.definition(for: id)?.bundledURL
+        }
+        return track.url
     }
 
     private var bars: ((Int, CGFloat) -> [CGFloat]?)? {
-        guard !clip.isSoundEffect, let url = track.url,
-              let peaks = cache.peaks(for: url) else { return nil }
+        guard let url = audioURL, let peaks = cache.peaks(for: url) else { return nil }
         let start = clip.sourceOffsetSeconds
         let duration = MixrTimeline.seconds(fromUnits: clip.length) * clip.playbackSpeed
         let insets = WaveformSilhouettePath.drawableInsets()
@@ -3683,20 +3650,6 @@ private struct TLSongRow: View {
 
             rowContent
                 .background(MixrTrackRowBackground(isSFXTrack: track.isSFXTrack))
-                // The selected song is the one the header's BPM / KEY
-                // describe: a slim bar in its color marks it.
-                .overlay(alignment: .leading) {
-                    if isSelected {
-                        Capsule()
-                            .fill(track.color.color)
-                            .frame(width: 2.5)
-                            .padding(.vertical, 10)
-                            .shadow(color: track.color.color.opacity(0.6), radius: 3)
-                            .transition(.opacity)
-                    }
-                }
-                .background(Color.white.opacity(isSelected ? 0.035 : 0))
-                .animation(.easeOut(duration: 0.18), value: isSelected)
                 .offset(x: isDeleting ? -rowWidth : swipeOffset)
                 .opacity(isDeleting ? 0.72 : 1)
                 .contentShape(Rectangle())
@@ -3733,7 +3686,7 @@ private struct TLSongRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityTitle)
         .accessibilityValue(accessibilityDetails)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAddTraits(.isButton)
         .accessibilityAction { onSelect?() }
         .accessibilityAction(named: "Delete") { performDelete() }
     }

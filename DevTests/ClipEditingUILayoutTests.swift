@@ -52,18 +52,6 @@ check(
         && matches(#"toolbarActionTopPadding\s*:\s*CGFloat\s*=\s*ts\s*\(\s*2\s*\)"#)
 )
 check(
-    "Speed field background extends two points lower",
-    matches(#"speedFieldBottomExtension\s*:\s*CGFloat\s*=\s*2"#)
-        && matches(#"frame\s*\(\s*height:\s*fieldHeight\s*\+\s*bottomExtension"#)
-)
-check(
-    "Speed multiplier uses × and is bottom-aligned to the value field",
-    source.contains("Text(\"×\")")
-        && matches(#"HStack\s*\(\s*alignment:\s*\.bottom"#)
-        && source.contains("field.contentVerticalAlignment = .bottom")
-        && matches(#"speedMultiplierBottomSpacing\s*:\s*CGFloat\s*="#)
-)
-check(
     "Speed field keeps Paste available in the native edit menu",
     source.contains("private final class TLSpeedPasteTextField")
         && source.contains("override func canPerformAction")
@@ -74,6 +62,31 @@ check(
     selectIndex < selectAllIndex
         && selectAllIndex < pasteIndex
         && source.contains("editMenuForCharactersIn range: NSRange")
+)
+
+check(
+    "Clip toolbar spaces actions by equal whitespace, with the pointer mid-gap after Speed",
+    source.contains("static let toolbarItemGap: CGFloat = 26")
+        && source.contains("static let toolbarEdgeMargin: CGFloat = 22")
+        && source.contains("var columnWidth: CGFloat { labelWidth + toolbarItemGap }")
+        && source.contains("return (right - left) / 2")
+        && !source.contains("toolbarDeleteGap")
+        && !source.contains("toolbarCenterGap")
+)
+
+check(
+    "Speed keypad Done is legible: the prominent item fills purple, not the bar's white",
+    source.contains("done.tintColor = UIColor(MixrColors.primaryPurple)")
+)
+
+check(
+    "Speed value reads like the chips (1.0×): × is a quiet suffix inside a box that hugs the value",
+    source.contains("Text(\"×\")")
+        && source.contains(".foregroundStyle(MixrColors.textSecondary)")
+        && source.contains(".frame(width: Self.valueWidth(speedText, fontSize: fontSize), height: fieldHeight)")
+        && source.contains("static let speedFieldHorizontalPadding: CGFloat = 8")
+        && source.contains("field.contentVerticalAlignment = .center")
+        && !source.contains("speedMultiplierBottomSpacing")
 )
 
 if failures > 0 {

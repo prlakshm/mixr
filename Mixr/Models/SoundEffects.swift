@@ -42,6 +42,14 @@ struct SoundEffectDefinition: Identifiable, Equatable, Sendable {
     var lengthUnits: CGFloat {
         MixrTimeline.units(fromSeconds: durationSeconds)
     }
+
+    /// The bundled audio file (nil only if the asset is missing).
+    nonisolated var bundledURL: URL? {
+        let base = (assetName as NSString).deletingPathExtension
+        return Bundle.main.url(forResource: base, withExtension: "wav")
+            ?? Bundle.main.url(forResource: base, withExtension: "wav", subdirectory: "SFX")
+            ?? Bundle.main.url(forResource: base, withExtension: "wav", subdirectory: "Resources/SFX")
+    }
 }
 
 // MARK: - Library

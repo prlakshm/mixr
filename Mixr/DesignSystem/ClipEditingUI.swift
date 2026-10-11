@@ -10,22 +10,61 @@ enum TLClipEditingMetrics {
 
     private static func ts(_ value: CGFloat) -> CGFloat { value * toolbarScale }
 
-    /// Equal horizontal inset inside the actions glass (left == right).
-    static let toolbarHorizontalPadding: CGFloat = ts(10)
-    /// Extra space between Duplicate and Delete only.
-    static let toolbarDeleteGap: CGFloat = 2
-    /// Fixed actions-pane width; equal left/right halves share the remainder
-    /// after insets + center gap. Base 248 matches the prior roomier total;
-    /// delete gap is added so columns aren't squeezed.
-    static let toolbarWidth: CGFloat = ts(248) - 2.5
-    /// Speed↔Duplicate gap — playhead/pointer sits at its midpoint.
-    static let toolbarCenterGap: CGFloat = ts(16)
+    /// The actions are spaced by equal whitespace, not equal slots: the
+    /// same visible gap between every pair of labels (the pointer sits in
+    /// the middle of the Speed–Duplicate gap), so a long word like
+    /// "Duplicate" can't crowd its neighbour.
+    static let toolbarItemGap: CGFloat = 26
+    /// Label-to-glass-edge margin, a touch under the gap: the rounded
+    /// corners already read as extra space.
+    static let toolbarEdgeMargin: CGFloat = 22
+
+    /// One toolbar action, left to right; the pointer sits after `speed`.
+    enum ToolbarAction: CaseIterable {
+        case split, speed, duplicate, delete
+
+        var label: String {
+            switch self {
+            case .split: "Split"
+            case .speed: "Speed"
+            case .duplicate: "Duplicate"
+            case .delete: "Delete"
+            }
+        }
+
+        var isDestructive: Bool { self == .delete }
+
+        /// The label's drawn width (labels are a fixed size).
+        var labelWidth: CGFloat {
+            let font = UIFont.systemFont(
+                ofSize: toolbarActionLabelSize,
+                weight: isDestructive ? .regular : .medium
+            )
+            return ceil((label as NSString).size(withAttributes: [.font: font]).width)
+        }
+
+        /// Column width: the label plus half a gap each side, so tap areas
+        /// tile the bar with no dead space between them.
+        var columnWidth: CGFloat { labelWidth + toolbarItemGap }
+    }
+
+    /// Actions-pane width, from the labels it holds.
+    static let toolbarWidth: CGFloat = {
+        let columns = ToolbarAction.allCases.map(\.columnWidth).reduce(0, +)
+        return columns + 2 * (toolbarEdgeMargin - toolbarItemGap / 2)
+    }()
     /// Compact speed-only bubble after removing the trailing checkmark.
     static let toolbarSpeedWidth: CGFloat = ts(98)
     static let toolbarBodyHeight: CGFloat = ts(50)
     static let toolbarSpeedBodyHeight: CGFloat = ts(46)
-    /// Glass-only — shift right so playhead reads closer to Duplicate.
-    static let toolbarActionsHorizontalOffset: CGFloat = 4
+    /// Glass-only shift that puts the middle of the Speed–Duplicate gap on
+    /// the pointer (the right half is wider, since "Duplicate" is long).
+    static let toolbarActionsHorizontalOffset: CGFloat = {
+        let edge = toolbarEdgeMargin - toolbarItemGap / 2
+        let left = edge + ToolbarAction.split.columnWidth + ToolbarAction.speed.columnWidth
+        let right = edge + ToolbarAction.duplicate.columnWidth + ToolbarAction.delete.columnWidth
+        return (right - left) / 2
+    }()
     /// Pointer tip stays on the playhead (does not follow the glass nudge).
     static let toolbarPointerOffsetX: CGFloat = 0
     /// Speed editor pane shift relative to the playhead.
@@ -44,11 +83,8 @@ enum TLClipEditingMetrics {
     static let toolbarActionIconHeight: CGFloat = ts(14)
     static let toolbarActionLabelSize: CGFloat = ts(9.8)
     static let toolbarActionTopPadding: CGFloat = ts(2)
-    static let speedFieldBottomExtension: CGFloat = 2
-    static let speedFieldHorizontalPadding: CGFloat = 6
-    static let speedValueBottomSpacing: CGFloat = 1.5
-    static let speedMultiplierBottomSpacing: CGFloat = 0.5
-    static let speedChevronVerticalOffset: CGFloat = 1.5
+    /// Equal inset either side of "1.0×" inside its box.
+    static let speedFieldHorizontalPadding: CGFloat = 8
     static let toolbarMorphDuration: Double = 0.28
     static let minPlaybackSpeed: Double = 0.25
     static let maxPlaybackSpeed: Double = 4.0
@@ -190,7 +226,7 @@ private struct TLClipToolbarAction: View {
         case "scissors":
             return 11.65 * s
         case "doc.on.doc":
-            return 11.35 * s
+            return 10.9 * s
         case "trash":
             return 11.4 * s
         default:
@@ -571,13 +607,13 @@ struct TLClipContextToolbar: View {
                 .leading,
                 mode == .speed
                     ? TLClipEditingMetrics.toolbarSpeedLeadingPadding
-                    : TLClipEditingMetrics.toolbarHorizontalPadding
+                    : TLClipEditingMetrics.toolbarEdgeMargin - TLClipEditingMetrics.toolbarItemGap / 2
             )
             .padding(
                 .trailing,
                 mode == .speed
                     ? TLClipEditingMetrics.toolbarSpeedTrailingPadding
-                    : TLClipEditingMetrics.toolbarHorizontalPadding
+                    : TLClipEditingMetrics.toolbarEdgeMargin - TLClipEditingMetrics.toolbarItemGap / 2
             )
             .padding(
                 .top,
@@ -693,92 +729,78 @@ struct TLClipContextToolbar: View {
     }
 
     private var actionsContent: some View {
-        // Equal left/right halves; center gap hosts the playhead.
-        HStack(spacing: TLClipEditingMetrics.toolbarCenterGap) {
-            HStack(spacing: 0) {
+        // Columns sized to their labels plus half a gap each side: equal
+        // whitespace between every label, pointer mid-gap after Speed.
+        HStack(spacing: 0) {
+            ForEach(TLClipEditingMetrics.ToolbarAction.allCases, id: \.self) { item in
                 TLClipToolbarAction(
-                    icon: "scissors",
-                    label: "Split",
-                    action: onSplit
+                    icon: icon(for: item),
+                    label: item.label,
+                    isDestructive: item.isDestructive,
+                    action: handler(for: item)
                 )
-                .frame(maxWidth: .infinity)
-
-                TLClipToolbarAction(
-                    icon: "gauge.with.dots.needle.67percent",
-                    label: "Speed",
-                    action: onSpeed
-                )
-                .frame(maxWidth: .infinity)
+                .frame(width: item.columnWidth)
             }
-            .frame(maxWidth: .infinity)
+        }
+    }
 
-            HStack(spacing: TLClipEditingMetrics.toolbarDeleteGap) {
-                TLClipToolbarAction(
-                    icon: "doc.on.doc",
-                    label: "Duplicate",
-                    action: onDuplicate
-                )
-                .frame(maxWidth: .infinity)
+    private func icon(for item: TLClipEditingMetrics.ToolbarAction) -> String {
+        switch item {
+        case .split: "scissors"
+        case .speed: "gauge.with.dots.needle.67percent"
+        case .duplicate: "doc.on.doc"
+        case .delete: "trash"
+        }
+    }
 
-                TLClipToolbarAction(
-                    icon: "trash",
-                    label: "Delete",
-                    isDestructive: true,
-                    action: onDelete
-                )
-                .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity)
+    private func handler(for item: TLClipEditingMetrics.ToolbarAction) -> () -> Void {
+        switch item {
+        case .split: onSplit
+        case .speed: onSpeed
+        case .duplicate: onDuplicate
+        case .delete: onDelete
         }
     }
 
     private var speedContent: some View {
         let s = TLClipEditingMetrics.toolbarScale
         let fieldHeight = 24 * s
-        let fieldWidth = 40 * s
-        let valueBottomSpacing = TLClipEditingMetrics.speedValueBottomSpacing
-        let multiplierBottomSpacing = TLClipEditingMetrics.speedMultiplierBottomSpacing
-        let bottomExtension = TLClipEditingMetrics.speedFieldBottomExtension
-        return HStack(alignment: .bottom, spacing: 4 * s) {
+        let fontSize = 13 * s
+        return HStack(spacing: 6 * s) {
             Button {
                 commitSpeed()
                 onSpeedBack()
             } label: {
-                // Match transition settings back chevron; vertically centered
-                // on the value field.
+                // Match transition settings back chevron.
                 MixrChevron(direction: .back, size: 10.5 * s)
-                    .offset(y: TLClipEditingMetrics.speedChevronVerticalOffset)
                     .frame(width: 14 * s, height: fieldHeight)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            Text("×")
-                .font(.system(size: 13 * s, weight: .semibold))
-                .foregroundStyle(MixrColors.textPrimary)
-                .padding(.bottom, multiplierBottomSpacing)
-                .padding(.trailing, 2 * s)
+            // The value reads like the preset chips ("1.5×"): one unit, the
+            // × a quieter suffix, the box hugging it with equal insets.
+            HStack(spacing: 1 * s) {
+                TLSpeedValueField(
+                    text: $speedText,
+                    isFocused: $isSpeedFieldFocused,
+                    fontSize: fontSize,
+                    onSubmit: commitSpeed
+                )
+                // A UIKit text field can keep a wider intrinsic width, so
+                // size and clip it to the typed value.
+                .frame(width: Self.valueWidth(speedText, fontSize: fontSize), height: fieldHeight)
+                .clipped()
 
-            TLSpeedValueField(
-                text: $speedText,
-                isFocused: $isSpeedFieldFocused,
-                fontSize: 13 * s,
-                onSubmit: commitSpeed
-            )
-            .padding(
-                .horizontal,
-                TLClipEditingMetrics.speedFieldHorizontalPadding
-            )
-            .padding(.bottom, valueBottomSpacing)
-            // A UIKit text field can retain an intrinsic width wider than this
-            // frame, so clip at the SwiftUI boundary that defines the box.
-            .frame(width: fieldWidth, height: fieldHeight, alignment: .bottomTrailing)
-            .clipped()
+                Text("×")
+                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                    .foregroundStyle(MixrColors.textSecondary)
+            }
+            .padding(.horizontal, TLClipEditingMetrics.speedFieldHorizontalPadding)
+            .frame(height: fieldHeight)
             .background {
                 RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
                     .fill(Color.white.opacity(0.08))
-                    .frame(height: fieldHeight + bottomExtension)
-                    .offset(y: bottomExtension / 2)
             }
         }
         .onChange(of: isSpeedFieldFocused) { _, focused in
@@ -786,6 +808,16 @@ struct TLClipContextToolbar: View {
                 commitSpeed()
             }
         }
+    }
+
+    /// Width of the typed value (plus the caret), so the box hugs it.
+    private static func valueWidth(_ text: String, fontSize: CGFloat) -> CGFloat {
+        let base = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        let font = base.fontDescriptor.withDesign(.rounded)
+            .map { UIFont(descriptor: $0, size: fontSize) } ?? base
+        let sample = text.isEmpty ? "0" : text
+        let width = (sample as NSString).size(withAttributes: [.font: font]).width
+        return min(ceil(width) + 2, 48)
     }
 
     private func commitSpeed() {
@@ -881,7 +913,7 @@ private struct TLSpeedValueField: UIViewRepresentable {
         field.keyboardType = .decimalPad
         field.returnKeyType = .done
         field.textAlignment = .right
-        field.contentVerticalAlignment = .bottom
+        field.contentVerticalAlignment = .center
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
         field.spellCheckingType = .no
@@ -956,12 +988,17 @@ private struct TLSpeedValueField: UIViewRepresentable {
                 items.append(item)
             }
             items.append(UIBarButtonItem(systemItem: .flexibleSpace))
-            items.append(UIBarButtonItem(
+            let done = UIBarButtonItem(
                 title: "Done",
                 style: .prominent,
                 target: self,
                 action: #selector(doneTapped)
-            ))
+            )
+            // A prominent item fills with its tint; the bar's white tint
+            // would leave white text on white. Use the app's primary purple
+            // (Play, tour Next).
+            done.tintColor = UIColor(MixrColors.primaryPurple)
+            items.append(done)
             bar.items = items
             bar.sizeToFit()
             return bar

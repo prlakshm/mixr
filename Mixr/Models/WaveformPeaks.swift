@@ -33,6 +33,48 @@ nonisolated struct WaveformPeaks: Sendable {
         return bars
     }
 
+    /// Peaks for `url`: from the on-disk cache if this file was read before,
+    /// otherwise read from the audio and saved, so reopening a project
+    /// draws every waveform at once.
+    static func load(url: URL) -> WaveformPeaks? {
+        let cacheFile = cacheURL(for: url)
+        if let cacheFile, let data = try? Data(contentsOf: cacheFile),
+           !data.isEmpty, data.count % MemoryLayout<Float>.size == 0 {
+            let values = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+            return WaveformPeaks(values: values)
+        }
+        guard let peaks = read(url: url) else { return nil }
+        if let cacheFile {
+            try? FileManager.default.createDirectory(
+                at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            let data = peaks.values.withUnsafeBufferPointer { Data(buffer: $0) }
+            try? data.write(to: cacheFile, options: .atomic)
+        }
+        return peaks
+    }
+
+    /// Cache file keyed by the audio's path and size. Every import gets its
+    /// own folder, so a path is never reused for different audio.
+    private static func cacheURL(for url: URL) -> URL? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        else { return nil }
+        let path = url.standardizedFileURL.path
+        let key = "\(String(stableHash(path), radix: 16))-\(size)"
+        return caches.appendingPathComponent("WaveformPeaks", isDirectory: true)
+            .appendingPathComponent(key + ".peaks")
+    }
+
+    /// FNV-1a: stable across launches (Swift's Hasher is seeded per run).
+    private static func stableHash(_ string: String) -> UInt64 {
+        var h: UInt64 = 0xcbf29ce484222325
+        for byte in string.utf8 { h = (h ^ UInt64(byte)) &* 0x100000001b3 }
+        return h
+    }
+
     /// Reads the file once: peak |sample| across channels per 10 ms.
     static func read(url: URL) -> WaveformPeaks? {
         let scoped = url.startAccessingSecurityScopedResource()
@@ -84,8 +126,9 @@ final class WaveformPeakCache: ObservableObject {
         if let ready = peaks[url] { return ready }
         if !pending.contains(url) {
             pending.insert(url)
-            Task.detached(priority: .utility) {
-                let result = WaveformPeaks.read(url: url)
+            // User-initiated: these are on screen and the user is waiting.
+            Task.detached(priority: .userInitiated) {
+                let result = WaveformPeaks.load(url: url)
                 await MainActor.run {
                     self.pending.remove(url)
                     if let result { self.peaks[url] = result }
