@@ -35,8 +35,8 @@ check(
     matches(#"toolbarSpeedBodyHeight\s*:\s*CGFloat\s*=\s*ts\s*\(\s*46\s*\)"#)
 )
 check(
-    "Speed value field is visually shorter",
-    matches(#"fieldHeight\s*=\s*24\s*\*\s*s"#)
+    "Speed value field keeps its 24 pt (scaled) text height",
+    matches(#"speedValueFieldHeight\s*:\s*CGFloat\s*=\s*ts\(24\)"#)
 )
 check(
     "Speed pane padding is 6/10/0/2",
@@ -80,13 +80,15 @@ check(
 )
 
 check(
-    "Speed value reads like the chips (1.0×): × is a quiet suffix inside a box that hugs the value",
+    "Speed value reads like the chips (1.0×): the box hugs the number, × centred outside it, a size up",
     source.contains("Text(\"×\")")
-        && source.contains(".foregroundStyle(MixrColors.textSecondary)")
-        && source.contains(".frame(width: Self.valueWidth(speedText, fontSize: fontSize), height: fieldHeight)")
-        && source.contains("static let speedFieldHorizontalPadding: CGFloat = 8")
+        && source.contains(".font(.system(size: M.speedSuffixSize, weight: .medium, design: .rounded))")
+        && matches(#"speedBoxPaddingH\s*:\s*CGFloat\s*=\s*ts\(11\)"#)
+        && matches(#"speedBoxPaddingV\s*:\s*CGFloat\s*=\s*ts\(3\.5\)"#)
+        && matches(#"speedSuffixSize\s*:\s*CGFloat\s*=\s*ts\(16\)"#)
         && source.contains("field.contentVerticalAlignment = .center")
-        && !source.contains("speedMultiplierBottomSpacing")
+        && source.contains("case .speed: TLClipEditingMetrics.speedPaneWidth(for: speedText)")
+        && !source.contains("SpeedFieldStyle")
 )
 
 if failures > 0 {

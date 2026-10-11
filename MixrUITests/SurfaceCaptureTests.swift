@@ -127,8 +127,6 @@ final class SurfaceCaptureTests: MixrUITestCase {
         tap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Night Signals clip'")).firstMatch)
         sleep(1)
         capture("clip-toolbar")
-        let split = app.buttons["Split"].frame, delete = app.buttons["Delete"].frame
-        print("TOOLBAR-FRAMES split=\(split) delete=\(delete)")
     }
 
     /// Speed editing: the toolbar morphs into the ×-field and the keypad
@@ -139,5 +137,8 @@ final class SurfaceCaptureTests: MixrUITestCase {
         tap(app.buttons["Speed"])
         sleep(2)
         capture("speed-editor")
+        app.textFields.firstMatch.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + "0.75")
+        sleep(1)
+        capture("speed-editor-075")
     }
 }

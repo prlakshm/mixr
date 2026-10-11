@@ -53,8 +53,9 @@ enum TLClipEditingMetrics {
         let columns = ToolbarAction.allCases.map(\.columnWidth).reduce(0, +)
         return columns + 2 * (toolbarEdgeMargin - toolbarItemGap / 2)
     }()
-    /// Compact speed-only bubble after removing the trailing checkmark.
-    static let toolbarSpeedWidth: CGFloat = ts(98)
+    /// Speed pane width for edge clamping (sized for a 3-digit "0.75";
+    /// the pane itself hugs whatever is typed).
+    static let toolbarSpeedWidth: CGFloat = speedPaneWidth(for: "0.75")
     static let toolbarBodyHeight: CGFloat = ts(50)
     static let toolbarSpeedBodyHeight: CGFloat = ts(46)
     /// Glass-only shift that puts the middle of the Speed–Duplicate gap on
@@ -83,8 +84,43 @@ enum TLClipEditingMetrics {
     static let toolbarActionIconHeight: CGFloat = ts(14)
     static let toolbarActionLabelSize: CGFloat = ts(9.8)
     static let toolbarActionTopPadding: CGFloat = ts(2)
-    /// Equal inset either side of "1.0×" inside its box.
-    static let speedFieldHorizontalPadding: CGFloat = 8
+    /// Speed value box: the number with equal side insets and enough
+    /// height to sit in proportion to the pane; × follows outside it.
+    static let speedValueFontSize: CGFloat = ts(13)
+    static let speedValueFieldHeight: CGFloat = ts(24)
+    static let speedBoxPaddingH: CGFloat = ts(11)
+    static let speedBoxPaddingV: CGFloat = ts(3.5)
+    static let speedBoxRadius: CGFloat = ts(8)
+    /// × suffix: centred on the number, a size up, medium weight.
+    static let speedSuffixSize: CGFloat = ts(16)
+    static let speedSuffixGap: CGFloat = ts(4)
+    static let speedChevronWidth: CGFloat = ts(14)
+    static let speedChevronGap: CGFloat = ts(6)
+
+    private static func roundedFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let base = UIFont.systemFont(ofSize: size, weight: weight)
+        return base.fontDescriptor.withDesign(.rounded)
+            .map { UIFont(descriptor: $0, size: size) } ?? base
+    }
+
+    /// Width of the typed value (plus the caret), so the box hugs it.
+    static func speedValueWidth(_ text: String) -> CGFloat {
+        let font = roundedFont(size: speedValueFontSize, weight: .semibold)
+        let sample = text.isEmpty ? "0" : text
+        let width = (sample as NSString).size(withAttributes: [.font: font]).width
+        return min(ceil(width) + 2, 48)
+    }
+
+    /// The speed pane hugs its content, so the margins stay even whether
+    /// it reads 1.0 or 0.75.
+    static func speedPaneWidth(for text: String) -> CGFloat {
+        let suffix = ceil(("×" as NSString).size(
+            withAttributes: [.font: roundedFont(size: speedSuffixSize, weight: .medium)]
+        ).width)
+        return toolbarSpeedLeadingPadding + speedChevronWidth + speedChevronGap
+            + speedValueWidth(text) + 2 * speedBoxPaddingH
+            + speedSuffixGap + suffix + toolbarSpeedTrailingPadding
+    }
     static let toolbarMorphDuration: Double = 0.28
     static let minPlaybackSpeed: Double = 0.25
     static let maxPlaybackSpeed: Double = 4.0
@@ -575,7 +611,7 @@ struct TLClipContextToolbar: View {
     private var bodyWidth: CGFloat {
         switch mode {
         case .actions: TLClipEditingMetrics.toolbarWidth
-        case .speed: TLClipEditingMetrics.toolbarSpeedWidth
+        case .speed: TLClipEditingMetrics.speedPaneWidth(for: speedText)
         }
     }
 
@@ -763,44 +799,44 @@ struct TLClipContextToolbar: View {
     }
 
     private var speedContent: some View {
-        let s = TLClipEditingMetrics.toolbarScale
-        let fieldHeight = 24 * s
-        let fontSize = 13 * s
-        return HStack(spacing: 6 * s) {
+        typealias M = TLClipEditingMetrics
+        let s = M.toolbarScale
+        return HStack(spacing: M.speedChevronGap) {
             Button {
                 commitSpeed()
                 onSpeedBack()
             } label: {
                 // Match transition settings back chevron.
                 MixrChevron(direction: .back, size: 10.5 * s)
-                    .frame(width: 14 * s, height: fieldHeight)
+                    .frame(width: M.speedChevronWidth, height: M.speedValueFieldHeight)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // The value reads like the preset chips ("1.5×"): one unit, the
-            // × a quieter suffix, the box hugging it with equal insets.
-            HStack(spacing: 1 * s) {
+            // Reads like the preset chips ("1.5×"): the box holds only the
+            // number, hugging it with equal insets; the × follows outside
+            // it, centred on the number and a size up.
+            HStack(spacing: M.speedSuffixGap) {
                 TLSpeedValueField(
                     text: $speedText,
                     isFocused: $isSpeedFieldFocused,
-                    fontSize: fontSize,
+                    fontSize: M.speedValueFontSize,
                     onSubmit: commitSpeed
                 )
                 // A UIKit text field can keep a wider intrinsic width, so
                 // size and clip it to the typed value.
-                .frame(width: Self.valueWidth(speedText, fontSize: fontSize), height: fieldHeight)
+                .frame(width: M.speedValueWidth(speedText), height: M.speedValueFieldHeight)
                 .clipped()
+                .padding(.horizontal, M.speedBoxPaddingH)
+                .padding(.vertical, M.speedBoxPaddingV)
+                .background {
+                    RoundedRectangle(cornerRadius: M.speedBoxRadius, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                }
 
                 Text("×")
-                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                    .font(.system(size: M.speedSuffixSize, weight: .medium, design: .rounded))
                     .foregroundStyle(MixrColors.textSecondary)
-            }
-            .padding(.horizontal, TLClipEditingMetrics.speedFieldHorizontalPadding)
-            .frame(height: fieldHeight)
-            .background {
-                RoundedRectangle(cornerRadius: 7 * s, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
             }
         }
         .onChange(of: isSpeedFieldFocused) { _, focused in
@@ -808,16 +844,6 @@ struct TLClipContextToolbar: View {
                 commitSpeed()
             }
         }
-    }
-
-    /// Width of the typed value (plus the caret), so the box hugs it.
-    private static func valueWidth(_ text: String, fontSize: CGFloat) -> CGFloat {
-        let base = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let font = base.fontDescriptor.withDesign(.rounded)
-            .map { UIFont(descriptor: $0, size: fontSize) } ?? base
-        let sample = text.isEmpty ? "0" : text
-        let width = (sample as NSString).size(withAttributes: [.font: font]).width
-        return min(ceil(width) + 2, 48)
     }
 
     private func commitSpeed() {
@@ -912,7 +938,7 @@ private struct TLSpeedValueField: UIViewRepresentable {
         field.clipsToBounds = true
         field.keyboardType = .decimalPad
         field.returnKeyType = .done
-        field.textAlignment = .right
+        field.textAlignment = .center
         field.contentVerticalAlignment = .center
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
