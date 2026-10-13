@@ -52,13 +52,6 @@ enum OnboardingTourTokens {
         }
     }
 
-    /// An occluder's silhouette (see `OnboardingTarget.occluders`).
-    static func occluderPath(_ target: OnboardingTarget, in frame: CGRect) -> Path {
-        target == .clipToolbarPointer
-            ? TLToolbarPointer().path(in: frame)
-            : Path(roundedRect: frame, cornerRadius: controlRadius(for: target), style: .continuous)
-    }
-
     static func spotlightRadius(for target: OnboardingTarget) -> CGFloat {
         controlRadius(for: target) + padding(for: target)
     }
@@ -93,6 +86,14 @@ struct OnboardingTourOverlay: View {
     var onBack: () -> Void = {}
     /// Replaces "Next" (step 1 on an empty project reads "Select").
     var primaryTitle: String? = nil
+    /// The clip toolbar's glass, once step 4's tap has opened it: the
+    /// spotlight moves onto it and the finger's job is done. The card stays
+    /// beside the step's target, so it doesn't jump.
+    var openedToolbarFrame: CGRect? = nil
+    /// Its pointer: lit with it and drawn over the ring, so the ring hugs
+    /// the glass like every other spotlight and the pointer still points
+    /// through it at the clip.
+    var openedToolbarPointer = Path()
     /// Floating chrome over the spotlight (the clip toolbar over its clip),
     /// in this overlay's coordinate space: it stays dimmed and the ring
     /// passes behind it.
@@ -101,42 +102,53 @@ struct OnboardingTourOverlay: View {
     @State private var cardSize = CGSize(width: OnboardingTourTokens.cardWidth, height: 150)
 
     var body: some View {
-        let hole = targetFrame.map {
+        let lit: OnboardingTarget = openedToolbarFrame == nil ? step.target : .clipToolbarBody
+        let targetHole = targetFrame.map {
             $0.insetBy(
                 dx: -OnboardingTourTokens.padding(for: step.target),
                 dy: -OnboardingTourTokens.padding(for: step.target)
             )
         }
+        let hole = openedToolbarFrame.map {
+            $0.insetBy(dx: -OnboardingTourTokens.padding(for: lit), dy: -OnboardingTourTokens.padding(for: lit))
+        } ?? targetHole
         ZStack(alignment: .topLeading) {
-            scrim(hole: hole)
+            scrim(hole: hole, cornerRadius: OnboardingTourTokens.spotlightRadius(for: lit))
 
             if let hole {
-                RoundedRectangle(cornerRadius: OnboardingTourTokens.spotlightRadius(for: step.target), style: .continuous)
+                RoundedRectangle(cornerRadius: OnboardingTourTokens.spotlightRadius(for: lit), style: .continuous)
                     .strokeBorder(OnboardingTourTokens.ring, lineWidth: 1.5)
                     .shadow(color: OnboardingTourTokens.ringGlow, radius: 9)
                     .frame(width: hole.width, height: hole.height)
                     .offset(x: hole.minX, y: hole.minY)
                     .frame(width: containerSize.width, height: containerSize.height, alignment: .topLeading)
-                    // The ring passes behind the occluders.
-                    .mask { Path(CGRect(origin: .zero, size: containerSize)).subtracting(occluders) }
+                    // The ring passes behind the occluders and the pointer.
+                    .mask {
+                        Path(CGRect(origin: .zero, size: containerSize))
+                            .subtracting(occluders.union(openedToolbarPointer))
+                    }
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
 
-                OnboardingFinger(gesture: step.gesture, travel: fingerTravel(in: hole))
-                .position(fingerPoint(in: hole))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-                .id(step)
+                if openedToolbarFrame == nil {
+                    OnboardingFinger(gesture: step.gesture, travel: fingerTravel(in: hole))
+                    .position(fingerPoint(in: hole))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .id(step)
+                }
             }
 
             OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack, primaryTitle: primaryTitle)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
-                .offset(cardOrigin(hole: hole))
+                .offset(cardOrigin(hole: targetHole))
                 .id(step)
                 .transition(.opacity)
         }
         .frame(width: containerSize.width, height: containerSize.height, alignment: .topLeading)
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: step)
+        // The spotlight glides from the clip onto the toolbar its tap opened.
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: openedToolbarFrame == nil)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .onAppear { announce() }
@@ -148,11 +160,12 @@ struct OnboardingTourOverlay: View {
     // elsewhere the scrim swallows them so the editor isn't edited by
     // accident mid-tour.
     @ViewBuilder
-    private func scrim(hole: CGRect?) -> some View {
+    private func scrim(hole: CGRect?, cornerRadius: CGFloat) -> some View {
         let shape = SpotlightScrimShape(
             hole: hole,
-            cornerRadius: OnboardingTourTokens.spotlightRadius(for: step.target),
-            occluders: occluders
+            cornerRadius: cornerRadius,
+            occluders: occluders,
+            alsoLit: openedToolbarPointer
         )
         let base = shape
             .fill(OnboardingTourTokens.scrim, style: FillStyle(eoFill: true))
@@ -214,18 +227,29 @@ struct OnboardingTourOverlay: View {
     }
 }
 
-/// Full-container rectangle with a rounded hole, minus any occluders (they
-/// stay dimmed); fill with eoFill.
+/// Full-container rectangle with a rounded hole (plus anything else lit
+/// with it), minus any occluders (they stay dimmed); fill with eoFill.
 struct SpotlightScrimShape: Shape {
     var hole: CGRect?
     var cornerRadius: CGFloat
     var occluders = Path()
+    var alsoLit = Path()
+
+    /// The hole moves with the ring when the spotlight changes target.
+    var animatableData: AnimatablePair<CGRect.AnimatableData, CGFloat> {
+        get { AnimatablePair((hole ?? .zero).animatableData, cornerRadius) }
+        set {
+            hole?.animatableData = newValue.first
+            cornerRadius = newValue.second
+        }
+    }
 
     func path(in rect: CGRect) -> Path {
         var path = Path(rect)
         if let hole {
             var lit = Path()
             lit.addRoundedRect(in: hole, cornerSize: CGSize(width: cornerRadius, height: cornerRadius), style: .continuous)
+            if !alsoLit.isEmpty { lit = lit.union(alsoLit) }
             path.addPath(occluders.isEmpty ? lit : lit.subtracting(occluders))
         }
         return path

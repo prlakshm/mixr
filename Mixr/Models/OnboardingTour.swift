@@ -18,7 +18,8 @@ nonisolated enum OnboardingTarget: Hashable, Sendable {
     case timelineViewport
     /// The clip toolbar's glass and pointer. Not step targets: the toolbar
     /// floats over its clip, so a spotlight passes behind it — dimmed with
-    /// the rest of the editor, never half lit with the ring through it.
+    /// the rest of the editor, never half lit with the ring through it —
+    /// until step 4's tap opens it and the spotlight moves onto it.
     case clipToolbarBody
     case clipToolbarPointer
 
@@ -28,8 +29,6 @@ nonisolated enum OnboardingTarget: Hashable, Sendable {
         self == .firstClip ? .timelineViewport : nil
     }
 
-    /// Floating chrome every spotlight passes behind.
-    static let occluders: [OnboardingTarget] = [.clipToolbarBody, .clipToolbarPointer]
 }
 
 /// The motion the animated finger demonstrates over a target.
@@ -64,7 +63,7 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
         case .importSongs: "Tap Import Songs to bring in the tracks you want to remix."
         case .deleteSong: "Slide a song to the left, then tap Delete to remove it."
         case .volume: "Drag a slider on the right. S solos a song, M mutes it."
-        case .clipTools: "Split it, change its speed, duplicate it or delete it."
+        case .clipTools: "Split, change its speed or volume, duplicate or delete it."
         case .tuneSound: "With a clip selected, add Reverb, Echo, Pitch and more."
         case .soundEffects: "Tap sfx for risers, impacts, bass drops and more."
         }
@@ -108,6 +107,11 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
     /// if none is. Step 4 doesn't: tapping the clip shows its toolbar
     /// right where it was tapped.
     var selectsClip: Bool { self == .tuneSound }
+
+    /// Step 4's tap opens the clip toolbar, which its tip describes: once
+    /// it's open the spotlight moves onto it (the finger's job is done) and
+    /// the tip stays until Next.
+    var spotlightsOpenedToolbar: Bool { self == .clipTools }
 
     var isLast: Bool { self == Self.allCases.last }
 

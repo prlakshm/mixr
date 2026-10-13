@@ -160,6 +160,23 @@ final class OnboardingTourFlowTests: MixrUITestCase {
         assertTourStep(4)
     }
 
+    func testTheOpenedToolbarTakesTheSpotlightAndWorks() {
+        launchSeededAtStepTwo()
+        nextButton.tap(); nextButton.tap()
+        assertTourStep(4)
+        let clip = tourClip
+        tapPoint(clip.frame.minX + 90, clip.frame.midY)
+        let volume = app.buttons["Volume"]
+        XCTAssertTrue(volume.waitForExistence(timeout: 2), "the tap shows the clip toolbar")
+        sleep(1) // the spotlight glides onto the toolbar
+        // Its icon sits above the clip: under the scrim until the
+        // spotlight moved onto the toolbar.
+        tapPoint(volume.frame.midX, volume.frame.minY + 6)
+        XCTAssertTrue(app.descendants(matching: .any)["Clip volume"].waitForExistence(timeout: 2),
+                      "the spotlit toolbar really works")
+        assertTourStep(4) // the tip waits for Next
+    }
+
     func testEffectsStepSelectsAClipAndRestoresSelection() {
         launchSeededAtStepTwo()
         nextButton.tap(); nextButton.tap(); nextButton.tap()

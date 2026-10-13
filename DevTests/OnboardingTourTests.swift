@@ -15,7 +15,7 @@ let expected: [(String, String)] = [
     ("Import your songs", "Tap Import Songs to bring in the tracks you want to remix."),
     ("Swipe left to delete", "Slide a song to the left, then tap Delete to remove it."),
     ("Set each song\u{2019}s volume", "Drag a slider on the right. S solos a song, M mutes it."),
-    ("Tap a clip for tools", "Split it, change its speed, duplicate it or delete it."),
+    ("Tap a clip for tools", "Split, change its speed or volume, duplicate or delete it."),
     ("Tune the sound", "With a clip selected, add Reverb, Echo, Pitch and more."),
     ("Add sound effects", "Tap sfx for risers, impacts, bass drops and more."),
 ]
@@ -33,6 +33,8 @@ check("Every step lets touches through to its spotlit control",
       OnboardingStep.allCases.allSatisfy(\.passesTouchesToTarget))
 check("Only the effects step selects a clip itself (step 4 waits for a tap)",
       OnboardingStep.allCases.filter(\.selectsClip) == [.tuneSound])
+check("Only step 4 moves its spotlight onto the toolbar its tap opens",
+      OnboardingStep.allCases.filter(\.spotlightsOpenedToolbar) == [.clipTools])
 var opened = OnboardingTourState(progress: .notStarted, activeStep: .soundEffects)
 opened.endForOpenedSurface()
 check("Opening a real surface from the spotlight ends the tour for good",
@@ -195,11 +197,16 @@ check("Moving on from step 2 closes a swiped-open song",
       timeline.contains("if step != .deleteSong, revealedDeleteRowID != nil"))
 check("The primary button never wraps (\"Start mixing\" beside Back)", overlay.contains(".lineLimit(1)\n                .fixedSize()"))
 let clipUI = source("Mixr/DesignSystem/ClipEditingUI.swift")
-check("The step-4 spotlight passes behind the clip toolbar: dimmed whole, the ring never through its labels",
+check("A spotlight passes behind the clip toolbar: dimmed whole, the ring never through its labels",
       clipUI.contains(".onboardingTarget(.clipToolbarBody)") && clipUI.contains(".onboardingTarget(.clipToolbarPointer)")
-        && timeline.contains("occluders: OnboardingTarget.occluders")
+        && timeline.contains("occluders: opensToolbar ? Path() : pointer.union(glass.map {")
         && overlay.contains("lit.subtracting(occluders)")
-        && overlay.contains(".mask { Path(CGRect(origin: .zero, size: containerSize)).subtracting(occluders) }"))
+        && overlay.contains(".subtracting(occluders.union(openedToolbarPointer))"))
+check("Once step 4's tap opens the toolbar, the spotlight moves onto it; the card stays and the finger goes",
+      timeline.contains("let opensToolbar = step.spotlightsOpenedToolbar && glass != nil")
+        && timeline.contains("openedToolbarFrame: opensToolbar ? glass : nil")
+        && overlay.contains("cardOrigin(hole: targetHole)")
+        && overlay.contains("if openedToolbarFrame == nil {"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")
 exit(failures == 0 ? 0 : 1)
