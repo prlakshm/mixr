@@ -5062,7 +5062,7 @@ private struct TLEffectsPanel: View {
                 .padding(.leading, leadingPad)
                 .padding(.trailing, isExpanded ? trailingPad : 32)
                 .padding(.top, (6 * contentScale).rounded())
-                .padding(.bottom, (4 * contentScale).rounded())
+                .padding(.bottom, (EditorLayoutMetrics.effectsRowFoot * contentScale).rounded())
                 .offset(x: rowOffset)
                 .animation(expandAnimation, value: selectedEffect)
             }

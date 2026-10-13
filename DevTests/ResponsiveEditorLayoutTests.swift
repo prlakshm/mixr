@@ -29,7 +29,7 @@ check("Approved phone uses the regular one-row transport", approvedPhone.mode ==
 checkClose("Approved phone keeps the Tracks ideal width", approvedPhone.tracksWidth, 208)
 checkClose("Approved phone keeps the Controls ideal width", approvedPhone.controlsWidth, 130)
 checkClose("Approved phone gives remaining width to the timeline", approvedPhone.timelineWidth, 412)
-checkClose("Expanded Effects hugs its card row (header + cards + 4pt foot)", approvedPhone.effectsHeight, 105)
+checkClose("Expanded Effects hugs its card row (header + cards + 12pt foot)", approvedPhone.effectsHeight, 113)
 checkClose("Regular transport uses the approved height", approvedPhone.transportHeight, 50)
 
 checkClose("Approved phone keeps the phone-baseline toolbar", approvedPhone.transport.scale, 1)
