@@ -47,7 +47,16 @@ enum OnboardingTourTokens {
         case .firstClip: WaveformMetrics.cornerRadius
         case .firstSongRow, .volumeControls, .timelineViewport: 8
         case .effectsPanel: 12
+        case .clipToolbarBody: TLClipEditingMetrics.toolbarCornerRadius
+        case .clipToolbarPointer: 0
         }
+    }
+
+    /// An occluder's silhouette (see `OnboardingTarget.occluders`).
+    static func occluderPath(_ target: OnboardingTarget, in frame: CGRect) -> Path {
+        target == .clipToolbarPointer
+            ? TLToolbarPointer().path(in: frame)
+            : Path(roundedRect: frame, cornerRadius: controlRadius(for: target), style: .continuous)
     }
 
     static func spotlightRadius(for target: OnboardingTarget) -> CGFloat {
@@ -84,6 +93,10 @@ struct OnboardingTourOverlay: View {
     var onBack: () -> Void = {}
     /// Replaces "Next" (step 1 on an empty project reads "Select").
     var primaryTitle: String? = nil
+    /// Floating chrome over the spotlight (the clip toolbar over its clip),
+    /// in this overlay's coordinate space: it stays dimmed and the ring
+    /// passes behind it.
+    var occluders = Path()
 
     @State private var cardSize = CGSize(width: OnboardingTourTokens.cardWidth, height: 150)
 
@@ -103,6 +116,9 @@ struct OnboardingTourOverlay: View {
                     .shadow(color: OnboardingTourTokens.ringGlow, radius: 9)
                     .frame(width: hole.width, height: hole.height)
                     .offset(x: hole.minX, y: hole.minY)
+                    .frame(width: containerSize.width, height: containerSize.height, alignment: .topLeading)
+                    // The ring passes behind the occluders.
+                    .mask { Path(CGRect(origin: .zero, size: containerSize)).subtracting(occluders) }
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
 
@@ -135,7 +151,8 @@ struct OnboardingTourOverlay: View {
     private func scrim(hole: CGRect?) -> some View {
         let shape = SpotlightScrimShape(
             hole: hole,
-            cornerRadius: OnboardingTourTokens.spotlightRadius(for: step.target)
+            cornerRadius: OnboardingTourTokens.spotlightRadius(for: step.target),
+            occluders: occluders
         )
         let base = shape
             .fill(OnboardingTourTokens.scrim, style: FillStyle(eoFill: true))
@@ -197,15 +214,19 @@ struct OnboardingTourOverlay: View {
     }
 }
 
-/// Full-container rectangle with a rounded hole; fill with eoFill.
+/// Full-container rectangle with a rounded hole, minus any occluders (they
+/// stay dimmed); fill with eoFill.
 struct SpotlightScrimShape: Shape {
     var hole: CGRect?
     var cornerRadius: CGFloat
+    var occluders = Path()
 
     func path(in rect: CGRect) -> Path {
         var path = Path(rect)
         if let hole {
-            path.addRoundedRect(in: hole, cornerSize: CGSize(width: cornerRadius, height: cornerRadius), style: .continuous)
+            var lit = Path()
+            lit.addRoundedRect(in: hole, cornerSize: CGSize(width: cornerRadius, height: cornerRadius), style: .continuous)
+            path.addPath(occluders.isEmpty ? lit : lit.subtracting(occluders))
         }
         return path
     }

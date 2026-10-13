@@ -999,7 +999,11 @@ struct TimelineScreen: View {
                     onBack: {
                         withAnimation(.easeOut(duration: 0.2)) { tour.back() }
                     },
-                    primaryTitle: selectsSongs ? OnboardingCopy.select : nil
+                    primaryTitle: selectsSongs ? OnboardingCopy.select : nil,
+                    occluders: OnboardingTarget.occluders.reduce(into: Path()) { path, target in
+                        guard let anchor = anchors[target] else { return }
+                        path = path.union(OnboardingTourTokens.occluderPath(target, in: proxy[anchor]))
+                    }
                 )
             }
             .transition(.opacity)

@@ -331,6 +331,39 @@ nonisolated enum AutoTransitionEnvelope {
         return Continuity(previous: previous, next: next)
     }
 
+    // MARK: Clip volume across a split
+
+    /// A split clip's pieces can carry different clip volumes (lowering a
+    /// song's tail under the next one, say). Where a piece continues the
+    /// previous one sample-for-sample there is no fade, so the level eases
+    /// from the previous piece's volume to this one's over one beat — a
+    /// quick fader move, never a step. Live playback, export and the test
+    /// mixdown all use this, so they can't disagree.
+    static func clipVolume(
+        _ volume: Double,
+        previousVolume: Double?,
+        clipStart: Double,
+        at t: Double,
+        bpm: Double
+    ) -> Double {
+        guard let previous = previousVolume, abs(previous - volume) > 1e-6 else { return volume }
+        let ramp = min(max(60 / max(bpm, 1), 0.25), 0.6)
+        return previous + (volume - previous) * smooth((t - clipStart) / ramp)
+    }
+
+    /// The clip `clip` continues sample-for-sample (abutting on the
+    /// timeline, same source material and rate), if any — the same test
+    /// `continuity(for:in:)` uses for its leading edge.
+    static func continuedClip(before clip: MixrClip, in clips: [MixrClip]) -> MixrClip? {
+        let clipStart = MixrTimeline.seconds(fromUnits: clip.start)
+        return clips.first { other in
+            other.id != clip.id && !other.isSoundEffect
+                && abs(MixrTimeline.seconds(fromUnits: other.start + other.length) - clipStart) <= 0.02
+                && abs(sourceEndSeconds(of: other) - clip.sourceOffsetSeconds) <= 0.05
+                && abs(other.playbackSpeed - clip.playbackSpeed) <= 0.001
+        }
+    }
+
     /// Splits a track's song clips onto two player lanes so overlapping
     /// clips (true crossfades) can sound simultaneously with independent
     /// gains. Non-overlapping clips stay on lane 0.

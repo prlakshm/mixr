@@ -194,6 +194,12 @@ check("A sheet opened from the spotlight (sfx, Auto) ends the tour",
 check("Moving on from step 2 closes a swiped-open song",
       timeline.contains("if step != .deleteSong, revealedDeleteRowID != nil"))
 check("The primary button never wraps (\"Start mixing\" beside Back)", overlay.contains(".lineLimit(1)\n                .fixedSize()"))
+let clipUI = source("Mixr/DesignSystem/ClipEditingUI.swift")
+check("The step-4 spotlight passes behind the clip toolbar: dimmed whole, the ring never through its labels",
+      clipUI.contains(".onboardingTarget(.clipToolbarBody)") && clipUI.contains(".onboardingTarget(.clipToolbarPointer)")
+        && timeline.contains("occluders: OnboardingTarget.occluders")
+        && overlay.contains("lit.subtracting(occluders)")
+        && overlay.contains(".mask { Path(CGRect(origin: .zero, size: containerSize)).subtracting(occluders) }"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")
 exit(failures == 0 ? 0 : 1)

@@ -685,6 +685,56 @@ do {
     check("Long blends render: sample peak ≤ −1 dBFS", dB(samplePeak(mix)) <= -0.99, String(format: "%.2f", dB(samplePeak(mix))))
 }
 
+// MARK: - 4c. Split + clip volume: the level eases, never steps
+
+do {
+    // A song split in two with the second piece at 50% (lowering a tail
+    // under the next song by hand). Rendered against the same song unsplit,
+    // the ratio isolates the gain curve the split produces.
+    let splitT = 20.0
+    func piece(_ start: Double, _ duration: Double, _ volume: Double, continues: Bool) -> AutoClipPlacement {
+        var p = AutoClipPlacement(
+            songID: trackA.id, sourceStart: 30 + start, timelineStart: start, timelineDuration: duration,
+            tempoRatio: 1, volume: volume, fadeIn: .none, fadeOut: .none, effects: ClipEffectSettings(),
+            role: .dominant, slotIndex: 0
+        )
+        p.envelopeBPM = songA.bpm
+        p.continuesPrevious = continues
+        return p
+    }
+    var splitPlan = mashupPlan
+    splitPlan.sfxEvents = []
+    splitPlan.placements = [piece(0, splitT, 1.0, continues: false), piece(splitT, 20, 0.5, continues: true)]
+    var wholePlan = splitPlan
+    wholePlan.placements = [piece(0, 40, 1.0, continues: false)]
+    let split = AutoOfflineMixdown.render(plan: splitPlan, sources: mashupSources, sampleRate: SR, includeTail: false).songBus
+    let whole = AutoOfflineMixdown.render(plan: wholePlan, sources: mashupSources, sampleRate: SR, includeTail: false).songBus
+    // PREVIOUS behaviour (the exporter): the new volume applied at once.
+    let stepped = whole.enumerated().map { i, v in Double(i) / SR >= splitT ? v * 0.5 : v }
+
+    /// Largest change of the gain curve between neighbouring 10 ms windows.
+    func steepest(_ x: [Float]) -> Double {
+        var worst = 0.0, previous: Double?
+        var w = splitT - 0.3
+        while w < splitT + 0.9 {
+            let g = level(x, w, w + 0.01) - level(whole, w, w + 0.01)
+            if let p = previous { worst = max(worst, abs(g - p)) }
+            previous = g; w += 0.01
+        }
+        return worst
+    }
+    let eased = steepest(split), step = steepest(stepped)
+    check("Split volume: the level eases into the lower piece (≤ 1 dB per 10 ms)", eased <= 1.0,
+          String(format: "%.2f dB", eased))
+    check("Previous instant step FAILS the same gate", step > 4, String(format: "%.2f dB", step))
+    let settled = level(split, splitT + 0.7, splitT + 1.2) - level(whole, splitT + 0.7, splitT + 1.2)
+    check("Split volume: settles at the piece's own level (−6 dB) within a beat", abs(settled + 6.02) <= 0.3,
+          String(format: "%.2f dB", settled))
+    let before = level(split, splitT - 1, splitT) - level(whole, splitT - 1, splitT)
+    check("Split volume: the first piece is untouched up to the split", abs(before) <= 0.05,
+          String(format: "%.2f dB", before))
+}
+
 // MARK: - 4a2. Loudness matched on what listeners hear (BS.1770 K-weighting)
 
 do {

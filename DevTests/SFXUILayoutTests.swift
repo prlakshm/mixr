@@ -346,6 +346,14 @@ check(
         && exportSource.contains("sfxTrack.volume * sfxTrack.sfxClipVolume(atSeconds: t)")
 )
 
+check(
+    "A split clip's volume change eases over a beat, identically live and in export",
+    engineSource.contains("AutoTransitionEnvelope.clipVolume(")
+        && exportSource.contains("AutoTransitionEnvelope.clipVolume(")
+        && engineSource.contains("AutoTransitionEnvelope.continuedClip(before: clip, in: songClips)?.volume")
+        && exportSource.contains("AutoTransitionEnvelope.continuedClip(before: clip, in: songClips)?.volume")
+)
+
 if failures > 0 {
     exit(1)
 }

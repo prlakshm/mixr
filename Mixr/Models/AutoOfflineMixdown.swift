@@ -72,6 +72,7 @@ nonisolated enum AutoOfflineMixdown {
                 usesEcho = renderPlacement(
                     p,
                     continuity: continuity,
+                    previousVolume: p.continuesPrevious && idx > 0 ? ordered[idx - 1].volume : nil,
                     source: source,
                     bpm: p.envelopeBPM > 0 ? p.envelopeBPM : plan.targetBPM,
                     trackVolume: trackVolume,
@@ -159,6 +160,7 @@ nonisolated enum AutoOfflineMixdown {
     private static func renderPlacement(
         _ p: AutoClipPlacement,
         continuity: AutoTransitionEnvelope.Continuity,
+        previousVolume: Double? = nil,
         source: Source,
         bpm: Double,
         trackVolume: Double,
@@ -213,7 +215,11 @@ nonisolated enum AutoOfflineMixdown {
             if envelope.highPassHz > AutoTransitionEnvelope.openHighPassHz + 1 { sample = hp.process(sample) }
             if min(envelope.lowPassHz, blurLP) < AutoTransitionEnvelope.openLowPassHz - 1 { sample = lp.process(sample) }
 
-            let g = Float(trackVolume * p.volume * envelope.gain)
+            let clipGain = AutoTransitionEnvelope.clipVolume(
+                p.volume, previousVolume: previousVolume,
+                clipStart: p.timelineStart, at: t, bpm: bpm
+            )
+            let g = Float(trackVolume * clipGain * envelope.gain)
             // AVAudioUnitDelay semantics: output = dry·(1 − mix) + wet·mix.
             let wetMix = Float(min(70, ClipEffectMapping.echoWetPercent(amount: echoLevel) + envelope.echoBoost) / 100)
             bus[outIdx] += sample * g * (1 - wetMix)

@@ -16,12 +16,20 @@ nonisolated enum OnboardingTarget: Hashable, Sendable {
     /// The visible part of the horizontally scrolling timeline. Not a step
     /// target: clips can run past it, so their spotlight is clipped to it.
     case timelineViewport
+    /// The clip toolbar's glass and pointer. Not step targets: the toolbar
+    /// floats over its clip, so a spotlight passes behind it — dimmed with
+    /// the rest of the editor, never half lit with the ring through it.
+    case clipToolbarBody
+    case clipToolbarPointer
 
     /// The container a target's spotlight is clipped to, if it can scroll
     /// out of view.
     var visibleBounds: OnboardingTarget? {
         self == .firstClip ? .timelineViewport : nil
     }
+
+    /// Floating chrome every spotlight passes behind.
+    static let occluders: [OnboardingTarget] = [.clipToolbarBody, .clipToolbarPointer]
 }
 
 /// The motion the animated finger demonstrates over a target.
