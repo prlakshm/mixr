@@ -394,9 +394,13 @@ struct EditorLayoutMetrics: Equatable {
     static let regularImportFooterHeight: CGFloat = 46
     static let compactImportFooterHeight: CGFloat = 82
 
-    /// Header + cards + a 4pt foot: the panel hugs its row instead of
-    /// leaving slack under the cards (it was 118 with ~17pt unused).
-    static let expandedEffectsHeight: CGFloat = 105
+    /// Space under the effect cards: clear of the home indicator on Face ID
+    /// phones (cards ~25pt from the screen edge) and off the bottom edge on
+    /// Home-button phones (~13pt). Was 4, which crowded both.
+    static let effectsRowFoot: CGFloat = 12
+    /// Header + cards + the foot: the panel hugs its row (it was 118, with
+    /// ~17pt of slack under the cards).
+    static let expandedEffectsHeight: CGFloat = 101 + effectsRowFoot
     /// Card growth on bigger screens is still measured against the original
     /// panel height, so trimming the slack doesn't resize tablet cards.
     static let effectsScaleReferenceHeight: CGFloat = 118
