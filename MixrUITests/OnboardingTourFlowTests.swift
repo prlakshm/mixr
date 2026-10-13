@@ -16,7 +16,8 @@ final class OnboardingTourFlowTests: MixrUITestCase {
     func testFirstLaunchShowsOnlyStepOne() {
         launch(fresh: true, tourDone: false)
         assertTourStep(1)
-        XCTAssertTrue(skipButton.exists && nextButton.exists)
+        XCTAssertTrue(skipButton.exists && selectButton.exists, "empty project: step 1 offers Select, not Next")
+        XCTAssertFalse(nextButton.exists)
         for step in 2...6 {
             XCTAssertFalse(app.staticTexts["Step \(step) of 6"].exists, "no flash of step \(step)")
         }
@@ -31,15 +32,24 @@ final class OnboardingTourFlowTests: MixrUITestCase {
         assertTourStep(2)
     }
 
-    func testNextWithoutImportingWaitsThenResumes() {
+    func testSelectPicksSongsThenContinuesAtStepTwo() {
         launch(fresh: true, tourDone: false)
         assertTourStep(1)
-        nextButton.tap()
-        assertNoTour()
-        footerImportButton.tap()
+        selectButton.tap()
         pickDemoSongs(["Paper Suns"])
         waitForSongs(1)
         assertTourStep(2)
+    }
+
+    func testCancellingTheSelectPickerStaysOnStepOne() {
+        launch(fresh: true, tourDone: false)
+        assertTourStep(1)
+        selectButton.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "document picker did not open")
+        cancel.tap()
+        assertTourStep(1)
+        XCTAssertTrue(selectButton.waitForExistence(timeout: 3))
     }
 
     func testWalkAllStepsAndFinish() {
@@ -98,19 +108,6 @@ final class OnboardingTourFlowTests: MixrUITestCase {
         assertTourStep(4)
         nextButton.tap()
         assertTourStep(5)
-    }
-
-    func testRelaunchWhileWaitingForFirstSong() {
-        launch(fresh: true, tourDone: false)
-        assertTourStep(1)
-        nextButton.tap()
-        assertNoTour()
-        relaunch()
-        assertNoTour()
-        footerImportButton.tap()
-        pickDemoSongs(["Night Signals"])
-        waitForSongs(1)
-        assertTourStep(2)
     }
 
     // MARK: Spotlight behaviour

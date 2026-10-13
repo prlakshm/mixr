@@ -52,9 +52,14 @@ MARK_WIDTH_FRACTION = 0.524
 # it removes the slant without touching any bar's height or order.
 ALIGN_BAR_CENTRES = True
 
+# MixrColors.brandMark* (the mark's own colours, shared with the logo beside
+# "Mixr" in the app): highlight #D4B4FF, top #AE74FF, mid #9352FA, bottom
+# #7F3CEE. The old ramp ended at #4610AD, nearly the tile's #14052B, so at
+# home-screen size the lower half of every bar vanished; every stop here
+# stays clearly lighter than the tile.
 BAR_GRADIENT = (
-    [(0xA4, 0x5C, 0xFF), (0x7E, 0x2B, 0xEA), (0x5C, 0x23, 0xBE), (0x46, 0x10, 0xAD)],
-    [0.0, 0.12, 0.58, 1.0],
+    [(0xD4, 0xB4, 0xFF), (0xAE, 0x74, 0xFF), (0x93, 0x52, 0xFA), (0x7F, 0x3C, 0xEE)],
+    [0.0, 0.14, 0.6, 1.0],
 )
 # The standalone logo carries an ambient wash down the field. The icon does
 # not: iOS already lays its own specular sheen over the tile, and the two
@@ -90,10 +95,24 @@ def ramp(stops, locs, t):
 #     tops and bottoms land on whole pixels,
 #   * taller bars to match the waveform beside "Mixr" in the app: the peak
 #     is 768 px, ~10.7× the bar width (was ~9.7×).
-ICON_BAR_WIDTH = 72
-ICON_PITCH = 120
-ICON_PEAK = 768
+#
+# October 2026 pass: the mark is 12% larger with thicker bars (94 px on a
+# 134 px pitch, 860 px peak), and it is optically rather than geometrically
+# centred. The peak (bar 3) sits left of centre and the dip (bar 4) right of
+# it, so with equal margins the mark read left-heavy and the tile looked
+# tilted. The group shifts right by its area-centroid offset (11 px), which
+# keeps every bar's height and order and puts the visual weight on centre.
+ICON_BAR_WIDTH = 94
+ICON_PITCH = 134
+ICON_PEAK = 860
 ICON_RELATIVE_HEIGHTS = [0.29, 0.72, 1.0, 0.45, 0.72, 0.29]   # app-logo order
+
+
+def optical_shift():
+    """Px to move the group right so its area centroid sits on centre."""
+    h = np.array(ICON_RELATIVE_HEIGHTS)
+    i = np.arange(len(h))
+    return round(-((i * h).sum() / h.sum() - (len(h) - 1) / 2) * ICON_PITCH)
 
 
 def solve_geometry():
@@ -101,7 +120,7 @@ def solve_geometry():
     span = n * ICON_BAR_WIDTH + (n - 1) * ICON_PITCH - (n - 1) * ICON_BAR_WIDTH
     left = (CANVAS - span) // 2
     assert CANVAS - span - 2 * left == 0, "group must centre on whole pixels"
-    centres = np.array([left + ICON_BAR_WIDTH / 2 + i * ICON_PITCH for i in range(n)], dtype=float)
+    centres = np.array([left + optical_shift() + ICON_BAR_WIDTH / 2 + i * ICON_PITCH for i in range(n)], dtype=float)
     heights = np.array([2 * round(h * ICON_PEAK / 2) for h in ICON_RELATIVE_HEIGHTS], dtype=float)
     tops = CANVAS / 2 - heights / 2
     width = float(ICON_BAR_WIDTH)

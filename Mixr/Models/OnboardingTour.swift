@@ -108,6 +108,9 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
 nonisolated enum OnboardingCopy {
     static let skip = "Skip"
     static let next = "Next"
+    /// Step 1 on an empty project: the primary button opens the song
+    /// picker itself, and the tour continues once songs land.
+    static let select = "Select"
     static let back = "Back"
     static let finish = "Start mixing"
     static let replay = "Replay tour"

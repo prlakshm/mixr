@@ -81,6 +81,25 @@ enum MixrColors {
     static let primaryPurple = Color(hex: "7231DD")
     static let secondaryPurple = Color(hex: "9873EB")
 
+    /// The Mixr waveform mark: the app icon and the logo beside "Mixr".
+    /// Brighter than the UI purples so the mark reads on the near-black
+    /// icon tile; used for the mark only, never for controls.
+    static let brandMarkHighlight = Color(hex: "D4B4FF")
+    static let brandMarkTop = Color(hex: "AE74FF")
+    static let brandMarkMid = Color(hex: "9352FA")
+    static let brandMarkBottom = Color(hex: "7F3CEE")
+    /// Top-to-bottom fill of the mark (same stops as Scripts/render_app_icon.py).
+    static let brandMarkGradient = LinearGradient(
+        stops: [
+            .init(color: brandMarkHighlight, location: 0),
+            .init(color: brandMarkTop, location: 0.14),
+            .init(color: brandMarkMid, location: 0.6),
+            .init(color: brandMarkBottom, location: 1),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
     static let waveformPink = Color(hex: "FF5FA2")
     static let waveformPurple = Color(hex: "9873EB")
     static let waveformRed = Color(hex: "EF4444")

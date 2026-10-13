@@ -82,6 +82,8 @@ struct OnboardingTourOverlay: View {
     var onNext: () -> Void
     var onSkip: () -> Void
     var onBack: () -> Void = {}
+    /// Replaces "Next" (step 1 on an empty project reads "Select").
+    var primaryTitle: String? = nil
 
     @State private var cardSize = CGSize(width: OnboardingTourTokens.cardWidth, height: 150)
 
@@ -111,7 +113,7 @@ struct OnboardingTourOverlay: View {
                 .id(step)
             }
 
-            OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack)
+            OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack, primaryTitle: primaryTitle)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                 .offset(cardOrigin(hole: hole))
                 .id(step)
@@ -259,6 +261,7 @@ private struct OnboardingTipCard: View {
     var onNext: () -> Void
     var onSkip: () -> Void
     var onBack: () -> Void = {}
+    var primaryTitle: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -295,8 +298,9 @@ private struct OnboardingTipCard: View {
                         .buttonStyle(OnboardingSkipButtonStyle())
                         .accessibilityHint("Previous tip")
                 }
-                Button(step.isLast ? OnboardingCopy.finish : OnboardingCopy.next, action: onNext)
+                Button(primaryTitle ?? (step.isLast ? OnboardingCopy.finish : OnboardingCopy.next), action: onNext)
                     .buttonStyle(OnboardingNextButtonStyle())
+                    .accessibilityHint(primaryTitle == OnboardingCopy.select ? "Opens Files to choose songs" : "")
             }
             .padding(.top, 2)
         }
