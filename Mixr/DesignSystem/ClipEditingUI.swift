@@ -1197,6 +1197,9 @@ private struct TLSpeedValueField: UIViewRepresentable {
 struct TLTransitionMenu: View {
     let selected: ClipTransition
     let trackColor: Color
+    /// The longest fade this clip edge really plays
+    /// (`AutoTransitionEnvelope.maxFadeBeats`); longer lengths are greyed out.
+    var maxFadeBeats: Double = .infinity
     let onSelect: (ClipTransitionType) -> Void
     var onUpdate: (ClipTransition) -> Void = { _ in }
 
@@ -1208,8 +1211,8 @@ struct TLTransitionMenu: View {
     }
 
     /// Fade lengths in beats: 1, 2, 4 and 8 bars, the way DJs count
-    /// phrases. Hard cuts use "None" (always click-free); the envelope caps
-    /// any fade at half its clip.
+    /// phrases. Hard cuts use "None" (always click-free). The envelope caps
+    /// any fade at half its clip, so longer lengths are greyed out.
     private enum DurationOption: Double, CaseIterable, Identifiable {
         case four = 4
         case eight = 8
@@ -1486,7 +1489,8 @@ struct TLTransitionMenu: View {
             fontSize: 10,
             selectionSpringResponse: 0.40,
             title: { $0.label(isSelected: $1) },
-            spokenTitle: { "\(Int($0.rawValue)) beats" }
+            spokenTitle: { "\(Int($0.rawValue)) beats" },
+            isEnabled: { fits($0) }
         ) { option in
             var tx = selected
             tx.duration = option.rawValue
@@ -1508,24 +1512,33 @@ struct TLTransitionMenu: View {
         }
     }
 
-    private var selectedDurationOption: DurationOption {
-        DurationOption.allCases.min {
-            abs($0.rawValue - selected.duration)
-                < abs($1.rawValue - selected.duration)
-        } ?? .four
+    /// Whether the clip is long enough to play this length in full. The
+    /// shortest always stays: on a very short clip it plays as long as the
+    /// clip allows.
+    private func fits(_ option: DurationOption) -> Bool {
+        option == .four || option.rawValue <= maxFadeBeats + 1e-6
     }
 
-    private var selectedCurveOption: CurveOption {
-        CurveOption(rawValue: selected.curve) ?? .linear
+    /// Highlighted only when it's exactly what plays: Auto's own lengths
+    /// (2-beat throws, 10-beat tails, 64-beat blends) and lengths the clip
+    /// can't fit show no highlight until one is picked.
+    private var selectedDurationOption: DurationOption? {
+        DurationOption(rawValue: selected.duration).flatMap { fits($0) ? $0 : nil }
+    }
+
+    /// Likewise, Auto's equal-power curve isn't one of these three.
+    private var selectedCurveOption: CurveOption? {
+        CurveOption(rawValue: selected.curve)
     }
 
     private func segmentedControl<Option: Identifiable & Equatable>(
         options: [Option],
-        selected: Option,
+        selected: Option?,
         fontSize: CGFloat = 10,
         selectionSpringResponse: Double = 0.30,
         title: @escaping (Option, Bool) -> String,
         spokenTitle: ((Option) -> String)? = nil,
+        isEnabled: @escaping (Option) -> Bool = { _ in true },
         onSelect: @escaping (Option) -> Void
     ) -> some View {
         TLTransitionSettingsSegmentedControl(
@@ -1536,6 +1549,7 @@ struct TLTransitionMenu: View {
             selectionSpringResponse: selectionSpringResponse,
             title: title,
             spokenTitle: spokenTitle,
+            isEnabled: isEnabled,
             onSelect: onSelect
         )
     }
@@ -1576,13 +1590,16 @@ struct TLTransitionSettingsSegmentedControl<
     private let dividerWidth: CGFloat = 0.35
 
     let options: [Option]
-    let selected: Option
+    /// nil: nothing highlighted (the current value isn't one of the options).
+    let selected: Option?
     let trackColor: Color
     let fontSize: CGFloat
     let selectionSpringResponse: Double
     let title: (Option, Bool) -> String
     /// What VoiceOver says for a segment (defaults to its title).
     var spokenTitle: ((Option) -> String)? = nil
+    /// Disabled segments are dimmed like other disabled controls.
+    var isEnabled: (Option) -> Bool = { _ in true }
     let onSelect: (Option) -> Void
 
     @State private var selectedTitleWidths: [AnyHashable: CGFloat] = [:]
@@ -1591,7 +1608,7 @@ struct TLTransitionSettingsSegmentedControl<
     var body: some View {
         GeometryReader { proxy in
             let layout = segmentLayout(in: proxy.size.width)
-            let selectedIndex = options.firstIndex(of: selected) ?? 0
+            let selectedIndex = selected.flatMap { options.firstIndex(of: $0) } ?? -1
 
             let selectedCenter =
                 layout.centers.indices.contains(selectedIndex)
@@ -1636,6 +1653,7 @@ struct TLTransitionSettingsSegmentedControl<
                         y: 1.0,
                         anchor: .center
                     )
+                    .opacity(selectedIndex >= 0 ? 1 : 0)
                     .position(x: selectedCenter, y: controlHeight / 2)
 
                 // Visible labels are centered on the same centers as the pill.
@@ -1657,6 +1675,7 @@ struct TLTransitionSettingsSegmentedControl<
                                     ? MixrColors.textPrimary
                                     : MixrColors.textSecondary
                             )
+                            .opacity(isEnabled(option) ? 1 : 0.32)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                             .fixedSize(horizontal: true, vertical: false)
@@ -1687,7 +1706,9 @@ struct TLTransitionSettingsSegmentedControl<
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .disabled(!isEnabled(option))
                         .accessibilityLabel(spokenTitle?(option) ?? title(option, isSelected))
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
                         .position(
                             x: hitFrame.midX,
                             y: controlHeight / 2

@@ -106,6 +106,27 @@ check(
         && source.contains("columns[toolbarPointerGapIndex...]")
 )
 
+let timelineSource = (try? String(
+    contentsOf: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("Mixr/TimelineScreen.swift"),
+    encoding: .utf8
+)) ?? ""
+check(
+    "Transition lengths the clip can't play in full are greyed out (the renderer's half-clip cap)",
+    source.contains("isEnabled: { fits($0) }")
+        && source.contains("option == .four || option.rawValue <= maxFadeBeats + 1e-6")
+        && source.contains(".disabled(!isEnabled(option))")
+        && source.contains(".opacity(isEnabled(option) ? 1 : 0.32)")
+        && timelineSource.contains("maxFadeBeats: AutoTransitionEnvelope.maxFadeBeats(")
+)
+check(
+    "A length or curve that isn't exactly what plays (Auto's own) shows no highlight",
+    source.contains("DurationOption(rawValue: selected.duration).flatMap { fits($0) ? $0 : nil }")
+        && source.contains("CurveOption(rawValue: selected.curve)\n")
+        && !source.contains("CurveOption(rawValue: selected.curve) ?? .linear")
+        && source.contains(".opacity(selectedIndex >= 0 ? 1 : 0)")
+)
+
 if failures > 0 {
     exit(1)
 }

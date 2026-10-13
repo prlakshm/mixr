@@ -142,6 +142,56 @@ final class EditorFlowTests: MixrUITestCase {
         XCTAssertEqual(clips(of: "Night Signals").count, 3)
     }
 
+    func testTransitionLengthsAShortClipCantPlayAreGreyedOut() {
+        // Split about 13 s in: a fade is capped at half its clip, so the
+        // first piece can play 4 and 8 beats in full but not 16 or 32.
+        let clip = clips(of: "Night Signals").firstMatch
+        XCTAssertTrue(clip.waitForExistence(timeout: 3))
+        let times = clip.label.components(separatedBy: ", ").last?
+            .components(separatedBy: " to ")
+            .map { $0.split(separator: ":").reduce(0.0) { $0 * 60 + (Double($1) ?? 0) } } ?? []
+        let seconds = max((times.last ?? 120) - (times.first ?? 0), 1)
+        // Tapping a clip selects it and moves the playhead to the tap.
+        tapPoint(clip.frame.minX + clip.frame.width * 13 / seconds, clip.frame.midY)
+        tap(app.buttons["Split"])
+        XCTAssertEqual(clips(of: "Night Signals").count, 2, "split makes a short first piece")
+
+        let piece = selectFirstClip()
+        tapPoint(piece.frame.minX + 1, piece.frame.midY) // its leading transition grip
+        tap(app.buttons["Crossfade"])
+        let four = app.buttons["4 beats"], eight = app.buttons["8 beats"]
+        let sixteen = app.buttons["16 beats"], thirtyTwo = app.buttons["32 beats"]
+        XCTAssertTrue(thirtyTwo.waitForExistence(timeout: 3), "the Duration pill shows")
+        XCTAssertTrue(four.isEnabled && eight.isEnabled, "4 and 8 beats fit a 13 s piece")
+        XCTAssertFalse(sixteen.isEnabled, "16 beats can't play in full on a 13 s piece")
+        XCTAssertFalse(thirtyTwo.isEnabled, "32 beats can't either")
+        XCTAssertTrue(four.isSelected, "a new crossfade starts at 4 beats")
+        tap(eight)
+        XCTAssertTrue(eight.isSelected)
+        sleep(1) // let the pill settle for the capture
+        capture("transition-short-clip")
+
+        // Split it to ~7 s: its 8-beat fade no longer plays in full, so the
+        // pill highlights nothing (and greys 8 out) instead of claiming 8.
+        tapEmptyTimeline()
+        sleep(1) // the menu closes; a tap straight after it is lost
+        let firstPiece = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Night Signals clip, 0:00 to")).firstMatch
+        tapPoint(firstPiece.frame.minX + firstPiece.frame.width * 7 / 13, firstPiece.frame.midY)
+        tap(app.buttons["Split"])
+        XCTAssertEqual(clips(of: "Night Signals").count, 3)
+        tapEmptyTimeline()
+        sleep(1)
+        tap(firstPiece) // now the ~7 s piece
+        tapPoint(firstPiece.frame.minX + 1, firstPiece.frame.midY)
+        tap(app.buttons["Crossfade"])
+        XCTAssertTrue(four.waitForExistence(timeout: 3))
+        XCTAssertFalse(eight.isEnabled, "8 beats no longer fits")
+        XCTAssertFalse([four, eight, sixteen, thirtyTwo].contains { $0.isSelected },
+                       "no length is highlighted: none of them is what plays")
+        sleep(1)
+        capture("transition-no-highlight")
+    }
+
     func testSpeedPresetFromKeyboardBar() {
         let clip = selectFirstClip()
         let before = clip.label

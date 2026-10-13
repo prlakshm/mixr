@@ -631,7 +631,8 @@ struct TimelineScreen: View {
                 isPlayheadDragging = false
                 playback.seek(to: MixrTimeline.seconds(fromUnits: unit))
             },
-            suppressesImportPulse: tourPausesImportHalo
+            suppressesImportPulse: tourPausesImportHalo,
+            projectBPM: library.projectBPM
         )
     }
 
@@ -2149,6 +2150,8 @@ private struct TLTrackArea: View {
     let onTimelineTapped: (CGFloat) -> Void
     /// True while the tour shows (it points at Import Songs itself).
     var suppressesImportPulse: Bool = false
+    /// Tempo for songs without their own (as playback and export use it).
+    var projectBPM: Int? = nil
 
     @State private var draggingID: UUID?        = nil
     @State private var dragTranslation: CGFloat = 0
@@ -3325,6 +3328,13 @@ private struct TLTrackArea: View {
             TLTransitionMenu(
                 selected:   curTx,
                 trackColor: f.track.color.color,
+                maxFadeBeats: AutoTransitionEnvelope.maxFadeBeats(
+                    clipSeconds: MixrTimeline.seconds(fromUnits: f.clip.length),
+                    timelineBPM: AutoTransitionEnvelope.timelineBPM(
+                        trackBPM: f.track.bpm ?? projectBPM,
+                        playbackSpeed: f.clip.playbackSpeed
+                    )
+                ),
                 onSelect:   { setTransition(type: $0, grip: grip) },
                 onUpdate:   { updateTransition($0, grip: grip) }
             )

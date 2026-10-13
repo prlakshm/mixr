@@ -735,6 +735,34 @@ do {
           String(format: "%.2f dB", before))
 }
 
+// MARK: - 4d. The transition menu offers only fade lengths that really play
+
+do {
+    // A 20 s clip at 120 BPM: the envelope caps a fade at half the clip
+    // (10 s = 20 beats). The previous menu offered 32 beats here, which
+    // plays exactly like 20; the menu now greys out what won't fit.
+    let bpm = 120.0, clipEnd = 20.0
+    let cap = AutoTransitionEnvelope.maxFadeBeats(clipSeconds: clipEnd, timelineBPM: bpm)
+    func gains(_ beats: Double) -> [Double] {
+        let out = ClipTransition(type: .fadeOut, duration: beats, curve: "linear")
+        return stride(from: 0.0, through: clipEnd, by: 0.01).map { t in
+            AutoTransitionEnvelope.envelope(
+                transitionIn: .none, transitionOut: out,
+                clipStart: 0, clipEnd: clipEnd, at: t, bpm: bpm
+            ).gain
+        }
+    }
+    let atCap = gains(cap)
+    let over = zip(atCap, gains(32)).map { abs($0 - $1) }.max() ?? 1
+    let under = zip(atCap, gains(16)).map { abs($0 - $1) }.max() ?? 0
+    check("Fade cap: the menu's longest playable length is the renderer's (20 beats on a 20 s clip)",
+          abs(cap - 20) < 1e-9, String(format: "%.2f beats", cap))
+    check("…32 beats plays exactly like the cap, so the previous menu showed a length nobody hears",
+          32 > cap && over < 1e-12, String(format: "max Δ %.2g", over))
+    check("…16 beats fits and plays in full (differs from the cap)", under > 0.05,
+          String(format: "max Δ %.2f", under))
+}
+
 // MARK: - 4a2. Loudness matched on what listeners hear (BS.1770 K-weighting)
 
 do {
