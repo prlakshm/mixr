@@ -71,6 +71,7 @@ class MixrUITestCase: XCTestCase {
 
     var tourCard: XCUIElement { app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Step '")).firstMatch }
     var nextButton: XCUIElement { app.buttons["Next"] }
+    var selectButton: XCUIElement { app.buttons["Select"] }
     var skipButton: XCUIElement { app.buttons["Skip"] }
     var finishButton: XCUIElement { app.buttons["Start mixing"] }
 

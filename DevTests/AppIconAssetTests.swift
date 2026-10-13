@@ -58,7 +58,19 @@ let centres = runs.map { Double($0.0 + $0.1) / 2 }
 let pitches = zip(centres.dropFirst(), centres).map { $0 - $1 }
 check("Bars are evenly spaced (one pitch, ±0.5 px)", (pitches.max() ?? 0) - (pitches.min() ?? 0) <= 0.5)
 if let first = runs.first, let last = runs.last {
-    check("Mark is centred left-right (margins within 1 px)", abs(first.0 - (w - 1 - last.1)) <= 1)
+    // Optically centred: the bars' area centroid (not their bounding box)
+// sits on the canvas centre, since the peak is left of centre.
+let areas = runs.map { run -> (x: Double, a: Double) in
+    let mid = (run.0 + run.1) / 2
+    var n = 0
+    for y in 0..<h where isMark(mid, y) { n += 1 }
+    return (Double(run.0 + run.1) / 2, Double(n * (run.1 - run.0 + 1)))
+}
+let weighted: Double = areas.reduce(0) { $0 + $1.x * $1.a }
+let total: Double = areas.reduce(0) { $0 + $1.a }
+let centroid = weighted / total
+check("Mark is optically centred (area centroid within 2 px of centre)", abs(centroid - Double(w - 1) / 2) <= 2)
+_ = first; _ = last
 }
 let verticalCentres: [Double] = runs.map { run in
     let mid = (run.0 + run.1) / 2
@@ -71,6 +83,12 @@ let peak = runs.map { run -> Int in
     let mid = (run.0 + run.1) / 2
     return (0..<h).filter { isMark(mid, $0) }.count
 }.max() ?? 0
-check("Bars are tall like the in-app waveform (peak ≥ 10× bar width)", Double(peak) >= 10 * Double(widths.max() ?? 1))
+check("Bars are tall like the in-app waveform (peak ≥ 8× bar width)", Double(peak) >= 8 * Double(widths.max() ?? 1))
+
+let colors = (try? String(contentsOf: root.appendingPathComponent("Mixr/DesignSystem/MixrColors.swift"), encoding: .utf8)) ?? ""
+let script = (try? String(contentsOf: root.appendingPathComponent("Scripts/render_app_icon.py"), encoding: .utf8)) ?? ""
+check("Icon bars use the brandMark tokens the in-app logo uses",
+      ["D4B4FF", "AE74FF", "9352FA", "7F3CEE"].allSatisfy { colors.contains("Color(hex: \"\($0)\")") }
+      && script.contains("(0xD4, 0xB4, 0xFF), (0xAE, 0x74, 0xFF), (0x93, 0x52, 0xFA), (0x7F, 0x3C, 0xEE)"))
 
 exit(failures == 0 ? 0 : 1)

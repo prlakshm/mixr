@@ -970,20 +970,28 @@ struct TimelineScreen: View {
         isHidden: Bool
     ) -> some View {
         if let step = tour.activeStep, !isHidden {
+            // Step 1 with no songs yet: the button picks songs itself, so the
+            // tip never vanishes into a wait; it moves on once songs land.
+            let selectsSongs = step == .importSongs && !tourHasSongs
             GeometryReader { proxy in
                 OnboardingTourOverlay(
                     step: step,
                     targetFrame: tourTargetFrame(step.target, anchors: anchors, proxy: proxy),
                     containerSize: proxy.size,
                     onNext: {
-                        withAnimation(.easeOut(duration: 0.2)) { tour.next(hasSongs: tourHasSongs) }
+                        if selectsSongs {
+                            showFilePicker = true
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) { tour.next(hasSongs: tourHasSongs) }
+                        }
                     },
                     onSkip: {
                         withAnimation(.easeOut(duration: 0.2)) { tour.skip() }
                     },
                     onBack: {
                         withAnimation(.easeOut(duration: 0.2)) { tour.back() }
-                    }
+                    },
+                    primaryTitle: selectsSongs ? OnboardingCopy.select : nil
                 )
             }
             .transition(.opacity)
@@ -1322,7 +1330,7 @@ private struct TLTransportBar: View {
                 HStack(spacing: 7 * toolbarScale) {
                     Image(systemName: "waveform")
                         .font(.system(size: 16 * toolbarScale, weight: .bold))
-                        .foregroundStyle(MixrColors.primaryPurple)
+                        .foregroundStyle(MixrColors.brandMarkGradient)
                         .partyModeIconGlow()
                     // The narrow (SE-class) bar keeps just the mark.
                     if density != .narrow {

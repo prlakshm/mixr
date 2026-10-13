@@ -178,6 +178,10 @@ check("Skip sits left of Next", {
     guard let skip = overlay.range(of: "OnboardingCopy.skip"), let next = overlay.range(of: "OnboardingCopy.next") else { return false }
     return skip.lowerBound < next.lowerBound
 }())
+check("Step 1 on an empty project reads Select and opens the picker",
+      timeline.contains("let selectsSongs = step == .importSongs && !tourHasSongs")
+      && timeline.contains("showFilePicker = true")
+      && timeline.contains("primaryTitle: selectsSongs ? OnboardingCopy.select : nil"))
 check("The primary button never wraps (\"Start mixing\" beside Back)", overlay.contains(".lineLimit(1)\n                .fixedSize()"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")
