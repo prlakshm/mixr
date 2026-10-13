@@ -185,8 +185,8 @@ final class SurfaceCaptureTests: MixrUITestCase {
         if app.buttons["Crossfade"].waitForExistence(timeout: 2) {
             tap(app.buttons["Crossfade"])
             sleep(1)
-            let sixteen = app.buttons["16 beats"]
-            if sixteen.waitForExistence(timeout: 2) { sixteen.tap(); sleep(1) }
+            let eight = app.buttons["8 beats"]
+            if eight.waitForExistence(timeout: 2) { eight.tap(); sleep(1) }
         }
         capture("fb-07-transition-lengths")
         app.terminate()

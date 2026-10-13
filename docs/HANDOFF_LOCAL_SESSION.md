@@ -42,7 +42,7 @@ on every step except the last.
 | 1 | Import Songs (track list footer, above Effects) | tap | Import your songs / Tap Import Songs to bring in the tracks you want to remix. |
 | 2 | First song row | swipe left | Swipe left to delete / Slide a song to the left, then tap Delete to remove it. |
 | 3 | Controls column (S/M + volume) | drag | Set each song’s volume / Drag a slider on the right. S solos a song, M mutes it. |
-| 4 | First clip of first song (its real toolbar opens) | tap | Tap a clip for tools / Split it, change its speed, duplicate it or delete it. |
+| 4 | First clip of first song; once tapped, the toolbar it opens | tap | Tap a clip for tools / Split, change its speed or volume, duplicate or delete it. |
 | 5 | Effects panel (expanded) | scroll | Tune the sound / With a clip selected, add Reverb, Echo, Pitch and more. |
 | 6 | sfx button | tap | Add sound effects / Tap sfx for risers, impacts, bass drops and more. |
 
@@ -55,8 +55,12 @@ Buttons: `Skip`, `Next`, last step `Start mixing`, project menu `Replay tour`.
   from step 1, or taps Next and imports later.
 - **Skip** ends the whole tour for good.
 - Deleting the last song mid-tour pauses the tour until a song exists again.
-- Steps 4–5 select the first clip, so the real toolbar shows. The previous
-  selection is restored afterwards. Step 5 expands the effects panel.
+- Step 4 waits for a tap on the clip; the toolbar opens where it's tapped and
+  the spotlight glides onto it (the finger fades, the card stays put, its
+  tools work). Step 5 selects the first clip if none is, so the real toolbar
+  shows; the previous selection is restored afterwards. Step 5 expands the
+  effects panel. Elsewhere a spotlight passes behind the toolbar (dimmed
+  whole, ring never through its labels).
 - Progress persists in UserDefaults (`mixr.onboardingTour.progress`).
 - **Replay tour** is in the project dropdown menu.
 

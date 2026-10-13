@@ -619,7 +619,17 @@ final class MixrPlaybackEngine: ObservableObject {
                         bpm: AutoTransitionEnvelope.timelineBPM(trackBPM: trackBPM, playbackSpeed: clip.playbackSpeed),
                         continuity: continuity
                     )
-                    let volume = Float(track.volume * clip.volume * envelope.gain * duckGain)
+                    // Clip volume eases across a split (shared with export).
+                    let clipGain = AutoTransitionEnvelope.clipVolume(
+                        clip.volume,
+                        previousVolume: continuity.previous
+                            ? AutoTransitionEnvelope.continuedClip(before: clip, in: songClips)?.volume
+                            : nil,
+                        clipStart: MixrTimeline.seconds(fromUnits: clip.start),
+                        at: t,
+                        bpm: AutoTransitionEnvelope.timelineBPM(trackBPM: trackBPM, playbackSpeed: clip.playbackSpeed)
+                    )
+                    let volume = Float(track.volume * clipGain * envelope.gain * duckGain)
                     let lane = lanes[clip.id] ?? 0
                     laneTargets[lane] = max(laneTargets[lane], volume)
                     // Effects follow the incoming clip during an overlap.

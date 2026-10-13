@@ -154,9 +154,7 @@ enum TLClipEditingMetrics {
     static let maxPlaybackSpeed: Double = 4.0
     static let menuWidth: CGFloat = 170
     static let menuSettingsWidth: CGFloat = 306.5
-    /// Six beat counts, numbers only (the row is titled "Beats"), the same
-    /// width as the Curve control below so the two line up.
-    static let menuSettingsDurationSegmentedWidth: CGFloat = 224
+    static let menuSettingsDurationSegmentedWidth: CGFloat = 210
     static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 11.5
     static let menuRowHeight: CGFloat = 42
@@ -296,7 +294,9 @@ private struct TLClipToolbarAction: View {
         case "trash":
             return 11.4 * s
         case "speaker.wave.2":
-            return 11.2 * s
+            // A squat glyph: sized up so its weight matches the others
+            // (measured ink ≈ 586 vs 352 at 11.2).
+            return 14.4 * s
         default:
             return 11.5 * s
         }
@@ -777,6 +777,8 @@ struct TLClipContextToolbar: View {
             )
             .shadow(color: .black.opacity(0.55), radius: 20 * s, x: 0, y: 8 * s)
             .shadow(color: .black.opacity(0.20), radius: 4 * s, x: 0, y: 2 * s)
+            // A tour spotlight on the clip passes behind the toolbar.
+            .onboardingTarget(.clipToolbarBody)
             // Glass shifts for content alignment; pointer stays on the playhead.
             .offset(x: bodyShift + Self.bodyOffset(for: mode))
 
@@ -801,6 +803,7 @@ struct TLClipContextToolbar: View {
                     lighting: .violetTrailing,
                     glintOffset: .near
                 )
+                .onboardingTarget(.clipToolbarPointer)
                 .offset(x: TLClipEditingMetrics.toolbarPointerOffsetX)
         }
         .animation(
@@ -1204,11 +1207,10 @@ struct TLTransitionMenu: View {
         case settings(ClipTransitionType)
     }
 
-    /// Fade lengths in beats. 16 and 32 (4 and 8 bars) give the long,
-    /// layered blends DJs use; the envelope caps any fade at half the clip.
+    /// Fade lengths in beats: 1, 2, 4 and 8 bars, the way DJs count
+    /// phrases. Hard cuts use "None" (always click-free); the envelope caps
+    /// any fade at half its clip.
     private enum DurationOption: Double, CaseIterable, Identifiable {
-        case one = 1
-        case two = 2
         case four = 4
         case eight = 8
         case sixteen = 16
@@ -1216,10 +1218,9 @@ struct TLTransitionMenu: View {
 
         var id: Double { rawValue }
 
-        /// Numbers only: the row title carries the unit, so six options
-        /// fit without the selected pill crowding its neighbours.
+        /// The selected segment carries the unit; the others are numbers.
         func label(isSelected: Bool) -> String {
-            "\(Int(rawValue))"
+            isSelected ? "\(Int(rawValue)) Beats" : "\(Int(rawValue))"
         }
     }
 
@@ -1360,7 +1361,7 @@ struct TLTransitionMenu: View {
                     ? selected
                     : ClipTransition(
                         type: txType,
-                        duration: DurationOption.one.rawValue,
+                        duration: DurationOption.four.rawValue,
                         curve: CurveOption.linear.rawValue
                     )
                 tx.type = txType
@@ -1411,7 +1412,7 @@ struct TLTransitionMenu: View {
                     menuDivider
                 }
             settingsRow(
-                title: "Beats",
+                title: "Duration",
                 control: durationControl,
                 controlWidth: TLClipEditingMetrics
                     .menuSettingsDurationSegmentedWidth
@@ -1485,7 +1486,7 @@ struct TLTransitionMenu: View {
             fontSize: 10,
             selectionSpringResponse: 0.40,
             title: { $0.label(isSelected: $1) },
-            spokenTitle: { Int($0.rawValue) == 1 ? "1 beat" : "\(Int($0.rawValue)) beats" }
+            spokenTitle: { "\(Int($0.rawValue)) beats" }
         ) { option in
             var tx = selected
             tx.duration = option.rawValue
@@ -1511,7 +1512,7 @@ struct TLTransitionMenu: View {
         DurationOption.allCases.min {
             abs($0.rawValue - selected.duration)
                 < abs($1.rawValue - selected.duration)
-        } ?? .one
+        } ?? .four
     }
 
     private var selectedCurveOption: CurveOption {

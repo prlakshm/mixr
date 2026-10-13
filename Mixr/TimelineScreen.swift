@@ -982,6 +982,10 @@ struct TimelineScreen: View {
             // tip never vanishes into a wait; it moves on once songs land.
             let selectsSongs = step == .importSongs && !tourHasSongs
             GeometryReader { proxy in
+                // The clip toolbar's glass and pointer, when it's open.
+                let glass = anchors[.clipToolbarBody].map { proxy[$0] }
+                let pointer = anchors[.clipToolbarPointer].map { TLToolbarPointer().path(in: proxy[$0]) } ?? Path()
+                let opensToolbar = step.spotlightsOpenedToolbar && glass != nil
                 OnboardingTourOverlay(
                     step: step,
                     targetFrame: tourTargetFrame(step.target, anchors: anchors, proxy: proxy),
@@ -999,7 +1003,12 @@ struct TimelineScreen: View {
                     onBack: {
                         withAnimation(.easeOut(duration: 0.2)) { tour.back() }
                     },
-                    primaryTitle: selectsSongs ? OnboardingCopy.select : nil
+                    primaryTitle: selectsSongs ? OnboardingCopy.select : nil,
+                    openedToolbarFrame: opensToolbar ? glass : nil,
+                    openedToolbarPointer: opensToolbar ? pointer : Path(),
+                    occluders: opensToolbar ? Path() : pointer.union(glass.map {
+                        Path(roundedRect: $0, cornerRadius: OnboardingTourTokens.controlRadius(for: .clipToolbarBody), style: .continuous)
+                    } ?? Path())
                 )
             }
             .transition(.opacity)
