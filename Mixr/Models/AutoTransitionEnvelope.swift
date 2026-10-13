@@ -96,6 +96,13 @@ nonisolated enum AutoTransitionEnvelope {
         seconds / (60.0 / max(timelineBPM, 1))
     }
 
+    /// The longest fade, in beats, a clip edge really plays: `envelope`
+    /// caps every fade at half its clip. The transition menu greys out
+    /// longer lengths, so it never offers one that won't be heard.
+    static func maxFadeBeats(clipSeconds: Double, timelineBPM: Double) -> Double {
+        beats(forSeconds: max(0.01, clipSeconds) * 0.5, timelineBPM: timelineBPM)
+    }
+
     // MARK: Curve primitives
 
     /// Fade-in shape at progress x (0…1).
