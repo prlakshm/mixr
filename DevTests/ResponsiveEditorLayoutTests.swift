@@ -29,7 +29,7 @@ check("Approved phone uses the regular one-row transport", approvedPhone.mode ==
 checkClose("Approved phone keeps the Tracks ideal width", approvedPhone.tracksWidth, 208)
 checkClose("Approved phone keeps the Controls ideal width", approvedPhone.controlsWidth, 130)
 checkClose("Approved phone gives remaining width to the timeline", approvedPhone.timelineWidth, 412)
-checkClose("Expanded Effects uses the approved height", approvedPhone.effectsHeight, 118)
+checkClose("Expanded Effects hugs its card row (header + cards + 4pt foot)", approvedPhone.effectsHeight, 105)
 checkClose("Regular transport uses the approved height", approvedPhone.transportHeight, 50)
 
 checkClose("Approved phone keeps the phone-baseline toolbar", approvedPhone.transport.scale, 1)
@@ -162,7 +162,7 @@ checkClose("Collapsed Effects uses the approved handle-only height", collapsedPh
 checkClose(
     "Collapsing Effects reflows all reclaimed height into the timeline",
     collapsedPhone.timelineHeight - approvedPhone.timelineHeight,
-    76
+    EditorLayoutMetrics.expandedEffectsHeight - EditorLayoutMetrics.collapsedEffectsHeight
 )
 
 let resizedCollapsed = EditorLayoutMetrics(
@@ -196,6 +196,11 @@ checkClose(
     "Dynamic Island bands stay out of the editor",
     phoneLandscapeChrome.horizontal,
     124
+)
+checkClose(
+    "The effect cards may use the top 8pt of the home-indicator band",
+    phoneLandscapeChrome.bottom,
+    20 - EditorSafeArea.homeIndicatorBandUse
 )
 let catalystChrome = EditorSafeArea(top: 32, leading: 0, bottom: 0, trailing: 0).resolved
 checkClose("A Mac title bar keeps its full band", catalystChrome.top, 32)
@@ -251,7 +256,11 @@ check("The 852pt phone (iPhone 16) keeps the full tight bar",
 
 var overlaps: [CGFloat] = []
 var offCentre: [CGFloat] = []
-var width: CGFloat = EditorTransportMetrics.minimumOneRowWidth(.narrow).rounded(.up)
+// One-row bars start at the narrow floor (narrower windows use two rows).
+var width: CGFloat = max(
+    EditorTransportMetrics.minimumOneRowWidth(.narrow),
+    EditorLayoutMetrics.narrowTransportMinimumWidth
+).rounded(.up)
 while width <= 1600 {
     let metrics = EditorLayoutMetrics(
         containerSize: CGSize(width: width, height: 900),

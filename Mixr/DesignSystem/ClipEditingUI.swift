@@ -12,22 +12,23 @@ enum TLClipEditingMetrics {
 
     /// The actions are spaced by equal whitespace, not equal slots: the
     /// same visible gap between every pair of labels (the pointer sits in
-    /// the middle of the Speed–Duplicate gap), so a long word like
-    /// "Duplicate" can't crowd its neighbour.
+    /// the gap nearest the bar's centre), so a long word like "Duplicate"
+    /// can't crowd its neighbour.
     static let toolbarItemGap: CGFloat = 26
     /// Label-to-glass-edge margin, a touch under the gap: the rounded
     /// corners already read as extra space.
     static let toolbarEdgeMargin: CGFloat = 22
 
-    /// One toolbar action, left to right; the pointer sits after `speed`.
+    /// One toolbar action, left to right. Delete stays last.
     enum ToolbarAction: CaseIterable {
-        case split, speed, duplicate, delete
+        case split, speed, duplicate, volume, delete
 
         var label: String {
             switch self {
             case .split: "Split"
             case .speed: "Speed"
             case .duplicate: "Duplicate"
+            case .volume: "Volume"
             case .delete: "Delete"
             }
         }
@@ -58,12 +59,25 @@ enum TLClipEditingMetrics {
     static let toolbarSpeedWidth: CGFloat = speedPaneWidth(for: "0.75")
     static let toolbarBodyHeight: CGFloat = ts(50)
     static let toolbarSpeedBodyHeight: CGFloat = ts(46)
-    /// Glass-only shift that puts the middle of the Speed–Duplicate gap on
-    /// the pointer (the right half is wider, since "Duplicate" is long).
-    static let toolbarActionsHorizontalOffset: CGFloat = {
+    /// How many actions sit left of the pointer: the gap between labels
+    /// nearest the bar's centre, so the bar hangs as evenly as it can.
+    static let toolbarPointerGapIndex: Int = {
+        let columns = ToolbarAction.allCases.map(\.columnWidth)
         let edge = toolbarEdgeMargin - toolbarItemGap / 2
-        let left = edge + ToolbarAction.split.columnWidth + ToolbarAction.speed.columnWidth
-        let right = edge + ToolbarAction.duplicate.columnWidth + ToolbarAction.delete.columnWidth
+        let half = toolbarWidth / 2
+        var best = 1, bestDistance = CGFloat.infinity, left = edge
+        for k in 1..<columns.count {
+            left += columns[k - 1]
+            if abs(left - half) < bestDistance { best = k; bestDistance = abs(left - half) }
+        }
+        return best
+    }()
+    /// Glass-only shift that puts the middle of that gap on the pointer.
+    static let toolbarActionsHorizontalOffset: CGFloat = {
+        let columns = ToolbarAction.allCases.map(\.columnWidth)
+        let edge = toolbarEdgeMargin - toolbarItemGap / 2
+        let left = edge + columns[..<toolbarPointerGapIndex].reduce(0, +)
+        let right = edge + columns[toolbarPointerGapIndex...].reduce(0, +)
         return (right - left) / 2
     }()
     /// Pointer tip stays on the playhead (does not follow the glass nudge).
@@ -121,12 +135,28 @@ enum TLClipEditingMetrics {
             + speedValueWidth(text) + 2 * speedBoxPaddingH
             + speedSuffixGap + suffix + toolbarSpeedTrailingPadding
     }
+    /// Clip volume pane: back, speaker, slider, percentage.
+    static let volumePaneWidth: CGFloat = ts(196)
+    static let volumeReadoutWidth: CGFloat = ts(34)
+    static let volumeIconWidth: CGFloat = ts(16)
+    /// Inner width of the volume pane and what's left for its slider —
+    /// explicit, because a flexible slider in the morphing pane stack
+    /// otherwise takes the widest pane's width.
+    static var volumeContentWidth: CGFloat {
+        volumePaneWidth - toolbarSpeedLeadingPadding - toolbarSpeedTrailingPadding
+    }
+    static var volumeSliderWidth: CGFloat {
+        volumeContentWidth - speedChevronWidth - volumeIconWidth - volumeReadoutWidth
+            - 3 * speedChevronGap
+    }
     static let toolbarMorphDuration: Double = 0.28
     static let minPlaybackSpeed: Double = 0.25
     static let maxPlaybackSpeed: Double = 4.0
     static let menuWidth: CGFloat = 170
     static let menuSettingsWidth: CGFloat = 306.5
-    static let menuSettingsDurationSegmentedWidth: CGFloat = 210
+    /// Six beat counts, numbers only (the row is titled "Beats"), the same
+    /// width as the Curve control below so the two line up.
+    static let menuSettingsDurationSegmentedWidth: CGFloat = 224
     static let menuSettingsCurveSegmentedWidth: CGFloat = 224
     static let menuSettingsControlGap: CGFloat = 11.5
     static let menuRowHeight: CGFloat = 42
@@ -265,6 +295,8 @@ private struct TLClipToolbarAction: View {
             return 10.9 * s
         case "trash":
             return 11.4 * s
+        case "speaker.wave.2":
+            return 11.2 * s
         default:
             return 11.5 * s
         }
@@ -281,6 +313,8 @@ private struct TLClipToolbarAction: View {
             return 2.2 * s
         case "trash":
             return 2.33 * s
+        case "speaker.wave.2":
+            return 2.2 * s
         default:
             return 0
         }
@@ -589,6 +623,7 @@ struct TLClipContextToolbar: View {
     enum Mode: Equatable {
         case actions
         case speed
+        case volume
     }
 
     let trackColor: Color
@@ -600,6 +635,15 @@ struct TLClipContextToolbar: View {
     let onDelete: () -> Void
     let onSpeedBack: () -> Void
     let onSpeedCommit: (Double) -> Void
+    /// Clip volume (0…1) and its slider colours (the track's own).
+    var volumeValue: Double = 1
+    var volumeAccent: Color = MixrColors.primaryPurple
+    var volumeTrack: Color = MixrColors.secondaryPurple
+    var onVolume: () -> Void = {}
+    var onVolumeBack: () -> Void = {}
+    var onVolumeChange: (Double) -> Void = { _ in }
+    /// `true` when a drag starts, `false` when it ends: one undo step per drag.
+    var onVolumeEditingChanged: (Bool) -> Void = { _ in }
     /// Slides the glass body sideways (to stay inside the timeline near its
     /// edges) while the pointer stays on the playhead.
     var bodyShift: CGFloat = 0
@@ -612,13 +656,33 @@ struct TLClipContextToolbar: View {
         switch mode {
         case .actions: TLClipEditingMetrics.toolbarWidth
         case .speed: TLClipEditingMetrics.speedPaneWidth(for: speedText)
+        case .volume: TLClipEditingMetrics.volumePaneWidth
         }
     }
 
     private var bodyHeight: CGFloat {
         switch mode {
         case .actions: TLClipEditingMetrics.toolbarBodyHeight
-        case .speed: TLClipEditingMetrics.toolbarSpeedBodyHeight
+        case .speed, .volume: TLClipEditingMetrics.toolbarSpeedBodyHeight
+        }
+    }
+
+    /// Glass shift relative to the pointer, per pane.
+    static func bodyOffset(for mode: Mode) -> CGFloat {
+        switch mode {
+        case .actions: TLClipEditingMetrics.toolbarActionsHorizontalOffset
+        case .speed: TLClipEditingMetrics.toolbarBodyHorizontalOffset
+        case .volume: 0
+        }
+    }
+
+    /// Body width the timeline clamps against (the speed pane is sized for
+    /// a 3-digit value; it hugs whatever is typed).
+    static func clampWidth(for mode: Mode) -> CGFloat {
+        switch mode {
+        case .actions: TLClipEditingMetrics.toolbarWidth
+        case .speed: TLClipEditingMetrics.toolbarSpeedWidth
+        case .volume: TLClipEditingMetrics.volumePaneWidth
         }
     }
 
@@ -631,37 +695,41 @@ struct TLClipContextToolbar: View {
 
         VStack(spacing: 0) {
             ZStack {
-                actionsContent
-                    .opacity(mode == .actions ? 1 : 0)
-                    .allowsHitTesting(mode == .actions)
-
-                speedContent
-                    .opacity(mode == .speed ? 1 : 0)
-                    .allowsHitTesting(mode == .speed)
+                // Only the shown pane exists (the glass frame morphs between
+                // sizes and the content crossfades), so a hidden pane can't
+                // be touched or reached by VoiceOver.
+                switch mode {
+                case .actions:
+                    actionsContent.transition(.opacity)
+                case .speed:
+                    speedContent.transition(.opacity)
+                case .volume:
+                    volumeContent.transition(.opacity)
+                }
             }
             .padding(
                 .leading,
-                mode == .speed
-                    ? TLClipEditingMetrics.toolbarSpeedLeadingPadding
-                    : TLClipEditingMetrics.toolbarEdgeMargin - TLClipEditingMetrics.toolbarItemGap / 2
+                mode == .actions
+                    ? TLClipEditingMetrics.toolbarEdgeMargin - TLClipEditingMetrics.toolbarItemGap / 2
+                    : TLClipEditingMetrics.toolbarSpeedLeadingPadding
             )
             .padding(
                 .trailing,
-                mode == .speed
-                    ? TLClipEditingMetrics.toolbarSpeedTrailingPadding
-                    : TLClipEditingMetrics.toolbarEdgeMargin - TLClipEditingMetrics.toolbarItemGap / 2
+                mode == .actions
+                    ? TLClipEditingMetrics.toolbarEdgeMargin - TLClipEditingMetrics.toolbarItemGap / 2
+                    : TLClipEditingMetrics.toolbarSpeedTrailingPadding
             )
             .padding(
                 .top,
-                mode == .speed
-                    ? TLClipEditingMetrics.toolbarSpeedContentTopPadding
-                    : TLClipEditingMetrics.toolbarContentTopPadding
+                mode == .actions
+                    ? TLClipEditingMetrics.toolbarContentTopPadding
+                    : TLClipEditingMetrics.toolbarSpeedContentTopPadding
             )
             .padding(
                 .bottom,
-                mode == .speed
-                    ? TLClipEditingMetrics.toolbarSpeedContentBottomPadding
-                    : TLClipEditingMetrics.toolbarContentBottomPadding
+                mode == .actions
+                    ? TLClipEditingMetrics.toolbarContentBottomPadding
+                    : TLClipEditingMetrics.toolbarSpeedContentBottomPadding
             )
             .frame(width: bodyWidth, height: tbH)
             .background {
@@ -710,11 +778,7 @@ struct TLClipContextToolbar: View {
             .shadow(color: .black.opacity(0.55), radius: 20 * s, x: 0, y: 8 * s)
             .shadow(color: .black.opacity(0.20), radius: 4 * s, x: 0, y: 2 * s)
             // Glass shifts for content alignment; pointer stays on the playhead.
-            .offset(
-                x: bodyShift + (mode == .actions
-                    ? TLClipEditingMetrics.toolbarActionsHorizontalOffset
-                    : TLClipEditingMetrics.toolbarBodyHorizontalOffset)
-            )
+            .offset(x: bodyShift + Self.bodyOffset(for: mode))
 
             TLToolbarPointer()
                 .fill(MixrColors.glassNavyDefault.opacity(0.90))
@@ -766,7 +830,7 @@ struct TLClipContextToolbar: View {
 
     private var actionsContent: some View {
         // Columns sized to their labels plus half a gap each side: equal
-        // whitespace between every label, pointer mid-gap after Speed.
+        // whitespace between every label, pointer in the gap nearest centre.
         HStack(spacing: 0) {
             ForEach(TLClipEditingMetrics.ToolbarAction.allCases, id: \.self) { item in
                 TLClipToolbarAction(
@@ -785,6 +849,7 @@ struct TLClipContextToolbar: View {
         case .split: "scissors"
         case .speed: "gauge.with.dots.needle.67percent"
         case .duplicate: "doc.on.doc"
+        case .volume: "speaker.wave.2"
         case .delete: "trash"
         }
     }
@@ -794,8 +859,56 @@ struct TLClipContextToolbar: View {
         case .split: onSplit
         case .speed: onSpeed
         case .duplicate: onDuplicate
+        case .volume: onVolume
         case .delete: onDelete
         }
+    }
+
+    /// Clip volume: back, a speaker that tracks the level, the track's own
+    /// slider, and the percentage — same chrome as the speed pane.
+    private var volumeContent: some View {
+        typealias M = TLClipEditingMetrics
+        let s = M.toolbarScale
+        let percent = Int((min(max(volumeValue, 0), 1) * 100).rounded())
+        return HStack(spacing: M.speedChevronGap) {
+            Button(action: onVolumeBack) {
+                MixrChevron(direction: .back, size: 10.5 * s)
+                    .frame(width: M.speedChevronWidth, height: M.speedValueFieldHeight)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+
+            Image(systemName: Self.volumeIcon(for: volumeValue))
+                .font(.system(size: 11 * s, weight: .medium))
+                .foregroundStyle(MixrColors.textSecondary)
+                .frame(width: M.volumeIconWidth)
+                .accessibilityHidden(true)
+
+            TLVolumeSlider(
+                value: Binding(get: { volumeValue }, set: { onVolumeChange($0) }),
+                accentColor: volumeAccent,
+                trackColor: volumeTrack,
+                accessibilityName: "Clip volume",
+                onEditingChanged: onVolumeEditingChanged
+            )
+            .frame(width: M.volumeSliderWidth)
+
+            Text("\(percent)%")
+                .font(.system(size: 12 * s, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(MixrColors.textPrimary)
+                .frame(width: M.volumeReadoutWidth, alignment: .trailing)
+                .accessibilityHidden(true)
+        }
+        .frame(width: M.volumeContentWidth)
+    }
+
+    static func volumeIcon(for value: Double) -> String {
+        if value <= 0.01 { return "speaker.slash" }
+        if value < 0.34 { return "speaker.wave.1" }
+        if value < 0.67 { return "speaker.wave.2" }
+        return "speaker.wave.3"
     }
 
     private var speedContent: some View {
@@ -1014,16 +1127,19 @@ private struct TLSpeedValueField: UIViewRepresentable {
                 items.append(item)
             }
             items.append(UIBarButtonItem(systemItem: .flexibleSpace))
+            // Done is the same glass capsule as the speed chips, in the bar's
+            // white, set semibold as the confirming action. A prominent
+            // (tinted) item picked up a coloured rim from the glass on device.
             let done = UIBarButtonItem(
                 title: "Done",
-                style: .prominent,
+                style: .plain,
                 target: self,
                 action: #selector(doneTapped)
             )
-            // A prominent item fills with its tint; the bar's white tint
-            // would leave white text on white. Use the app's primary purple
-            // (Play, tour Next).
-            done.tintColor = UIColor(MixrColors.primaryPurple)
+            let doneFont = UIFont.systemFont(ofSize: 17, weight: .semibold)
+            for state: UIControl.State in [.normal, .highlighted] {
+                done.setTitleTextAttributes([.font: doneFont], for: state)
+            }
             items.append(done)
             bar.items = items
             bar.sizeToFit()
@@ -1088,20 +1204,22 @@ struct TLTransitionMenu: View {
         case settings(ClipTransitionType)
     }
 
+    /// Fade lengths in beats. 16 and 32 (4 and 8 bars) give the long,
+    /// layered blends DJs use; the envelope caps any fade at half the clip.
     private enum DurationOption: Double, CaseIterable, Identifiable {
         case one = 1
         case two = 2
         case four = 4
         case eight = 8
+        case sixteen = 16
+        case thirtyTwo = 32
 
         var id: Double { rawValue }
 
+        /// Numbers only: the row title carries the unit, so six options
+        /// fit without the selected pill crowding its neighbours.
         func label(isSelected: Bool) -> String {
-            let n = Int(rawValue)
-            if isSelected {
-                return n == 1 ? "1 Beat" : "\(n) Beats"
-            }
-            return "\(n)"
+            "\(Int(rawValue))"
         }
     }
 
@@ -1293,7 +1411,7 @@ struct TLTransitionMenu: View {
                     menuDivider
                 }
             settingsRow(
-                title: "Duration",
+                title: "Beats",
                 control: durationControl,
                 controlWidth: TLClipEditingMetrics
                     .menuSettingsDurationSegmentedWidth
@@ -1366,7 +1484,8 @@ struct TLTransitionMenu: View {
             selected: selectedDurationOption,
             fontSize: 10,
             selectionSpringResponse: 0.40,
-            title: { $0.label(isSelected: $1) }
+            title: { $0.label(isSelected: $1) },
+            spokenTitle: { Int($0.rawValue) == 1 ? "1 beat" : "\(Int($0.rawValue)) beats" }
         ) { option in
             var tx = selected
             tx.duration = option.rawValue
@@ -1405,6 +1524,7 @@ struct TLTransitionMenu: View {
         fontSize: CGFloat = 10,
         selectionSpringResponse: Double = 0.30,
         title: @escaping (Option, Bool) -> String,
+        spokenTitle: ((Option) -> String)? = nil,
         onSelect: @escaping (Option) -> Void
     ) -> some View {
         TLTransitionSettingsSegmentedControl(
@@ -1414,6 +1534,7 @@ struct TLTransitionMenu: View {
             fontSize: fontSize,
             selectionSpringResponse: selectionSpringResponse,
             title: title,
+            spokenTitle: spokenTitle,
             onSelect: onSelect
         )
     }
@@ -1459,6 +1580,8 @@ struct TLTransitionSettingsSegmentedControl<
     let fontSize: CGFloat
     let selectionSpringResponse: Double
     let title: (Option, Bool) -> String
+    /// What VoiceOver says for a segment (defaults to its title).
+    var spokenTitle: ((Option) -> String)? = nil
     let onSelect: (Option) -> Void
 
     @State private var selectedTitleWidths: [AnyHashable: CGFloat] = [:]
@@ -1563,7 +1686,7 @@ struct TLTransitionSettingsSegmentedControl<
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(title(option, isSelected))
+                        .accessibilityLabel(spokenTitle?(option) ?? title(option, isSelected))
                         .position(
                             x: hitFrame.midX,
                             y: controlHeight / 2

@@ -101,6 +101,7 @@ enum AutoRemixPlanner {
                 case .bassSwap: effectNames.insert("Bass Swap")
                 case .highPassSweep: effectNames.insert("High-Pass Build")
                 case .lowPassSweep: effectNames.insert("Filter Sweep")
+                case .tailLowCut: effectNames.insert("Layered Echo Tail")
                 case nil: break
                 }
                 if edge.type == .echoOut { effectNames.insert("Echo Out") }
@@ -1124,7 +1125,7 @@ enum AutoRemixPlanner {
             case .beatmatchedBlend:
                 // DJ turns mix tight (4 bars, 2 when vocals or keys would
                 // clash); long-form appearances can breathe over 8.
-                var blend = turnMode ? 4 : 8
+                var blend = turnMode ? 4 : tuning.longFormBlendBars
                 let clash = s.vocal(apps[k].payoffEndBar, apps[k].payoffEndBar + 8)
                     + y.vocal(apps[k + 1].entryBar, apps[k + 1].entryBar + 8)
                 if clash > 1.0 { blend = turnMode ? 2 : 4 }
@@ -1299,6 +1300,35 @@ enum AutoRemixPlanner {
                 fadeOut = ClipTransition(type: .echoOut, duration: 4)   // ending
             }
 
+            // Layered handoff: an echo slam lands the incoming song while
+            // the outgoing one's last bars are still playing — its low end
+            // handed over, ducked, echoing, easing out to the end of its
+            // phrase — instead of stopping dead on the downbeat. Tempos
+            // needn't lock: with no kick or bass left in the tail, nothing
+            // flams. (Build-drops keep their clean drop: by then the build
+            // has drained everything but the treble.)
+            let handoffT = t0 + duration
+            var layerSec = 0.0
+            if tuning.layeredHandoffs, outgoing == .echoSlam {
+                let bars = turnMode ? tuning.layeredTailBarsTurns : tuning.layeredTailBarsLongForm
+                let phraseBars = app.payoffEndBar - app.payoffBar
+                if phraseBars >= bars + 6 {
+                    let from = s.barTime(app.payoffEndBar - bars)
+                    let to = min(s.barTime(app.payoffEndBar), lastSource)
+                    layerSec = max(0, (to - from) / rate)
+                }
+            }
+            if layerSec > 0 {
+                let layerBeats = AutoTransitionEnvelope.beats(forSeconds: layerSec, timelineBPM: bpm)
+                fadeOut = ClipTransition(
+                    type: .echoOut, duration: 2 + layerBeats,
+                    curve: AutoTransitionEnvelope.equalPowerCurveName, filter: .tailLowCut,
+                    layerBeats: layerBeats
+                )
+                decisions.append(AutoDecision(kind: .layeredHandoff, songTitle: s.title,
+                                              detail: String(format: "%.1f s", layerSec)))
+            }
+
             placements.append(AutoClipPlacement(
                 songID: s.id, sourceStart: src0, timelineStart: t0, timelineDuration: duration,
                 tempoRatio: rate, volume: volume, fadeIn: fadeIn, fadeOut: fadeOut,
@@ -1346,12 +1376,15 @@ enum AutoRemixPlanner {
                 // Measured downbeat where the blend starts (never nominal
                 // bar lengths — a song's real bars may drift).
                 cursor = t0 + (s.barTime(app.payoffEndBar - app.tailBars) - src0) / rate
+            case .echoSlam? where layerSec > 0:
+                // The incoming song lands under the outgoing phrase's last bars.
+                cursor = payoffEndT - layerSec
             case .beatmatchedBlend?, .echoSlam?, .cleanCrossfade?:
                 cursor = payoffEndT
             case .filterBuildDrop?:
-                cursor = t0 + duration
+                cursor = handoffT
             default:
-                cursor = t0 + duration
+                cursor = handoffT
             }
         }
 

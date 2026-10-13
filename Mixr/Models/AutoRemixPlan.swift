@@ -75,6 +75,7 @@ enum AutoDecisionKind: String, Sendable, Equatable {
     case removedRedundantRepeat
     case hookPreview
     case bassSwapBlend
+    case layeredHandoff
     case loudnessMatched
     case trimmedIntro
     case shortenedOutro
@@ -140,6 +141,8 @@ struct AutoDecision: Sendable, Equatable {
             return "Opened with a filtered preview of \(song)'s hook."
         case .bassSwapBlend:
             return "Blended into \(song) on the beat with a bass swap\(detail.map { " (\($0))" } ?? "")."
+        case .layeredHandoff:
+            return "Layered \(song) under the next song as it handed off (\(detail ?? "a short tail"))."
         case .loudnessMatched:
             return "Matched \(song)'s loudness\(detail.map { " (\($0))" } ?? "")."
         case .trimmedIntro:
@@ -389,6 +392,18 @@ struct AutoTuning: Sendable {
     /// Mashup: songs trade short, high-energy, phrase-aligned turns (DJ
     /// back-and-forth). Off = the earlier long lead-in → hook appearances.
     var mashupDJTurns = true
+    /// Mashup: build-drop and echo-slam handoffs keep the outgoing song
+    /// playing under the incoming one — low end drained, echoing, easing
+    /// out — instead of stopping dead on the handoff. Off = the earlier
+    /// back-to-back joins.
+    var layeredHandoffs = true
+    /// Bars the outgoing song layers under the incoming one (DJ turns /
+    /// long-form appearances).
+    var layeredTailBarsTurns = 2
+    var layeredTailBarsLongForm = 4
+    /// Longest beatmatched blend for long-form appearances when vocals and
+    /// keys don't clash (bars).
+    var longFormBlendBars = 16
     /// Longest unintended silence tolerated between clips (beats).
     /// 0.5 beat = one eighth note at the target BPM.
     var maxGapBeats = 0.5

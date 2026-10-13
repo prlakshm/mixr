@@ -29,8 +29,14 @@ check("Progress label", OnboardingStep.volume.progressLabel == "3 OF 6"
       && OnboardingStep.volume.accessibilityProgress == "Step 3 of 6")
 check("Each step points at a different control",
       Set(OnboardingStep.allCases.map(\.target)).count == OnboardingStep.allCases.count)
-check("Only step 1 lets touches through to its control",
-      OnboardingStep.allCases.filter(\.passesTouchesToTarget) == [.importSongs])
+check("Every step lets touches through to its spotlit control",
+      OnboardingStep.allCases.allSatisfy(\.passesTouchesToTarget))
+check("Only the effects step selects a clip itself (step 4 waits for a tap)",
+      OnboardingStep.allCases.filter(\.selectsClip) == [.tuneSound])
+var opened = OnboardingTourState(progress: .notStarted, activeStep: .soundEffects)
+opened.endForOpenedSurface()
+check("Opening a real surface from the spotlight ends the tour for good",
+      opened.activeStep == nil && opened.progress == .finished)
 
 // MARK: - Flow
 
@@ -182,6 +188,11 @@ check("Step 1 on an empty project reads Select and opens the picker",
       timeline.contains("let selectsSongs = step == .importSongs && !tourHasSongs")
       && timeline.contains("showFilePicker = true")
       && timeline.contains("primaryTitle: selectsSongs ? OnboardingCopy.select : nil"))
+check("A sheet opened from the spotlight (sfx, Auto) ends the tour",
+      timeline.contains(".onChange(of: showSFXPanel)") && timeline.contains(".onChange(of: showAutoDialog)")
+      && timeline.contains("tour.endForOpenedSurface()"))
+check("Moving on from step 2 closes a swiped-open song",
+      timeline.contains("if step != .deleteSong, revealedDeleteRowID != nil"))
 check("The primary button never wraps (\"Start mixing\" beside Back)", overlay.contains(".lineLimit(1)\n                .fixedSize()"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")

@@ -127,9 +127,10 @@ struct OnboardingTourOverlay: View {
         .onChange(of: step) { _, _ in announce() }
     }
 
-    // Dims everything except the spotlight. On step 1 touches inside the
-    // spotlight reach the real Import Songs button; elsewhere the scrim
-    // swallows them so the editor isn't edited by accident mid-tour.
+    // Dims everything except the spotlight. Touches inside the spotlight
+    // reach the real control, so the gesture each step shows really works;
+    // elsewhere the scrim swallows them so the editor isn't edited by
+    // accident mid-tour.
     @ViewBuilder
     private func scrim(hole: CGRect?) -> some View {
         let shape = SpotlightScrimShape(

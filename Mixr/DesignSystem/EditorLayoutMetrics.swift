@@ -26,14 +26,24 @@ struct EditorSafeArea: Equatable {
     /// chrome (phone landscape) keeps its edge-to-edge toolbar.
     static let minimumTopChrome: CGFloat = 28
 
+    /// The home indicator sits in the lower half of its band (21pt on a
+    /// phone in landscape), so the editor's lowest row — the effect cards —
+    /// may use the band's top 8pt and still clear the indicator. Without
+    /// this the cards floated ~38pt above the screen edge.
+    static let homeIndicatorBandUse: CGFloat = 8
+
     var horizontal: CGFloat { leading + trailing }
     var vertical: CGFloat { top + bottom }
 
-    /// Grows a reported top inset to the minimum chrome band.
+    /// Grows a reported top inset to the minimum chrome band, and lets the
+    /// content use the top of the home-indicator band.
     var resolved: EditorSafeArea {
         var value = self
         if value.top > 0 {
             value.top = max(value.top, Self.minimumTopChrome)
+        }
+        if value.bottom > 0 {
+            value.bottom = max(0, value.bottom - Self.homeIndicatorBandUse)
         }
         return value
     }
@@ -99,13 +109,6 @@ enum EditorLayoutDensity: Equatable {
         }
     }
 
-    var readoutKeyWidth: CGFloat {
-        switch self {
-        case .narrow, .tight: 46
-        case .roomy: 56
-        case .large: 60
-        }
-    }
 }
 
 enum EditorEffectsState: Equatable {
@@ -171,7 +174,6 @@ enum EditorTransportMetrics {
     /// "0:00 / 2:09" at the monospaced readout size.
     static let timeReadoutWidth: CGFloat = 78
     static let bpmWidth: CGFloat = 30
-    static let readoutGap: CGFloat = 10
     static let exportWidth: CGFloat = 96
     /// Icon-only Export (narrow bars) — still a 44pt target.
     static let iconExportWidth: CGFloat = 44
@@ -219,11 +221,10 @@ enum EditorTransportMetrics {
         transportButtonWidth * 3
             + timeReadoutWidth
             + bpmWidth
-            + density.readoutKeyWidth
     }
 
     static func clusterFixedWidth(_ density: EditorLayoutDensity) -> CGFloat {
-        density.transportSpacing * 4 + readoutGap
+        density.transportSpacing * 4
     }
 
     static func clusterWidth(
@@ -377,6 +378,10 @@ struct EditorLayoutMetrics: Equatable {
     /// Island bands are removed — that is the narrowest bar the groups fit on
     /// (see `EditorTransportMetrics.minimumOneRowWidth`).
     static let regularTransportMinimumWidth: CGFloat = 720
+    /// The narrow one-row bar is for SE-class phones (667pt). Narrower
+    /// windows (iPad split view) have the height for the two-row bar, which
+    /// keeps the wordmark and a labelled Export.
+    static let narrowTransportMinimumWidth: CGFloat = 640
     static let compactWidthFloor: CGFloat = 393
     /// Width at which the compact side columns reach their ideals. Held above
     /// the one-row threshold so lowering that threshold does not make the
@@ -389,7 +394,12 @@ struct EditorLayoutMetrics: Equatable {
     static let regularImportFooterHeight: CGFloat = 46
     static let compactImportFooterHeight: CGFloat = 82
 
-    static let expandedEffectsHeight: CGFloat = 118
+    /// Header + cards + a 4pt foot: the panel hugs its row instead of
+    /// leaving slack under the cards (it was 118 with ~17pt unused).
+    static let expandedEffectsHeight: CGFloat = 105
+    /// Card growth on bigger screens is still measured against the original
+    /// panel height, so trimming the slack doesn't resize tablet cards.
+    static let effectsScaleReferenceHeight: CGFloat = 118
     static let collapsedEffectsHeight: CGFloat = 42
 
     /// Phone-baseline effect card — scaled up by `contentScale`.
@@ -484,7 +494,10 @@ struct EditorLayoutMetrics: Equatable {
         // Export) still fits on SE-class phones; only narrower than that does
         // the toolbar take two rows.
         let isNarrow = width < Self.regularTransportMinimumWidth
-            && width >= EditorTransportMetrics.minimumOneRowWidth(.narrow)
+            && width >= max(
+                EditorTransportMetrics.minimumOneRowWidth(.narrow),
+                Self.narrowTransportMinimumWidth
+            )
         let mode: EditorLayoutMode =
             width >= Self.regularTransportMinimumWidth || isNarrow ? .regular : .compact
         let density: EditorLayoutDensity =
@@ -552,7 +565,7 @@ struct EditorLayoutMetrics: Equatable {
             1,
             min(
                 cardsFitScale,
-                height * Self.effectsHeightShareCeiling / Self.expandedEffectsHeight
+                height * Self.effectsHeightShareCeiling / Self.effectsScaleReferenceHeight
             )
         )
         let effectCardWidth = (EditorLayoutMetrics.baseEffectCardWidth * cardScale)

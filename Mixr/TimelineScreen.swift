@@ -506,6 +506,14 @@ struct TimelineScreen: View {
         .onChange(of: tour) { _, state in
             tourDidChange(state)
         }
+        // A spotlit control opened a real surface (sfx on step 6, Auto on
+        // step 5): end the tour so its scrim doesn't sit on top of it.
+        .onChange(of: showSFXPanel) { _, isOpen in
+            if isOpen, tour.activeStep != nil { tour.endForOpenedSurface() }
+        }
+        .onChange(of: showAutoDialog) { _, isOpen in
+            if isOpen, tour.activeStep != nil { tour.endForOpenedSurface() }
+        }
         // Leaving the app: save now (autosave is debounced), and pause on
         // background — Mixr doesn't play in the background, so the UI must
         // not keep claiming it does.
@@ -1018,10 +1026,21 @@ struct TimelineScreen: View {
     private func tourDidChange(_ state: OnboardingTourState) {
         OnboardingTourStore().save(state)
         let step = state.activeStep
+        // A song swiped open on step 2 closes as the tour moves on.
+        if step != .deleteSong, revealedDeleteRowID != nil {
+            withAnimation(.easeOut(duration: 0.2)) { revealedDeleteRowID = nil }
+        }
         if let step, step.selectsClip, let clipID = tourClipID {
             if tourSavedSelection == nil { tourSavedSelection = .some(selectedClipID) }
             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                selectedClipID = clipID
+                if selectedClipID == nil {
+                    // Nothing tapped on step 4: select the tour clip with the
+                    // playhead a little way in, so its toolbar sits over the
+                    // clip with its tail (at the clip's very edge the tail
+                    // ends up hidden).
+                    seekIntoTourClip(clipID)
+                    selectedClipID = clipID
+                }
                 if step == .tuneSound { isEffectsCollapsed = false }
             }
         } else if let saved = tourSavedSelection {
@@ -1030,6 +1049,16 @@ struct TimelineScreen: View {
                 selectedClipID = saved
             }
         }
+    }
+
+    /// Moves the playhead ~20 s (at most a third of the clip) into a clip
+    /// when it isn't already well inside it.
+    private func seekIntoTourClip(_ clipID: UUID) {
+        guard let clip = library.tracks.lazy.flatMap(\.clips).first(where: { $0.id == clipID }) else { return }
+        let inset = min(clip.length / 3, MixrTimeline.units(fromSeconds: 20))
+        let unit = effectivePlayheadUnit
+        guard unit < clip.start + inset / 2 || unit > clip.start + clip.length else { return }
+        playback.seek(to: MixrTimeline.seconds(fromUnits: clip.start + inset))
     }
 
     private func replayTour() {
@@ -1475,58 +1504,32 @@ private struct TLTransportBar: View {
             }
             .frame(height: 40 * toolbarScale, alignment: .center)
 
-            HStack(
-                alignment: .center,
-                spacing: layoutMode == .regular
-                    ? EditorTransportMetrics.readoutGap
-                    : 7
-            ) {
-                VStack(spacing: 0) {
-                    Text(library.displayBPM)
-                        .mixrScaledFont(
-                            size: 14 * toolbarScale,
-                            weight: .bold,
-                            relativeTo: .headline
-                        )
-                        .foregroundStyle(MixrColors.textPrimary)
-                    Text("BPM")
-                        .mixrScaledFont(
-                            size: 8 * toolbarScale,
-                            weight: .semibold,
-                            relativeTo: .caption2
-                        )
-                        .foregroundStyle(MixrColors.textSecondary)
-                        .kerning(0.5)
-                }
-                .frame(
-                    width: EditorTransportMetrics.bpmWidth * toolbarScale,
-                    height: 40 * toolbarScale
-                )
-
-                VStack(spacing: 0) {
-                    Text(library.displayKey)
-                        .mixrScaledFont(
-                            size: 14 * toolbarScale,
-                            weight: .bold,
-                            relativeTo: .headline
-                        )
-                        .foregroundStyle(MixrColors.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                    Text("KEY")
-                        .mixrScaledFont(
-                            size: 8 * toolbarScale,
-                            weight: .semibold,
-                            relativeTo: .caption2
-                        )
-                        .foregroundStyle(MixrColors.textSecondary)
-                        .kerning(0.5)
-                }
-                .frame(
-                    width: density.readoutKeyWidth * toolbarScale,
-                    height: 40 * toolbarScale
-                )
+            // Tempo only: the first song's key isn't the remix's key and
+            // nobody acts on it here (Auto reads every song's key itself).
+            VStack(spacing: 0) {
+                Text(library.displayBPM)
+                    .mixrScaledFont(
+                        size: 14 * toolbarScale,
+                        weight: .bold,
+                        relativeTo: .headline
+                    )
+                    .foregroundStyle(MixrColors.textPrimary)
+                Text("BPM")
+                    .mixrScaledFont(
+                        size: 8 * toolbarScale,
+                        weight: .semibold,
+                        relativeTo: .caption2
+                    )
+                    .foregroundStyle(MixrColors.textSecondary)
+                    .kerning(0.5)
             }
+            .frame(
+                width: EditorTransportMetrics.bpmWidth * toolbarScale,
+                height: 40 * toolbarScale
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Tempo")
+            .accessibilityValue("\(library.displayBPM) BPM")
         }
         // Leading, not centred: the modelled cluster width is a measured
         // estimate, and centring inside it would push the play button off the
@@ -2145,7 +2148,8 @@ private struct TLTrackArea: View {
     // Clip editing state
     @State private var clipTapAnchorX:   CGFloat?    = nil
     @State private var activeGrip:       ActiveGrip? = nil
-    @State private var isSpeedEditing:   Bool        = false
+    /// Which pane the clip toolbar shows (actions, speed field, volume).
+    @State private var clipToolbarMode: TLClipContextToolbar.Mode = .actions
     @State private var currentContentW:     CGFloat = 0
     @State private var currentContentUnits: CGFloat = TLK.totalUnits
     @State private var currentLaneVW:       CGFloat = 0
@@ -2264,7 +2268,7 @@ private struct TLTrackArea: View {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID  = newID
             activeGrip      = nil
-            isSpeedEditing  = false
+            clipToolbarMode = .actions
             clipTapAnchorX  = splitAt / contentUnits * currentContentW
         }
     }
@@ -2312,7 +2316,7 @@ private struct TLTrackArea: View {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             selectedClipID = newID
             activeGrip     = nil
-            isSpeedEditing = false
+            clipToolbarMode = .actions
             clipTapAnchorX = newStart / contentUnits * currentContentW
         }
     }
@@ -2323,7 +2327,7 @@ private struct TLTrackArea: View {
             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                 selectedClipID = nil
                 activeGrip     = nil
-                isSpeedEditing = false
+                clipToolbarMode = .actions
                 clipTapAnchorX = nil
             }
             // Track deletion registers its own undo step in TrackLibrary.
@@ -2337,13 +2341,19 @@ private struct TLTrackArea: View {
             tracks[f.trackIdx].clips.remove(at: f.clipIdx)
             selectedClipID = nil
             activeGrip     = nil
-            isSpeedEditing = false
+            clipToolbarMode = .actions
             clipTapAnchorX = nil
         }
     }
 
     /// Applies a playback-speed multiplier, rescales clip length from the implied
     /// source duration, and ripples following clips: right on grow, left on shrink.
+    /// Clip gain 0…1 (multiplies the track's volume; heard live).
+    private func setClipVolume(id: UUID, _ value: Double) {
+        guard let f = findClip(id) else { return }
+        tracks[f.trackIdx].clips[f.clipIdx].volume = min(max(value, 0), 1)
+    }
+
     private func applyClipSpeed(id: UUID, speed: Double) {
         guard let f = findClip(id) else { return }
         let clamped = min(
@@ -2395,7 +2405,7 @@ private struct TLTrackArea: View {
         }
 
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-            isSpeedEditing = false
+            clipToolbarMode = .actions
             selectedClipID = id
             activeGrip = nil
         }
@@ -2414,7 +2424,7 @@ private struct TLTrackArea: View {
         }
         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
             activeGrip = nil
-            isSpeedEditing = false
+            clipToolbarMode = .actions
         }
     }
 
@@ -2449,7 +2459,7 @@ private struct TLTrackArea: View {
         withAnimation(.easeOut(duration: TLK.clipDragScrimAnim)) {
             isDraggingClip = true
             activeGrip = nil
-            isSpeedEditing = false
+            clipToolbarMode = .actions
             selectedClipID = clipID
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -3103,7 +3113,7 @@ private struct TLTrackArea: View {
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                         selectedClipID = nil
                         activeGrip     = nil
-                        isSpeedEditing = false
+                        clipToolbarMode = .actions
                         clipTapAnchorX = nil
                     }
                 }
@@ -3137,7 +3147,7 @@ private struct TLTrackArea: View {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 selectedClipID = clipID
                                 activeGrip     = nil
-                                isSpeedEditing = false
+                                clipToolbarMode = .actions
                                 clipTapAnchorX = tapX
                             }
                         },
@@ -3145,7 +3155,7 @@ private struct TLTrackArea: View {
                             guard !isDraggingClip else { return }
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                                 activeGrip = grip
-                                isSpeedEditing = false
+                                clipToolbarMode = .actions
                             }
                         },
                         onClipDragArmed: { clipID, areaX, areaY in
@@ -3202,13 +3212,11 @@ private struct TLTrackArea: View {
         }
 
         if let cid = selectedClipID, activeGrip == nil, !isDraggingClip, let f = findClip(cid) {
-            let mode: TLClipContextToolbar.Mode = isSpeedEditing ? .speed : .actions
-            let tbW = mode == .speed
-                ? TLClipEditingMetrics.toolbarSpeedWidth
-                : TLClipEditingMetrics.toolbarWidth
-            let tbH = (mode == .speed
-                ? TLClipEditingMetrics.toolbarSpeedBodyHeight
-                : TLClipEditingMetrics.toolbarBodyHeight)
+            let mode = clipToolbarMode
+            let tbW = TLClipContextToolbar.clampWidth(for: mode)
+            let tbH = (mode == .actions
+                ? TLClipEditingMetrics.toolbarBodyHeight
+                : TLClipEditingMetrics.toolbarSpeedBodyHeight)
                 + TLClipEditingMetrics.toolbarPointerH
             let playheadContentX = (effectivePlayheadUnit / contentUnits) * contentW
             let tbSX   = screenXFor(playheadContentX)
@@ -3216,9 +3224,7 @@ private struct TLTrackArea: View {
             let tbTopY    = trackTopY + rowHeight * 0.03 - tbH * 0.5 - 6
             // Keep the body inside the lanes (never over the song names or
             // Controls); the pointer stays on the playhead.
-            let bodyOffset = mode == .actions
-                ? TLClipEditingMetrics.toolbarActionsHorizontalOffset
-                : TLClipEditingMetrics.toolbarBodyHorizontalOffset
+            let bodyOffset = TLClipContextToolbar.bodyOffset(for: mode)
             let bodyMinX = tbSX - tbW / 2 + bodyOffset
             let laneMinX = sidebarW + 4
             let laneMaxX = sidebarW + laneVW - 4
@@ -3234,7 +3240,7 @@ private struct TLTrackArea: View {
                     withAnimation(
                         .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
                     ) {
-                        isSpeedEditing = true
+                        clipToolbarMode = .speed
                     }
                 },
                 onDuplicate: { duplicateClip(id: cid) },
@@ -3243,10 +3249,35 @@ private struct TLTrackArea: View {
                     withAnimation(
                         .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
                     ) {
-                        isSpeedEditing = false
+                        clipToolbarMode = .actions
                     }
                 },
                 onSpeedCommit: { applyClipSpeed(id: cid, speed: $0) },
+                volumeValue: f.clip.volume,
+                volumeAccent: f.track.color.volumeAccentColor,
+                volumeTrack: f.track.color.volumeTrackColor,
+                onVolume: {
+                    withAnimation(
+                        .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
+                    ) {
+                        clipToolbarMode = .volume
+                    }
+                },
+                onVolumeBack: {
+                    withAnimation(
+                        .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
+                    ) {
+                        clipToolbarMode = .actions
+                    }
+                },
+                onVolumeChange: { setClipVolume(id: cid, $0) },
+                onVolumeEditingChanged: { editing in
+                    if editing {
+                        onEditBegin("Change Clip Volume", .clip(cid))
+                    } else {
+                        onEditCommit()
+                    }
+                },
                 bodyShift: bodyShift
             )
             .frame(width: tbW)
@@ -3258,7 +3289,7 @@ private struct TLTrackArea: View {
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: selectedClipID)
             .animation(
                 .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration),
-                value: isSpeedEditing
+                value: clipToolbarMode
             )
         }
 
@@ -5012,7 +5043,7 @@ private struct TLEffectsPanel: View {
                 .padding(.leading, leadingPad)
                 .padding(.trailing, isExpanded ? trailingPad : 32)
                 .padding(.top, (6 * contentScale).rounded())
-                .padding(.bottom, (10 * contentScale).rounded())
+                .padding(.bottom, (4 * contentScale).rounded())
                 .offset(x: rowOffset)
                 .animation(expandAnimation, value: selectedEffect)
             }

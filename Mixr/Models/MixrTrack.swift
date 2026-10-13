@@ -29,6 +29,11 @@ enum TransitionFilter: String, Equatable, Sendable, Codable {
     /// Low-pass: an entering edge opens from muffled to full; a leaving
     /// edge closes toward muffled.
     case lowPassSweep
+    /// Layered tail (leaving edges with `layerBeats`): full range right up
+    /// to the handoff; then the low end hands over to the incoming song
+    /// within ~0.1 s, and across the tail the highs close to ~1.8 kHz, so
+    /// what lingers is a melodic wash, not a second drum kit.
+    case tailLowCut
 }
 
 struct ClipTransition: Equatable, Sendable, Codable {
@@ -36,17 +41,25 @@ struct ClipTransition: Equatable, Sendable, Codable {
     var duration: Double = 0.5
     var curve:    String = "linear"
     var filter:   TransitionFilter? = nil
+    /// Layered tail (leaving edges, Auto-generated; optional so saved
+    /// projects decode unchanged): the clip keeps sounding for its last
+    /// `layerBeats` under the next song. The gain fade (and the echo wash)
+    /// covers only that tail; the filter sweep completes as it begins and
+    /// holds through it, so the tail never brings its low end back.
+    var layerBeats: Double? = nil
 
     nonisolated init(
         type: ClipTransitionType = .none,
         duration: Double = 0.5,
         curve: String = "linear",
-        filter: TransitionFilter? = nil
+        filter: TransitionFilter? = nil,
+        layerBeats: Double? = nil
     ) {
         self.type = type
         self.duration = duration
         self.curve = curve
         self.filter = filter
+        self.layerBeats = layerBeats
     }
 
     nonisolated static let none = ClipTransition()
@@ -132,6 +145,24 @@ struct MixrTrack: Identifiable, Equatable {
         }
 
         return "\(trimmed) major"
+    }
+}
+
+extension MixrTrack {
+    /// Gain of the sound-effect clip sounding at `seconds`; between clips,
+    /// the next one's, so a hit's first transient already has its level
+    /// (the SFX lane never overlaps). Live playback and export share this.
+    func sfxClipVolume(atSeconds seconds: Double) -> Double {
+        let ordered = clips.sorted { $0.start < $1.start }
+        func span(_ clip: MixrClip) -> (Double, Double) {
+            (MixrTimeline.seconds(fromUnits: clip.start),
+             MixrTimeline.seconds(fromUnits: clip.start + clip.length))
+        }
+        if let active = ordered.first(where: { seconds >= span($0).0 && seconds < span($0).1 }) {
+            return active.volume
+        }
+        if let next = ordered.first(where: { span($0).0 > seconds }) { return next.volume }
+        return ordered.last?.volume ?? 1
     }
 }
 

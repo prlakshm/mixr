@@ -660,7 +660,10 @@ final class MixrPlaybackEngine: ObservableObject {
 
         if let sfxTrack = snapshot.first(where: { $0.isSFXTrack }), let sfxChain {
             let audible = TrackLibrary.isAudible(sfxTrack, in: soloAware)
-            let target: Float = audible ? Float(sfxTrack.volume) : 0
+            // Track volume × the sounding sound-effect clip's own volume.
+            let target: Float = audible
+                ? Float(sfxTrack.volume * sfxTrack.sfxClipVolume(atSeconds: t))
+                : 0
             if force {
                 sfxChain.smoothedVolume = target
             } else {

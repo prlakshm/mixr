@@ -51,7 +51,8 @@ struct Noise {
     }
 }
 
-func synthesize(bpm: Double, pickup: Double, sections: [SectionSpec], keyShift: Int = 0, seed: UInt64 = 7) -> SyntheticSong {
+func synthesize(bpm: Double, pickup: Double, sections: [SectionSpec], keyShift: Int = 0, seed: UInt64 = 7,
+                padLevel: Double = 0.05) -> SyntheticSong {
     let beat = 60 / bpm, bar = beat * 4
     let totalBars = sections.reduce(0) { $0 + $1.bars }
     let duration = pickup + Double(totalBars) * bar + 1.0
@@ -123,7 +124,7 @@ func synthesize(bpm: Double, pickup: Double, sections: [SectionSpec], keyShift: 
                 for (k, iv) in [0, 3, 7].enumerated() {
                     v += sin(2 * .pi * hz(root + iv, octave: 0.5) * t + Double(k))
                 }
-                out[i0 + j] += Float(0.05 * Double(0.4 + e) * v)
+                out[i0 + j] += Float(padLevel * Double(0.4 + e) * v)
             }
             barIndex += 1
         }
@@ -216,6 +217,12 @@ func lowBand(_ x: [Float], cutoff: Double = 150) -> [Float] {
     let a = Float(1 - exp(-2 * .pi * cutoff / SR))
     var y: Float = 0, z: Float = 0
     return x.map { v in y += (v - y) * a; z += (y - z) * a; return z }
+}
+
+/// Presence band (above ~1.5 kHz): the signal minus its low-passed self.
+func highBand(_ x: [Float], cutoff: Double = 1_500) -> [Float] {
+    let lp = lowBand(x, cutoff: cutoff)
+    return zip(x, lp).map { $0 - $1 }
 }
 
 func samplePeak(_ x: [Float]) -> Double { Double(x.map { abs($0) }.max() ?? 0) }
@@ -537,6 +544,147 @@ do {
     print(String(format: "      (long-form render on the same songs: %.0f%% quiet)", oldQuiet * 100))
 }
 
+// MARK: - 4b. Layered handoffs (tempos that can't lock)
+
+do {
+    // 123.4 vs 92 BPM: outside the ±8% stretch and not half/double time,
+    // so the songs can't be beat-locked — the case that used to hand off
+    // back to back (build-drop / echo slam, nothing overlapping).
+    let slow = popSong(bpm: 92, pickup: 0.41, keyShift: 3, seed: 33)
+    let trackS = track("Synthetic Slow", slow)
+    let signals = [trackA.id: featuresA, trackS.id: SongSignalAnalyzer.extract(samples: slow.samples, sampleRate: SR)]
+    let sources: [UUID: AutoOfflineMixdown.Source] = [
+        trackA.id: .init(samples: songA.samples, sampleRate: SR),
+        trackS.id: .init(samples: slow.samples, sampleRate: SR),
+    ]
+    func mashup(_ tuning: AutoTuning) -> (plan: AutoRemixPlan, mix: [Float]) {
+        let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [trackA, trackS], tuning: tuning, seed: 1, signals: signals)!
+        let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+        return (plan, AutoOfflineMixdown.render(plan: plan, sources: sources, sampleRate: SR).mix)
+    }
+    var backToBack = AutoTuning.standard
+    backToBack.layeredHandoffs = false
+    let layered = mashup(.standard), old = mashup(backToBack)
+
+    /// (outgoing, incoming) song-change pairs in timeline order.
+    func handoffs(_ plan: AutoRemixPlan) -> [(AutoClipPlacement, AutoClipPlacement)] {
+        let order = plan.placements.sorted { $0.timelineStart < $1.timelineStart }
+        return zip(order, order.dropFirst()).filter { $0.songID != $1.songID }
+    }
+    let beat = 60 / max(layered.plan.targetBPM, 1)
+    let newPairs = handoffs(layered.plan), oldPairs = handoffs(old.plan)
+    let newOverlap = newPairs.map { $0.timelineEnd - $1.timelineStart }
+    let oldOverlap = oldPairs.map { $0.timelineEnd - $1.timelineStart }
+    print("layered: " + layered.plan.transitionsUsed.map(\.rawValue).joined(separator: ", ")
+          + " · overlaps " + newOverlap.map { String(format: "%.1fs", $0) }.joined(separator: " "))
+    check("Layered: tempos can't lock (fixture sanity)", layered.plan.placements.contains { abs($0.tempoRatio - 1) < 1e-9 }
+            && !layered.plan.placements.contains { $0.fadeIn.filter == .bassSwap })
+    let echoPairs = newPairs.filter { $0.0.fadeOut.type == .echoOut }
+    let echoOverlap = echoPairs.map { $0.timelineEnd - $1.timelineStart }
+    check("Layered: every echo-slam handoff keeps the outgoing song under the incoming one ≥ 1 bar",
+          echoPairs.count >= 3 && echoOverlap.allSatisfy { $0 >= 4 * beat * 0.95 },
+          echoOverlap.map { String(format: "%.1fs", $0) }.joined(separator: " "))
+    check("Previous back-to-back joins FAIL the layer gate (≤ 0.1 s overlap)", oldOverlap.allSatisfy { $0 <= 0.1 },
+          oldOverlap.map { String(format: "%.2fs", $0) }.joined(separator: " "))
+    let newOrder = layered.plan.placements.sorted { $0.timelineStart < $1.timelineStart }
+    let oldOrder = old.plan.placements.sorted { $0.timelineStart < $1.timelineStart }
+    check("Layered: every phrase still ends where it did — finished under the next song, not cut or extended",
+          newOrder.count == oldOrder.count
+            && zip(newOrder, oldOrder).allSatisfy { $0.songID == $1.songID && abs($0.sourceEnd - $1.sourceEnd) < 0.01 })
+
+    let joins = newPairs.map { $0.1.timelineStart }
+    let worst = joins.map { joinTrough(layered.mix, at: $0) }.max() ?? 0
+    check("Layered render: no handoff loudness hole > 2 dB", worst <= 2.0, String(format: "worst %.2f dB", worst))
+    // Reference: the SAME plan with each tail cut off at the landing (a
+    // plain echo throw), so the comparison isolates what the tail adds.
+    var tailless = layered.plan
+    for i in tailless.placements.indices {
+        let edge = tailless.placements[i].fadeOut
+        guard let beats = edge.layerBeats, beats > 0 else { continue }
+        tailless.placements[i].timelineDuration -= beats * 60 / tailless.placements[i].envelopeBPM
+        tailless.placements[i].fadeOut = ClipTransition(type: .echoOut, duration: 2)
+    }
+    let reference = AutoOfflineMixdown.render(plan: tailless, sources: sources, sampleRate: SR).mix
+    let lowNew = lowBand(layered.mix), lowOld = lowBand(reference)
+    // The wash lives in the mids (lows handed over, highs closing).
+    func midBand(_ x: [Float]) -> [Float] { lowBand(highBand(x, cutoff: 300), cutoff: 1_500) }
+    let midOld = midBand(reference)
+    // What the tail contributes on its own (layered − tailless).
+    let tailOnly = midBand(zip(layered.mix, reference).map { $0 - $1 })
+    var lowWorst = -120.0, firstBeatWorst = -120.0, quietest = 120.0, loudest = -120.0
+    for (out, inc) in echoPairs {
+        let h = inc.timelineStart, tailEnd = out.timelineEnd
+        guard tailEnd - h > 2 * beat else { continue }
+        // After the first beat of the tail the low end belongs to the incoming song alone.
+        lowWorst = max(lowWorst, level(lowNew, h + beat, tailEnd - 0.1) - level(lowOld, h + beat, tailEnd - 0.1))
+        // Energy is conserved: the tail adds presence, never a jump.
+        let gain = level(layered.mix, h, h + beat) - level(reference, h, h + beat)
+        firstBeatWorst = max(firstBeatWorst, gain)
+        // The tail lives in the mids and highs (its low end is gone).
+        // Tail-to-incoming ratio in the mids, where the wash lives.
+        let heard = level(tailOnly, h + 0.1, h + 3 * beat) - level(midOld, h + 0.1, h + 3 * beat)
+        quietest = min(quietest, heard); loudest = max(loudest, heard)
+        print(String(format: "   handoff @%.1fs %@: tail %.1fs, first beat %+.2f dB, tail/incoming mids %.1f dB, low %+.2f dB",
+                     h, String(describing: out.fadeOut.type), tailEnd - h, gain, heard,
+                     level(lowNew, h + beat, tailEnd - 0.1) - level(lowOld, h + beat, tailEnd - 0.1)))
+    }
+    check("Layered render: the tail never doubles the low end (≤ +1 dB over the incoming song alone)", lowWorst <= 1.0,
+          String(format: "%+.2f dB", lowWorst))
+    check("Layered render: no loudness jump as the incoming song lands (≤ +2 dB)", firstBeatWorst <= 2.0,
+          String(format: "%+.2f dB", firstBeatWorst))
+    check("Layered render: the tail is a real layer under the incoming song (−12…−2 dB in the mids)",
+          quietest >= -12 && loudest <= -2, String(format: "%.1f…%.1f dB", quietest, loudest))
+    check("Layered render: sample peak ≤ −1 dBFS", dB(samplePeak(layered.mix)) <= -0.99,
+          String(format: "%.2f", dB(samplePeak(layered.mix))))
+}
+
+do {
+    // Beatmatched long-form blends breathe longer when nothing clashes:
+    // two minimal club tracks (kick, bass, hats — no pads or lead to
+    // collide in the mids), tempos that lock.
+    func instrumental(bpm: Double, pickup: Double, keyShift: Int, seed: UInt64) -> SyntheticSong {
+        let groove = [0, 8, 3, 10], lift = [8, 10, 0, 3]
+        return synthesize(bpm: bpm, pickup: pickup, sections: [
+            SectionSpec(label: "intro", bars: 16, chords: groove, energy: 0.35, melody: nil),
+            SectionSpec(label: "verse", bars: 16, chords: groove, energy: 0.6, melody: nil),
+            SectionSpec(label: "chorus", bars: 16, chords: lift, energy: 1.0, melody: nil),
+            SectionSpec(label: "verse", bars: 16, chords: groove, energy: 0.6, melody: nil),
+            SectionSpec(label: "chorus", bars: 16, chords: lift, energy: 1.0, melody: nil),
+            SectionSpec(label: "bridge", bars: 8, chords: [5, 7], energy: 0.4, melody: nil),
+            SectionSpec(label: "chorus", bars: 16, chords: lift, energy: 1.0, melody: nil),
+            SectionSpec(label: "outro", bars: 16, chords: groove, energy: 0.4, melody: nil),
+        ], keyShift: keyShift, seed: seed, padLevel: 0)
+    }
+    let i1 = instrumental(bpm: 124, pickup: 0.3, keyShift: 0, seed: 41)
+    let i2 = instrumental(bpm: 121, pickup: 0.45, keyShift: 7, seed: 42)
+    let t1 = track("Minimal 1", i1), t2 = track("Minimal 2", i2)
+    let signals = [t1.id: SongSignalAnalyzer.extract(samples: i1.samples, sampleRate: SR),
+                   t2.id: SongSignalAnalyzer.extract(samples: i2.samples, sampleRate: SR)]
+    var longForm = AutoTuning.standard
+    longForm.mashupDJTurns = false
+    var oldCap = longForm
+    oldCap.longFormBlendBars = 8
+    func blends(_ tuning: AutoTuning) -> (bars: [Double], plan: AutoRemixPlan) {
+        let (draft, profiles) = AutoRemixPlanner.makePlan(tracks: [t1, t2], tuning: tuning, seed: 1, signals: signals)!
+        let plan = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+        return (plan.placements.filter { $0.fadeIn.filter == .bassSwap }.map { $0.fadeIn.duration / 4 }, plan)
+    }
+    let new = blends(longForm), old = blends(oldCap)
+    print("long-form blends (bars): new " + new.bars.map { String(format: "%.1f", $0) }.joined(separator: " ")
+          + " · 8-bar cap " + old.bars.map { String(format: "%.1f", $0) }.joined(separator: " "))
+    check("Long-form: a clash-free beatmatched blend runs longer than 8 bars", (new.bars.max() ?? 0) > 8.5,
+          new.bars.map { String(format: "%.1f", $0) }.joined(separator: " "))
+    check("Previous 8-bar cap FAILS the same gate", (old.bars.max() ?? 0) <= 8.5,
+          old.bars.map { String(format: "%.1f", $0) }.joined(separator: " "))
+    let sources: [UUID: AutoOfflineMixdown.Source] = [t1.id: .init(samples: i1.samples, sampleRate: SR),
+                                                       t2.id: .init(samples: i2.samples, sampleRate: SR)]
+    let mix = AutoOfflineMixdown.render(plan: new.plan, sources: sources, sampleRate: SR).mix
+    let joins = new.plan.placements.sorted { $0.timelineStart < $1.timelineStart }.dropFirst().map(\.timelineStart)
+    let worst = joins.map { joinTrough(mix, at: $0) }.max() ?? 0
+    check("Long blends render: no handoff loudness hole > 2 dB", worst <= 2.0, String(format: "worst %.2f dB", worst))
+    check("Long blends render: sample peak ≤ −1 dBFS", dB(samplePeak(mix)) <= -0.99, String(format: "%.2f", dB(samplePeak(mix))))
+}
+
 // MARK: - 4a2. Loudness matched on what listeners hear (BS.1770 K-weighting)
 
 do {
@@ -666,6 +814,27 @@ do {
     let beats = AutoTransitionEnvelope.beats(forSeconds: 4.0, timelineBPM: bpm)
     check("Fade beats use the clip's timeline tempo (live/export/planner parity)", abs(beats * 60 / bpm - 4.0) < 1e-9
           && abs(bpm - 120) < 1e-9)
+}
+
+do {
+    // The transition menu's curves are real shapes in the shared envelope
+    // (they used to fall through to linear).
+    let easeOutHalf = AutoTransitionEnvelope.fadeOutGain(progress: 0.5, curve: "easeOut")
+    check("Ease Out fade-out drops fast, then lingers (−12 dB halfway)", abs(easeOutHalf - 0.25) < 1e-9,
+          String(format: "%.2f", easeOutHalf))
+    check("Previous behaviour (linear) FAILS the Ease Out shape",
+          abs(AutoTransitionEnvelope.fadeOutGain(progress: 0.5, curve: "linear") - 0.25) > 0.2)
+    let x = 0.3
+    // At crossfade progress x the outgoing edge has 1 − x of its fade left.
+    let pair = AutoTransitionEnvelope.fadeInGain(progress: x, curve: "easeInOut")
+        + AutoTransitionEnvelope.fadeOutGain(progress: 1 - x, curve: "easeInOut")
+    check("Ease In/Out is a smooth S-curve (eased at both ends, complementary)",
+          AutoTransitionEnvelope.fadeInGain(progress: 0.1, curve: "easeInOut") < 0.1
+            && abs(pair - 1) < 1e-9)
+    let edge = ClipTransition(type: .fadeOut, duration: 8, curve: "easeOut")
+    let live = AutoTransitionEnvelope.envelope(transitionIn: .none, transitionOut: edge, clipStart: 0, clipEnd: 20,
+                                               at: 18, bpm: 120).gain
+    check("Ease Out reaches the envelope every renderer uses", abs(live - 0.25) < 1e-6, String(format: "%.3f", live))
 }
 
 do {

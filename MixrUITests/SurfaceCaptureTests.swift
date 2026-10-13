@@ -141,4 +141,68 @@ final class SurfaceCaptureTests: MixrUITestCase {
         sleep(1)
         capture("speed-editor-075")
     }
+
+    /// Device-feedback review: header, bottom margin, dial number, clip
+    /// volume, Done, transition lengths, and the tour's step 4 tap.
+    func testCaptureDeviceFeedback() {
+        launch(fresh: true, tourDone: true, songs: true)
+        sleep(1)
+        capture("fb-01-editor")
+
+        let clip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Night Signals clip'")).firstMatch
+        tapPoint(clip.frame.minX + 120, clip.frame.midY)
+        sleep(1)
+        capture("fb-02-clip-toolbar")
+
+        tap(app.buttons["Volume"])
+        sleep(1)
+        let volume = app.descendants(matching: .any)["Clip volume"]
+        volume.swipeLeft()
+        sleep(1)
+        capture("fb-03-clip-volume")
+        tap(app.buttons["Back"])
+        sleep(1)
+
+        tap(app.buttons["Reverb"])
+        let level = app.descendants(matching: .any)["Reverb level"]
+        _ = level.waitForExistence(timeout: 3)
+        level.swipeRight()
+        sleep(1)
+        capture("fb-04-reverb-tray")
+        tap(app.buttons["Reverb"])
+        sleep(1)
+        capture("fb-05-dial-number")
+
+        tap(app.buttons["Speed"])
+        sleep(2)
+        capture("fb-06-speed-done")
+        app.buttons["Done"].tap()
+        sleep(1)
+
+        // Leading transition grip of the selected clip.
+        tapPoint(clip.frame.minX + 1, clip.frame.midY)
+        sleep(1)
+        if app.buttons["Crossfade"].waitForExistence(timeout: 2) {
+            tap(app.buttons["Crossfade"])
+            sleep(1)
+            let sixteen = app.buttons["16 beats"]
+            if sixteen.waitForExistence(timeout: 2) { sixteen.tap(); sleep(1) }
+        }
+        capture("fb-07-transition-lengths")
+        app.terminate()
+
+        // Tour step 4: tapping the clip puts its toolbar (with tail) there.
+        launch(fresh: true, tourDone: false, songs: true)
+        _ = app.buttons["Next"].waitForExistence(timeout: 5)
+        app.buttons["Next"].tap(); sleep(1)
+        app.buttons["Next"].tap(); sleep(1)
+        app.buttons["Next"].tap(); sleep(1)
+        capture("fb-08-tour-step4")
+        let tourClip = app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip'")).allElementsBoundByIndex
+            .filter { $0.frame.width > 0 }
+            .min { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+        if let tourClip { tapPoint(tourClip.frame.minX + 140, tourClip.frame.midY) }
+        sleep(1)
+        capture("fb-09-tour-step4-tapped")
+    }
 }

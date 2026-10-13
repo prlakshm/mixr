@@ -310,6 +310,10 @@ struct EffectCard: View {
     var level: Double? = nil
 
     @State private var isHovered = false
+    /// Briefly true after the level returns to 0, so "0" confirms the
+    /// change before the number fades away with the ring.
+    @State private var showsZero = false
+    @State private var zeroFade: Task<Void, Never>?
 
     private var isAuto: Bool { effect == .auto }
     private var isActive: Bool { isSelected || isHovered }
@@ -479,11 +483,9 @@ struct EffectCard: View {
                     .rotationEffect(.degrees(-90))
                     .shadow(color: effect.color.opacity(0.55), radius: 3)
                     .opacity(fraction > 0 ? 1 : 0)
-                Circle()
-                    .fill(effect.color)
-                    .frame(width: 5, height: 5)
-                    .shadow(color: effect.color.opacity(0.7), radius: 2)
-                    .opacity(fraction > 0 ? 1 : 0)
+                // The level itself sits in the middle (it replaced the
+                // centre dot that used to mark an active effect).
+                levelNumber
             }
             .frame(width: size, height: size)
             .position(
@@ -494,6 +496,40 @@ struct EffectCard: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .onChange(of: displayedLevel) { old, new in
+            // Set back to 0: confirm with "0", then let it fade with the ring.
+            zeroFade?.cancel()
+            guard let old, old > 0, new == 0 else {
+                if new != 0 { showsZero = false }
+                return
+            }
+            showsZero = true
+            zeroFade = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.1))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.3)) { showsZero = false }
+            }
+        }
+    }
+
+    /// The level as the dial shows it: a whole percentage, nil with no clip.
+    private var displayedLevel: Int? {
+        level.map { Int(min(max($0, 0), 100).rounded()) }
+    }
+
+    /// The value in the middle of the dial: always while the effect is on,
+    /// and briefly as "0" when it's turned off.
+    private var levelNumber: some View {
+        let value = displayedLevel ?? 0
+        let visible = displayedLevel != nil && (value > 0 || showsZero)
+        return Text("\(value)")
+            .font(.system(size: value >= 100 ? 8.5 : 10, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(Color.white.opacity(0.92))
+            .contentTransition(.numericText(value: Double(value)))
+            .opacity(visible ? 1 : 0)
+            .animation(.easeOut(duration: 0.2), value: visible)
+            .animation(.easeOut(duration: 0.12), value: value)
     }
 }
 

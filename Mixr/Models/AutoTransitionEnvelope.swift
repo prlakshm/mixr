@@ -13,10 +13,15 @@ import Foundation
 // Curve names stored on ClipTransition.curve:
 //   "linear"     — legacy straight-line fade
 //   "equalPower" — sin/cos constant-power crossfade halves
+//   "easeInOut"  — smoothstep: gentle at both ends
+//   "easeOut"    — fast at the start, long gentle tail (a fade-out drops
+//                  away quickly, then lingers underneath)
 nonisolated enum AutoTransitionEnvelope {
 
     /// Curve identifier for equal-power fades (ClipTransition.curve).
     static let equalPowerCurveName = "equalPower"
+    static let easeInOutCurveName = "easeInOut"
+    static let easeOutCurveName = "easeOut"
 
     /// Anti-click microfade applied at clip edges that have no explicit
     /// fade and are NOT source-continuous with their neighbor (seconds).
@@ -60,6 +65,17 @@ nonisolated enum AutoTransitionEnvelope {
     /// Low-pass fully closed (muffled "outside the club").
     static let closedLowPassHz = 500.0
 
+    /// A layered tail drops to this level as the incoming song lands — a
+    /// DJ pulling the old track's fader part-way down (≈ −4.4 dB) — then
+    /// fades out under it.
+    static let layeredTailLevel = 0.6
+    /// Across the tail the old song's highs close down to this, so its
+    /// hats and snare (the parts that would clash at another tempo) fade
+    /// first and its chords and vocal linger as a wash.
+    static let tailWashLowPassHz = 1_800.0
+    /// How fast that fader pull happens (seconds; a ramp, never a step).
+    static let layeredTailDuckSeconds = 0.06
+
     // MARK: Timeline tempo (shared unit for fade lengths)
 
     /// Fallback when a track has no BPM — identical in every consumer.
@@ -85,20 +101,25 @@ nonisolated enum AutoTransitionEnvelope {
     /// Fade-in shape at progress x (0…1).
     static func fadeInGain(progress x: Double, curve: String) -> Double {
         let clamped = min(1, max(0, x))
-        if curve == equalPowerCurveName {
-            return sin(clamped * .pi / 2)
+        switch curve {
+        case equalPowerCurveName: return sin(clamped * .pi / 2)
+        case easeInOutCurveName: return smooth(clamped)
+        case easeOutCurveName: return 1 - (1 - clamped) * (1 - clamped)
+        default: return clamped
         }
-        return clamped
     }
 
     /// Fade-out shape at remaining-progress x (1 → clip fully audible,
-    /// 0 → clip edge).
+    /// 0 → clip edge). Ease-out is eased in TIME: most of the drop happens
+    /// at the start of the fade, then a long quiet tail.
     static func fadeOutGain(progress x: Double, curve: String) -> Double {
         let clamped = min(1, max(0, x))
-        if curve == equalPowerCurveName {
-            return sin(clamped * .pi / 2)   // cos(π/2·(1−x)) == sin(π/2·x)
+        switch curve {
+        case equalPowerCurveName: return sin(clamped * .pi / 2)   // cos(π/2·(1−x)) == sin(π/2·x)
+        case easeInOutCurveName: return smooth(clamped)
+        case easeOutCurveName: return clamped * clamped
+        default: return clamped
         }
-        return clamped
     }
 
     // MARK: Envelope
@@ -148,21 +169,31 @@ nonisolated enum AutoTransitionEnvelope {
         }
 
         // ── Leaving edge ──
+        // A layered tail (layerBeats) confines the gain fade to the clip's
+        // last bars, where it plays under the next song.
+        let layerTail = layerTailSeconds(transitionOut, beat: beat, clipLen: clipLen)
         if !continuity.next {
             let outDur = min(transitionOut.duration * beat, clipLen * 0.5)
             switch transitionOut.type {
             case .fadeOut, .crossfade, .auto:
-                if outDur > 0.01 {
-                    gain *= fadeOutGain(progress: (clipEnd - t) / outDur, curve: transitionOut.curve)
+                let fade = layerTail > 0.01 ? layerTail : outDur
+                if fade > 0.01 {
+                    gain *= fadeOutGain(progress: (clipEnd - t) / fade, curve: transitionOut.curve)
                 }
+                gain *= layeredTailDuck(at: t, clipEnd: clipEnd, tail: layerTail)
             case .echoOut:
                 if outDur > 0.01 {
                     let k = min(1.0, max(0.0, 1.0 - (clipEnd - t) / outDur))
                     echoBoost = k * 32.0
-                    // A short echo THROW (≤ 2 beats) keeps full level up to
-                    // the downbeat — the echo tail carries the join; longer
-                    // echo-outs also ease the dry level down.
-                    if transitionOut.duration > 2.0 + 1e-9 {
+                    if layerTail > 0.01 {
+                        // Layered: the dry signal ducks and eases out under
+                        // the next song while the echo washes over it.
+                        gain *= fadeOutGain(progress: (clipEnd - t) / layerTail, curve: transitionOut.curve)
+                            * layeredTailDuck(at: t, clipEnd: clipEnd, tail: layerTail)
+                    } else if transitionOut.duration > 2.0 + 1e-9 {
+                        // A short echo THROW (≤ 2 beats) keeps full level up
+                        // to the downbeat — the echo tail carries the join;
+                        // longer echo-outs also ease the dry level down.
                         gain *= 1.0 - 0.30 * k
                     }
                 }
@@ -184,6 +215,8 @@ nonisolated enum AutoTransitionEnvelope {
             let window = min(max(transitionIn.duration * beat, 0.05), clipLen)
             let x = (t - clipStart) / window
             switch filter {
+            case .tailLowCut:
+                break   // leaving edges only
             case .bassSwap:
                 let k = swapProgress(t: t, mid: clipStart + window / 2, beat: beat)
                 highPass = max(highPass, logInterpolate(bassSwapCutoffHz, openHighPassHz, k))
@@ -194,10 +227,25 @@ nonisolated enum AutoTransitionEnvelope {
             }
         }
         if let filter = transitionOut.filter {
-            let window = min(max(transitionOut.duration * beat, 0.05), clipLen)
-            let start = clipEnd - window
+            // With a layered tail the sweep completes as the tail begins
+            // and holds through it (the tail never gets its lows back).
+            let full = min(max(transitionOut.duration * beat, 0.05), clipLen)
+            let window = max(full - layerTail, 0.05)
+            let start = clipEnd - layerTail - window
             let x = (t - start) / window
             switch filter {
+            case .tailLowCut:
+                // Hand the low end over with the fader pull, finished by the
+                // handoff, so the incoming kick owns the low end from its
+                // downbeat.
+                let handoff = clipEnd - layerTail
+                let ramp = 2 * layeredTailDuckSeconds
+                let k = layerTail > 0.01 ? smooth((t - (handoff - ramp)) / ramp) : 0
+                highPass = max(highPass, logInterpolate(openHighPassHz, bassSwapCutoffHz, k))
+                if layerTail > 0.01 {
+                    let wash = smooth((t - handoff) / layerTail)
+                    lowPass = min(lowPass, logInterpolate(openLowPassHz, tailWashLowPassHz, wash))
+                }
             case .bassSwap:
                 let k = swapProgress(t: t, mid: start + window / 2, beat: beat)
                 highPass = max(highPass, logInterpolate(openHighPassHz, bassSwapCutoffHz, k))
@@ -211,6 +259,22 @@ nonisolated enum AutoTransitionEnvelope {
         }
 
         return Value(gain: gain, echoBoost: echoBoost, highPassHz: highPass, lowPassHz: lowPass)
+    }
+
+    /// 1 before a layered tail; ramps to `layeredTailLevel` over the 60 ms
+    /// that END at the handoff, so the old song is already down when the
+    /// incoming downbeat lands (and that downbeat masks the move).
+    static func layeredTailDuck(at t: Double, clipEnd: Double, tail: Double) -> Double {
+        guard tail > 0.01 else { return 1 }
+        let handoff = clipEnd - tail
+        let k = smooth((t - (handoff - layeredTailDuckSeconds)) / layeredTailDuckSeconds)
+        return 1 - (1 - layeredTailLevel) * k
+    }
+
+    /// Seconds of a leaving edge's layered tail (0 when it has none).
+    static func layerTailSeconds(_ edge: ClipTransition, beat: Double, clipLen: Double) -> Double {
+        guard let beats = edge.layerBeats, beats > 0 else { return 0 }
+        return min(beats * beat, edge.duration * beat, clipLen * 0.5)
     }
 
     /// 0 before `mid − ½ beat`, 1 after `mid + ½ beat`, smooth between —

@@ -90,13 +90,16 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
         }
     }
 
-    /// Taps inside the spotlight reach the real control (step 1 only:
-    /// tapping Import Songs opens the file picker and the tour continues
-    /// once the first song lands).
-    var passesTouchesToTarget: Bool { self == .importSongs }
+    /// Touches inside the spotlight reach the real control on every step,
+    /// so the gesture the finger shows really works (swipe a song, drag a
+    /// slider, tap a clip, scroll the effects, tap sfx). The tour still
+    /// waits for Next; outside the spotlight the scrim swallows touches.
+    var passesTouchesToTarget: Bool { true }
 
-    /// Steps 3–5 show the clip toolbar / live effects on a selected clip.
-    var selectsClip: Bool { self == .clipTools || self == .tuneSound }
+    /// Step 5 needs a clip for its live effects, so the tour selects one
+    /// if none is. Step 4 doesn't: tapping the clip shows its toolbar
+    /// right where it was tapped.
+    var selectsClip: Bool { self == .tuneSound }
 
     var isLast: Bool { self == Self.allCases.last }
 
@@ -209,6 +212,10 @@ nonisolated struct OnboardingTourState: Equatable, Sendable {
     }
 
     mutating func skip() { finish() }
+
+    /// A control in the spotlight opened a real sheet (the sfx menu or
+    /// Auto): the tour gets out of the way, as "Start mixing" would.
+    mutating func endForOpenedSurface() { finish() }
 
     mutating func replay(hasSongs: Bool) {
         progress = .notStarted

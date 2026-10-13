@@ -162,6 +162,24 @@ final class EditorFlowTests: MixrUITestCase {
         XCTAssertFalse(app.keyboards.firstMatch.exists, "Done dismisses the keypad")
     }
 
+    func testClipVolumeIsAdjustableAndUndoable() {
+        _ = selectFirstClip()
+        tap(app.buttons["Volume"])
+        let volume = element("Clip volume")
+        XCTAssertTrue(volume.waitForExistence(timeout: 3), "Volume opens the clip's own slider")
+        XCTAssertEqual(volume.value as? String, "100 percent")
+        volume.swipeLeft()
+        let lowered = NSPredicate(format: "value != '100 percent'")
+        expectation(for: lowered, evaluatedWith: volume)
+        waitForExpectations(timeout: 3)
+        tap(undo)
+        let restored = NSPredicate(format: "value == '100 percent'")
+        expectation(for: restored, evaluatedWith: volume)
+        waitForExpectations(timeout: 3)
+        tap(app.buttons["Back"])
+        XCTAssertTrue(app.buttons["Split"].waitForExistence(timeout: 2), "Back returns to the clip tools")
+    }
+
     // MARK: Effects
 
     func testEffectWithNothingSelectedSelectsTheClipItEdits() {

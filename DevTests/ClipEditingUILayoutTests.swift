@@ -65,7 +65,7 @@ check(
 )
 
 check(
-    "Clip toolbar spaces actions by equal whitespace, with the pointer mid-gap after Speed",
+    "Clip toolbar spaces actions by equal whitespace between labels",
     source.contains("static let toolbarItemGap: CGFloat = 26")
         && source.contains("static let toolbarEdgeMargin: CGFloat = 22")
         && source.contains("var columnWidth: CGFloat { labelWidth + toolbarItemGap }")
@@ -75,8 +75,10 @@ check(
 )
 
 check(
-    "Speed keypad Done is legible: the prominent item fills purple, not the bar's white",
-    source.contains("done.tintColor = UIColor(MixrColors.primaryPurple)")
+    "Speed keypad Done is a white glass capsule like the chips (no tinted fill or rim)",
+    source.contains("title: \"Done\",\n                style: .plain,")
+        && source.contains("UIFont.systemFont(ofSize: 17, weight: .semibold)")
+        && !source.contains("style: .prominent")
 )
 
 check(
@@ -89,6 +91,19 @@ check(
         && source.contains("field.contentVerticalAlignment = .center")
         && source.contains("case .speed: TLClipEditingMetrics.speedPaneWidth(for: speedText)")
         && !source.contains("SpeedFieldStyle")
+)
+
+check(
+    "Clip toolbar has Volume just before Delete, opening its own slider pane",
+    source.contains("case split, speed, duplicate, volume, delete")
+        && source.contains("case .volume: onVolume")
+        && source.contains("accessibilityName: \"Clip volume\"")
+        && source.contains("case .volume: TLClipEditingMetrics.volumePaneWidth")
+)
+check(
+    "Clip toolbar's pointer sits in the gap nearest the bar's centre",
+    source.contains("static let toolbarPointerGapIndex: Int")
+        && source.contains("columns[toolbarPointerGapIndex...]")
 )
 
 if failures > 0 {

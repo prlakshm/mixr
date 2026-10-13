@@ -470,7 +470,10 @@ nonisolated enum MixrExportRenderer {
 
         if let sfxPlayer, let sfxTrack = tracks.first(where: { $0.isSFXTrack }) {
             let audible = !sfxTrack.isMuted && (!soloActive || sfxTrack.isSoloed)
-            sfxPlayer.volume = audible ? Float(sfxTrack.volume) : 0
+            // Same rule as the live tick: track × sounding clip volume.
+            sfxPlayer.volume = audible
+                ? Float(sfxTrack.volume * sfxTrack.sfxClipVolume(atSeconds: t))
+                : 0
         }
     }
 

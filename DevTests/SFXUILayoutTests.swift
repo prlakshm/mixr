@@ -334,6 +334,18 @@ check(
         && !timelineSource.contains("guard !clip.isSoundEffect, let url = track.url")
 )
 
+let engineURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("Mixr/Models/MixrPlaybackEngine.swift")
+let engineSource = (try? String(contentsOf: engineURL, encoding: .utf8)) ?? ""
+let exportURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("Mixr/Models/MixrExportRenderer.swift")
+let exportSource = (try? String(contentsOf: exportURL, encoding: .utf8)) ?? ""
+check(
+    "Sound-effect clips honour their own volume, identically live and in export",
+    engineSource.contains("sfxTrack.volume * sfxTrack.sfxClipVolume(atSeconds: t)")
+        && exportSource.contains("sfxTrack.volume * sfxTrack.sfxClipVolume(atSeconds: t)")
+)
+
 if failures > 0 {
     exit(1)
 }

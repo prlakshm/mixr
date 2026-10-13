@@ -96,15 +96,15 @@ def ramp(stops, locs, t):
 #   * taller bars to match the waveform beside "Mixr" in the app: the peak
 #     is 768 px, ~10.7× the bar width (was ~9.7×).
 #
-# October 2026 pass: the mark is 12% larger with thicker bars (94 px on a
-# 134 px pitch, 860 px peak), and it is optically rather than geometrically
+# October 2026 pass: the mark is 10% larger with thicker bars (92 px on a
+# 132 px pitch, 844 px peak), and it is optically rather than geometrically
 # centred. The peak (bar 3) sits left of centre and the dip (bar 4) right of
 # it, so with equal margins the mark read left-heavy and the tile looked
-# tilted. The group shifts right by its area-centroid offset (11 px), which
+# tilted. The group shifts right by its area-centroid offset (10 px), which
 # keeps every bar's height and order and puts the visual weight on centre.
-ICON_BAR_WIDTH = 94
-ICON_PITCH = 134
-ICON_PEAK = 860
+ICON_BAR_WIDTH = 92
+ICON_PITCH = 132
+ICON_PEAK = 844
 ICON_RELATIVE_HEIGHTS = [0.29, 0.72, 1.0, 0.45, 0.72, 0.29]   # app-logo order
 
 

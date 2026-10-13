@@ -112,26 +112,74 @@ final class OnboardingTourFlowTests: MixrUITestCase {
 
     // MARK: Spotlight behaviour
 
-    func testScrimBlocksTheEditorOnSongSteps() {
+    /// The clip the tour spotlights: the first clip in the top lane.
+    private var tourClip: XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip'")).allElementsBoundByIndex
+            .filter { $0.frame.width > 0 }
+            .min { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+            ?? app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip'")).firstMatch
+    }
+
+    func testSpotlitControlsWorkButTheScrimBlocksTheRest() {
         launchSeededAtStepTwo()
         nextButton.tap()
         assertTourStep(3)
         let mute = app.buttons["Mute Night Signals"]
-        XCTAssertFalse(mute.isHittable, "the scrim covers the editor")
-        tapPoint(mute.frame.midX, mute.frame.midY) // a real tap, inside the spotlight
-        XCTAssertEqual(mute.value as? String, "Off", "the tour does not edit the mix by accident")
+        tapPoint(mute.frame.midX, mute.frame.midY) // inside the spotlight
+        XCTAssertEqual(mute.value as? String, "On", "the spotlit control really works")
+        assertTourStep(3) // the tour waits for Next
+        let play = app.buttons["Play"]
+        tapPoint(play.frame.midX, play.frame.midY) // outside the spotlight
+        XCTAssertFalse(app.buttons["Pause"].waitForExistence(timeout: 1), "the scrim blocks the rest of the editor")
     }
 
-    func testClipStepsShowTheToolbarAndRestoreSelection() {
+    func testSwipeOnStepTwoRevealsDeleteAndNextClosesIt() {
+        launchSeededAtStepTwo()
+        // Step 2 spotlights the top song row.
+        let topTitle = DemoSongs.titles.map { songTitle($0) }
+            .filter(\.exists)
+            .min { $0.frame.minY < $1.frame.minY }
+        guard let topTitle else { return XCTFail("no song rows") }
+        topTitle.swipeLeft()
+        let delete = app.buttons["Delete"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 2), "the swipe the finger shows reveals Delete")
+        assertTourStep(2)
+        nextButton.tap()
+        assertTourStep(3)
+        XCTAssertFalse(delete.waitForExistence(timeout: 1), "moving on closes the swiped row")
+    }
+
+    func testTappingTheClipOnStepFourShowsItsToolbar() {
         launchSeededAtStepTwo()
         nextButton.tap(); nextButton.tap()
         assertTourStep(4)
-        XCTAssertTrue(app.buttons["Split"].waitForExistence(timeout: 2), "step 4 shows the real clip toolbar")
-        nextButton.tap()
+        XCTAssertFalse(app.buttons["Split"].waitForExistence(timeout: 1), "step 4 waits for the tap")
+        let clip = tourClip
+        tapPoint(clip.frame.minX + 90, clip.frame.midY) // inside the spotlight
+        XCTAssertTrue(app.buttons["Split"].waitForExistence(timeout: 2), "the tap shows the clip toolbar")
+        assertTourStep(4)
+    }
+
+    func testEffectsStepSelectsAClipAndRestoresSelection() {
+        launchSeededAtStepTwo()
+        nextButton.tap(); nextButton.tap(); nextButton.tap()
         assertTourStep(5)
+        XCTAssertTrue(app.buttons["Split"].waitForExistence(timeout: 2), "step 5 edits a selected clip")
         nextButton.tap()
         assertTourStep(6)
-        XCTAssertFalse(app.buttons["Split"].waitForExistence(timeout: 1), "selection is restored after the clip steps")
+        XCTAssertFalse(app.buttons["Split"].waitForExistence(timeout: 1), "selection is restored after the effects step")
+    }
+
+    func testTappingSfxOnTheLastStepOpensTheMenuAndEndsTheTour() {
+        launchSeededAtStepTwo()
+        for step in 3...6 {
+            nextButton.tap()
+            assertTourStep(step)
+        }
+        let sfx = app.buttons["Sound Effects"]
+        tapPoint(sfx.frame.midX, sfx.frame.midY) // inside the spotlight
+        assertNoTour()
+        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 2), "the sound effects menu is open")
     }
 
     func testRotatingToPortraitHidesAndRestoresTheStep() {
