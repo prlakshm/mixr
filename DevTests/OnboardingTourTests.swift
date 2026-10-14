@@ -35,6 +35,8 @@ check("Only the effects step selects a clip itself (step 4 waits for a tap)",
       OnboardingStep.allCases.filter(\.selectsClip) == [.tuneSound])
 check("Only step 4 moves its spotlight onto the toolbar its tap opens",
       OnboardingStep.allCases.filter(\.spotlightsOpenedToolbar) == [.clipTools])
+check("Only step 4 limits the toolbar to Split (the finger's one safe tool)",
+      OnboardingStep.allCases.filter(\.limitsToolbarToSplit) == [.clipTools])
 var opened = OnboardingTourState(progress: .notStarted, activeStep: .soundEffects)
 opened.endForOpenedSurface()
 check("Opening a real surface from the spotlight ends the tour for good",
@@ -202,12 +204,18 @@ check("A spotlight passes behind the clip toolbar: dimmed whole, the ring never 
         && timeline.contains("occluders: opensToolbar ? Path() : pointer.union(glass.map {")
         && overlay.contains("lit.subtracting(occluders)")
         && overlay.contains(".subtracting(occluders.union(openedToolbarPointer))"))
-check("The tip card never lands on the lit toolbar (its tools work mid-tour)",
+check("Step 4: the finger points at Split, which alone responds until the tour ends",
+      clipUI.contains(".disabled(!(enabledActions?.contains(item) ?? true))")
+        && clipUI.contains(".onboardingTarget(.clipToolbarSplit, isActive: item == .split)")
+        && timeline.contains("toolbarActions: tour.activeStep?.limitsToolbarToSplit == true ? [.split] : nil")
+        && timeline.contains("toolbarHint: opensToolbar && step.limitsToolbarToSplit && !tourDidSplit")
+        && overlay.contains("OnboardingFinger(gesture: .tap, travel: 0)"))
+check("The tip card never lands on the lit toolbar",
       overlay.contains("private func cardOrigin(hole: CGRect?, clearOf lit: CGRect?) -> CGSize"))
 check("Once step 4's tap opens the toolbar, the spotlight moves onto it; the card stays and the finger goes",
       timeline.contains("let opensToolbar = step.spotlightsOpenedToolbar && glass != nil")
         && timeline.contains("openedToolbarFrame: opensToolbar ? glass : nil")
-        && overlay.contains("cardOrigin(hole: targetHole, clearOf: openedToolbarFrame == nil ? nil : hole)")
+        && overlay.contains("hole: openedToolbarFrame == nil ? targetHole : targetHoleAtOpen ?? targetHole,")
         && overlay.contains("if openedToolbarFrame == nil {"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")

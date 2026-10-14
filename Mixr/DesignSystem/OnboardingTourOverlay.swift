@@ -48,7 +48,7 @@ enum OnboardingTourTokens {
         case .firstSongRow, .volumeControls, .timelineViewport: 8
         case .effectsPanel: 12
         case .clipToolbarBody: TLClipEditingMetrics.toolbarCornerRadius
-        case .clipToolbarPointer: 0
+        case .clipToolbarPointer, .clipToolbarSplit: 0
         }
     }
 
@@ -94,21 +94,31 @@ struct OnboardingTourOverlay: View {
     /// the glass like every other spotlight and the pointer still points
     /// through it at the clip.
     var openedToolbarPointer = Path()
+    /// The tool the finger taps once the toolbar is open (Split), until
+    /// it's been used.
+    var toolbarHint: CGRect? = nil
     /// Floating chrome over the spotlight (the clip toolbar over its clip),
     /// in this overlay's coordinate space: it stays dimmed and the ring
     /// passes behind it.
     var occluders = Path()
 
     @State private var cardSize = CGSize(width: OnboardingTourTokens.cardWidth, height: 150)
+    /// The target's spotlight when the toolbar opened: the card keeps its
+    /// place while the toolbar's own edit (Split) reshapes the clip.
+    @State private var targetHoleAtOpen: CGRect?
 
-    var body: some View {
-        let lit: OnboardingTarget = openedToolbarFrame == nil ? step.target : .clipToolbarBody
-        let targetHole = targetFrame.map {
+    private var targetHole: CGRect? {
+        targetFrame.map {
             $0.insetBy(
                 dx: -OnboardingTourTokens.padding(for: step.target),
                 dy: -OnboardingTourTokens.padding(for: step.target)
             )
         }
+    }
+
+    var body: some View {
+        let lit: OnboardingTarget = openedToolbarFrame == nil ? step.target : .clipToolbarBody
+        let targetHole = self.targetHole
         let hole = openedToolbarFrame.map {
             $0.insetBy(dx: -OnboardingTourTokens.padding(for: lit), dy: -OnboardingTourTokens.padding(for: lit))
         } ?? targetHole
@@ -136,12 +146,20 @@ struct OnboardingTourOverlay: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
                     .id(step)
+                } else if let toolbarHint {
+                    OnboardingFinger(gesture: .tap, travel: 0)
+                    .position(x: toolbarHint.midX, y: toolbarHint.midY)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
             }
 
             OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack, primaryTitle: primaryTitle)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
-                .offset(cardOrigin(hole: targetHole, clearOf: openedToolbarFrame == nil ? nil : hole))
+                .offset(cardOrigin(
+                    hole: openedToolbarFrame == nil ? targetHole : targetHoleAtOpen ?? targetHole,
+                    clearOf: openedToolbarFrame == nil ? nil : hole
+                ))
                 .id(step)
                 .transition(.opacity)
         }
@@ -153,6 +171,9 @@ struct OnboardingTourOverlay: View {
         .accessibilityAddTraits(.isModal)
         .onAppear { announce() }
         .onChange(of: step) { _, _ in announce() }
+        .onChange(of: openedToolbarFrame == nil, initial: true) { _, closed in
+            targetHoleAtOpen = closed ? nil : targetHole
+        }
     }
 
     // Dims everything except the spotlight. Touches inside the spotlight

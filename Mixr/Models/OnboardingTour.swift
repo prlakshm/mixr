@@ -22,6 +22,8 @@ nonisolated enum OnboardingTarget: Hashable, Sendable {
     /// until step 4's tap opens it and the spotlight moves onto it.
     case clipToolbarBody
     case clipToolbarPointer
+    /// The toolbar's Split button: step 4's finger points at it.
+    case clipToolbarSplit
 
     /// The container a target's spotlight is clipped to, if it can scroll
     /// out of view.
@@ -112,6 +114,12 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
     /// it's open the spotlight moves onto it (the finger's job is done) and
     /// the tip stays until Next.
     var spotlightsOpenedToolbar: Bool { self == .clipTools }
+
+    /// Step 4 guides one safe tool: once the toolbar is open the finger
+    /// points at Split, the only tool that responds until the tour ends.
+    /// Delete could remove the last clip (pausing the tour) and Speed's
+    /// keypad would cover the tip; Split loses nothing and Undo reverses it.
+    var limitsToolbarToSplit: Bool { self == .clipTools }
 
     var isLast: Bool { self == Self.allCases.last }
 

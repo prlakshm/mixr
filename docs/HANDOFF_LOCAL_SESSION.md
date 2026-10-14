@@ -61,9 +61,12 @@ Buttons: `Skip`, `Next`, last step `Start mixing`, project menu `Replay tour`.
   shows; the previous selection is restored afterwards. Step 5 expands the
   effects panel. Elsewhere a spotlight passes behind the toolbar (dimmed
   whole, ring never through its labels).
-- Every lit tool works mid-tour, sub-panes included (Speed keypad, Volume
-  slider); edits are undoable and the tip waits for Next. The tip card moves
-  below the lit toolbar if it would cover it (e.g. after Duplicate scrolls).
+- Step 4, once the toolbar is open: the whole toolbar is lit and the finger
+  points at Split, the only tool that responds until the tour ends (Delete
+  could remove the last clip and pause the tour; Speed's keypad would cover
+  the tip). After a Split the finger goes; the card keeps its place (it moves
+  below the lit toolbar only if it would cover it) and the tip waits for
+  Next.
 - Step 2: a swiped-open song closes by swiping back, also from the Delete
   button itself (a tap there still deletes).
 - Progress persists in UserDefaults (`mixr.onboardingTour.progress`).

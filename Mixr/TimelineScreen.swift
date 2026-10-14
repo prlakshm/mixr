@@ -365,6 +365,8 @@ struct TimelineScreen: View {
     /// Bumped when Entire Project Auto lands: the timeline returns to 0:00
     /// so the new remix is in view from its start.
     @State private var timelineStartRequest = 0
+    /// Step 4's finger points at Split until it's been used.
+    @State private var tourDidSplit = false
     @State private var isExporting = false
     @State private var autoErrorMessage: String?
     @State private var exportErrorMessage: String?
@@ -636,7 +638,11 @@ struct TimelineScreen: View {
             },
             suppressesImportPulse: tourPausesImportHalo,
             projectBPM: library.projectBPM,
-            scrollToStartRequest: timelineStartRequest
+            scrollToStartRequest: timelineStartRequest,
+            toolbarActions: tour.activeStep?.limitsToolbarToSplit == true ? [.split] : nil,
+            onClipSplit: {
+                if tour.activeStep?.limitsToolbarToSplit == true { tourDidSplit = true }
+            }
         )
     }
 
@@ -1011,6 +1017,9 @@ struct TimelineScreen: View {
                     primaryTitle: selectsSongs ? OnboardingCopy.select : nil,
                     openedToolbarFrame: opensToolbar ? glass : nil,
                     openedToolbarPointer: opensToolbar ? pointer : Path(),
+                    toolbarHint: opensToolbar && step.limitsToolbarToSplit && !tourDidSplit
+                        ? anchors[.clipToolbarSplit].map { proxy[$0] }
+                        : nil,
                     occluders: opensToolbar ? Path() : pointer.union(glass.map {
                         Path(roundedRect: $0, cornerRadius: OnboardingTourTokens.controlRadius(for: .clipToolbarBody), style: .continuous)
                     } ?? Path())
@@ -1040,6 +1049,7 @@ struct TimelineScreen: View {
     private func tourDidChange(_ state: OnboardingTourState) {
         OnboardingTourStore().save(state)
         let step = state.activeStep
+        if step != .clipTools { tourDidSplit = false }
         // A song swiped open on step 2 closes as the tour moves on.
         if step != .deleteSong, revealedDeleteRowID != nil {
             withAnimation(.easeOut(duration: 0.2)) { revealedDeleteRowID = nil }
@@ -2159,6 +2169,10 @@ private struct TLTrackArea: View {
     var projectBPM: Int? = nil
     /// Each change returns the playhead and the view to 0:00.
     var scrollToStartRequest = 0
+    /// Clip tools that respond (nil: all); the tour's toolbar step limits
+    /// them to Split.
+    var toolbarActions: Set<TLClipEditingMetrics.ToolbarAction>? = nil
+    var onClipSplit: () -> Void = {}
 
     @State private var draggingID: UUID?        = nil
     @State private var dragTranslation: CGFloat = 0
@@ -2258,13 +2272,16 @@ private struct TLTrackArea: View {
         }
     }
 
-    private func splitClip(id: UUID) {
-        guard let f = findClip(id) else { return }
+    /// Splits at the playhead (or the clip's middle); false when the clip
+    /// is too short to split there.
+    @discardableResult
+    private func splitClip(id: UUID) -> Bool {
+        guard let f = findClip(id) else { return false }
         let phUnit  = effectivePlayheadUnit
         let inClip  = phUnit > f.clip.start && phUnit < f.clip.start + f.clip.length
         let splitAt = inClip ? phUnit : f.clip.start + f.clip.length / 2
         guard splitAt - f.clip.start >= 2,
-              f.clip.start + f.clip.length - splitAt >= 2 else { return }
+              f.clip.start + f.clip.length - splitAt >= 2 else { return false }
         onEditBegin("Split Clip", .trackClips(f.track.id))
         defer { onEditCommit() }
         let leftLen  = splitAt - f.clip.start
@@ -2291,6 +2308,7 @@ private struct TLTrackArea: View {
             clipToolbarMode = .actions
             clipTapAnchorX  = splitAt / contentUnits * currentContentW
         }
+        return true
     }
 
     private func duplicateClip(id: UUID) {
@@ -3258,7 +3276,7 @@ private struct TLTrackArea: View {
                 trackColor: f.track.color.color,
                 mode: mode,
                 speedValue: f.clip.playbackSpeed,
-                onSplit: { splitClip(id: cid) },
+                onSplit: { if splitClip(id: cid) { onClipSplit() } },
                 onSpeed: {
                     withAnimation(
                         .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration)
@@ -3301,7 +3319,8 @@ private struct TLTrackArea: View {
                         onEditCommit()
                     }
                 },
-                bodyShift: bodyShift
+                bodyShift: bodyShift,
+                enabledActions: toolbarActions
             )
             .frame(width: tbW)
             .offset(x: tbSX - tbW / 2, y: tbTopY)
