@@ -202,10 +202,12 @@ check("A spotlight passes behind the clip toolbar: dimmed whole, the ring never 
         && timeline.contains("occluders: opensToolbar ? Path() : pointer.union(glass.map {")
         && overlay.contains("lit.subtracting(occluders)")
         && overlay.contains(".subtracting(occluders.union(openedToolbarPointer))"))
+check("The tip card never lands on the lit toolbar (its tools work mid-tour)",
+      overlay.contains("private func cardOrigin(hole: CGRect?, clearOf lit: CGRect?) -> CGSize"))
 check("Once step 4's tap opens the toolbar, the spotlight moves onto it; the card stays and the finger goes",
       timeline.contains("let opensToolbar = step.spotlightsOpenedToolbar && glass != nil")
         && timeline.contains("openedToolbarFrame: opensToolbar ? glass : nil")
-        && overlay.contains("cardOrigin(hole: targetHole)")
+        && overlay.contains("cardOrigin(hole: targetHole, clearOf: openedToolbarFrame == nil ? nil : hole)")
         && overlay.contains("if openedToolbarFrame == nil {"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")

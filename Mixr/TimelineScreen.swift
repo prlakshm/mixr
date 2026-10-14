@@ -362,6 +362,9 @@ struct TimelineScreen: View {
     @State private var showSFXPanel = false
     @State private var showAutoDialog = false
     @State private var isAutoRunning = false
+    /// Bumped when Entire Project Auto lands: the timeline returns to 0:00
+    /// so the new remix is in view from its start.
+    @State private var timelineStartRequest = 0
     @State private var isExporting = false
     @State private var autoErrorMessage: String?
     @State private var exportErrorMessage: String?
@@ -632,7 +635,8 @@ struct TimelineScreen: View {
                 playback.seek(to: MixrTimeline.seconds(fromUnits: unit))
             },
             suppressesImportPulse: tourPausesImportHalo,
-            projectBPM: library.projectBPM
+            projectBPM: library.projectBPM,
+            scrollToStartRequest: timelineStartRequest
         )
     }
 
@@ -1165,6 +1169,7 @@ struct TimelineScreen: View {
                 isAutoRunning = false
             }
             library.commitGestureEdit()
+            timelineStartRequest += 1
             UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         case .failure(let message):
@@ -2152,6 +2157,8 @@ private struct TLTrackArea: View {
     var suppressesImportPulse: Bool = false
     /// Tempo for songs without their own (as playback and export use it).
     var projectBPM: Int? = nil
+    /// Each change returns the playhead and the view to 0:00.
+    var scrollToStartRequest = 0
 
     @State private var draggingID: UUID?        = nil
     @State private var dragTranslation: CGFloat = 0
@@ -2241,7 +2248,8 @@ private struct TLTrackArea: View {
         return max(0, min(target, maxOffset))
     }
 
-    /// Reset horizontal scroll and playhead to 0:00 when the timeline is cleared.
+    /// Reset horizontal scroll and playhead to 0:00 when the timeline is
+    /// cleared, or Auto has rebuilt the whole project.
     private func scrollToTimelineStart() {
         scrollTrigger = nil
         onTimelineTapped(0)
@@ -2977,6 +2985,9 @@ private struct TLTrackArea: View {
                 if isEmpty {
                     scrollToTimelineStart()
                 }
+            }
+            .onChange(of: scrollToStartRequest) { _, _ in
+                scrollToTimelineStart()
             }
 #if DEBUG
             // Visual QA: exercises the same programmatic path the Catalyst
@@ -3858,6 +3869,21 @@ private struct TLSongRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Dragging the revealed Delete back to the right slides the row
+        // closed, as in Mail (the row's own swipe handler sits under this
+        // button). A tap still deletes; a drag never does.
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { value in
+                    swipeOffset = min(0, max(-deleteActionWidth, -deleteActionWidth + value.translation.width))
+                }
+                .onEnded { value in
+                    let projected = -deleteActionWidth + value.predictedEndTranslation.width
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                        swipeOffset = projected > -revealThreshold ? 0 : -deleteActionWidth
+                    }
+                }
+        )
     }
 
     private func performDelete() {

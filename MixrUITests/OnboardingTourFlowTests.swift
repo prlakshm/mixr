@@ -149,6 +149,44 @@ final class OnboardingTourFlowTests: MixrUITestCase {
         XCTAssertFalse(delete.waitForExistence(timeout: 1), "moving on closes the swiped row")
     }
 
+    func testSwipingDeleteBackClosesItOnStepTwo() {
+        launchSeededAtStepTwo()
+        let topTitle = DemoSongs.titles.map { songTitle($0) }
+            .filter(\.exists)
+            .min { $0.frame.minY < $1.frame.minY }
+        guard let topTitle else { return XCTFail("no song rows") }
+        topTitle.swipeLeft()
+        let delete = app.buttons["Delete"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 2))
+        delete.swipeRight() // drag it back, as in Mail
+        XCTAssertTrue(delete.waitForNonExistence(timeout: 2), "swiping back closes Delete")
+        XCTAssertTrue(topTitle.exists, "and the song stays")
+        assertTourStep(2)
+    }
+
+    func testTheTipCardNeverCoversTheLitToolbar() {
+        launchSeededAtStepTwo()
+        nextButton.tap(); nextButton.tap()
+        assertTourStep(4)
+        let clip = tourClip
+        tapPoint(clip.frame.minX + 90, clip.frame.midY)
+        let duplicate = app.buttons["Duplicate"]
+        XCTAssertTrue(duplicate.waitForExistence(timeout: 2))
+        sleep(1) // the spotlight glides onto the toolbar
+        // Duplicate scrolls the copy into view and selects it; the clip the
+        // card sits beside slides aside.
+        tapPoint(duplicate.frame.midX, duplicate.frame.minY + 6)
+        sleep(1)
+        assertTourStep(4)
+        let card = app.staticTexts["Tap a clip for tools"].frame.union(nextButton.frame)
+        for tool in ["Split", "Speed", "Duplicate", "Volume", "Delete"] {
+            let button = app.buttons[tool].firstMatch
+            XCTAssertTrue(button.exists, "\(tool) shows")
+            XCTAssertFalse(card.intersects(button.frame), "the tip card covers \(tool)")
+        }
+        capture("tour-step-4-after-duplicate")
+    }
+
     func testTappingTheClipOnStepFourShowsItsToolbar() {
         launchSeededAtStepTwo()
         nextButton.tap(); nextButton.tap()
