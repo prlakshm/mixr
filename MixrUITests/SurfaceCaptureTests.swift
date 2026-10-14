@@ -205,4 +205,48 @@ final class SurfaceCaptureTests: MixrUITestCase {
         sleep(1)
         capture("fb-09-tour-step4-tapped")
     }
+
+    /// Tour steps 2–5: each step's action, then its finger travels to Next.
+    func testCaptureFingerToNext() {
+        launch(fresh: true, tourDone: false, songs: true)
+        _ = app.buttons["Next"].waitForExistence(timeout: 5)
+        app.buttons["Next"].tap(); sleep(2)
+
+        // Step 2: swipe the top song open.
+        let top = DemoSongs.titles.map { app.staticTexts[$0] }.filter(\.exists)
+            .min { $0.frame.minY < $1.frame.minY }
+        top?.swipeLeft()
+        sleep(3)
+        capture("ftn-2-delete")
+        app.buttons["Next"].tap(); sleep(2)
+
+        // Step 3: drag a volume slider well down (a brush doesn't count).
+        let slider = app.descendants(matching: .any)["\(DemoSongs.titles[0]) volume"]
+        print("TOUR slider \(slider.label) before \(slider.value ?? "")")
+        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)))
+        print("TOUR slider after \(slider.value ?? "")")
+        sleep(3)
+        capture("ftn-3-volume")
+        app.buttons["Next"].tap(); sleep(2)
+
+        // Step 4: tap the clip, then Split.
+        let clip = app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip'")).allElementsBoundByIndex
+            .filter { $0.frame.width > 0 }
+            .min { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+        if let clip { tapPoint(clip.frame.minX + 90, clip.frame.midY) }
+        sleep(2)
+        let split = app.buttons["Split"]
+        tapPoint(split.frame.midX, split.frame.minY + 6)
+        sleep(3)
+        capture("ftn-4-split")
+        app.buttons["Next"].tap(); sleep(2)
+
+        // Step 5: open an effect (a coordinate tap: the tour's modal layer
+        // makes XCUITest call the spotlit card "not hittable").
+        let reverb = app.buttons["Reverb"]
+        tapPoint(reverb.frame.midX, reverb.frame.midY)
+        sleep(3)
+        capture("ftn-5-effect")
+    }
 }

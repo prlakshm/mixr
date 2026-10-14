@@ -97,12 +97,33 @@ struct OnboardingTourOverlay: View {
     /// The tool the finger taps once the toolbar is open (Split), until
     /// it's been used.
     var toolbarHint: CGRect? = nil
+    /// The step's action is done: the finger moves on to tap Next.
+    var fingerOnNext = false
     /// Floating chrome over the spotlight (the clip toolbar over its clip),
     /// in this overlay's coordinate space: it stays dimmed and the ring
     /// passes behind it.
     var occluders = Path()
 
     @State private var cardSize = CGSize(width: OnboardingTourTokens.cardWidth, height: 150)
+    /// Next's frame in this overlay, for the finger once the step is done.
+    @State private var nextFrame: CGRect?
+    /// Where the step's finger last was (the glide to Next starts there).
+    @State private var lastFingerPoint: CGPoint?
+    @State private var handoff: FingerHandoff = .none
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The finger's trip to Next once the step's action is done: a beat
+    /// where it was (so the result is seen), a glide, then tapping on Next.
+    private enum FingerHandoff: Equatable {
+        case none, beat(CGPoint), gliding, onNext
+    }
+
+    /// The step's own finger, while it shows.
+    private var activeFingerPoint: CGPoint? {
+        if let toolbarHint { return CGPoint(x: toolbarHint.midX, y: toolbarHint.midY) }
+        guard openedToolbarFrame == nil, let hole = targetHole else { return nil }
+        return fingerPoint(in: hole)
+    }
     /// The target's spotlight when the toolbar opened: the card keeps its
     /// place while the toolbar's own edit (Split) reshapes the clip.
     @State private var targetHoleAtOpen: CGRect?
@@ -140,13 +161,13 @@ struct OnboardingTourOverlay: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
 
-                if openedToolbarFrame == nil {
+                if openedToolbarFrame == nil, !fingerOnNext {
                     OnboardingFinger(gesture: step.gesture, travel: fingerTravel(in: hole))
                     .position(fingerPoint(in: hole))
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
                     .id(step)
-                } else if let toolbarHint {
+                } else if let toolbarHint, !fingerOnNext {
                     OnboardingFinger(gesture: .tap, travel: 0)
                     .position(x: toolbarHint.midX, y: toolbarHint.midY)
                     .allowsHitTesting(false)
@@ -154,7 +175,10 @@ struct OnboardingTourOverlay: View {
                 }
             }
 
-            OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack, primaryTitle: primaryTitle)
+            OnboardingTipCard(
+                step: step, onNext: onNext, onSkip: onSkip, onBack: onBack,
+                primaryTitle: primaryTitle, onNextFrame: { nextFrame = $0 }
+            )
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                 .offset(cardOrigin(
                     hole: openedToolbarFrame == nil ? targetHole : targetHoleAtOpen ?? targetHole,
@@ -162,9 +186,38 @@ struct OnboardingTourOverlay: View {
                 ))
                 .id(step)
                 .transition(.opacity)
+
+            // The step's action is done: the finger travels on to Next and
+            // taps there. It never takes the tap (Next gets it).
+            if let nextFrame {
+                let next = CGPoint(x: nextFrame.midX, y: nextFrame.midY)
+                switch handoff {
+                case .none:
+                    EmptyView()
+                case .beat(let from):
+                    OnboardingFingerDot().position(from)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                case .gliding:
+                    OnboardingFingerDot().position(next)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                case .onNext:
+                    OnboardingFinger(gesture: .tap, travel: 0)
+                        .position(next)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .transition(.opacity)
+                }
+            }
         }
         .frame(width: containerSize.width, height: containerSize.height, alignment: .topLeading)
+        .coordinateSpace(.named(Self.space))
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: step)
+        .onChange(of: activeFingerPoint, initial: true) { _, point in
+            if let point { lastFingerPoint = point }
+        }
+        .onChange(of: fingerOnNext, initial: true) { _, done in
+            runHandoff(done)
+        }
         // The spotlight glides from the clip onto the toolbar its tap opened.
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: openedToolbarFrame == nil)
         .accessibilityElement(children: .contain)
@@ -202,6 +255,29 @@ struct OnboardingTourOverlay: View {
         AccessibilityNotification.Announcement(
             "\(step.accessibilityProgress). \(step.title). \(step.message)"
         ).post()
+    }
+
+    static let space = "onboardingTour"
+
+    /// Half a second to see the result, then a 0.45 s glide to Next (Reduce
+    /// Motion: no glide, the finger reappears on Next).
+    private func runHandoff(_ done: Bool) {
+        guard done else { handoff = .none; return }
+        guard handoff == .none else { return }
+        let from = lastFingerPoint ?? nextFrame.map { CGPoint(x: $0.midX, y: $0.midY) } ?? .zero
+        if !reduceMotion { handoff = .beat(from) }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard fingerOnNext else { return }
+            if reduceMotion {
+                withAnimation(.easeOut(duration: 0.2)) { handoff = .onNext }
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.45)) { handoff = .gliding }
+            try? await Task.sleep(for: .milliseconds(450))
+            guard fingerOnNext else { return }
+            handoff = .onNext
+        }
     }
 
     // MARK: Placement
@@ -298,6 +374,20 @@ struct SpotlightScrimShape: Shape {
 
 // MARK: - Finger
 
+/// The finger at rest, without its gesture: what glides to Next.
+private struct OnboardingFingerDot: View {
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(Color.white.opacity(0.8), lineWidth: 2).opacity(0.9)
+            Circle()
+                .fill(Color.white.opacity(0.42))
+                .padding(3)
+                .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
+        }
+        .frame(width: 26, height: 26)
+    }
+}
+
 private struct OnboardingFinger: View {
     let gesture: OnboardingGesture
     /// Horizontal travel for swipe / drag / scroll (points).
@@ -348,6 +438,8 @@ private struct OnboardingTipCard: View {
     var onSkip: () -> Void
     var onBack: () -> Void = {}
     var primaryTitle: String? = nil
+    /// Reports Next's frame in the overlay's space (the finger lands there).
+    var onNextFrame: (CGRect) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -386,6 +478,9 @@ private struct OnboardingTipCard: View {
                 }
                 Button(primaryTitle ?? (step.isLast ? OnboardingCopy.finish : OnboardingCopy.next), action: onNext)
                     .buttonStyle(OnboardingNextButtonStyle())
+                    .onGeometryChange(for: CGRect.self) {
+                        $0.frame(in: .named(OnboardingTourOverlay.space))
+                    } action: { onNextFrame($0) }
                     .accessibilityHint(primaryTitle == OnboardingCopy.select ? "Opens Files to choose songs" : "")
             }
             .padding(.top, 2)
