@@ -367,6 +367,11 @@ struct TimelineScreen: View {
     @State private var timelineStartRequest = 0
     /// Step 4's finger points at Split until it's been used.
     @State private var tourDidSplit = false
+    /// The step's action is really done: its finger moves on to Next.
+    @State private var tourStepDone = false
+    /// Step 3's starting mix (volume, mute, solo per song), to tell a real
+    /// slider move from a brush.
+    @State private var tourMixBaseline: [UUID: TourMix] = [:]
     @State private var isExporting = false
     @State private var autoErrorMessage: String?
     @State private var exportErrorMessage: String?
@@ -519,6 +524,19 @@ struct TimelineScreen: View {
         .onChange(of: showAutoDialog) { _, isOpen in
             if isOpen, tour.activeStep != nil { tour.endForOpenedSurface() }
         }
+        // Each step's real action moves its finger on to Next.
+        .onChange(of: revealedDeleteRowID) { _, id in
+            if id != nil, tour.activeStep == .deleteSong { markTourStepDone() }
+        }
+        .onChange(of: tourMix) { _, mix in
+            guard tour.activeStep == .volume else { return }
+            let moved = mix.contains { id, now in
+                guard let then = tourMixBaseline[id] else { return false }
+                return abs(now.volume - then.volume) >= OnboardingStep.volumeStepThreshold
+                    || now.isMuted != then.isMuted || now.isSoloed != then.isSoloed
+            }
+            if moved { markTourStepDone() }
+        }
         // Leaving the app: save now (autosave is debounced), and pause on
         // background — Mixr doesn't play in the background, so the UI must
         // not keep claiming it does.
@@ -641,7 +659,10 @@ struct TimelineScreen: View {
             scrollToStartRequest: timelineStartRequest,
             toolbarActions: tour.activeStep?.limitsToolbarToSplit == true ? [.split] : nil,
             onClipSplit: {
-                if tour.activeStep?.limitsToolbarToSplit == true { tourDidSplit = true }
+                if tour.activeStep?.limitsToolbarToSplit == true {
+                    tourDidSplit = true
+                    markTourStepDone()
+                }
             }
         )
     }
@@ -674,8 +695,29 @@ struct TimelineScreen: View {
                 withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                     selectedClipID = id
                 }
+            },
+            onEngaged: {
+                if tour.activeStep == .tuneSound { markTourStepDone() }
             }
         )
+    }
+
+    /// Each song's volume, mute and solo — what step 3 watches.
+    struct TourMix: Equatable {
+        var volume: Double
+        var isMuted: Bool
+        var isSoloed: Bool
+    }
+
+    private var tourMix: [UUID: TourMix] {
+        Dictionary(uniqueKeysWithValues: library.tracks.filter { !$0.isSFXTrack }.map {
+            ($0.id, TourMix(volume: $0.volume, isMuted: $0.isMuted, isSoloed: $0.isSoloed))
+        })
+    }
+
+    private func markTourStepDone() {
+        guard let step = tour.activeStep, step.fingerMovesToNextWhenDone, !tourStepDone else { return }
+        tourStepDone = true
     }
 
     /// The top bar (split out of `body` to keep the type checker fast).
@@ -1020,6 +1062,7 @@ struct TimelineScreen: View {
                     toolbarHint: opensToolbar && step.limitsToolbarToSplit && !tourDidSplit
                         ? anchors[.clipToolbarSplit].map { proxy[$0] }
                         : nil,
+                    fingerOnNext: tourStepDone && step.fingerMovesToNextWhenDone,
                     occluders: opensToolbar ? Path() : pointer.union(glass.map {
                         Path(roundedRect: $0, cornerRadius: OnboardingTourTokens.controlRadius(for: .clipToolbarBody), style: .continuous)
                     } ?? Path())
@@ -1050,6 +1093,8 @@ struct TimelineScreen: View {
         OnboardingTourStore().save(state)
         let step = state.activeStep
         if step != .clipTools { tourDidSplit = false }
+        tourStepDone = false
+        tourMixBaseline = step == .volume ? tourMix : [:]
         // A song swiped open on step 2 closes as the tour moves on.
         if step != .deleteSong, revealedDeleteRowID != nil {
             withAnimation(.easeOut(duration: 0.2)) { revealedDeleteRowID = nil }
@@ -4935,6 +4980,9 @@ private struct TLEffectsPanel: View {
     /// Selects a clip on the timeline (an effect opened with nothing selected
     /// selects the clip under the playhead, so the edited clip is visible).
     var onSelectClip: (UUID) -> Void = { _ in }
+    /// An effect was opened or the row scrolled at least a card (the tour's
+    /// effects step counts that as tried).
+    var onEngaged: () -> Void = {}
 
     @State private var selectedEffect: MixrEffect?
     /// Current horizontal content offset of the cards row — the open/close
@@ -5115,6 +5163,7 @@ private struct TLEffectsPanel: View {
                 $0.contentOffset.x + $0.contentInsets.leading
             }) { _, new in
                 rowScrollOffset = new
+                if new >= cardWidth { onEngaged() }
             }
             .scrollDisabled(isExpanded)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -5200,6 +5249,7 @@ private struct TLEffectsPanel: View {
         withAnimation(expandAnimation) {
             selectedEffect = selectedEffect == effect ? nil : effect
         }
+        if selectedEffect != nil { onEngaged() }
     }
 
     @ViewBuilder

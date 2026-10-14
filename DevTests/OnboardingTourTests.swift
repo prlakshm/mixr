@@ -35,6 +35,10 @@ check("Only the effects step selects a clip itself (step 4 waits for a tap)",
       OnboardingStep.allCases.filter(\.selectsClip) == [.tuneSound])
 check("Only step 4 moves its spotlight onto the toolbar its tap opens",
       OnboardingStep.allCases.filter(\.spotlightsOpenedToolbar) == [.clipTools])
+check("Steps 2–5 hand their finger on to Next once their action is done (1 and 6 move on by themselves)",
+      OnboardingStep.allCases.filter(\.fingerMovesToNextWhenDone) == [.deleteSong, .volume, .clipTools, .tuneSound])
+check("A volume brush doesn't count: the slider must move at least 10%",
+      OnboardingStep.volumeStepThreshold == 0.10)
 check("Only step 4 limits the toolbar to Split (the finger's one safe tool)",
       OnboardingStep.allCases.filter(\.limitsToolbarToSplit) == [.clipTools])
 var opened = OnboardingTourState(progress: .notStarted, activeStep: .soundEffects)
@@ -210,13 +214,21 @@ check("Step 4: the finger points at Split, which alone responds until the tour e
         && timeline.contains("toolbarActions: tour.activeStep?.limitsToolbarToSplit == true ? [.split] : nil")
         && timeline.contains("toolbarHint: opensToolbar && step.limitsToolbarToSplit && !tourDidSplit")
         && overlay.contains("OnboardingFinger(gesture: .tap, travel: 0)"))
+check("Each step's real action moves its finger on to Next: beat, glide, then tapping there",
+      timeline.contains("if id != nil, tour.activeStep == .deleteSong { markTourStepDone() }")
+        && timeline.contains("abs(now.volume - then.volume) >= OnboardingStep.volumeStepThreshold")
+        && timeline.contains("if tour.activeStep == .tuneSound { markTourStepDone() }")
+        && timeline.contains("fingerOnNext: tourStepDone && step.fingerMovesToNextWhenDone")
+        && overlay.contains("try? await Task.sleep(for: .milliseconds(500))")
+        && overlay.contains("withAnimation(.easeInOut(duration: 0.45)) { handoff = .gliding }")
+        && overlay.contains("if reduceMotion {"))
 check("The tip card never lands on the lit toolbar",
       overlay.contains("private func cardOrigin(hole: CGRect?, clearOf lit: CGRect?) -> CGSize"))
 check("Once step 4's tap opens the toolbar, the spotlight moves onto it; the card stays and the finger goes",
       timeline.contains("let opensToolbar = step.spotlightsOpenedToolbar && glass != nil")
         && timeline.contains("openedToolbarFrame: opensToolbar ? glass : nil")
         && overlay.contains("hole: openedToolbarFrame == nil ? targetHole : targetHoleAtOpen ?? targetHole,")
-        && overlay.contains("if openedToolbarFrame == nil {"))
+        && overlay.contains("if openedToolbarFrame == nil, !fingerOnNext {"))
 
 print(failures == 0 ? "\nALL PASSED" : "\nFAILED: \(failures)")
 exit(failures == 0 ? 0 : 1)

@@ -121,6 +121,20 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
     /// keypad would cover the tip; Split loses nothing and Undo reverses it.
     var limitsToolbarToSplit: Bool { self == .clipTools }
 
+    /// Steps whose finger moves on to Next once their action is really done
+    /// (row swiped open, a slider moved or S/M toggled, Split used, an
+    /// effect tapped or the row scrolled a card). Steps 1 and 6 move on by
+    /// themselves.
+    var fingerMovesToNextWhenDone: Bool {
+        switch self {
+        case .deleteSong, .volume, .clipTools, .tuneSound: true
+        case .importSongs, .soundEffects: false
+        }
+    }
+
+    /// How far a volume slider must move (of its 0…1 range) to count.
+    static let volumeStepThreshold = 0.10
+
     var isLast: Bool { self == Self.allCases.last }
 
     /// "2 OF 6"
