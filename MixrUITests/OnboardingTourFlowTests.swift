@@ -164,29 +164,6 @@ final class OnboardingTourFlowTests: MixrUITestCase {
         assertTourStep(2)
     }
 
-    func testTheTipCardNeverCoversTheLitToolbar() {
-        launchSeededAtStepTwo()
-        nextButton.tap(); nextButton.tap()
-        assertTourStep(4)
-        let clip = tourClip
-        tapPoint(clip.frame.minX + 90, clip.frame.midY)
-        let duplicate = app.buttons["Duplicate"]
-        XCTAssertTrue(duplicate.waitForExistence(timeout: 2))
-        sleep(1) // the spotlight glides onto the toolbar
-        // Duplicate scrolls the copy into view and selects it; the clip the
-        // card sits beside slides aside.
-        tapPoint(duplicate.frame.midX, duplicate.frame.minY + 6)
-        sleep(1)
-        assertTourStep(4)
-        let card = app.staticTexts["Tap a clip for tools"].frame.union(nextButton.frame)
-        for tool in ["Split", "Speed", "Duplicate", "Volume", "Delete"] {
-            let button = app.buttons[tool].firstMatch
-            XCTAssertTrue(button.exists, "\(tool) shows")
-            XCTAssertFalse(card.intersects(button.frame), "the tip card covers \(tool)")
-        }
-        capture("tour-step-4-after-duplicate")
-    }
-
     func testTappingTheClipOnStepFourShowsItsToolbar() {
         launchSeededAtStepTwo()
         nextButton.tap(); nextButton.tap()
@@ -198,21 +175,32 @@ final class OnboardingTourFlowTests: MixrUITestCase {
         assertTourStep(4)
     }
 
-    func testTheOpenedToolbarTakesTheSpotlightAndWorks() {
+    func testStepFourGuidesToSplitWhichAloneWorks() {
         launchSeededAtStepTwo()
         nextButton.tap(); nextButton.tap()
         assertTourStep(4)
         let clip = tourClip
         tapPoint(clip.frame.minX + 90, clip.frame.midY)
-        let volume = app.buttons["Volume"]
-        XCTAssertTrue(volume.waitForExistence(timeout: 2), "the tap shows the clip toolbar")
+        let split = app.buttons["Split"]
+        XCTAssertTrue(split.waitForExistence(timeout: 2), "the tap shows the clip toolbar")
         sleep(1) // the spotlight glides onto the toolbar
-        // Its icon sits above the clip: under the scrim until the
-        // spotlight moved onto the toolbar.
-        tapPoint(volume.frame.midX, volume.frame.minY + 6)
-        XCTAssertTrue(app.descendants(matching: .any)["Clip volume"].waitForExistence(timeout: 2),
-                      "the spotlit toolbar really works")
+        for tool in ["Speed", "Duplicate", "Volume", "Delete"] {
+            XCTAssertFalse(app.buttons[tool].firstMatch.isEnabled, "\(tool) waits until the tour ends")
+        }
+        let clips = app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip, '"))
+        let before = clips.count
+        // Its icon sits above the clip: under the scrim until the spotlight
+        // moved onto the toolbar.
+        tapPoint(split.frame.midX, split.frame.minY + 6)
+        XCTAssertEqual(clips.count, before + 1, "Split really splits")
         assertTourStep(4) // the tip waits for Next
+        let card = app.staticTexts["Tap a clip for tools"].frame.union(nextButton.frame)
+        for tool in ["Split", "Speed", "Duplicate", "Volume", "Delete"] {
+            XCTAssertFalse(card.intersects(app.buttons[tool].firstMatch.frame), "the tip card covers \(tool)")
+        }
+        capture("tour-step-4-split")
+        app.buttons["Skip"].tap()
+        XCTAssertTrue(app.buttons["Volume"].firstMatch.isEnabled, "every tool works once the tour ends")
     }
 
     func testEffectsStepSelectsAClipAndRestoresSelection() {

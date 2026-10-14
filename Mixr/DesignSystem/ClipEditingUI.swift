@@ -135,9 +135,10 @@ enum TLClipEditingMetrics {
             + speedValueWidth(text) + 2 * speedBoxPaddingH
             + speedSuffixGap + suffix + toolbarSpeedTrailingPadding
     }
-    /// Clip volume pane: back, speaker, slider, percentage.
+    /// Clip volume pane: back, speaker, slider, level.
     static let volumePaneWidth: CGFloat = ts(196)
-    static let volumeReadoutWidth: CGFloat = ts(34)
+    /// Fits "100" (the level reads like the effect dials, without "%").
+    static let volumeReadoutWidth: CGFloat = ts(26)
     static let volumeIconWidth: CGFloat = ts(16)
     /// Inner width of the volume pane and what's left for its slider —
     /// explicit, because a flexible slider in the morphing pane stack
@@ -647,6 +648,9 @@ struct TLClipContextToolbar: View {
     /// Slides the glass body sideways (to stay inside the timeline near its
     /// edges) while the pointer stays on the playhead.
     var bodyShift: CGFloat = 0
+    /// Tools that respond (nil: all). The tour's toolbar step allows Split
+    /// alone; the others stay lit but inert until it ends.
+    var enabledActions: Set<TLClipEditingMetrics.ToolbarAction>? = nil
 
     @State private var speedText: String = "1.0"
     /// Driven by the UIKit speed field — used for focus chrome + commit.
@@ -842,7 +846,9 @@ struct TLClipContextToolbar: View {
                     isDestructive: item.isDestructive,
                     action: handler(for: item)
                 )
+                .disabled(!(enabledActions?.contains(item) ?? true))
                 .frame(width: item.columnWidth)
+                .onboardingTarget(.clipToolbarSplit, isActive: item == .split)
             }
         }
     }
@@ -868,7 +874,8 @@ struct TLClipContextToolbar: View {
     }
 
     /// Clip volume: back, a speaker that tracks the level, the track's own
-    /// slider, and the percentage — same chrome as the speed pane.
+    /// slider, and the level as a number like the effect dials ("64") —
+    /// same chrome as the speed pane.
     private var volumeContent: some View {
         typealias M = TLClipEditingMetrics
         let s = M.toolbarScale
@@ -897,7 +904,7 @@ struct TLClipContextToolbar: View {
             )
             .frame(width: M.volumeSliderWidth)
 
-            Text("\(percent)%")
+            Text("\(percent)")
                 .font(.system(size: 12 * s, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(MixrColors.textPrimary)
