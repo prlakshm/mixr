@@ -141,7 +141,7 @@ struct OnboardingTourOverlay: View {
 
             OnboardingTipCard(step: step, onNext: onNext, onSkip: onSkip, onBack: onBack, primaryTitle: primaryTitle)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
-                .offset(cardOrigin(hole: targetHole))
+                .offset(cardOrigin(hole: targetHole, clearOf: openedToolbarFrame == nil ? nil : hole))
                 .id(step)
                 .transition(.opacity)
         }
@@ -184,6 +184,25 @@ struct OnboardingTourOverlay: View {
     }
 
     // MARK: Placement
+
+    /// Beside the step's target, but never over the lit toolbar: its tools
+    /// work during the tour (Duplicate, say, scrolls the clip aside and the
+    /// card used to land on Volume and Delete). Then below the toolbar,
+    /// else above it.
+    private func cardOrigin(hole: CGRect?, clearOf lit: CGRect?) -> CGSize {
+        let preferred = cardOrigin(hole: hole)
+        let g = OnboardingTourTokens.gap, m = OnboardingTourTokens.margin
+        guard let lit,
+              CGRect(origin: CGPoint(x: preferred.width, y: preferred.height), size: cardSize)
+                .intersects(lit.insetBy(dx: -g, dy: -g))
+        else { return preferred }
+        let x = min(max(lit.midX - cardSize.width / 2, m), max(m, containerSize.width - cardSize.width - m))
+        let below = lit.maxY + g
+        if below + cardSize.height <= containerSize.height - m {
+            return CGSize(width: x, height: below)
+        }
+        return CGSize(width: x, height: max(m, lit.minY - g - cardSize.height))
+    }
 
     /// Right of the target, else left, else above, else below; clamped
     /// inside the container. Centered when the target isn't on screen.

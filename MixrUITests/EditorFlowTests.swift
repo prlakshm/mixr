@@ -298,7 +298,15 @@ final class EditorFlowTests: MixrUITestCase {
         tap(app.buttons["Cancel"])
     }
 
-    func testAutoEntireProjectMashupIsUndoable() {
+    func testAutoEntireProjectShowsTheRemixFromItsStartAndIsUndoable() {
+        // Leave the view scrolled on and the playhead past the start.
+        let laneStart = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Night Signals, "))
+            .firstMatch.frame.maxX
+        tapEmptyTimeline()
+        XCTAssertNotEqual(playheadTime, "0:00")
+        clips(of: "Night Signals").firstMatch.swipeLeft()
+        XCTAssertLessThan(clips(of: "Night Signals").firstMatch.frame.minX, laneStart - 30, "the view scrolled on")
+
         tap(app.buttons["Auto"])
         tap(app.buttons["Entire Project"])
         let running = app.descendants(matching: .any)["Auto is running"]
@@ -308,6 +316,22 @@ final class EditorFlowTests: MixrUITestCase {
         waitForExpectations(timeout: 90)
         XCTAssertFalse(app.staticTexts["Auto Couldn’t Finish"].exists, "Auto finished without an error")
         XCTAssertTrue(undo.isEnabled)
+
+        // The new remix is in view from its start.
+        sleep(1)
+        XCTAssertEqual(playheadTime, "0:00", "the playhead returns to the start")
+        let opening = app.buttons.matching(NSPredicate(format: "label CONTAINS ' clip, 0:00 to '")).firstMatch
+        XCTAssertTrue(opening.exists)
+        XCTAssertEqual(opening.frame.minX, laneStart, accuracy: 30, "the view is back at 0:00")
+        capture("auto-from-start")
+    }
+
+    /// The transport's current time ("1:23" in "1:23 / 2:39").
+    private var playheadTime: String {
+        let slash = app.staticTexts["/"].frame
+        return app.staticTexts.allElementsBoundByIndex
+            .filter { abs($0.frame.midY - slash.midY) < 6 && $0.frame.maxX <= slash.minX + 1 }
+            .max { $0.frame.maxX < $1.frame.maxX }?.label ?? ""
     }
 
     // MARK: Transport
