@@ -36,8 +36,8 @@ struct MixrGlassButtonChrome: View {
             .overlay {
                 if isPulsing {
                     if reduceMotion {
-                        // Still, but clearly lit: the halo at rest.
-                        shape.strokeBorder(MixrColors.secondaryPurple.opacity(0.55), lineWidth: 1)
+                        // Still, but clearly lit: the halo's core at rest.
+                        shape.strokeBorder(MixrColors.secondaryPurple, lineWidth: 1.5)
                             .transition(.opacity)
                     } else {
                         ImportHaloPulse(cornerRadius: cornerRadius, timeScale: Self.timeScale)
