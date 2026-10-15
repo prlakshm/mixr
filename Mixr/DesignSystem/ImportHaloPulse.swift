@@ -29,13 +29,15 @@ struct HaloPulseStyle {
     var maxVerticalDistance: CGFloat = 5
     /// Glow strength when retracted / extended. Kept close, so the only
     /// pulses you see are the two pushes outward — the return to rest is a
-    /// quiet reset, not a flash.
-    var nearIntensity: Double = 0.7
-    var farIntensity: Double = 0.6
+    /// quiet reset, not a flash. Near full strength: at 0.6–0.7 the halo
+    /// read as a faint outline beside the tour's opaque spotlight ring.
+    var nearIntensity: Double = 1
+    var farIntensity: Double = 0.95
     var color: Color = MixrColors.secondaryPurple
     /// Stacked strokes that make the glow (width, opacity), from the crisp
-    /// core outwards — a halo without a blur pass.
-    var layers: [(width: CGFloat, opacity: Double)] = [(1, 0.55), (3.5, 0.22), (7, 0.08)]
+    /// core outwards — a halo without a blur pass. The core matches the
+    /// tour's 1.5 pt ring.
+    var layers: [(width: CGFloat, opacity: Double)] = [(1.5, 1.0), (4, 0.45), (8, 0.18)]
 
     static let standard = HaloPulseStyle()
 
