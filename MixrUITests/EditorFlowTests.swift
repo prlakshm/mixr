@@ -84,6 +84,33 @@ final class EditorFlowTests: MixrUITestCase {
                       "a video with no audio says so instead of failing silently")
     }
 
+    func testTappingAGapInALaneClosesTheClipToolbar() {
+        // Make a gap in the first lane: split, then delete the right piece.
+        let clip = clips(of: "Night Signals").firstMatch
+        tapPoint(clip.frame.minX + clip.frame.width * 0.35, clip.frame.midY)
+        tap(app.buttons["Split"])
+        tap(app.buttons.matching(identifier: "Delete").firstMatch)
+        let piece = clips(of: "Night Signals").firstMatch.frame
+        tapPoint(piece.midX, piece.midY)
+        XCTAssertTrue(app.buttons["Split"].waitForExistence(timeout: 2), "the clip's toolbar opens")
+        tapPoint(piece.maxX + 60, piece.midY) // empty lane, right of the clip
+        XCTAssertTrue(app.buttons["Split"].waitForNonExistence(timeout: 2),
+                      "a tap in an empty part of a lane closes the toolbar")
+    }
+
+    func testSongControlsCloseTheClipToolbar() {
+        let split = app.buttons["Split"]
+        _ = selectFirstClip()
+        tap(app.buttons["Mute Night Signals"])
+        XCTAssertTrue(split.waitForNonExistence(timeout: 2), "M closes the toolbar")
+        _ = selectFirstClip() // a muted song's clip still opens its tools
+        element("Velvet Static volume").swipeLeft()
+        XCTAssertTrue(split.waitForNonExistence(timeout: 2), "a volume drag closes it")
+        _ = selectFirstClip()
+        tap(songTitle("Paper Suns"))
+        XCTAssertTrue(split.waitForNonExistence(timeout: 2), "tapping a song row closes it")
+    }
+
     func testSwipeToDeleteThenUndoRedo() {
         songTitle("Velvet Static").swipeLeft()
         tap(app.buttons["Delete"])
