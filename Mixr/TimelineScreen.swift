@@ -375,6 +375,7 @@ struct TimelineScreen: View {
     @State private var isExporting = false
     @State private var autoErrorMessage: String?
     @State private var exportErrorMessage: String?
+    @State private var importErrorMessage: String?
     @State private var showProjectMenu = false
     @State private var projectTitleFrame: CGRect = .zero
     @State private var showDeleteProjectConfirm = false
@@ -568,11 +569,11 @@ struct TimelineScreen: View {
         }
         .fileImporter(
             isPresented: $showFilePicker,
-            allowedContentTypes: [.mp3, .wav, .mpeg4Audio, .aiff, .audio],
+            allowedContentTypes: [.mp3, .wav, .mpeg4Audio, .aiff, .audio, .movie],
             allowsMultipleSelection: true
         ) { result in
             guard case .success(let urls) = result else { return }
-            library.addTracks(from: urls)
+            importSongs(urls)
         }
     }
 
@@ -606,7 +607,7 @@ struct TimelineScreen: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             },
             onImportURLs: { urls in
-                library.addTracks(from: urls)
+                importSongs(urls)
             },
             onDeleteTrack: { id in
                 library.deleteTrack(id: id)
@@ -952,6 +953,22 @@ struct TimelineScreen: View {
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
 
+        if let message = importErrorMessage {
+            ZStack {
+                Color.black.opacity(0.52)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(MixrMotion.overlay) { importErrorMessage = nil }
+                    }
+
+                MixrMessageAlert(title: "Couldn’t Import", message: message, scale: alertScale) {
+                    withAnimation(MixrMotion.overlay) { importErrorMessage = nil }
+                }
+            }
+            .zIndex(86)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+
         // Delete project confirm — same chrome as the Auto scope dialog.
         if showDeleteProjectConfirm {
             ZStack {
@@ -1011,6 +1028,36 @@ struct TimelineScreen: View {
     private func dismissProjectMenu() {
         withAnimation(MixrMotion.overlay) {
             showProjectMenu = false
+        }
+    }
+
+    // MARK: - Import
+
+    /// Audio files go straight in; a video's audio track is pulled out first
+    /// (saved as an m4a), so MP4 and MOV import like any song.
+    private func importSongs(_ urls: [URL]) {
+        let videos = urls.filter(ImportedAudioStore.isVideo)
+        let audio = urls.filter { !ImportedAudioStore.isVideo($0) }
+        if !audio.isEmpty { library.addTracks(from: audio) }
+        guard !videos.isEmpty else { return }
+        Task { @MainActor in
+            var extracted: [URL] = []
+            var silent: [String] = []
+            for video in videos {
+                if let song = await ImportedAudioStore.audioTrack(of: video) {
+                    extracted.append(song)
+                } else {
+                    silent.append(video.deletingPathExtension().lastPathComponent)
+                }
+            }
+            if !extracted.isEmpty { library.addTracks(from: extracted) }
+            if !silent.isEmpty {
+                withAnimation(MixrMotion.overlay) {
+                    importErrorMessage = silent.count == 1
+                        ? "“\(silent[0])” has no audio Mixr can use."
+                        : "\(silent.count) videos have no audio Mixr can use."
+                }
+            }
         }
     }
 
@@ -4778,6 +4825,7 @@ private enum TLAudioDrop {
         UTType.mpeg4Audio.identifier,
         UTType.wav.identifier,
         UTType.aiff.identifier,
+        UTType.movie.identifier,
     ]
 
     /// Keeps the app's own copy (the dropped file's URL is only valid

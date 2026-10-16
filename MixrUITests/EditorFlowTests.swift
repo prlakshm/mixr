@@ -67,6 +67,23 @@ final class EditorFlowTests: MixrUITestCase {
         XCTAssertEqual(rows.count, 2, "the picked song is added as a new row")
     }
 
+    func testImportAnMP4AddsItsAudioAsASong() {
+        footerImportButton.tap()
+        pickDemoSongs(["Sunburst Clip"])
+        XCTAssertTrue(songTitle("Sunburst Clip").waitForExistence(timeout: 15),
+                      "the video's audio is added as a song")
+        XCTAssertFalse(app.staticTexts["Couldn’t Import"].exists)
+        sleep(4) // duration, waveform and tempo arrive
+        capture("import-mp4")
+    }
+
+    func testImportAVideoWithoutAudioExplainsWhy() {
+        footerImportButton.tap()
+        pickDemoSongs(["Silent Clip"])
+        XCTAssertTrue(app.staticTexts["Couldn’t Import"].waitForExistence(timeout: 15),
+                      "a video with no audio says so instead of failing silently")
+    }
+
     func testSwipeToDeleteThenUndoRedo() {
         songTitle("Velvet Static").swipeLeft()
         tap(app.buttons["Delete"])

@@ -1,4 +1,5 @@
-import Foundation
+import AVFoundation
+import UniformTypeIdentifiers
 
 /// Audio the app keeps its own copy of (songs dropped onto the timeline).
 /// Lives in Application Support, which iOS never purges (unlike tmp), and
@@ -24,6 +25,36 @@ nonisolated enum ImportedAudioStore {
             try fm.copyItem(at: source, to: destination)
             return destination
         } catch {
+            return nil
+        }
+    }
+
+    /// Video files (MP4, MOV …): Mixr imports their audio track.
+    static func isVideo(_ url: URL) -> Bool {
+        UTType(filenameExtension: url.pathExtension)?.conforms(to: .movie) ?? false
+    }
+
+    /// A video's audio track, saved into the store as an .m4a named after the
+    /// video — from then on the song is an ordinary m4a for playback,
+    /// waveforms, Auto and export. Nil when the video has no audio track or
+    /// can't be read.
+    static func audioTrack(of video: URL) async -> URL? {
+        let scoped = video.startAccessingSecurityScopedResource()
+        defer { if scoped { video.stopAccessingSecurityScopedResource() } }
+        let asset = AVURLAsset(url: video)
+        guard let tracks = try? await asset.loadTracks(withMediaType: .audio), !tracks.isEmpty,
+              let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A),
+              let base = directory else { return nil }
+        let folder = base.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let destination = folder
+            .appendingPathComponent(video.deletingPathExtension().lastPathComponent)
+            .appendingPathExtension("m4a")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try await session.export(to: destination, as: .m4a)
+            return destination
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
             return nil
         }
     }
