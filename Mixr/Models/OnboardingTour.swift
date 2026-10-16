@@ -132,6 +132,11 @@ nonisolated enum OnboardingStep: Int, CaseIterable, Sendable {
         }
     }
 
+    /// Whether the finger rests half a second on the result before gliding to
+    /// Next. Not on step 4: Split's cut sits under the toolbar, so there's
+    /// nothing new to look at and the rest read as dead time.
+    var restsBeforeNext: Bool { self != .clipTools }
+
     /// How far a volume slider must move (of its 0…1 range) to count.
     static let volumeStepThreshold = 0.10
 
