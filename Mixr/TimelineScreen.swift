@@ -3099,6 +3099,9 @@ private struct TLTrackArea: View {
             .onChange(of: scrollToStartRequest) { _, _ in
                 scrollToTimelineStart()
             }
+            .onChange(of: revealedDeleteRowID) { _, id in
+                if id != nil { closeClipTools() }
+            }
 #if DEBUG
             // Visual QA: exercises the same programmatic path the Catalyst
             // pointer bridge drives, and visibly shifts the ruler on capture.
@@ -3128,6 +3131,18 @@ private struct TLTrackArea: View {
             Spacer(minLength: 0)
         }
         .padding(.leading, leadingInset)
+    }
+
+    /// The song list and Controls act on whole songs: using them means the
+    /// clip's tools are done, so its toolbar (and any transition menu) closes.
+    private func closeClipTools() {
+        guard selectedClipID != nil || activeGrip != nil else { return }
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            selectedClipID = nil
+            activeGrip     = nil
+            clipToolbarMode = .actions
+            clipTapAnchorX = nil
+        }
     }
 
     private func sidebarColumn() -> some View {
@@ -3170,7 +3185,10 @@ private struct TLTrackArea: View {
                     isSelected: track.id == selectedTrackID,
                     revealedRowID: $revealedDeleteRowID,
                     onDragChanged: { delta in
-                        if draggingID == nil { draggingID = track.id }
+                        if draggingID == nil {
+                            draggingID = track.id
+                            closeClipTools()
+                        }
                         dragTranslation = delta
                     },
                     onDragEnded: { delta in
@@ -3180,6 +3198,7 @@ private struct TLTrackArea: View {
                         onDeleteTrack(track.id)
                     },
                     onSelect: {
+                        closeClipTools()
                         onSelectTrack(track.id)
                     }
                 )
@@ -3545,10 +3564,17 @@ private struct TLTrackArea: View {
                             }
                         }
                     ),
-                    onToggleSolo: { onToggleSolo(track.id) },
-                    onToggleMute: { onToggleMute(track.id) },
+                    onToggleSolo: {
+                        closeClipTools()
+                        onToggleSolo(track.id)
+                    },
+                    onToggleMute: {
+                        closeClipTools()
+                        onToggleMute(track.id)
+                    },
                     onVolumeEditingChanged: { editing in
                         if editing {
+                            closeClipTools()
                             onEditBegin("Change Volume", .trackMix(track.id))
                         } else {
                             onEditCommit()
@@ -3838,7 +3864,8 @@ private struct TLSongRow: View {
                         swipeOffset: $swipeOffset,
                         deleteActionWidth: deleteActionWidth,
                         revealThreshold: revealThreshold,
-                        onHorizontalSwipeBegan: closeDeleteAction
+                        onHorizontalSwipeBegan: closeDeleteAction,
+                        onTap: handleRowTap
                     )
                 }
                 .zIndex(1)
@@ -3918,13 +3945,16 @@ private struct TLSongRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: rowHeight)
         .contentShape(Rectangle())
-        .onTapGesture {
-            // A tap on a row with Delete showing just closes it.
-            if swipeOffset != 0 {
-                closeDeleteAction()
-            } else {
-                onSelect?()
-            }
+    }
+
+    /// Taps arrive through the swipe handler laid over the row (a SwiftUI
+    /// tap on the row underneath never fired). A tap on a row with Delete
+    /// showing just closes it.
+    private func handleRowTap() {
+        if swipeOffset != 0 {
+            closeDeleteAction()
+        } else {
+            onSelect?()
         }
     }
 
@@ -4034,6 +4064,7 @@ private struct TLRowHorizontalSwipeHandler: UIViewRepresentable {
     let deleteActionWidth: CGFloat
     let revealThreshold: CGFloat
     var onHorizontalSwipeBegan: () -> Void = {}
+    var onTap: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -4054,17 +4085,31 @@ private struct TLRowHorizontalSwipeHandler: UIViewRepresentable {
         pan.delegate = context.coordinator
         pan.cancelsTouchesInView = false
         view.addGestureRecognizer(pan)
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        tap.cancelsTouchesInView = false
+        view.addGestureRecognizer(tap)
+        context.coordinator.onTap = onTap
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onTap = onTap
+    }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         @Binding var swipeOffset: CGFloat
         let deleteActionWidth: CGFloat
         let revealThreshold: CGFloat
         var onHorizontalSwipeBegan: () -> Void
+        var onTap: () -> Void = {}
         private var dragStartOffset: CGFloat = 0
+
+        @objc func handleTap(_ tap: UITapGestureRecognizer) {
+            if tap.state == .ended { onTap() }
+        }
         private var isActive = false
 
         private let horizontalDominance: CGFloat = 1.25
@@ -4497,6 +4542,10 @@ private struct TLTrackLane: View {
     var isActiveForDrag: Bool          = false
     /// Muted, or excluded by another track's solo — clips render dimmed.
     var isInaudible:    Bool           = false
+    /// Muted / soloed-out lanes are dimmed. Applied to what's drawn only:
+    /// an opacity on the whole lane also switched off the clips' UIKit tap
+    /// and drag recognisers, so a muted song's clips couldn't be selected.
+    private var inaudibleDim: Double { isInaudible ? 0.42 : 1 }
     /// The clip the onboarding tour spotlights (first clip of the first song).
     var onboardingClipID: UUID?        = nil
     var onClipTapped:   ((UUID, CGFloat) -> Void)?          = nil
@@ -4588,7 +4637,11 @@ private struct TLTrackLane: View {
             // Faint wash of the track's own color; the SFX lane sits 5%
             // lower than the standard 0.025 so its silver tint reads a
             // touch quieter than the song lanes.
+            // Paint only: a tap in a gap between clips falls through to the
+            // timeline, which moves the playhead and closes the clip toolbar.
             track.color.color.opacity(track.isSFXTrack ? 0.018 : 0.025)
+                .opacity(inaudibleDim)
+                .allowsHitTesting(false)
             MixrColors.divider
                 .frame(height: 0.5)
                 .frame(maxHeight: .infinity, alignment: .bottom)
@@ -4616,6 +4669,7 @@ private struct TLTrackLane: View {
                         isDraggingThis: isDraggingThis,
                         isArmedThis: isArmedThis
                     )
+                    .opacity(inaudibleDim)
                 }
 
                 // Permanent gesture hit area — always present regardless of drag state so that
@@ -4662,6 +4716,7 @@ private struct TLTrackLane: View {
                 // SFX clips have no transitions — no grips.
                 if !isDraggingThis && !isArmedThis && !clip.isSoundEffect {
                     clipGrips(for: clip, segments: clipSegments)
+                        .opacity(inaudibleDim)
                 }
             }
 
@@ -4675,14 +4730,13 @@ private struct TLTrackLane: View {
                 TLClipWaveform(track: track, clip: drag.originalClip)
                     .frame(height: waveformHeight)
                     .frame(width: clipW)
-                    .opacity(TLK.clipDragGhostOpacity)
+                    .opacity(TLK.clipDragGhostOpacity * inaudibleDim)
                     .allowsHitTesting(false)
                     .position(x: xOffset + clipW / 2, y: rowHeight / 2)
                     .zIndex(0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .opacity(isInaudible ? 0.42 : 1)
         .animation(.easeOut(duration: 0.18), value: isInaudible)
         .overlay {
             if isScrimmed {
