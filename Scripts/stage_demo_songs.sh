@@ -30,4 +30,15 @@ fi
 rm -rf "${STORAGE:?}/Mixr Demo"
 mkdir -p "$STORAGE/Mixr Demo"
 cp "$SONGS"/*.m4a "$STORAGE/Mixr Demo/"
+# Two copyright-free videos for the MP4 import tests: a demo song with a plain
+# colour picture (named unlike any song, so title-based picks stay exact), and
+# a clip with no audio track. Needs ffmpeg (skipped
+# without it; those two tests then can't find their files).
+if command -v ffmpeg >/dev/null 2>&1; then
+  ffmpeg -v error -y -f lavfi -i "color=c=0x7231DD:s=320x180:r=15" \
+    -i "$SONGS/Sable Coast - Paper Suns.m4a" -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac \
+    "$STORAGE/Mixr Demo/Sable Coast - Sunburst Clip.mp4"
+  ffmpeg -v error -y -f lavfi -i "color=c=0x101018:s=320x180:r=15" -t 3 -c:v libx264 -pix_fmt yuv420p \
+    "$STORAGE/Mixr Demo/Silent Clip.mp4"
+fi
 echo "$STORAGE/Mixr Demo"
