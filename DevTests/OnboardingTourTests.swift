@@ -37,6 +37,8 @@ check("Only step 4 moves its spotlight onto the toolbar its tap opens",
       OnboardingStep.allCases.filter(\.spotlightsOpenedToolbar) == [.clipTools])
 check("Steps 2–5 hand their finger on to Next once their action is done (1 and 6 move on by themselves)",
       OnboardingStep.allCases.filter(\.fingerMovesToNextWhenDone) == [.deleteSong, .volume, .clipTools, .tuneSound])
+check("Only step 4 skips the rest before the glide (Split's result is under the toolbar)",
+      OnboardingStep.allCases.filter { !$0.restsBeforeNext } == [.clipTools])
 check("A volume brush doesn't count: the slider must move at least 10%",
       OnboardingStep.volumeStepThreshold == 0.10)
 check("Only step 4 limits the toolbar to Split (the finger's one safe tool)",
@@ -219,7 +221,7 @@ check("Each step's real action moves its finger on to Next: beat, glide, then ta
         && timeline.contains("abs(now.volume - then.volume) >= OnboardingStep.volumeStepThreshold")
         && timeline.contains("if tour.activeStep == .tuneSound { markTourStepDone() }")
         && timeline.contains("fingerOnNext: tourStepDone && step.fingerMovesToNextWhenDone")
-        && overlay.contains("try? await Task.sleep(for: .milliseconds(500))")
+        && overlay.contains("try? await Task.sleep(for: .milliseconds(step.restsBeforeNext ? 500 : 0))")
         && overlay.contains("withAnimation(.easeInOut(duration: 0.45)) { handoff = .gliding }")
         && overlay.contains("if reduceMotion {"))
 check("The tip card never lands on the lit toolbar",

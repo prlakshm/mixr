@@ -71,8 +71,9 @@ Buttons: `Skip`, `Next`, last step `Start mixing`, project menu `Replay tour`.
   button itself (a tap there still deletes).
 - Steps 2–5: once the step's action is really done (row swiped open; a
   slider moved ≥ 10% or S/M toggled; Split used; an effect opened or the
-  row scrolled a card) the finger rests half a second, glides to Next
-  (0.45 s) and taps there; it stays on Next. Reduce Motion: no glide. Next
+  row scrolled a card) the finger rests half a second (not on step 4,
+  whose cut is hidden under the toolbar), glides to Next (0.45 s) and taps
+  there; it stays on Next. Reduce Motion: no glide. Next
   itself never changes. Steps 1 and 6 move on by themselves.
 - Progress persists in UserDefaults (`mixr.onboardingTour.progress`).
 - **Replay tour** is in the project dropdown menu.

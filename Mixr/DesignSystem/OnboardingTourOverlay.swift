@@ -260,14 +260,15 @@ struct OnboardingTourOverlay: View {
     static let space = "onboardingTour"
 
     /// Half a second to see the result, then a 0.45 s glide to Next (Reduce
-    /// Motion: no glide, the finger reappears on Next).
+    /// Motion: no glide, the finger reappears on Next). Steps whose result is
+    /// hard to see (Split's cut sits under the toolbar) skip the rest.
     private func runHandoff(_ done: Bool) {
         guard done else { handoff = .none; return }
         guard handoff == .none else { return }
         let from = lastFingerPoint ?? nextFrame.map { CGPoint(x: $0.midX, y: $0.midY) } ?? .zero
         if !reduceMotion { handoff = .beat(from) }
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
+            try? await Task.sleep(for: .milliseconds(step.restsBeforeNext ? 500 : 0))
             guard fingerOnNext else { return }
             if reduceMotion {
                 withAnimation(.easeOut(duration: 0.2)) { handoff = .onNext }
