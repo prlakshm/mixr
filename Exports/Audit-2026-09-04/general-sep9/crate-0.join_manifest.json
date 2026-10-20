@@ -1,0 +1,363 @@
+{
+  "audioSHA256" : "829a7e38ba5760869d5c9f0fd3e862e2dac8669193698bbcdbb2fb81f8626061",
+  "dropBars" : [
+    24,
+    56.000000000000007
+  ],
+  "dropTimes" : [
+    55.299539170506904,
+    129.03225806451613
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "britney-baby-one-more-time.mp3" : "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252"
+  },
+  "intentionalGaps" : [
+
+  ],
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 55.299539170506904,
+      "incomingSongID" : null,
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "windowStart" : 50.691244239631331
+    }
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 28
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 0,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 36.866359447004605,
+      "timelineStart" : 0,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 41.29032258064516,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 13.824884792626726,
+      "timelineStart" : 36.866359447004605,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 56.774193548387096,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.7282949308755704,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 56.774193548387096,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.608294930875573,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 0.41999999999999998
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 58.079999999999998,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 36.986359447004617,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 61.935483870967737,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.72724654377880427,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 12,
+        "reverb" : 20.5
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 143.25999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 18.433179723502302,
+      "timelineStart" : 92.165898617511516,
+      "volume" : 1.1585416398027804
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 99.370322580645166,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.2318548387096797,
+      "timelineStart" : 92.165898617511516,
+      "volume" : 0.97960000000000003
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 18,
+        "echo" : 8,
+        "flanger" : 10
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 163.90516129032258,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.2165898617511512,
+      "timelineStart" : 110.59907834101382,
+      "volume" : 0.97926715153898103
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 174.22774193548386,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.3365898617511647,
+      "timelineStart" : 119.81566820276497,
+      "volume" : 0.96058410966313967
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 10,
+        "echo" : 6,
+        "reverb" : 12
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 122.59999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 40.608667139312303,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "supporting",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 184.55032258064517,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.8925691244239715,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "reverb" : 14
+      },
+      "role" : "dominant",
+      "songID" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "sourceStart" : 184.56,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.3660714285714182,
+      "timelineStart" : 165.89861751152074,
+      "volume" : 0.89362804524143646
+    }
+  ],
+  "planFingerprint" : "19a57f028d7659c587098750750616b8cdc90243be89128e3cb2abb005539aa4",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : false
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sfxEvents" : [
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 51.299539170506904
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 51.299539170506904
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 53.299539170506904
+    },
+    {
+      "assetID" : "tapeStop",
+      "duration" : 1,
+      "timelineStart" : 54.299539170506904
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "bassDrop",
+      "duration" : 1.5,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 59.907834101382484
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 62.21198156682027
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 64.51612903225805
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 64.516129032258064
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 66.820276497695843
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 69.124423963133637
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 71.428571428571416
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 73.73271889400921
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 92.165898617511516
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 125.03225806451613
+    },
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 125.03225806451613
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 129.03225806451613
+    },
+    {
+      "assetID" : "crash",
+      "duration" : 1,
+      "timelineStart" : 129.03225806451613
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 165.89861751152071
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 166.69861751152075
+    }
+  ],
+  "sourceIdentity" : [
+    {
+      "id" : "1301F57A-0498-464D-BB3A-266A96670E5C",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/britney-baby-one-more-time.mp3"
+    }
+  ],
+  "targetBPM" : 104.16000000000001,
+  "warnings" : [
+    "Listen loop: loudnessStep @75.0s — -8.9 dB between adjacent seconds",
+    "Listen loop: loudnessStep @76.0s — +8.1 dB between adjacent seconds",
+    "Listen loop: hole @75.2s — notch 0.80s, 19.1 dB under its own approach"
+  ]
+}

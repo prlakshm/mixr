@@ -1,0 +1,28 @@
+[
+  {
+    "label": "revised",
+    "source": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/groove-sep13-final/crate-0-1.m4a",
+    "source_sha256": "8cb7c56afc6e093e214cccae50202d8138ab0a1360c3d9c00b0b3f2602625ef3",
+    "excerpt": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/listening-groove-sep13/revised.wav",
+    "excerpt_sha256": "3328c12af21949e6c47c6079883d9edbdc850e015f9f219d9ad6499c55819d8b",
+    "source_offset_seconds": 43.299539170506904,
+    "drop_at_excerpt_seconds": 12,
+    "gain_db": -6.743792979738945,
+    "measured_excerpt_lufs": -18.00000000112331,
+    "normalization": "single fixed gain to -18 integrated LUFS; no extra limiting",
+    "review_status": "not auditioned; labeled development comparison, not blinded release approval"
+  },
+  {
+    "label": "preferred-B",
+    "source": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/01-mashup-oops-x-baby.m4a",
+    "source_sha256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+    "excerpt": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/listening-groove-sep13/preferred-B.wav",
+    "excerpt_sha256": "84558403c1f553c3f1a01dc68d715e53bb6e71c57497c3edea85032ad0e123f2",
+    "source_offset_seconds": 65.50759878419451,
+    "drop_at_excerpt_seconds": 12,
+    "gain_db": -7.685357266277526,
+    "measured_excerpt_lufs": -17.999999992478607,
+    "normalization": "single fixed gain to -18 integrated LUFS; no extra limiting",
+    "review_status": "not auditioned; labeled development comparison, not blinded release approval"
+  }
+]

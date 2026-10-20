@@ -1,0 +1,21 @@
+{
+  "review_date": "2026-09-12",
+  "reviewer": "owner",
+  "candidate": "Exports/Audit-2026-09-04/listening-sep12/revised.wav",
+  "candidate_musical_approval": false,
+  "headphone_signoff": null,
+  "speaker_signoff": null,
+  "observations": [
+    "The revised mix cuts off lines or lyrics.",
+    "The earlier version preserved complete lines better.",
+    "The jump into I think the problem is this is desirable, but the next handoff happens too quickly.",
+    "The opening h of Hit me baby is not audible in the described handoff."
+  ],
+  "required_behavior": [
+    "Preserve complete outgoing lines, including the deliberate continuation.",
+    "Delay the subsequent handoff rather than deleting the continuation.",
+    "Retain the incoming consonant and pickup without a second title preview."
+  ],
+  "supersedes": "Any interpretation of the September 9 feedback that requires deleting the problem-is-this continuation or permits shortening at an isolated RMS valley.",
+  "verification_status": "Post-feedback correction in progress; earlier numerical passes do not certify the revised musical behavior."
+}

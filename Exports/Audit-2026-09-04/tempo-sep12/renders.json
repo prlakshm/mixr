@@ -1,0 +1,56 @@
+[
+  {
+    "bpm" : 93,
+    "expected_pitch_semitones" : 0,
+    "name" : "pair-vocal",
+    "negative_control" : false,
+    "path" : "\/Users\/pranavi\/Documents\/GitHub\/mixr\/Exports\/Audit-2026-09-04\/tempo-sep12\/pair-vocal.m4a",
+    "rate" : 1.1200000000000001,
+    "target" : 104.16000000000001
+  },
+  {
+    "bpm" : 95,
+    "expected_pitch_semitones" : 0,
+    "name" : "pair-bed",
+    "negative_control" : false,
+    "path" : "\/Users\/pranavi\/Documents\/GitHub\/mixr\/Exports\/Audit-2026-09-04\/tempo-sep12\/pair-bed.m4a",
+    "rate" : 1.096421052631579,
+    "target" : 104.16000000000001
+  },
+  {
+    "bpm" : 93,
+    "expected_pitch_semitones" : 0,
+    "name" : "native-control",
+    "negative_control" : false,
+    "path" : "\/Users\/pranavi\/Documents\/GitHub\/mixr\/Exports\/Audit-2026-09-04\/tempo-sep12\/native-control.m4a",
+    "rate" : 1,
+    "target" : 93
+  },
+  {
+    "bpm" : 93,
+    "expected_pitch_semitones" : 0,
+    "name" : "negative-drift",
+    "negative_control" : true,
+    "path" : "\/Users\/pranavi\/Documents\/GitHub\/mixr\/Exports\/Audit-2026-09-04\/tempo-sep12\/negative-drift.m4a",
+    "rate" : 1.1100000000000001,
+    "target" : 104.16
+  },
+  {
+    "bpm" : 93,
+    "expected_pitch_semitones" : 2,
+    "name" : "pitch-up",
+    "negative_control" : false,
+    "path" : "\/Users\/pranavi\/Documents\/GitHub\/mixr\/Exports\/Audit-2026-09-04\/tempo-sep12\/pitch-up.m4a",
+    "rate" : 1.1200000000000001,
+    "target" : 104.16
+  },
+  {
+    "bpm" : 128,
+    "expected_pitch_semitones" : -1,
+    "name" : "slowdown",
+    "negative_control" : false,
+    "path" : "\/Users\/pranavi\/Documents\/GitHub\/mixr\/Exports\/Audit-2026-09-04\/tempo-sep12\/slowdown.m4a",
+    "rate" : 0.92000000000000004,
+    "target" : 117.76000000000001
+  }
+]

@@ -1,0 +1,300 @@
+[
+  {
+    "file": "crate-0-2-4.m4a",
+    "start": 91.47,
+    "end": 91.57,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 88.07900000000001,
+        "rms_dbfs": -69.69096421719232,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/drums.wav",
+        "source_start": 29.539677419354838,
+        "rms_dbfs": -64.03645839613449,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/bass.wav",
+        "source_start": 29.539677419354838,
+        "rms_dbfs": -61.243077254947366,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/other.wav",
+        "source_start": 29.539677419354838,
+        "rms_dbfs": -53.71440620025558,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-0-3-4.m4a",
+    "start": 91.47,
+    "end": 91.57,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 88.07900000000001,
+        "rms_dbfs": -69.69096421719232,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/drums.wav",
+        "source_start": 29.539677419354838,
+        "rms_dbfs": -64.03645839613449,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/bass.wav",
+        "source_start": 29.539677419354838,
+        "rms_dbfs": -61.243077254947366,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/other.wav",
+        "source_start": 29.539677419354838,
+        "rms_dbfs": -53.71440620025558,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-0.m4a",
+    "start": 7.96,
+    "end": 8.01,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Songs/britney-baby-one-more-time.mp3",
+        "source_start": 8.9152,
+        "rms_dbfs": -58.35633485026626,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1-2-4.m4a",
+    "start": 92.67,
+    "end": 92.78,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 91.37833333333334,
+        "rms_dbfs": -72.96156009559003,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+        "source_start": 32.04789473684211,
+        "rms_dbfs": -67.85672253860187,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+        "source_start": 32.04789473684211,
+        "rms_dbfs": -56.721675998946836,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+        "source_start": 32.04789473684211,
+        "rms_dbfs": -62.43694357751558,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1-2-4.m4a",
+    "start": 97.72,
+    "end": 97.84,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+        "source_start": 37.09789473684211,
+        "rms_dbfs": -64.33611525234915,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+        "source_start": 37.09789473684211,
+        "rms_dbfs": -63.22158080408635,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+        "source_start": 37.09789473684211,
+        "rms_dbfs": -61.916497109899105,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 96.70888888888888,
+        "rms_dbfs": -72.59725158614451,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1-2-4.m4a",
+    "start": 98.33,
+    "end": 98.44,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+        "source_start": 37.70789473684211,
+        "rms_dbfs": -60.4239209811701,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+        "source_start": 37.70789473684211,
+        "rms_dbfs": -60.0351801567437,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+        "source_start": 37.70789473684211,
+        "rms_dbfs": -63.370376370149934,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 97.35277777777777,
+        "rms_dbfs": -71.32860006269382,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1-3-4.m4a",
+    "start": 92.67,
+    "end": 92.78,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 91.37833333333334,
+        "rms_dbfs": -72.96156009559003,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+        "source_start": 32.04789473684211,
+        "rms_dbfs": -67.85672253860187,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+        "source_start": 32.04789473684211,
+        "rms_dbfs": -56.721675998946836,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+        "source_start": 32.04789473684211,
+        "rms_dbfs": -62.43694357751558,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1-3-4.m4a",
+    "start": 97.72,
+    "end": 97.84,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+        "source_start": 37.09789473684211,
+        "rms_dbfs": -64.33611525234915,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+        "source_start": 37.09789473684211,
+        "rms_dbfs": -63.22158080408635,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+        "source_start": 37.09789473684211,
+        "rms_dbfs": -61.916497109899105,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 96.70888888888888,
+        "rms_dbfs": -72.59725158614451,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1-3-4.m4a",
+    "start": 98.33,
+    "end": 98.44,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+        "source_start": 37.70789473684211,
+        "rms_dbfs": -60.4239209811701,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+        "source_start": 37.70789473684211,
+        "rms_dbfs": -60.0351801567437,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+        "source_start": 37.70789473684211,
+        "rms_dbfs": -63.370376370149934,
+        "status": "measured"
+      },
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+        "source_start": 97.35277777777777,
+        "rms_dbfs": -71.32860006269382,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1.m4a",
+    "start": 2.26,
+    "end": 2.73,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Songs/britney-oops-i-did-it-again.mp3",
+        "source_start": 2.5312,
+        "rms_dbfs": -70.69098291107315,
+        "status": "measured"
+      }
+    ]
+  },
+  {
+    "file": "crate-1.m4a",
+    "start": 3.66,
+    "end": 3.95,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Songs/britney-oops-i-did-it-again.mp3",
+        "source_start": 4.099200000000001,
+        "rms_dbfs": -69.04780338596584,
+        "status": "measured"
+      }
+    ]
+  }
+]

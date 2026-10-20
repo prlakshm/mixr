@@ -1,0 +1,1340 @@
+{
+  "audioSHA256" : "fc74719aa71f928598a6acea3ff75c742088f1f5f95cdf9e500de9c78b72d139",
+  "dropBars" : [
+    24,
+    49
+  ],
+  "dropTimes" : [
+    55.299539170506904,
+    112.9032258064516
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "britney-baby-one-more-time.mp3" : "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252",
+    "britney-oops-i-did-it-again.mp3" : "813410aa8f0466f210a78f38730578e1946fbd3291c05a92b2872eab3cf4eaa4"
+  },
+  "intentionalGaps" : [
+
+  ],
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 55.299539170506904,
+      "incomingSongID" : "B602FF0E-D54D-4947-90EB-FE00F5E38C68",
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "windowStart" : 50.691244239631331
+    }
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 12,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 2,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 0,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 0,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 14.400921658986173,
+      "timelineStart" : 0,
+      "volume" : 1.4561934395469733
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 0.57603686635944695,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 18.5531797235023,
+      "timelineStart" : 13.824884792626726,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4,
+      "timelineStart" : 13.824884792626726,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4,
+      "timelineStart" : 13.824884792626726,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4,
+      "timelineStart" : 13.824884792626726,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 2,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 54.623149473684208,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 14.433179723502299,
+      "timelineStart" : 17.824884792626726,
+      "volume" : 1.1926691145053716
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 2,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 54.623149473684208,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 14.433179723502299,
+      "timelineStart" : 17.824884792626726,
+      "volume" : 1.1926691145053716
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 2,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 54.623149473684208,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 14.433179723502299,
+      "timelineStart" : 17.824884792626726,
+      "volume" : 1.1926691145053716
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 6.4966461538461546,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 112.90322580645159,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 13.824884792626726,
+      "timelineStart" : 32.258064516129032,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4,
+      "timelineStart" : 32.258064516129032,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4,
+      "timelineStart" : 32.258064516129032,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.237465263157894,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4,
+      "timelineStart" : 32.258064516129032,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 7.5398466666666666,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 0.57603686635944695,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 70.447991578947367,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.3432296466973881,
+      "timelineStart" : 32.258064516129032,
+      "volume" : 1.5573695875359397
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 54.623149473684208,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 9.824884792626726,
+      "timelineStart" : 36.258064516129032,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 54.623149473684208,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 9.824884792626726,
+      "timelineStart" : 36.258064516129032,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 54.623149473684208,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 9.824884792626726,
+      "timelineStart" : 36.258064516129032,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 0,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 65.395359999999997,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 7.1547695852534545,
+      "timelineStart" : 46.082949308755758,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 65.395359999999997,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.608294930875573,
+      "timelineStart" : 46.082949308755758,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 65.395359999999997,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.608294930875573,
+      "timelineStart" : 46.082949308755758,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 18.433179723502302,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 65.395359999999997,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.8963133640552954,
+      "timelineStart" : 46.082949308755758,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 4,
+        "curve" : "equalPower",
+        "floorGain" : 0.63095734448019325,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 9.2165898617511512,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.527368421052635,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 13.824884792626724,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 4,
+        "curve" : "equalPower",
+        "floorGain" : 0.63095734448019325,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 9.2165898617511512,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.527368421052635,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 13.824884792626724,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 9.2165898617511512,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 50.527368421052635,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 13.824884792626724,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 4,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 0,
+      "role" : "dominant",
+      "songID" : "B602FF0E-D54D-4947-90EB-FE00F5E38C68",
+      "sourceStart" : 42.350000000000001,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 23.264688940092164,
+      "timelineStart" : 55.076324884792619,
+      "volume" : 4.152856116610308
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 9.2165898617511512,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 55.579999999999998,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 9.2165898617511512,
+      "timelineStart" : 64.51612903225805,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 9.2165898617511512,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 55.579999999999998,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 9.2165898617511512,
+      "timelineStart" : 64.51612903225805,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 9.2165898617511512,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 55.579999999999998,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 9.2165898617511512,
+      "timelineStart" : 64.51612903225805,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 2.3041474654377865,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 55.579999999999998,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 2.3041474654377865,
+      "timelineStart" : 73.73271889400921,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 2.3041474654377865,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 55.579999999999998,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 2.3041474654377865,
+      "timelineStart" : 73.73271889400921,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 2.3041474654377865,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 55.579999999999998,
+      "stemKind" : "other",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 2.3041474654377865,
+      "timelineStart" : 73.73271889400921,
+      "volume" : 3.9810717055349727
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 12,
+        "pitchUp" : 8.3333333333333321,
+        "reverb" : 18
+      },
+      "fadeIn" : {
+        "beats" : 4,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 2.3041474654377878,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 144.40000000000001,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 18.553179723502311,
+      "timelineStart" : 76.036866359446989,
+      "volume" : 1
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 22
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 6.4966461538461546,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 0,
+      "role" : "supporting",
+      "songID" : "B602FF0E-D54D-4947-90EB-FE00F5E38C68",
+      "sourceStart" : 65.825806451612905,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 3.7423076923076923,
+      "timelineStart" : 76.036866359446989,
+      "volume" : 0.78000000000000003
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 22,
+        "echo" : 12,
+        "flanger" : 12,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 6.4966461538461511,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 55.299539170506904,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 116.16,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 13.944884792626738,
+      "timelineStart" : 94.470046082949295,
+      "volume" : 0.9675999999999999
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 12,
+        "pitchUp" : 8.3333333333333321,
+        "reverb" : 18
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 7.1558333333333106,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 2.3041474654377878,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 164.61052631578949,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.122023809523796,
+      "timelineStart" : 94.470046082949295,
+      "volume" : 0.62
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 22,
+        "echo" : 12,
+        "flanger" : 12,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 55.299539170506904,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 116.16,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.6082949308755756,
+      "timelineStart" : 108.41493087557603,
+      "volume" : 0.80385488401308913
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 36.866359447004598,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 68.180000000000007,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 18.553179723502311,
+      "timelineStart" : 112.9032258064516,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 22,
+        "echo" : 12,
+        "flanger" : 12,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 2.9758333333333304,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 55.299539170506904,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 136.37052631578948,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 1.7141897081413191,
+      "timelineStart" : 112.9032258064516,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 14,
+        "pitchUp" : 8.3333333333333321,
+        "reverb" : 18
+      },
+      "fadeIn" : {
+        "beats" : 6.4966461538461511,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502292,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 179.74000000000001,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 7.3439900153609585,
+      "timelineStart" : 131.33640552995391,
+      "volume" : 0.80722134916046195
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6,
+        "pitchUp" : 8.3333333333333321
+      },
+      "fadeIn" : {
+        "beats" : 0.5,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 6.6174999999999944,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 36.866359447004598,
+      "role" : "supporting",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 88.390526315789486,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 3.811923963133637,
+      "timelineStart" : 131.33640552995391,
+      "volume" : 0.97960000000000003
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8.6666666666666661,
+        "echo" : 14,
+        "pitchUp" : 8.3333333333333321,
+        "reverb" : 18
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502292,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 187.79210526315788,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.6082949308755756,
+      "timelineStart" : 138.68039554531487,
+      "volume" : 0.46752829410802815
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 17.333333333333332,
+        "echo" : 14,
+        "pitchUp" : 8.3333333333333321,
+        "reverb" : 18
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "overlapSeconds" : 18.433179723502292,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 192.84473684210525,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.6082949308755756,
+      "timelineStart" : 143.28869047619045,
+      "volume" : 0.35181295616612113
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 26,
+        "echo" : 14,
+        "pitchUp" : 8.3333333333333321,
+        "reverb" : 18
+      },
+      "fadeIn" : {
+        "beats" : 0,
+        "curve" : "linear",
+        "floorGain" : null,
+        "type" : "None"
+      },
+      "fadeOut" : {
+        "beats" : 8,
+        "curve" : "equalPower",
+        "floorGain" : null,
+        "type" : "Crossfade"
+      },
+      "overlapSeconds" : 18.433179723502292,
+      "role" : "dominant",
+      "songID" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "sourceStart" : 197.89736842105262,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.096421052631579,
+      "timelineDuration" : 4.6082949308755756,
+      "timelineStart" : 147.89698540706601,
+      "volume" : 0.20256389705783176
+    }
+  ],
+  "planFingerprint" : "1c239dc1830728a543e27cd903d5d1b65bb75d55e99a3b0f19157f9b6b899190",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : false
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sfxEvents" : [
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 51.299539170506904
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 62.21198156682027
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 64.51612903225805
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 64.516129032258064
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 66.820276497695843
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 69.124423963133637
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 71.428571428571416
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 73.73271889400921
+    },
+    {
+      "assetID" : "tapeStop",
+      "duration" : 1,
+      "timelineStart" : 75.736866359446992
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 76.036866359446989
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 108.9032258064516
+    },
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 108.9032258064516
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 112.9032258064516
+    },
+    {
+      "assetID" : "crash",
+      "duration" : 1,
+      "timelineStart" : 112.9032258064516
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 131.33640552995391
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 131.33640552995391
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 132.38640552995392
+    }
+  ],
+  "sourceIdentity" : [
+    {
+      "id" : "B602FF0E-D54D-4947-90EB-FE00F5E38C68",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/britney-baby-one-more-time.mp3"
+    },
+    {
+      "id" : "3DFC7697-5CB0-4B4C-977D-655526B9E527",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/britney-oops-i-did-it-again.mp3"
+    }
+  ],
+  "targetBPM" : 104.16000000000001,
+  "warnings" : [
+    "Fewer song handoffs than intended — some sections were skipped for lack of material.",
+    "Review the delayed handoff: measured timing does not confirm a complete lyric phrase.",
+    "Listen loop: loudnessStep @105.0s — -7.4 dB between adjacent seconds",
+    "Listen loop: loudnessStep @106.0s — +7.9 dB between adjacent seconds",
+    "Listen loop: loudnessStep @120.0s — -7.0 dB between adjacent seconds",
+    "Listen loop: hole @105.0s — notch 0.70s, 14.5 dB under its own approach"
+  ]
+}

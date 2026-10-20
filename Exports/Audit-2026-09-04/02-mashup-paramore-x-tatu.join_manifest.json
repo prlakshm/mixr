@@ -1,0 +1,56 @@
+{
+  "audioSHA256": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+  "dropTimes": [
+    56.66666666666667,
+    110
+  ],
+  "gitCommit": "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes": {
+    "paramore-all-i-wanted.mp3": "9515694f184d0f6fff14b7d2b4d47adf2c80cf0c345f080ce0355552e78eb77e",
+    "tatu-all-the-things-she-said.mp3": "aa3d90a1854abdb232ccdb9b690844074b8c4ac54856f486a105d40c6c51917d"
+  },
+  "joinContracts": [
+    {
+      "coverage": "bedOther",
+      "cutAt": 56.66666666666667,
+      "incomingSongID": "A8D88771-6603-48FC-9858-4C9E9FF90FE9",
+      "kind": "sweepJoin",
+      "outgoingSongID": "36B598FC-D8DE-4F5B-B9F1-E617584A4B5E",
+      "windowStart": 53.333333333333336
+    }
+  ],
+  "planFingerprint": "eef0a1be205b41dfb81267d83e043a5f0f5fcd5556f87292b505c718fb1c6554",
+  "preApplyScore": {
+    "candidate": {
+      "criticalContractViolations": 0,
+      "dropApproachDeficit": 0,
+      "missingRequiredCoverage": 0,
+      "worstTroughDeficit": 0
+    },
+    "original": {
+      "criticalContractViolations": 0,
+      "dropApproachDeficit": 0,
+      "missingRequiredCoverage": 0,
+      "worstTroughDeficit": 0
+    },
+    "repairKept": false
+  },
+  "releaseAudit": {
+    "audioSHA256": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+    "joins": [
+      {
+        "coverage": "bedOther",
+        "cutAt": 56.66666666666667,
+        "highpassDipDB": -8.27,
+        "troughDeficit": 0.0,
+        "windowStart": 53.333333333333336
+      }
+    ],
+    "status": "pass",
+    "whisper": "inconclusive",
+    "worstTroughDeficit": 0.0,
+    "zScore": "diagnostic-only"
+  },
+  "schemaVersion": 1,
+  "seed": 20260815
+}

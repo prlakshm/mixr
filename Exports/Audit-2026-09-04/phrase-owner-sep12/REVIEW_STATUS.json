@@ -1,0 +1,17 @@
+{
+  "musical_approval": false,
+  "status": "rejected_during_diagnostics",
+  "reasons": [
+    "Drop 1 reached elapsed bar 27 without independent late-drop approval.",
+    "Outgoing vocal ended at source 76.5 within a longer lyric, despite passing a quiet-window heuristic.",
+    "A later repair demoted the incoming pickup to a 0.254-second dominant fragment and added an overlapping supporting copy."
+  ],
+  "measured_output": {
+    "integrated_lufs": -14.84,
+    "true_peak_dbtp": -1.356,
+    "clipped_samples": 0
+  },
+  "headphone_signoff": null,
+  "speaker_signoff": null,
+  "next_revision": "Fix backing-versus-lead classification, use measured source-bar/word entrances, and reserve room with a vocal-free intro."
+}

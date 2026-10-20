@@ -1,0 +1,291 @@
+{
+  "audioSHA256" : "fd491b30d57af3678bdbb7e621bd53465cccf8da3f33f53fc020fdb7a0aa7953",
+  "dropBars" : [
+    24.000000000000004,
+    56
+  ],
+  "dropTimes" : [
+    40.000000000000007,
+    93.333333333333343
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "paramore-all-i-wanted.mp3" : "9515694f184d0f6fff14b7d2b4d47adf2c80cf0c345f080ce0355552e78eb77e"
+  },
+  "intentionalGaps" : [
+
+  ],
+  "joinContracts" : [
+
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 28
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 0,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 26.666666666666668,
+      "timelineStart" : 0,
+      "volume" : 1.7782794100389228
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 12
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 26.666666666666668,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 10.000000000000004,
+      "timelineStart" : 26.666666666666668,
+      "volume" : 1.7782794100389228
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 56,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 36.666666666666671,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 3.3333333333333335,
+      "timelineStart" : 36.666666666666671,
+      "volume" : 1.4048407339307489
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 40.000000000000007,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 26.666666666666668,
+      "timelineStart" : 40.000000000000007,
+      "volume" : 1.7782794100389228
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 36,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 66.666666666666671,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 13.333333333333334,
+      "timelineStart" : 66.666666666666671,
+      "volume" : 0.84200461169853325
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 18,
+        "echo" : 8,
+        "flanger" : 10
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 80,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 6.666666666666667,
+      "timelineStart" : 80,
+      "volume" : 0.80060499420460396
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 56,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 86.666666666666671,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 6.666666666666667,
+      "timelineStart" : 86.666666666666671,
+      "volume" : 0.82996243893629207
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 93.333333333333343,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 26.666666666666668,
+      "timelineStart" : 93.333333333333343,
+      "volume" : 1.7782794100389228
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "dominant",
+      "songID" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "sourceStart" : 120.00000000000001,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 6.666666666666667,
+      "timelineStart" : 120.00000000000001,
+      "volume" : 0.76899999999999991
+    }
+  ],
+  "planFingerprint" : "53696afdf4e4056096786d81d9c0c03e7c0f04b8a1ae35e47f158cfb49d55295",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : false
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sfxEvents" : [
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 36.000000000000007
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 36.000000000000007
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 38.000000000000007
+    },
+    {
+      "assetID" : "tapeStop",
+      "duration" : 1,
+      "timelineStart" : 39.000000000000007
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 42.916666666666671
+    },
+    {
+      "assetID" : "bassDrop",
+      "duration" : 1.5,
+      "timelineStart" : 42.916666666666671
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 42.916666666666671
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 43.333333333333343
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 45.000000000000007
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 46.666666666666671
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 46.666666666666671
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 48.333333333333343
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 50.000000000000007
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 51.666666666666671
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 53.333333333333336
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 66.666666666666671
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 89.333333333333343
+    },
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 89.333333333333343
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 93.333333333333343
+    },
+    {
+      "assetID" : "crash",
+      "duration" : 1,
+      "timelineStart" : 93.333333333333343
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 120
+    }
+  ],
+  "sourceIdentity" : [
+    {
+      "id" : "83E91E84-598B-4D85-9028-FCE925291596",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/paramore-all-i-wanted.mp3"
+    }
+  ],
+  "targetBPM" : 144,
+  "warnings" : [
+
+  ]
+}

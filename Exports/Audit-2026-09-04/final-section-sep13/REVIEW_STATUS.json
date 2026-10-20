@@ -1,0 +1,54 @@
+{
+  "status": "final_pass_candidate_awaiting_owner_audition",
+  "date": "2026-09-14",
+  "musical_approval": false,
+  "listening_excerpt": "listening-final.wav",
+  "handoff_at_excerpt_seconds": 12.0,
+  "owner_feedback_applied": [
+    "Preserved the accepted brief dip and rising transition.",
+    "Replaced the mid-chorus title-word entrance with the beginning of the measured vocal section.",
+    "Kept the complete measured hook and avoided padding it with the quieter following verse.",
+    "Kept the foreground vocal balance correction from the previous pass."
+  ],
+  "actual_source_evidence": {
+    "previous_incoming_start_seconds": 59.464838709677416,
+    "final_pickup_start_seconds": 42.35,
+    "measured_chorus_downbeat_seconds": 42.6,
+    "first_chorus_word_seconds": 42.94,
+    "measured_chorus_end_seconds": 65.82,
+    "drop_timeline_seconds": 55.299539170506904,
+    "outgoing_line_source_end_seconds": 73.24
+  },
+  "delivery": {
+    "integrated_lufs": -13.754644639363793,
+    "true_peak_dbtp": -1.2030590010753412,
+    "clipped_samples": 0,
+    "encoded_peak_gate": "pass",
+    "software_limiter_gate": "pass",
+    "mapped_source_silence_gate": "pass"
+  },
+  "continuity": {
+    "owner_verdict_on_brief_transition": "accepted",
+    "frozen_numerical_approach_gate": "fail: 3.70 LU versus 3.00 LU limit",
+    "following_passage_change_lu": -0.44,
+    "following_passage_gate": "pass",
+    "longest_body_run_below_local_median_minus_3_lu_seconds": 0.3,
+    "prior_candidate_equivalent_seconds": 0.4
+  },
+  "verification": {
+    "focused_assertions": 47,
+    "broader_core_assertions": 687,
+    "manifest_assertions": 44,
+    "python_runner_tests": 13,
+    "actual_app_dsp_render": "pass",
+    "app_package_build": "inconclusive: Xcode asset compiler could not connect to CoreSimulatorService; no Swift compile error reported"
+  },
+  "remaining_limits": [
+    "The final candidate has not been approved on headphones and speakers.",
+    "The frozen numerical transition gate still records the brief dip even though the owner accepted that aspect.",
+    "A source-supported 0.70-second breath near 1:45 is retained; it is not inside the supplied listening excerpt.",
+    "Live/export parity was not captured in this pass.",
+    "Arbitrary-song musical quality cannot be proven by one local crate."
+  ],
+  "cloud_audio_requests_this_pass": 0
+}

@@ -1,0 +1,588 @@
+diff --git a/DevTests/AutoJoinEngineTests.swift b/DevTests/AutoJoinEngineTests.swift
+index 24382a9..53e2175 100644
+--- a/DevTests/AutoJoinEngineTests.swift
++++ b/DevTests/AutoJoinEngineTests.swift
+@@ -768,7 +768,7 @@ func sweepPlan(
+             )
+         )
+     }
+-    var plan = AutoRemixPlan(
++    let plan = AutoRemixPlan(
+         mode: .mashup,
+         targetBPM: bpm,
+         targetDuration: cutAt + bar * 8,
+@@ -867,6 +867,214 @@ do {
+     )
+ }
+ 
++// MARK: - Finish the lyric line (not just the current word)
++
++func profileWithLyrics(
++    title: String,
++    id: UUID,
++    words: [(t: Double, word: String)],
++    bpm: Int = 124
++) -> AutoSongProfile {
++    var signal = makeFeatures(duration: 180, bpm: Double(bpm))
++    signal.lyricWords = words
++    var track = joinFixtureTrack(title: title, id: id)
++    track.bpm = bpm
++    return AutoSectionCatalog.profile(track: track, signal: signal)
++}
++
++func clip(
++    song: UUID,
++    source: Double,
++    start: Double,
++    duration: Double,
++    volume: Double = 1,
++    role: AutoPlacementRole = .dominant,
++    slot: Int,
++    fadeIn: ClipTransition = .none,
++    fadeOut: ClipTransition = .hardCut,
++    stem: AutoStemKind? = nil
++) -> AutoClipPlacement {
++    AutoClipPlacement(
++        songID: song, sourceStart: source, timelineStart: start,
++        timelineDuration: duration, tempoRatio: 1, volume: volume,
++        fadeIn: fadeIn, fadeOut: fadeOut, effects: ClipEffectSettings(),
++        role: role, slotIndex: slot, stemKind: stem
++    )
++}
++
++/// Line: I / played / with / your / heart. Cut sits BETWEEN "your" and
++/// "heart" — outside the old 0.06…0.34s mid-word window — so a word-nudge
++/// still beheads the line.
++let heartLine: [(t: Double, word: String)] = [
++    (16.20, "I"), (16.60, "played"), (17.00, "with"), (17.40, "your"), (17.95, "heart")
++]
++let heartLineEnd = 17.95 + 0.35
++
++do {
++    let songID = UUID()
++    let sourceStart = 10.0
++    let sourceEnd = 17.70   // 0.30s after "your", 0.25s before "heart"
++    let duration = sourceEnd - sourceStart
++    let plan = AutoRemixPlan(
++        mode: .remix,
++        targetBPM: 124,
++        targetDuration: duration + 4,
++        anchorSongIDs: [songID],
++        selectedSections: [],
++        placements: [
++            clip(song: songID, source: sourceStart, start: 0, duration: duration, slot: 0)
++        ],
++        sfxEvents: [],
++        handoffCount: 0,
++        songLetters: [songID: "A"],
++        sequence: ["A"],
++        transitionsUsed: [],
++        decisions: [],
++        warnings: [],
++        confidence: 0.9,
++        randomSeed: 1
++    )
++    let profiles = [
++        songID: profileWithLyrics(title: "Line Song", id: songID, words: heartLine)
++    ]
++    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
++    let end = validated.placements.filter { $0.songID == songID }.map(\.sourceEnd).max() ?? 0
++    check(
++        "Join: mid-line cut extends to the last word of the lyric line",
++        end >= heartLineEnd - 0.05,
++        String(format: "sourceEnd=%.2f want≥%.2f", end, heartLineEnd)
++    )
++}
++
++do {
++    let bedID = UUID()
++    let guestID = UUID()
++    let bpm = 124.0
++    let bar = 240.0 / bpm
++    let sourceStart = 10.0
++    let sourceEnd = 17.70
++    let duration = sourceEnd - sourceStart
++    let cutAt = duration
++    let plan = AutoRemixPlan(
++        mode: .mashup,
++        targetBPM: bpm,
++        targetDuration: cutAt + bar * 8,
++        anchorSongIDs: [bedID],
++        selectedSections: [],
++        placements: [
++            clip(song: bedID, source: sourceStart, start: 0, duration: cutAt, slot: 0),
++            clip(
++                song: guestID, source: 40, start: cutAt, duration: bar * 8,
++                slot: 1, fadeIn: .hardCut, fadeOut: .none, stem: .vocals
++            ),
++        ],
++        sfxEvents: [],
++        pulseRegions: [
++            AutoClubPulse.Region(role: .drop, timelineStart: cutAt, timelineEnd: cutAt + bar * 8)
++        ],
++        joinContracts: [
++            AutoJoinContract(
++                kind: .sweepJoin,
++                windowStart: cutAt - bar * 2,
++                cutAt: cutAt,
++                outgoingSongID: bedID,
++                incomingSongID: guestID,
++                coverage: .noneRequired
++            )
++        ],
++        mashupVocalSongID: guestID,
++        mashupBedSongID: bedID,
++        handoffCount: 1,
++        songLetters: [bedID: "A", guestID: "B"],
++        sequence: ["A", "B"],
++        transitionsUsed: [.hardHypeCut],
++        decisions: [],
++        warnings: [],
++        confidence: 0.9,
++        randomSeed: 1
++    )
++    let profiles = [
++        bedID: profileWithLyrics(title: "Bed", id: bedID, words: heartLine),
++        guestID: profileWithLyrics(title: "Guest", id: guestID, words: []),
++    ]
++    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
++    let bedTail = validated.placements.filter { $0.songID == bedID }.map(\.timelineEnd).max() ?? 0
++    let guest = validated.placements.first {
++        $0.songID == guestID && $0.role == .dominant && abs($0.timelineStart - cutAt) < 0.2
++    }
++    check(
++        "Join: unfinished line layers over Drop 1 instead of a flush lyric chop",
++        bedTail > cutAt + 0.35,
++        String(format: "bedEnd=%.2f cutAt=%.2f", bedTail, cutAt)
++    )
++    check(
++        "Join: Drop 1 incoming stays a hard cut at full volume",
++        guest != nil
++            && guest!.volume >= 0.95
++            && guest!.fadeIn.type != .crossfade,
++        "vol=\(guest?.volume ?? -1) fade=\(guest?.fadeIn.type.rawValue ?? "missing")"
++    )
++}
++
++do {
++    let aID = UUID()
++    let bID = UUID()
++    let stay = 4.2
++    let plan = AutoRemixPlan(
++        mode: .mashup,
++        targetBPM: 124,
++        targetDuration: 24,
++        anchorSongIDs: [aID],
++        selectedSections: [],
++        placements: [
++            clip(song: aID, source: 8, start: 0, duration: stay, slot: 0),
++            clip(song: bID, source: 40, start: stay, duration: stay, slot: 1),
++            clip(song: aID, source: 20, start: stay * 2, duration: 12, slot: 2),
++        ],
++        sfxEvents: [],
++        mashupVocalSongID: bID,
++        mashupBedSongID: aID,
++        handoffCount: 2,
++        songLetters: [aID: "A", bID: "B"],
++        sequence: ["A", "B", "A"],
++        transitionsUsed: [.hardHypeCut],
++        decisions: [],
++        warnings: [],
++        confidence: 0.9,
++        randomSeed: 1
++    )
++    let profiles = [
++        aID: profileWithLyrics(title: "A", id: aID, words: []),
++        bID: profileWithLyrics(title: "B", id: bID, words: []),
++    ]
++    let validated = AutoRemixValidator.validate(plan, profiles: profiles, tuning: .standard)
++    let leadStarts = validated.placements
++        .filter { $0.role == .dominant && !$0.continuesPrevious }
++        .sorted { $0.timelineStart < $1.timelineStart }
++    var switchTimes: [Double] = []
++    for (prev, next) in zip(leadStarts, leadStarts.dropFirst())
++    where prev.songID != next.songID {
++        switchTimes.append(next.timelineStart)
++    }
++    let rapid = zip(switchTimes, switchTimes.dropFirst()).contains { $1 - $0 < 4.95 }
++    let bIsLayer = validated.placements.contains {
++        $0.songID == bID && $0.role == .supporting
++    }
++    let aCoversWindow = (validated.placements.filter { $0.songID == aID }.map(\.timelineEnd).max() ?? 0) >= stay + 0.8
++    let bOverlaps = validated.placements.contains { p in
++        p.songID == bID && p.timelineStart < stay + 0.2 && p.timelineEnd > stay + 0.5
++            && validated.placements.contains {
++                $0.songID == aID && $0.timelineStart < p.timelineEnd - 0.3
++                    && $0.timelineEnd > p.timelineStart + 0.3
++            }
++    }
++    check(
++        "Join: A→B→A inside 5s becomes a layer, not two flush lead switches",
++        !rapid && (bIsLayer || (aCoversWindow && bOverlaps)),
++        "rapid=\(rapid) bLayer=\(bIsLayer) aCover=\(aCoversWindow) overlap=\(bOverlaps) leads=\(leadStarts.map { String(format: "%@%.1f", $0.songID == aID ? "A" : "B", $0.timelineStart) })"
++    )
++}
++
+ if failures > 0 {
+     print("\nFAILED: \(failures)")
+     exit(1)
+diff --git a/Mixr/Models/AutoRemixPlan.swift b/Mixr/Models/AutoRemixPlan.swift
+index 09e95de..9e617d6 100644
+--- a/Mixr/Models/AutoRemixPlan.swift
++++ b/Mixr/Models/AutoRemixPlan.swift
+@@ -94,6 +94,10 @@ enum AutoDecisionKind: String, Sendable, Equatable {
+     case skippedPivotWallpaper
+     /// Offline Demucs sidecar used (vocal grain, drums kick, or bed instrumental).
+     case usedStemSidecar
++    /// Outgoing source end sat inside a lyric line; clip extended to the last word.
++    case finishedLyricLine
++    /// Two lead switches inside ~5s were turned into an overlap with volume rides.
++    case layeredRapidSwitch
+ }
+ 
+ struct AutoDecision: Sendable, Equatable {
+@@ -181,6 +185,10 @@ struct AutoDecision: Sendable, Equatable {
+             return "Skipped the pivot wallpaper loop on \(song)\(detail.map { " — \($0)" } ?? "")."
+         case .usedStemSidecar:
+             return "Used stem sidecar for \(song)\(detail.map { " — \($0)" } ?? "")."
++        case .finishedLyricLine:
++            return "Finished \(song)'s lyric line\(detail.map { " — \($0)" } ?? "")."
++        case .layeredRapidSwitch:
++            return "Layered a rapid song switch on \(song)\(detail.map { " — \($0)" } ?? "")."
+         }
+     }
+ }
+diff --git a/Mixr/Models/AutoRemixValidator.swift b/Mixr/Models/AutoRemixValidator.swift
+index 10fa347..b98edd2 100644
+--- a/Mixr/Models/AutoRemixValidator.swift
++++ b/Mixr/Models/AutoRemixValidator.swift
+@@ -609,9 +609,11 @@ nonisolated enum AutoRemixValidator {
+     ///    mix. A third verbatim appearance retargets to an unused chorus
+     ///    island of the same song when one exists; otherwise it is surfaced
+     ///    as a warning (never silently deleted — a hole is worse).
+-    ///  • LYRIC-LINE INTEGRITY — a dominant cut may not land inside a word:
+-    ///    when the sidecar has word onsets, a clip whose source end falls
+-    ///    mid-word is extended to the word's end (bounded, collision-checked).
++    ///  • LYRIC-LINE INTEGRITY — a vocal cut may not land inside a sung line.
++    ///    Extend to the last word of the current line (0.7s word-gap). When
++    ///    that collides with the next clip, layer and ride volumes instead
++    ///    of flushing the lyric. Rapid different-song lead switches inside
++    ///    ~5s become the same overlap + volume ride (Drop 1 stays a hard cut).
+     private static func enforceArrangementInvariants(
+         _ plan: inout AutoRemixPlan,
+         profiles: [UUID: AutoSongProfile],
+@@ -667,40 +669,293 @@ nonisolated enum AutoRemixValidator {
+             )
+         }
+ 
+-        // ── Lyric-line integrity ──
+-        let sortedIdx = plan.placements.indices.sorted {
+-            plan.placements[$0].timelineStart < plan.placements[$1].timelineStart
++        // ── Lyric-line integrity + rapid-switch layering ──
++        finishLyricLines(&plan, profiles: profiles, decisions: &decisions)
++        layerRapidSongSwitches(&plan, profiles: profiles, decisions: &decisions)
++    }
++
++    /// Whisper word-gap grouping. A new line starts after ~0.7s of silence
++    /// between onsets — the same split `keepGuestFirstLineClear` uses.
++    private enum LyricLine {
++        static let wordGapSeconds = 0.7
++        static let lineTailSeconds = 0.35
++        static let minLeadSwitchSeconds = 5.0
++
++        static func lineEnd(
++            containing t: Double,
++            words: [(t: Double, word: String)]
++        ) -> Double? {
++            let sorted = words.sorted { $0.t < $1.t }
++            guard !sorted.isEmpty else { return nil }
++            var start = sorted[0].t
++            var last = sorted[0].t
++            for w in sorted.dropFirst() {
++                if w.t - last > wordGapSeconds {
++                    let end = last + lineTailSeconds
++                    if t >= start - 0.02 && t < end - 0.04 { return end }
++                    start = w.t
++                }
++                last = w.t
++            }
++            let end = last + lineTailSeconds
++            if t >= start - 0.02 && t < end - 0.04 { return end }
++            return nil
++        }
++    }
++
++    private static func isChainTail(_ p: AutoClipPlacement, in plan: AutoRemixPlan) -> Bool {
++        !plan.placements.contains { q in
++            q.continuesPrevious
++                && q.songID == p.songID
++                && q.stemKind == p.stemKind
++                && abs(q.timelineStart - p.timelineEnd) < 0.08
++        }
++    }
++
++    private static func isLockedDropStart(_ t: Double, plan: AutoRemixPlan) -> Bool {
++        let beat = plan.beatSeconds
++        if plan.joinContracts.contains(where: {
++            $0.kind == .sweepJoin && abs($0.cutAt - t) < beat * 0.5
++        }) {
++            return true
+         }
++        return AutoRemixDiagnostics.incomingIsClubDrop(
++            pulseRegions: plan.pulseRegions,
++            timelineStart: t
++        )
++    }
++
++    /// Extend a chain-tail cut that lands inside a lyric line to the last
++    /// word. If the next clip is already on the timeline, overlap it and
++    /// ride volumes — do not skip the extend, and do not fade-in Drop 1.
++    private static func finishLyricLines(
++        _ plan: inout AutoRemixPlan,
++        profiles: [UUID: AutoSongProfile],
++        decisions: inout [AutoDecision]
++    ) {
++        let barSec = plan.barSeconds
++        guard barSec > 0.05 else { return }
++        let maxExtend = barSec * 2
++
+         for i in plan.placements.indices {
+             let p = plan.placements[i]
+-            guard p.role == .dominant, p.timelineDuration >= barSec * 2 else { continue }
++            guard p.role == .dominant || p.stemKind == .vocals else { continue }
++            guard p.timelineDuration >= plan.beatSeconds * 4 else { continue }
++            guard isChainTail(p, in: plan) else { continue }
+             guard let words = profiles[p.songID]?.analysis.signal?.lyricWords,
+                   !words.isEmpty else { continue }
+-            // Next placement on the timeline (for collision checks).
+-            let nextStart = sortedIdx
+-                .compactMap { plan.placements[$0].timelineStart > p.timelineStart + 0.05
+-                    ? plan.placements[$0].timelineStart : nil }
+-                .min() ?? .infinity
+-            let srcEnd = p.sourceEnd
+-            guard let word = words.first(where: {
+-                srcEnd > $0.t + 0.06 && srcEnd < $0.t + 0.34
+-            }) else { continue }
+-            let extendSrc = (word.t + 0.38) - srcEnd
+-            let extendTimeline = extendSrc / max(p.tempoRatio, 0.001)
+-            guard extendTimeline > 0.02, extendTimeline < 0.6 else { continue }
+-            guard p.timelineEnd + extendTimeline < nextStart + 0.25 else { continue }
++            guard let lineEnd = LyricLine.lineEnd(containing: p.sourceEnd, words: words)
++            else { continue }
++
++            let songDur = profiles[p.songID]?.analysis.durationSeconds ?? .infinity
++            let wantedSrc = min(lineEnd, songDur - 0.05)
++            let extendSrc = wantedSrc - p.sourceEnd
++            let extendTimeline = min(maxExtend, extendSrc / max(p.tempoRatio, 0.001))
++            guard extendTimeline > 0.04 else { continue }
++
+             plan.placements[i].timelineDuration += extendTimeline
++            let next = plan.placements.enumerated()
++                .filter {
++                    $0.offset != i
++                        && $0.element.timelineStart > p.timelineStart + 0.05
++                        && !($0.element.continuesPrevious
++                             && $0.element.songID == p.songID
++                             && $0.element.stemKind == p.stemKind)
++                }
++                .min { $0.element.timelineStart < $1.element.timelineStart }
++            if let next, plan.placements[i].timelineEnd > next.element.timelineStart + 0.05 {
++                rideLayerVolumes(
++                    &plan,
++                    outgoingIndex: i,
++                    incomingIndex: next.offset,
++                    keepIncomingHardCut: isLockedDropStart(next.element.timelineStart, plan: plan)
++                )
++            }
+             decisions.append(
+                 AutoDecision(
+-                    kind: .shortenedForMaterial,
++                    kind: .finishedLyricLine,
+                     songTitle: profiles[p.songID]?.title,
+-                    detail: String(
+-                        format: "cut nudged off mid-word “%@” (+%.2fs so the line finishes)",
+-                        word.word, extendTimeline
++                    detail: String(format: "extended +%.2fs to finish the line", extendTimeline)
++                )
++            )
++        }
++    }
++
++    /// A→B then another song (or back to A) inside 5s is a ping-pong cut.
++    /// Keep the first lead playing through the layered clip, ride volumes.
++    /// Drop 1 sweep / club-drop slams stay hard cuts.
++    private static func layerRapidSongSwitches(
++        _ plan: inout AutoRemixPlan,
++        profiles: [UUID: AutoSongProfile],
++        decisions: inout [AutoDecision]
++    ) {
++        let minGap = LyricLine.minLeadSwitchSeconds
++        var leadIdx = plan.placements.indices.filter {
++            plan.placements[$0].role == .dominant && !plan.placements[$0].continuesPrevious
++        }.sorted { plan.placements[$0].timelineStart < plan.placements[$1].timelineStart }
++
++        var i = 0
++        while i < leadIdx.count {
++            let aIdx = leadIdx[i]
++            let a = plan.placements[aIdx]
++            guard i + 1 < leadIdx.count else { break }
++            let bIdx = leadIdx[i + 1]
++            let b = plan.placements[bIdx]
++            if a.songID == b.songID {
++                i += 1
++                continue
++            }
++            let dt = b.timelineStart - a.timelineStart
++            if dt >= minGap - 0.05 || isLockedDropStart(b.timelineStart, plan: plan) {
++                i += 1
++                continue
++            }
++
++            let laterIdx = Array(leadIdx.dropFirst(i + 2))
++            let pingPong = laterIdx.contains { k in
++                let c = plan.placements[k]
++                return c.songID != b.songID
++                    && c.timelineStart - b.timelineStart < minGap - 0.05
++            }
++            let songDur = profiles[a.songID]?.analysis.durationSeconds ?? .infinity
++            let maxEnd = a.timelineStart + max(0, songDur - 0.05 - a.sourceStart) / max(a.tempoRatio, 0.001)
++            var coverUntil = max(
++                plan.placements[aIdx].timelineEnd,
++                a.timelineStart + minGap,
++                b.timelineStart + 0.6
++            )
++            if pingPong {
++                coverUntil = max(coverUntil, b.timelineEnd)
++                if let cIdx = laterIdx.first(where: { plan.placements[$0].songID != b.songID }) {
++                    coverUntil = max(coverUntil, plan.placements[cIdx].timelineStart + 0.15)
++                }
++            }
++            coverUntil = min(coverUntil, maxEnd)
++            if coverUntil > plan.placements[aIdx].timelineEnd + 0.04 {
++                plan.placements[aIdx].timelineDuration = coverUntil - plan.placements[aIdx].timelineStart
++            }
++            rideLayerVolumes(
++                &plan,
++                outgoingIndex: aIdx,
++                incomingIndex: bIdx,
++                keepIncomingHardCut: false
++            )
++
++            if pingPong {
++                plan.placements[bIdx].role = .supporting
++                plan.placements[bIdx].volume = min(
++                    max(plan.placements[bIdx].volume, 0.62),
++                    0.85
++                )
++                let aCoverEnd = plan.placements
++                    .filter { $0.songID == a.songID }
++                    .map(\.timelineEnd).max() ?? 0
++                if let cIdx = laterIdx.first(where: { plan.placements[$0].songID == a.songID }) {
++                    plan.placements[cIdx].overlapsPreviousSeconds = max(
++                        plan.placements[cIdx].overlapsPreviousSeconds,
++                        max(0, aCoverEnd - plan.placements[cIdx].timelineStart)
+                     )
++                }
++            }
++
++            decisions.append(
++                AutoDecision(
++                    kind: .layeredRapidSwitch,
++                    songTitle: profiles[b.songID]?.title,
++                    detail: String(format: "switch at %.1fs was %.1fs after the previous lead", b.timelineStart, dt)
+                 )
+             )
++            leadIdx = plan.placements.indices.filter {
++                plan.placements[$0].role == .dominant && !plan.placements[$0].continuesPrevious
++            }.sorted { plan.placements[$0].timelineStart < plan.placements[$1].timelineStart }
++            i += 1
++        }
++    }
++
++    /// Outgoing keeps playing under the incoming clip; tail is quieter so
++    /// the new lead can take the foreground without a flush cut.
++    private static func rideLayerVolumes(
++        _ plan: inout AutoRemixPlan,
++        outgoingIndex: Int,
++        incomingIndex: Int,
++        keepIncomingHardCut: Bool
++    ) {
++        let splitAt = plan.placements[incomingIndex].timelineStart
++        let outVol = plan.placements[outgoingIndex].volume
++        splitOutgoingTail(
++            &plan,
++            index: outgoingIndex,
++            at: splitAt,
++            tailVolume: max(0.45, outVol * 0.62)
++        )
++        if keepIncomingHardCut {
++            plan.placements[incomingIndex].fadeIn = .none
++            plan.placements[incomingIndex].volume = max(
++                plan.placements[incomingIndex].volume,
++                AutoGainPolicy.incomingDropVolume
++            )
++        } else {
++            plan.placements[incomingIndex].volume = max(
++                plan.placements[incomingIndex].volume,
++                min(1.0, outVol * 0.92)
++            )
++        }
++        let outSong = plan.placements[outgoingIndex].songID
++        if plan.placements[incomingIndex].songID == outSong {
++            let coverEnd = plan.placements
++                .filter { $0.songID == outSong }
++                .map(\.timelineEnd).max() ?? 0
++            let overlap = max(0, coverEnd - splitAt)
++            plan.placements[incomingIndex].overlapsPreviousSeconds = max(
++                plan.placements[incomingIndex].overlapsPreviousSeconds,
++                overlap
++            )
++        }
++    }
++
++    private static func splitOutgoingTail(
++        _ plan: inout AutoRemixPlan,
++        index: Int,
++        at t: Double,
++        tailVolume: Double
++    ) {
++        var head = plan.placements[index]
++        let originalEnd = head.timelineEnd
++        guard t > head.timelineStart + 0.12, t < originalEnd - 0.05 else {
++            if t < originalEnd - 0.05, t > head.timelineStart {
++                let beats = max(0.5, (originalEnd - t) / max(plan.beatSeconds, 0.001))
++                head.fadeOut = ClipTransition(
++                    type: .crossfade,
++                    duration: beats,
++                    curve: AutoTransitionEnvelope.equalPowerCurveName
++                )
++                plan.placements[index] = head
++            }
++            return
+         }
++        // Leave a hair of head overlap so consecutive-dominant grammar still
++        // sees a real overlap (head→incoming) rather than a flush 0s splice.
++        let headEnd = min(originalEnd, t + 0.12)
++        let headDur = headEnd - head.timelineStart
++        var tail = head
++        tail.timelineStart = t
++        tail.timelineDuration = originalEnd - t
++        tail.sourceStart = head.sourceStart + (t - head.timelineStart) * head.tempoRatio
++        tail.volume = min(head.volume, tailVolume)
++        tail.continuesPrevious = true
++        tail.role = .supporting
++        tail.overlapsPreviousSeconds = max(tail.overlapsPreviousSeconds, headEnd - t)
++        tail.fadeIn = .none
++        tail.fadeOut = ClipTransition(
++            type: .crossfade,
++            duration: max(0.5, tail.timelineDuration / max(plan.beatSeconds, 0.001)),
++            curve: AutoTransitionEnvelope.equalPowerCurveName
++        )
++        tail.continuationShape = tail.volume / max(head.volume, 0.05)
++        head.timelineDuration = headDur
++        head.fadeOut = .none
++        plan.placements[index] = head
++        plan.placements.append(tail)
+     }
+ 
+     /// Sample-continuous neighbors may not STEP in volume ("jumps louder,

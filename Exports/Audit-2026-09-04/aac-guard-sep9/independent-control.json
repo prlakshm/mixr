@@ -1,0 +1,17 @@
+{
+  "true_peaks": {
+    "unguarded": 0.1706276535987854,
+    "guarded": -1.2054616212844849
+  },
+  "pass": true,
+  "checks": {
+    "previous encode fails the frozen ceiling": true,
+    "guarded delivery passes independent 4x peak check": true,
+    "codec correction is bounded attenuation": true
+  },
+  "audit": {
+    "gainDB": -1.315100651201308,
+    "attempts": 2,
+    "decodedTruePeakDBTP": -1.210989047806359
+  }
+}

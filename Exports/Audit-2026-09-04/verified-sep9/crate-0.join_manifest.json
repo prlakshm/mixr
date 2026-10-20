@@ -1,0 +1,450 @@
+{
+  "audioSHA256" : "73a02a6b2f6f27db8f5a66acadacf7494bc635c288897006032ba2f26a1d9512",
+  "dropBars" : [
+    24,
+    56.000000000000007
+  ],
+  "dropTimes" : [
+    55.299539170506904,
+    129.03225806451613
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "britney-baby-one-more-time.mp3" : "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252"
+  },
+  "intentionalGaps" : [
+
+  ],
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 55.299539170506904,
+      "incomingSongID" : null,
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "windowStart" : 50.691244239631331
+    }
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 28
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 0,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 36.866359447004605,
+      "timelineStart" : 0,
+      "volume" : 1.5746710558632642
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 41.29032258064516,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 13.824884792626726,
+      "timelineStart" : 36.866359447004605,
+      "volume" : 1.1838884039099782
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 30
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 56.774193548387096,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3041474654377878,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 0.83089999999999997
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 20,
+        "echo" : 55
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 61.29032258064516,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.57603686635944695,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 56.774193548387096,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.608294930875573,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 0.41999999999999998
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 59.354838709677416,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.4241474654377839,
+      "timelineStart" : 52.995391705069117,
+      "volume" : 0.71219999999999994
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 58.079999999999998,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 18.433179723502306,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 1.3226942028889772
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 61.935483870967737,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.72724654377880427,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 12,
+        "reverb" : 20.5
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 143.25999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 18.433179723502302,
+      "timelineStart" : 92.165898617511516,
+      "volume" : 1.3715840128093622
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 99.370322580645166,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.2318548387096797,
+      "timelineStart" : 92.165898617511516,
+      "volume" : 0.97960000000000003
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 18,
+        "echo" : 8,
+        "flanger" : 10
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 163.90516129032258,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.2165898617511512,
+      "timelineStart" : 110.59907834101382,
+      "volume" : 1.1593430250369545
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 174.22774193548386,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.3365898617511647,
+      "timelineStart" : 119.81566820276497,
+      "volume" : 1.1372243884103816
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 10,
+        "echo" : 6,
+        "reverb" : 12
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 122.59999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 40.608667139312303,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 184.55032258064517,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.8925691244239715,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "reverb" : 14
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 184.56,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.3660714285714182,
+      "timelineStart" : 165.89861751152074,
+      "volume" : 1.0579558801700777
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 61.935483870967737,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.72724654377880427,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 0.45000000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "supporting",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 184.55032258064517,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.8925691244239431,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 0.5955621479911466
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 81.305806451612909,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.249032258064517,
+      "timelineStart" : 76.036866359447004,
+      "volume" : 1.3226942028889772
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "sourceStart" : 78.725161290322575,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3041474654377936,
+      "timelineStart" : 73.73271889400921,
+      "volume" : 3.3224576212732013
+    }
+  ],
+  "planFingerprint" : "4755ed537a86d7e00a9144101f2ed3902cb0c70de689cb52a170b51348323043",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : true
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sfxEvents" : [
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 51.299539170506904
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 51.299539170506904
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 53.299539170506904
+    },
+    {
+      "assetID" : "tapeStop",
+      "duration" : 1,
+      "timelineStart" : 54.299539170506904
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "bassDrop",
+      "duration" : 1.5,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 59.907834101382477
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 59.907834101382484
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 62.21198156682027
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 64.51612903225805
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 64.516129032258064
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 66.820276497695843
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 69.124423963133637
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 71.428571428571416
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 73.73271889400921
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 92.165898617511516
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 125.03225806451613
+    },
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 125.03225806451613
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 129.03225806451613
+    },
+    {
+      "assetID" : "crash",
+      "duration" : 1,
+      "timelineStart" : 129.03225806451613
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 165.89861751152071
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 166.69861751152075
+    }
+  ],
+  "sourceIdentity" : [
+    {
+      "id" : "DB08B2D9-C339-4DBE-9F31-0C740B82B7AF",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/britney-baby-one-more-time.mp3"
+    }
+  ],
+  "targetBPM" : 104.16000000000001,
+  "warnings" : [
+    "Listen loop: loudnessStep @60.0s — -6.6 dB between adjacent seconds",
+    "Listen loop: loudnessStep @68.0s — +7.0 dB between adjacent seconds",
+    "Listen loop: loudnessStep @75.0s — -8.9 dB between adjacent seconds"
+  ]
+}
