@@ -1,0 +1,333 @@
+{
+  "audioSHA256" : "ae268e33eeebcbe793ec81b55a8db9bc11ea0480186de8e0e586b3646f7a99e0",
+  "dropBars" : [
+    24,
+    56.000000000000007
+  ],
+  "dropTimes" : [
+    55.299539170506904,
+    129.03225806451613
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "britney-baby-one-more-time.mp3" : "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252"
+  },
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 55.299539170506904,
+      "incomingSongID" : null,
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "windowStart" : 50.691244239631331
+    }
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 28
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 0,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 36.866359447004605,
+      "timelineStart" : 0,
+      "volume" : 1.5746710558632642
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 41.29032258064516,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 13.824884792626726,
+      "timelineStart" : 36.866359447004605,
+      "volume" : 1.1838884039099782
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 30
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 56.774193548387096,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3041474654377878,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 0.83089999999999997
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 20,
+        "echo" : 55
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 61.29032258064516,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.57603686635944695,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 56.774193548387096,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.608294930875573,
+      "timelineStart" : 50.691244239631331,
+      "volume" : 0.41999999999999998
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 59.354838709677416,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.4241474654377839,
+      "timelineStart" : 52.995391705069117,
+      "volume" : 0.71219999999999994
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 58.079999999999998,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 18.433179723502306,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 1.3226942028889772
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 61.935483870967737,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.72724654377880427,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 12,
+        "reverb" : 20.5
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 143.25999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 18.433179723502302,
+      "timelineStart" : 92.165898617511516,
+      "volume" : 1.3715840128093622
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 99.370322580645166,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.2318548387096797,
+      "timelineStart" : 92.165898617511516,
+      "volume" : 0.97960000000000003
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 18,
+        "echo" : 8,
+        "flanger" : 10
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 163.90516129032258,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.2165898617511512,
+      "timelineStart" : 110.59907834101382,
+      "volume" : 1.1593430250369545
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 174.22774193548386,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.3365898617511647,
+      "timelineStart" : 119.81566820276497,
+      "volume" : 1.1372243884103816
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 10,
+        "echo" : 6,
+        "reverb" : 12
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 122.59999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 40.608667139312303,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 184.55032258064517,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.8925691244239715,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 1.3300840270608825
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "reverb" : 14
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 184.56,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 9.3660714285714182,
+      "timelineStart" : 165.89861751152074,
+      "volume" : 1.0579558801700777
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 61.935483870967737,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.72724654377880427,
+      "timelineStart" : 55.299539170506904,
+      "volume" : 0.45000000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 58,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "supporting",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 184.55032258064517,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.8925691244239431,
+      "timelineStart" : 129.03225806451613,
+      "volume" : 0.5955621479911466
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 81.305806451612909,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.249032258064517,
+      "timelineStart" : 76.036866359447004,
+      "volume" : 1.3226942028889772
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 6
+      },
+      "role" : "dominant",
+      "songID" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "sourceStart" : 78.725161290322575,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3041474654377936,
+      "timelineStart" : 73.73271889400921,
+      "volume" : 3.3224576212732013
+    }
+  ],
+  "planFingerprint" : "be8961cce632e14bd9d0002673202bc23095fee54b8e25f333102df7b8c652ed",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : true
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sourceIdentity" : [
+    {
+      "id" : "094B44F0-5A8F-46FE-9257-62655DF67FB3",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/britney-baby-one-more-time.mp3"
+    }
+  ],
+  "targetBPM" : 104.16000000000001,
+  "warnings" : [
+    "Listen loop: loudnessStep @75.0s — -8.2 dB between adjacent seconds"
+  ]
+}

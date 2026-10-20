@@ -1,0 +1,314 @@
+[
+  {
+    "file": "01-mashup-oops-x-baby.m4a",
+    "dur_s": 194.3,
+    "ref_db": -16.7,
+    "quiet_holes": [
+      {
+        "t": 3.05,
+        "dur_s": 1.25,
+        "min_db_vs_ref": -33.1,
+        "below_local_db": 14.8
+      },
+      {
+        "t": 5.8,
+        "dur_s": 0.25,
+        "min_db_vs_ref": -19.7,
+        "below_local_db": 4.7
+      },
+      {
+        "t": 6.1,
+        "dur_s": 0.4,
+        "min_db_vs_ref": -18.3,
+        "below_local_db": 4.1
+      },
+      {
+        "t": 6.55,
+        "dur_s": 1.05,
+        "min_db_vs_ref": -23.4,
+        "below_local_db": 15.9
+      },
+      {
+        "t": 54.45,
+        "dur_s": 0.4,
+        "min_db_vs_ref": -29.5,
+        "below_local_db": 26.9
+      },
+      {
+        "t": 190.3,
+        "dur_s": 4.0,
+        "min_db_vs_ref": -51.9,
+        "below_local_db": 43.5
+      }
+    ],
+    "energy_dips": [
+      {
+        "t": 6.75,
+        "dip_db": -8.6
+      },
+      {
+        "t": 74.35,
+        "dip_db": -9.0
+      },
+      {
+        "t": 96.45,
+        "dip_db": -8.3
+      }
+    ],
+    "mean_flatness": 0.0016,
+    "metallic_windows": [
+      {
+        "t": 4.6,
+        "comb": 0.94
+      },
+      {
+        "t": 9.3,
+        "comb": 0.95
+      },
+      {
+        "t": 13.9,
+        "comb": 0.95
+      },
+      {
+        "t": 18.6,
+        "comb": 0.96
+      },
+      {
+        "t": 23.2,
+        "comb": 0.94
+      },
+      {
+        "t": 27.9,
+        "comb": 0.95
+      },
+      {
+        "t": 32.5,
+        "comb": 0.96
+      },
+      {
+        "t": 37.2,
+        "comb": 0.95
+      },
+      {
+        "t": 41.8,
+        "comb": 0.93
+      },
+      {
+        "t": 46.4,
+        "comb": 0.95
+      },
+      {
+        "t": 51.1,
+        "comb": 0.94
+      },
+      {
+        "t": 55.7,
+        "comb": 0.95
+      },
+      {
+        "t": 60.4,
+        "comb": 0.94
+      },
+      {
+        "t": 65.0,
+        "comb": 0.94
+      },
+      {
+        "t": 69.7,
+        "comb": 0.94
+      },
+      {
+        "t": 74.3,
+        "comb": 0.81
+      },
+      {
+        "t": 78.9,
+        "comb": 0.94
+      },
+      {
+        "t": 83.6,
+        "comb": 0.93
+      },
+      {
+        "t": 88.2,
+        "comb": 0.94
+      },
+      {
+        "t": 92.9,
+        "comb": 0.82
+      }
+    ],
+    "n_metallic": 41,
+    "fails": [
+      "deep hole @54.45s (0.4s, -29.5 dB, 26.9 under local)",
+      "dead air @190.3s (4.0s, -51.9 dB, 43.5 under local)"
+    ],
+    "loudness": {
+      "input_i": "-13.68",
+      "input_tp": "-1.10",
+      "input_lra": "11.00",
+      "input_thresh": "-24.07",
+      "output_i": "-15.51",
+      "output_tp": "-1.00",
+      "output_lra": "10.00",
+      "output_thresh": "-25.67",
+      "normalization_type": "dynamic",
+      "target_offset": "-0.49"
+    },
+    "sha256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+    "joinContracts": [
+      {
+        "coverage": "bedOther",
+        "cutAt": 77.50759878419451,
+        "incomingSongID": "D4B1ACFC-2FF2-4FA0-A910-999CD958776B",
+        "kind": "sweepJoin",
+        "outgoingSongID": "466E571A-14CF-46C9-951E-69620B79482A",
+        "windowStart": 72.9483282674772
+      }
+    ],
+    "dropTimes": [
+      77.50759878419451,
+      150.45592705167172
+    ]
+  },
+  {
+    "file": "02-mashup-paramore-x-tatu.m4a",
+    "dur_s": 139.8,
+    "ref_db": -15.1,
+    "quiet_holes": [
+      {
+        "t": 27.1,
+        "dur_s": 0.3,
+        "min_db_vs_ref": -17.2,
+        "below_local_db": 9.1
+      },
+      {
+        "t": 83.35,
+        "dur_s": 0.3,
+        "min_db_vs_ref": -25.2,
+        "below_local_db": 19.5
+      },
+      {
+        "t": 134.5,
+        "dur_s": 5.25,
+        "min_db_vs_ref": -55.6,
+        "below_local_db": 44.1
+      }
+    ],
+    "energy_dips": [],
+    "mean_flatness": 0.0021,
+    "metallic_windows": [
+      {
+        "t": 4.6,
+        "comb": 0.91
+      },
+      {
+        "t": 9.3,
+        "comb": 0.91
+      },
+      {
+        "t": 13.9,
+        "comb": 0.93
+      },
+      {
+        "t": 18.6,
+        "comb": 0.9
+      },
+      {
+        "t": 23.2,
+        "comb": 0.92
+      },
+      {
+        "t": 27.9,
+        "comb": 0.91
+      },
+      {
+        "t": 32.5,
+        "comb": 0.9
+      },
+      {
+        "t": 37.2,
+        "comb": 0.91
+      },
+      {
+        "t": 41.8,
+        "comb": 0.9
+      },
+      {
+        "t": 46.4,
+        "comb": 0.91
+      },
+      {
+        "t": 51.1,
+        "comb": 0.9
+      },
+      {
+        "t": 55.7,
+        "comb": 0.77
+      },
+      {
+        "t": 60.4,
+        "comb": 0.94
+      },
+      {
+        "t": 65.0,
+        "comb": 0.83
+      },
+      {
+        "t": 69.7,
+        "comb": 0.91
+      },
+      {
+        "t": 74.3,
+        "comb": 0.94
+      },
+      {
+        "t": 78.9,
+        "comb": 0.92
+      },
+      {
+        "t": 83.6,
+        "comb": 0.56
+      },
+      {
+        "t": 88.2,
+        "comb": 0.93
+      },
+      {
+        "t": 92.9,
+        "comb": 0.95
+      }
+    ],
+    "n_metallic": 30,
+    "fails": [
+      "dead air @134.5s (5.25s, -55.6 dB, 44.1 under local)"
+    ],
+    "loudness": {
+      "input_i": "-12.55",
+      "input_tp": "-1.08",
+      "input_lra": "13.90",
+      "input_thresh": "-23.18",
+      "output_i": "-14.06",
+      "output_tp": "-1.19",
+      "output_lra": "11.40",
+      "output_thresh": "-24.34",
+      "normalization_type": "dynamic",
+      "target_offset": "-1.94"
+    },
+    "sha256": "4ffee210d7b4c581b24a0296a8716b728c0eab0c3ed2539a40975355943665e5",
+    "joinContracts": [
+      {
+        "coverage": "bedOther",
+        "cutAt": 56.66666666666667,
+        "incomingSongID": "A8D88771-6603-48FC-9858-4C9E9FF90FE9",
+        "kind": "sweepJoin",
+        "outgoingSongID": "36B598FC-D8DE-4F5B-B9F1-E617584A4B5E",
+        "windowStart": 53.333333333333336
+      }
+    ],
+    "dropTimes": [
+      56.66666666666667,
+      110
+    ]
+  }
+]

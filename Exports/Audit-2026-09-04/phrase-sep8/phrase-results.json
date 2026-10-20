@@ -1,0 +1,12 @@
+[
+  {
+    "drop1_elapsed_bars" : 24,
+    "early_phrase_pass" : true,
+    "songs" : 1
+  },
+  {
+    "drop1_elapsed_bars" : 24,
+    "early_phrase_pass" : true,
+    "songs" : 2
+  }
+]

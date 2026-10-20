@@ -1,0 +1,53 @@
+{
+  "audioSHA256" : "31b9e32923a565d0e98401b8aac86d5f8d5ff77fa145eba46127d969a09ac437",
+  "dropBars" : [
+    24,
+    56.000000000000007
+  ],
+  "dropTimes" : [
+    55.299539170506904,
+    129.03225806451613
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "britney-baby-one-more-time.mp3" : "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252",
+    "britney-oops-i-did-it-again.mp3" : "813410aa8f0466f210a78f38730578e1946fbd3291c05a92b2872eab3cf4eaa4"
+  },
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 55.299539170506904,
+      "incomingSongID" : "AFEC0CE4-1AEC-484D-A94A-2B391623FC9C",
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "F0AE13A8-4802-4C1F-B420-755F8C2C731E",
+      "windowStart" : 50.691244239631331
+    }
+  ],
+  "planFingerprint" : "c911f2ac7b029523303c4dbbca2252ade0fd55a741df7bfd354babee2ce19e36",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : false
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "targetBPM" : 104.16000000000001,
+  "warnings" : [
+    "Fewer song handoffs than intended — some sections were skipped for lack of material.",
+    "Listen loop: loudnessStep @121.0s — -6.6 dB between adjacent seconds",
+    "Listen loop: loudnessStep @132.0s — -6.7 dB between adjacent seconds",
+    "Listen loop: loudnessStep @134.0s — +6.8 dB between adjacent seconds",
+    "Listen loop: hole @132.3s — notch 1.60s, 17.5 dB under its own approach",
+    "Listen loop: titleOverDrop @55.3s — title probe -11.8 dB vs drop 1 -12.2 dB — drop must win by 1.0 dB"
+  ]
+}

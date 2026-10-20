@@ -1,0 +1,6 @@
+{
+  "status": "owner_rejected",
+  "musical_approval": false,
+  "reason": "Quiet vocals; interior feels like background music/intro/outro. Also discovered later phrase repair drift.",
+  "evidence": "docs/audits/2026-09-04-auto-remix/owner-listening-sep13-foreground.json"
+}

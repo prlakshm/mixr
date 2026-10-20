@@ -1,0 +1,56 @@
+{
+  "audioSHA256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+  "dropTimes": [
+    77.50759878419451,
+    150.45592705167172
+  ],
+  "gitCommit": "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes": {
+    "britney-baby-one-more-time.mp3": "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252",
+    "britney-oops-i-did-it-again.mp3": "813410aa8f0466f210a78f38730578e1946fbd3291c05a92b2872eab3cf4eaa4"
+  },
+  "joinContracts": [
+    {
+      "coverage": "bedOther",
+      "cutAt": 77.50759878419451,
+      "incomingSongID": "D4B1ACFC-2FF2-4FA0-A910-999CD958776B",
+      "kind": "sweepJoin",
+      "outgoingSongID": "466E571A-14CF-46C9-951E-69620B79482A",
+      "windowStart": 72.9483282674772
+    }
+  ],
+  "planFingerprint": "e332a15ec658fa8e2dbce88f8afa5a92b7b73a3cd8a918946e0e745527e183cd",
+  "preApplyScore": {
+    "candidate": {
+      "criticalContractViolations": 0,
+      "dropApproachDeficit": 0,
+      "missingRequiredCoverage": 0,
+      "worstTroughDeficit": 0
+    },
+    "original": {
+      "criticalContractViolations": 0,
+      "dropApproachDeficit": 0,
+      "missingRequiredCoverage": 0,
+      "worstTroughDeficit": 0
+    },
+    "repairKept": true
+  },
+  "releaseAudit": {
+    "audioSHA256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+    "joins": [
+      {
+        "coverage": "bedOther",
+        "cutAt": 77.50759878419451,
+        "highpassDipDB": 4.23,
+        "troughDeficit": 0.0,
+        "windowStart": 72.9483282674772
+      }
+    ],
+    "status": "pass",
+    "whisper": "inconclusive",
+    "worstTroughDeficit": 0.0,
+    "zScore": "diagnostic-only"
+  },
+  "schemaVersion": 1,
+  "seed": 20260815
+}

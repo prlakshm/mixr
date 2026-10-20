@@ -1,0 +1,1549 @@
+[
+  {
+    "file": "crate-0-1-2-3-4.m4a",
+    "audio_sha256": "071e213e2b4ba8067db78797656d2703aad5c82a580c64c6a9c96d8d84b6598c",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1-2-3.m4a",
+    "audio_sha256": "694e0ef83225f9dc7049902ad06ac5f673247538943980891023f74bf9c0f5ee",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1-2-4.m4a",
+    "audio_sha256": "2019dbf2fdeb072df70fb3da8ff4a270834623a4795b2b71c1106a08651cab08",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1-2.m4a",
+    "audio_sha256": "08f23628d39e9d3d4ee63e7d5d0bbb02fc7e852f253096733e9f669f2c6e39f2",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1-3-4.m4a",
+    "audio_sha256": "877929acb12d273646ec3aa60b0e93980988391a82caf3e06cb54791758f0c1a",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1-3.m4a",
+    "audio_sha256": "6c8f06407a779be2cdc3aa8ef8c4db34cce100ed0dd86ff263d81b2a4b3cd632",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1-4.m4a",
+    "audio_sha256": "d56e4a24602ec7203e4ddfaf596db018e6f0f06edcd80fe674fc1488eec30d6c",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-1.m4a",
+    "audio_sha256": "0d8dd61ed5a2fa2901e887791186581ebbd70ca92b35c8f2a12fc283010b246b",
+    "duration_seconds": 173.61414965986395,
+    "integrated_lufs": -13.481476575132683,
+    "sample_peak_dbfs": -1.316035440237118,
+    "true_peak_4x_dbtp": -1.3105082291759538,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.008270475939673623,
+      "longestHeavySeconds": 0.051201814058956914,
+      "maximumAtSeconds": 23.129433106575963,
+      "maximumDB": 5.0152112848796655,
+      "sampleCount": 7655424
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        172.76,
+        172.86
+      ],
+      [
+        172.89,
+        173.6
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -16.430843263872244,
+        "minimum_at_seconds": 54.9,
+        "maximum_400ms_loudness": -7.303773753296782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-2-3-4.m4a",
+    "audio_sha256": "668afbe1f9dcc8eaa21247c4f9410d538d53fa85c9d2d55ab1c58a5622765e58",
+    "duration_seconds": 174.542947845805,
+    "integrated_lufs": -12.325790049991118,
+    "sample_peak_dbfs": -1.3318698997556147,
+    "true_peak_4x_dbtp": -1.3168758506034848,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006860104693320915,
+      "longestHeavySeconds": 0.052312925170068025,
+      "maximumAtSeconds": 52.975034013605445,
+      "maximumDB": 4.878235130108795,
+      "sampleCount": 7696384
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.9,
+        174.53
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -13.300525700556292,
+        "minimum_at_seconds": 57.6,
+        "maximum_400ms_loudness": -6.463695291671158,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-2-3.m4a",
+    "audio_sha256": "09bfab7d51055df7b4caf9ae999ac3ae157f70ac23cdf6dd34fcae10b24c787a",
+    "duration_seconds": 180.2550566893424,
+    "integrated_lufs": -14.247736334383925,
+    "sample_peak_dbfs": -1.3556882514075184,
+    "true_peak_4x_dbtp": -1.3191806188450792,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.002404794592244267,
+      "longestHeavySeconds": 0.06975056689342404,
+      "maximumAtSeconds": 55.89691609977324,
+      "maximumDB": 5.95074611487545,
+      "sampleCount": 7948288
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.28
+      ],
+      [
+        7.96,
+        8.01
+      ],
+      [
+        179.32,
+        179.41
+      ],
+      [
+        179.42,
+        180.23999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -19.505956180528717,
+        "minimum_at_seconds": 53.7,
+        "maximum_400ms_loudness": -8.732257527175578,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-2-4.m4a",
+    "audio_sha256": "7a2c8d9571dde08eb0199553fbd21ff6cf6f5c811e0f60237a91b8bae5898578",
+    "duration_seconds": 174.542947845805,
+    "integrated_lufs": -12.32579028583485,
+    "sample_peak_dbfs": -1.3446061524269983,
+    "true_peak_4x_dbtp": -1.3302146164656623,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006860364555614689,
+      "longestHeavySeconds": 0.052312925170068025,
+      "maximumAtSeconds": 52.975034013605445,
+      "maximumDB": 4.878413067282178,
+      "sampleCount": 7696384
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.9,
+        174.53
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -13.300525700636527,
+        "minimum_at_seconds": 57.6,
+        "maximum_400ms_loudness": -6.463714847596805,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-2.m4a",
+    "audio_sha256": "03b90f70f8fec74f590a7907fd946862890cc77a9dc7f41c34d7ee02d3db6b7e",
+    "duration_seconds": 180.2550566893424,
+    "integrated_lufs": -14.247736334383925,
+    "sample_peak_dbfs": -1.3556882514075184,
+    "true_peak_4x_dbtp": -1.3191806188450792,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.002404794592244267,
+      "longestHeavySeconds": 0.06975056689342404,
+      "maximumAtSeconds": 55.89691609977324,
+      "maximumDB": 5.95074611487545,
+      "sampleCount": 7948288
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.28
+      ],
+      [
+        7.96,
+        8.01
+      ],
+      [
+        179.32,
+        179.41
+      ],
+      [
+        179.42,
+        180.23999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -19.505956180528717,
+        "minimum_at_seconds": 53.7,
+        "maximum_400ms_loudness": -8.732257527175578,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-3-4.m4a",
+    "audio_sha256": "f26d39f59dec1260795bf8d5471fc9956dcac997e71cd177751ceb673c6671ff",
+    "duration_seconds": 174.542947845805,
+    "integrated_lufs": -12.325790049991118,
+    "sample_peak_dbfs": -1.3318698997556147,
+    "true_peak_4x_dbtp": -1.3168758506034848,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006860104693320915,
+      "longestHeavySeconds": 0.052312925170068025,
+      "maximumAtSeconds": 52.975034013605445,
+      "maximumDB": 4.878235130108795,
+      "sampleCount": 7696384
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.9,
+        174.53
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -13.300525700556292,
+        "minimum_at_seconds": 57.6,
+        "maximum_400ms_loudness": -6.463695291671158,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-3.m4a",
+    "audio_sha256": "274ad7f9e2a94a107236dcb2321fe8cf2dca9efdf1f19d316e1cf7fa9e4cbfbc",
+    "duration_seconds": 180.2550566893424,
+    "integrated_lufs": -14.247736334383925,
+    "sample_peak_dbfs": -1.3556882514075184,
+    "true_peak_4x_dbtp": -1.3191806188450792,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.002404794592244267,
+      "longestHeavySeconds": 0.06975056689342404,
+      "maximumAtSeconds": 55.89691609977324,
+      "maximumDB": 5.95074611487545,
+      "sampleCount": 7948288
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.28
+      ],
+      [
+        7.96,
+        8.01
+      ],
+      [
+        179.32,
+        179.41
+      ],
+      [
+        179.42,
+        180.23999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -19.505956180528717,
+        "minimum_at_seconds": 53.7,
+        "maximum_400ms_loudness": -8.732257527175578,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0-4.m4a",
+    "audio_sha256": "e2d4ae5e3604463440635f45acf71d87752e5dc851b410164be8aaf1fa78e353",
+    "duration_seconds": 174.542947845805,
+    "integrated_lufs": -12.32579028583485,
+    "sample_peak_dbfs": -1.3446061524269983,
+    "true_peak_4x_dbtp": -1.3302146164656623,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006860364555614689,
+      "longestHeavySeconds": 0.052312925170068025,
+      "maximumAtSeconds": 52.975034013605445,
+      "maximumDB": 4.878413067282178,
+      "sampleCount": 7696384
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.9,
+        174.53
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -13.300525700636527,
+        "minimum_at_seconds": 57.6,
+        "maximum_400ms_loudness": -6.463714847596805,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-0.m4a",
+    "audio_sha256": "67ab72819fc33b5c78e4d71eedc495a417218cba7df772d5e43e4e47bbc83f89",
+    "duration_seconds": 180.2550566893424,
+    "integrated_lufs": -14.247736334383925,
+    "sample_peak_dbfs": -1.3556882514075184,
+    "true_peak_4x_dbtp": -1.3191806188450792,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.002404794592244267,
+      "longestHeavySeconds": 0.06975056689342404,
+      "maximumAtSeconds": 55.89691609977324,
+      "maximumDB": 5.95074611487545,
+      "sampleCount": 7948288
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.28
+      ],
+      [
+        7.96,
+        8.01
+      ],
+      [
+        179.32,
+        179.41
+      ],
+      [
+        179.42,
+        180.23999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -19.505956180528717,
+        "minimum_at_seconds": 53.7,
+        "maximum_400ms_loudness": -8.732257527175578,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-2-3-4.m4a",
+    "audio_sha256": "69ef49eb820165348f33c8fe7c2a3c819627017a3f7b070d3f2a2f402fd845d5",
+    "duration_seconds": 174.47328798185941,
+    "integrated_lufs": -11.767139501874174,
+    "sample_peak_dbfs": -1.3169842965740173,
+    "true_peak_4x_dbtp": -1.1227436476330355,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006462626239518168,
+      "longestHeavySeconds": 0.07687074829931972,
+      "maximumAtSeconds": 77.21154195011339,
+      "maximumDB": 5.667051790032225,
+      "sampleCount": 7693312
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.32
+      ],
+      [
+        173.72,
+        173.8
+      ],
+      [
+        173.82,
+        173.93
+      ],
+      [
+        173.95,
+        174.45999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -12.79067099861916,
+        "minimum_at_seconds": 58.7,
+        "maximum_400ms_loudness": -7.367916523673472,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-2-3.m4a",
+    "audio_sha256": "1bfa5f94a2a89c07e2db3dc17945bad2f7c93787057afb3c285afeacf1583896",
+    "duration_seconds": 150.6031746031746,
+    "integrated_lufs": -12.644801749792926,
+    "sample_peak_dbfs": -1.4234412001541228,
+    "true_peak_4x_dbtp": -1.1853849462827057,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.007272491808018504,
+      "longestHeavySeconds": 0.1056689342403628,
+      "maximumAtSeconds": 18.076961451247165,
+      "maximumDB": 5.949363687849473,
+      "sampleCount": 6640640
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.13
+      ],
+      [
+        2.26,
+        2.73
+      ],
+      [
+        3.66,
+        3.95
+      ],
+      [
+        150.17,
+        150.24
+      ],
+      [
+        150.3,
+        150.59
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 54.13533834586467,
+        "minimum_400ms_loudness": -15.54855132271355,
+        "minimum_at_seconds": 50.0,
+        "maximum_400ms_loudness": -8.778465502883922,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-2-4.m4a",
+    "audio_sha256": "c1c5e6f10463e77dc5467fc49c065796d9cece374e93026e95780e2ff4a0a71a",
+    "duration_seconds": 174.47328798185941,
+    "integrated_lufs": -11.767139501874174,
+    "sample_peak_dbfs": -1.3169842965740173,
+    "true_peak_4x_dbtp": -1.1227436476330355,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006462626239518168,
+      "longestHeavySeconds": 0.07687074829931972,
+      "maximumAtSeconds": 77.21154195011339,
+      "maximumDB": 5.667051790032225,
+      "sampleCount": 7693312
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.32
+      ],
+      [
+        173.72,
+        173.8
+      ],
+      [
+        173.82,
+        173.93
+      ],
+      [
+        173.95,
+        174.45999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -12.79067099861916,
+        "minimum_at_seconds": 58.7,
+        "maximum_400ms_loudness": -7.367916523673472,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-2.m4a",
+    "audio_sha256": "2b6830e4b97bb8e161d5eb1a76a1ed401fa03bd7d3b99dedcdd211f4e1bb11d4",
+    "duration_seconds": 150.6031746031746,
+    "integrated_lufs": -12.644801749792926,
+    "sample_peak_dbfs": -1.4234412001541228,
+    "true_peak_4x_dbtp": -1.1853849462827057,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.007272491808018504,
+      "longestHeavySeconds": 0.1056689342403628,
+      "maximumAtSeconds": 18.076961451247165,
+      "maximumDB": 5.949363687849473,
+      "sampleCount": 6640640
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.13
+      ],
+      [
+        2.26,
+        2.73
+      ],
+      [
+        3.66,
+        3.95
+      ],
+      [
+        150.17,
+        150.24
+      ],
+      [
+        150.3,
+        150.59
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 54.13533834586467,
+        "minimum_400ms_loudness": -15.54855132271355,
+        "minimum_at_seconds": 50.0,
+        "maximum_400ms_loudness": -8.778465502883922,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-3-4.m4a",
+    "audio_sha256": "83480aed41a5e12557a8b45d2be249c58dd8bf1df8b3ebb43a1977399712578b",
+    "duration_seconds": 174.47328798185941,
+    "integrated_lufs": -11.767139501874174,
+    "sample_peak_dbfs": -1.3169842965740173,
+    "true_peak_4x_dbtp": -1.1227436476330355,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006462626239518168,
+      "longestHeavySeconds": 0.07687074829931972,
+      "maximumAtSeconds": 77.21154195011339,
+      "maximumDB": 5.667051790032225,
+      "sampleCount": 7693312
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.32
+      ],
+      [
+        173.72,
+        173.8
+      ],
+      [
+        173.82,
+        173.93
+      ],
+      [
+        173.95,
+        174.45999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -12.79067099861916,
+        "minimum_at_seconds": 58.7,
+        "maximum_400ms_loudness": -7.367916523673472,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-3.m4a",
+    "audio_sha256": "23d89920188c435ec8a0089ee72eb2160dc96632b3202751e7edca8959d6a2d8",
+    "duration_seconds": 150.6031746031746,
+    "integrated_lufs": -12.644801749792926,
+    "sample_peak_dbfs": -1.4234412001541228,
+    "true_peak_4x_dbtp": -1.1853849462827057,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.007272491808018504,
+      "longestHeavySeconds": 0.1056689342403628,
+      "maximumAtSeconds": 18.076961451247165,
+      "maximumDB": 5.949363687849473,
+      "sampleCount": 6640640
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.13
+      ],
+      [
+        2.26,
+        2.73
+      ],
+      [
+        3.66,
+        3.95
+      ],
+      [
+        150.17,
+        150.24
+      ],
+      [
+        150.3,
+        150.59
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 54.13533834586467,
+        "minimum_400ms_loudness": -15.54855132271355,
+        "minimum_at_seconds": 50.0,
+        "maximum_400ms_loudness": -8.778465502883922,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1-4.m4a",
+    "audio_sha256": "5f9fb773a450fcf61dd55bcff9f12508602b69317b795bf135be1beb0183a2ef",
+    "duration_seconds": 174.47328798185941,
+    "integrated_lufs": -11.76745886047646,
+    "sample_peak_dbfs": -1.3171511855182074,
+    "true_peak_4x_dbtp": -1.1227436476330355,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006455737138959137,
+      "longestHeavySeconds": 0.07687074829931972,
+      "maximumAtSeconds": 77.21154195011339,
+      "maximumDB": 5.66611536181356,
+      "sampleCount": 7693312
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.32
+      ],
+      [
+        173.72,
+        173.8
+      ],
+      [
+        173.82,
+        173.93
+      ],
+      [
+        173.95,
+        174.45999999999998
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -12.791600456453347,
+        "minimum_at_seconds": 58.7,
+        "maximum_400ms_loudness": -7.367667729903688,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-1.m4a",
+    "audio_sha256": "5fa14935ed5466ede297cde0f295265bd55fec16f9812b5eec33751590167b1f",
+    "duration_seconds": 150.6031746031746,
+    "integrated_lufs": -12.644801749792926,
+    "sample_peak_dbfs": -1.4234412001541228,
+    "true_peak_4x_dbtp": -1.1853849462827057,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.007272491808018504,
+      "longestHeavySeconds": 0.1056689342403628,
+      "maximumAtSeconds": 18.076961451247165,
+      "maximumDB": 5.949363687849473,
+      "sampleCount": 6640640
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.13
+      ],
+      [
+        2.26,
+        2.73
+      ],
+      [
+        3.66,
+        3.95
+      ],
+      [
+        150.17,
+        150.24
+      ],
+      [
+        150.3,
+        150.59
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 54.13533834586467,
+        "minimum_400ms_loudness": -15.54855132271355,
+        "minimum_at_seconds": 50.0,
+        "maximum_400ms_loudness": -8.778465502883922,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-2-3-4.m4a",
+    "audio_sha256": "d34a63968888659ac0aeabf9c787df5b3677bd1bf385d8f03a70903b914a5dd1",
+    "duration_seconds": 174.17142857142858,
+    "integrated_lufs": -11.975795685429558,
+    "sample_peak_dbfs": -1.2122110257353582,
+    "true_peak_4x_dbtp": -1.2066834369359385,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.004323307291666667,
+      "longestHeavySeconds": 0.03498866213151927,
+      "maximumAtSeconds": 89.1392290249433,
+      "maximumDB": 4.786408290401518,
+      "sampleCount": 7680000
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.19,
+        173.26
+      ],
+      [
+        173.48,
+        174.16
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -17.074611090315656,
+        "minimum_at_seconds": 50.9,
+        "maximum_400ms_loudness": -10.378856539722817,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-2-3.m4a",
+    "audio_sha256": "791ae8684d0ed852157ec39e9b7986372328009e7aeeed4609f0868b4e12d9d0",
+    "duration_seconds": 143.45142857142858,
+    "integrated_lufs": -11.546804562347234,
+    "sample_peak_dbfs": -1.152305396919823,
+    "true_peak_4x_dbtp": -1.1223665948583632,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006745506263153634,
+      "longestHeavySeconds": 0.08011337868480725,
+      "maximumAtSeconds": 48.139863945578234,
+      "maximumDB": 5.007877776228614,
+      "sampleCount": 6325248
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.06,
+        0.18
+      ]
+    ],
+    "join_loudness": [],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-2-4.m4a",
+    "audio_sha256": "54d999aa1461649d9c79e56e6662ea60db417dc6ff1633c5edc03518b47a71fd",
+    "duration_seconds": 174.17142857142858,
+    "integrated_lufs": -11.975795685429558,
+    "sample_peak_dbfs": -1.2122110257353582,
+    "true_peak_4x_dbtp": -1.2066834369359385,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.004323307291666667,
+      "longestHeavySeconds": 0.03498866213151927,
+      "maximumAtSeconds": 89.1392290249433,
+      "maximumDB": 4.786408290401518,
+      "sampleCount": 7680000
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.19,
+        173.26
+      ],
+      [
+        173.48,
+        174.16
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -17.074611090315656,
+        "minimum_at_seconds": 50.9,
+        "maximum_400ms_loudness": -10.378856539722817,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-2.m4a",
+    "audio_sha256": "1e4b7e6730085b972872d3160dfd7c735e775d0491c927d3ce62f66b458fbefb",
+    "duration_seconds": 143.45142857142858,
+    "integrated_lufs": -11.546804562347234,
+    "sample_peak_dbfs": -1.152305396919823,
+    "true_peak_4x_dbtp": -1.1223665948583632,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.006745506263153634,
+      "longestHeavySeconds": 0.08011337868480725,
+      "maximumAtSeconds": 48.139863945578234,
+      "maximumDB": 5.007877776228614,
+      "sampleCount": 6325248
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.06,
+        0.18
+      ]
+    ],
+    "join_loudness": [],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-3-4.m4a",
+    "audio_sha256": "d51500bbc0a983aeba937fb62c077f9a811bf2dfe643cca06050ad2cd8f7e96b",
+    "duration_seconds": 174.17142857142858,
+    "integrated_lufs": -11.975795685429558,
+    "sample_peak_dbfs": -1.2122110257353582,
+    "true_peak_4x_dbtp": -1.2066834369359385,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.004323307291666667,
+      "longestHeavySeconds": 0.03498866213151927,
+      "maximumAtSeconds": 89.1392290249433,
+      "maximumDB": 4.786408290401518,
+      "sampleCount": 7680000
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.19,
+        173.26
+      ],
+      [
+        173.48,
+        174.16
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -17.074611090315656,
+        "minimum_at_seconds": 50.9,
+        "maximum_400ms_loudness": -10.378856539722817,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-3.m4a",
+    "audio_sha256": "dea81ee6034b568a5b1666dc9bdce092bcb913c3b31f8611dd38a2fb69b9fefe",
+    "duration_seconds": 127.22068027210884,
+    "integrated_lufs": -10.600825438308373,
+    "sample_peak_dbfs": -1.218143007274711,
+    "true_peak_4x_dbtp": -1.1736318705126834,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.009942647008488499,
+      "longestHeavySeconds": 0.12197278911564625,
+      "maximumAtSeconds": 97.28689342403628,
+      "maximumDB": 5.189588507769583,
+      "sampleCount": 5609472
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ]
+    ],
+    "join_loudness": [],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "crate-4.m4a",
+    "audio_sha256": "22ec21d061b3c3bb8fa9562af92f71e73eb216b6d6efdb2c8630b8338a504d3d",
+    "duration_seconds": 174.17142857142858,
+    "integrated_lufs": -11.975795685429558,
+    "sample_peak_dbfs": -1.2122110257353582,
+    "true_peak_4x_dbtp": -1.2066834369359385,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "software_limiter_pass": true,
+    "software_limiter": {
+      "heavyFraction": 0.004323307291666667,
+      "longestHeavySeconds": 0.03498866213151927,
+      "maximumAtSeconds": 89.1392290249433,
+      "maximumDB": 4.786408290401518,
+      "sampleCount": 7680000
+    },
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.31
+      ],
+      [
+        173.19,
+        173.26
+      ],
+      [
+        173.48,
+        174.16
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 57.14285714285713,
+        "minimum_400ms_loudness": -17.074611090315656,
+        "minimum_at_seconds": 50.9,
+        "maximum_400ms_loudness": -10.378856539722817,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "upstream Audio Unit limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  }
+]

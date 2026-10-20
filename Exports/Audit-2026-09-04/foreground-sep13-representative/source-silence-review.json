@@ -1,0 +1,16 @@
+[
+  {
+    "file": "crate-0.m4a",
+    "start": 7.96,
+    "end": 8.01,
+    "status": "quiet_source_confirmed",
+    "sources": [
+      {
+        "source": "/Users/pranavi/Documents/Mixr/Songs/britney-baby-one-more-time.mp3",
+        "source_start": 8.9152,
+        "rms_dbfs": -58.35633485026626,
+        "status": "measured"
+      }
+    ]
+  }
+]

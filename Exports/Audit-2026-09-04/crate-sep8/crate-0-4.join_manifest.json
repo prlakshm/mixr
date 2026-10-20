@@ -1,0 +1,912 @@
+{
+  "audioSHA256" : "8e104c103de13d4cfca1207df4057e5dc649a2f6eb6138e51ec64a4eab53b262",
+  "dropBars" : [
+    24,
+    55.999999999999993
+  ],
+  "dropTimes" : [
+    57.142857142857132,
+    133.33333333333329
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "britney-baby-one-more-time.mp3" : "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252",
+    "tatu-all-the-things-she-said.mp3" : "aa3d90a1854abdb232ccdb9b690844074b8c4ac54856f486a105d40c6c51917d"
+  },
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 57.142857142857132,
+      "incomingSongID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "windowStart" : 52.380952380952372
+    }
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 0,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 19.642857142857139,
+      "timelineStart" : 0,
+      "volume" : 1.1498515444191384
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 22.789926739926734,
+      "timelineStart" : 19.047619047619044,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4,
+      "timelineStart" : 19.047619047619044,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4,
+      "timelineStart" : 19.047619047619044,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4,
+      "timelineStart" : 19.047619047619044,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 62.040000000000006,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 15.047619047619044,
+      "timelineStart" : 23.047619047619044,
+      "volume" : 1.1926691145053716
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 62.040000000000006,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 15.047619047619044,
+      "timelineStart" : 23.047619047619044,
+      "volume" : 1.1637580268825205
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 62.040000000000006,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 15.047619047619044,
+      "timelineStart" : 23.047619047619044,
+      "volume" : 0.94811865006482865
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 14.285714285714285,
+      "timelineStart" : 38.095238095238088,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4,
+      "timelineStart" : 38.095238095238088,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4,
+      "timelineStart" : 38.095238095238088,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 57.560000000000002,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4,
+      "timelineStart" : 38.095238095238088,
+      "volume" : 0.39600000000000002
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 62.040000000000006,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 10.285714285714285,
+      "timelineStart" : 42.095238095238088,
+      "volume" : 2.1684892991006754
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 62.040000000000006,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 10.285714285714285,
+      "timelineStart" : 42.095238095238088,
+      "volume" : 2.1159236852409462
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 62.040000000000006,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 10.285714285714285,
+      "timelineStart" : 42.095238095238088,
+      "volume" : 1.723852091026961
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 26
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 54.453548387096767,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 4.761904761904761,
+      "timelineStart" : 47.619047619047613,
+      "volume" : 1.5573695875359397
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 30,
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 73.560000000000002,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 52.380952380952372,
+      "volume" : 2.1979006275708826
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 73.560000000000002,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 52.380952380952372,
+      "volume" : 2.7106116238758444
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 73.560000000000002,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 52.380952380952372,
+      "volume" : 2.644904606551183
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 73.560000000000002,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 52.380952380952372,
+      "volume" : 2.1548151137837013
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 20,
+        "echo" : 55
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 78.226666666666659,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 0.59523809523809512,
+      "timelineStart" : 52.380952380952372,
+      "volume" : 2.5118864315095801
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 73.560000000000002,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.7619047619047592,
+      "timelineStart" : 52.380952380952372,
+      "volume" : 0.41999999999999998
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46,
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 76.226666666666659,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 54.761904761904752,
+      "volume" : 1.883914823632185
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 76.226666666666659,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 54.761904761904752,
+      "volume" : 2.7106116238758444
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 76.226666666666659,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 54.761904761904752,
+      "volume" : 2.644904606551183
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 46
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 76.226666666666659,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 54.761904761904752,
+      "volume" : 2.1548151137837013
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 59.614838709677414,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 16.666666666666664,
+      "timelineStart" : 57.142857142857132,
+      "volume" : 5.2749615061701185
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 147.56666666666666,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.666666666666664,
+      "timelineStart" : 57.142857142857132,
+      "volume" : 1.1498515444191384
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 147.56666666666666,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.666666666666664,
+      "timelineStart" : 57.142857142857132,
+      "volume" : 1.1498515444191384
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 147.56666666666666,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.666666666666664,
+      "timelineStart" : 57.142857142857132,
+      "volume" : 1.1498515444191384
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 147.56666666666666,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 76.190476190476176,
+      "volume" : 2.3587616623604402
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 147.56666666666666,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 76.190476190476176,
+      "volume" : 2.3587616623604402
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 147.56666666666666,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 76.190476190476176,
+      "volume" : 2.1228854961243964
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 80.259999999999991,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 76.190476190476176,
+      "volume" : 5.5
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 32,
+        "echo" : 6,
+        "reverb" : 14
+      },
+      "role" : "dominant",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 95.743870967741927,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 4.8819047619047637,
+      "timelineStart" : 90.476190476190453,
+      "volume" : 0.90000000000000002
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 12,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 150.88,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 19.167619047619041,
+      "timelineStart" : 95.238095238095212,
+      "volume" : 1.1965022329300217
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 22
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 100.90516129032257,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 3.7423076923076923,
+      "timelineStart" : 95.238095238095212,
+      "volume" : 0.78000000000000003
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "echo" : 6,
+        "reverb" : 14
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 100.90516129032257,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 95.238095238095212,
+      "volume" : 0.55800000000000005
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 22,
+        "echo" : 12,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 44.219999999999999,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 19.047619047619044,
+      "timelineStart" : 114.28571428571425,
+      "volume" : 1
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 12,
+        "reverb" : 18
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 172.21333333333331,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.6041666666666714,
+      "timelineStart" : 114.28571428571425,
+      "volume" : 0.62
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 126.90000000000001,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 22.789926739926727,
+      "timelineStart" : 133.33333333333329,
+      "volume" : 0.99691260427870543
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "echo" : 14,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 172.22,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.7619047619047592,
+      "timelineStart" : 152.38095238095232,
+      "volume" : 0.91899999999999993
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8.6666666666666661,
+        "echo" : 14,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 177.55333333333334,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.761904761904761,
+      "timelineStart" : 157.14285714285708,
+      "volume" : 0.78247603097847584
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 17.333333333333332,
+        "echo" : 14,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 185.55333333333331,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523805,
+      "timelineStart" : 164.28571428571422,
+      "volume" : 0.38682541752192523
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 26,
+        "echo" : 14,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 188.22,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.761904761904761,
+      "timelineStart" : 166.6666666666666,
+      "volume" : 0.25155224017346361
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 80.259999999999991,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 76.190476190476176,
+      "volume" : 5.5
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 12,
+        "reverb" : 18
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 172.21333333333331,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 4.6041666666666714,
+      "timelineStart" : 114.28571428571425,
+      "volume" : 0.7129079575398658
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 32,
+        "echo" : 6,
+        "reverb" : 14
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 100.90516129032257,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 95.238095238095212,
+      "volume" : 0.55800000000000005
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 17.333333333333332,
+        "echo" : 14,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 182.88666666666666,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.1904761904761902,
+      "timelineStart" : 161.90476190476184,
+      "volume" : 0.61870794979665289
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 17.333333333333332,
+        "echo" : 14,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 184.22,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 1.1904761904761902,
+      "timelineStart" : 163.09523809523805,
+      "volume" : 0.48921565899327529
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "dominant",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 77.679354838709671,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 2.5009523809523841,
+      "timelineStart" : 73.809523809523796,
+      "volume" : 5.5
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 166.23333333333332,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 73.809523809523796,
+      "volume" : 2.7122257403818062
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 166.23333333333332,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 73.809523809523796,
+      "volume" : 2.7122257403818062
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 166.23333333333332,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 2.3809523809523796,
+      "timelineStart" : 73.809523809523796,
+      "volume" : 2.7122257403818062
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 150.23333333333332,
+      "stemKind" : "drums",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.666666666666657,
+      "timelineStart" : 78.571428571428555,
+      "volume" : 1
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 150.23333333333332,
+      "stemKind" : "bass",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.666666666666657,
+      "timelineStart" : 78.571428571428555,
+      "volume" : 1
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "supporting",
+      "songID" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "sourceStart" : 150.23333333333332,
+      "stemKind" : "other",
+      "tempoRatio" : 1.1200000000000001,
+      "timelineDuration" : 16.666666666666657,
+      "timelineStart" : 78.571428571428555,
+      "volume" : 0.90000000000000002
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 82.840645161290311,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 12.002678571428575,
+      "timelineStart" : 78.571428571428555,
+      "volume" : 3.2704761338254733
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "echo" : 6
+      },
+      "role" : "supporting",
+      "songID" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "sourceStart" : 82.840645161290311,
+      "stemKind" : "vocals",
+      "tempoRatio" : 1.0838709677419356,
+      "timelineDuration" : 16.431250000000006,
+      "timelineStart" : 78.571428571428555,
+      "volume" : 3.2704761338254733
+    }
+  ],
+  "planFingerprint" : "c3b10167d6ac0c0128650287e93978fbd22e508ffa1d3f341947789361f426be",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : true
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sourceIdentity" : [
+    {
+      "id" : "62D089F6-D0A3-4923-91FF-5F0029CD3066",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/britney-baby-one-more-time.mp3"
+    },
+    {
+      "id" : "D31A042E-0C7F-4672-9DFE-44BFFA13C55C",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/tatu-all-the-things-she-said.mp3"
+    }
+  ],
+  "targetBPM" : 100.80000000000001,
+  "warnings" : [
+    "Fewer song handoffs than intended — some sections were skipped for lack of material.",
+    "Fewer song handoffs than intended — some sections were skipped for lack of material."
+  ]
+}

@@ -1,0 +1,28 @@
+[
+  {
+    "label": "revised",
+    "source": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/foreground-sep13/crate-0-1.m4a",
+    "source_sha256": "1ac06ba15fef82ccc8bcc0dedd6590ae11eb0b56603c7db969524445bf5b018f",
+    "excerpt": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/listening-foreground-sep13/revised.wav",
+    "excerpt_sha256": "d8126083a9e65e3a99ebb6780970a315db33ba7b7650cb66bb5d26e67877c28c",
+    "source_offset_seconds": 43.299539170506904,
+    "drop_at_excerpt_seconds": 12,
+    "gain_db": -6.6846748679931824,
+    "measured_excerpt_lufs": -17.999999994030212,
+    "normalization": "single fixed gain to -18 integrated LUFS; no extra limiting",
+    "review_status": "not auditioned; labeled development comparison, not blinded release approval"
+  },
+  {
+    "label": "preferred-B",
+    "source": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/01-mashup-oops-x-baby.m4a",
+    "source_sha256": "956dd47301ad75c126e6ef5e98f9e4e35bf24dbe3ed50e3a4ae335993ffae178",
+    "excerpt": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/listening-foreground-sep13/preferred-B.wav",
+    "excerpt_sha256": "84558403c1f553c3f1a01dc68d715e53bb6e71c57497c3edea85032ad0e123f2",
+    "source_offset_seconds": 65.50759878419451,
+    "drop_at_excerpt_seconds": 12,
+    "gain_db": -7.685357266277526,
+    "measured_excerpt_lufs": -17.999999992478607,
+    "normalization": "single fixed gain to -18 integrated LUFS; no extra limiting",
+    "review_status": "not auditioned; labeled development comparison, not blinded release approval"
+  }
+]

@@ -1,0 +1,51 @@
+{
+  "audioSHA256" : "d5b692a23a0bc517a9d2c0b4e56aa57a82efcaa3c2e5424e0474abe6840dc71e",
+  "dropBars" : [
+    24,
+    55.999999999999993
+  ],
+  "dropTimes" : [
+    40,
+    93.333333333333329
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "paramore-all-i-wanted.mp3" : "9515694f184d0f6fff14b7d2b4d47adf2c80cf0c345f080ce0355552e78eb77e",
+    "tatu-all-the-things-she-said.mp3" : "aa3d90a1854abdb232ccdb9b690844074b8c4ac54856f486a105d40c6c51917d"
+  },
+  "joinContracts" : [
+    {
+      "coverage" : "bedOther",
+      "cutAt" : 40,
+      "incomingSongID" : "3FCD4F3A-69D4-4713-AA6D-6130B5845FB4",
+      "kind" : "sweepJoin",
+      "outgoingSongID" : "3FCD4F3A-69D4-4713-AA6D-6130B5845FB4",
+      "windowStart" : 36.666666666666664
+    }
+  ],
+  "planFingerprint" : "92500dfff81d99ad3bde98a313f0e0d30838c19f5e7884212bc54a140dbaa51d",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : true
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "targetBPM" : 144,
+  "warnings" : [
+    "Skipped All The Things She Said: no tempo-aligned full hook or verified short chop.",
+    "No guest passed the full-hook gate; bed material carries the drops.",
+    "Dropped a section that no longer had enough source material.",
+    "Listen loop: loudnessStep @74.0s — +6.7 dB between adjacent seconds"
+  ]
+}

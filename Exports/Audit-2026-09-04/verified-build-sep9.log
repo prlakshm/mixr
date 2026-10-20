@@ -1,0 +1,427 @@
+Compiling listen renderer…
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift:178:13: warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+176 |         // 3 — Literal gap: rawStart lands in empty space → place exactly where released
+177 |         let clampedStart = max(0, rawStart)
+178 |         let movingEnd = clampedStart + movingClip.length
+    |             `- warning: initialization of immutable value 'movingEnd' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+179 |         let startsInClip = others.contains { clip in
+180 |             clampedStart > clip.start + epsilon
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipFlanger.swift:395:13: warning: capture of 'node' with non-Sendable type 'AVAudioUnit?' in a '@Sendable' closure [#SendableClosureCaptures]
+393 |                 print("ClipFlanger: instantiate failed — \(error.localizedDescription)")
+394 |             }
+395 |             node = unit
+    |             `- warning: capture of 'node' with non-Sendable type 'AVAudioUnit?' in a '@Sendable' closure [#SendableClosureCaptures]
+396 |             semaphore.signal()
+397 |         }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioUnit.h:28:12: note: class 'AVAudioUnit' does not conform to the 'Sendable' protocol
+ 26 | */
+ 27 | API_AVAILABLE(macos(10.10), ios(8.0), tvos(9.0)) API_UNAVAILABLE(watchos)
+ 28 | @interface AVAudioUnit : AVAudioNode
+    |            `- note: class 'AVAudioUnit' does not conform to the 'Sendable' protocol
+ 29 | 
+ 30 | #if AVAUDIOUNIT_HAVE_AUDIOUNIT
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipFlanger.swift:1:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+  1 | import AVFoundation
+    | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+  2 | import AudioToolbox
+  3 | import CoreAudio
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:884:13: warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 882 |         var placements: [AutoClipPlacement] = []
+ 883 |         var pulseRegions: [AutoClubPulse.Region] = []
+ 884 |         var joinContracts: [AutoJoinContract] = []
+     |             `- warning: variable 'joinContracts' was never mutated; consider changing to 'let' constant
+ 885 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 886 |         var cutRecords: [AutoCutRecord] = []
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:886:13: warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 884 |         var joinContracts: [AutoJoinContract] = []
+ 885 |         var intentionalGaps: [AutoIntentionalGap] = []
+ 886 |         var cutRecords: [AutoCutRecord] = []
+     |             `- warning: variable 'cutRecords' was never mutated; consider changing to 'let' constant
+ 887 |         var sfx: [AutoSFXEvent] = []
+ 888 |         var decisions = decisions
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift:1545:62: warning: will never be executed
+1543 |             mashupVocalID: drop1?.songID,
+1544 |             mashupBedID: bed.songID,
+1545 |             bedTempoRatio: bedTempo.ok ? bedTempo.bedRatio : nil,
+     |                                     |                        `- warning: will never be executed
+     |                                     `- note: condition always evaluates to true
+1546 |             vocalTempoRatio: vocalTempoRatio,
+1547 |             bedPitchSemitones: bedPitch,
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift:178:13: warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 176 |         joinContracts: inout [AutoJoinContract]
+ 177 |     ) {
+ 178 |         let repeats = tuning.pivotWallpaperBeats
+     |             `- warning: initialization of immutable value 'repeats' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 179 |         let loopDur = tuning.pivotWindowSeconds(barSec: barSec)
+ 180 |         let loopStart = dropTimelineStart - loopDur
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift:64:13: warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 62 |         }
+ 63 | 
+ 64 |         var validated = AutoRemixValidator.validate(draft, profiles: profiles, tuning: tuning)
+    |             `- warning: variable 'validated' was never mutated; consider changing to 'let' constant
+ 65 |         var staged = validated
+ 66 |         AutoJoinEngine.boostJoinClipVolumes(
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:67:17: warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+65 |                 if pulled { outStatus.pointee = .noDataNow; return nil }
+66 |                 pulled = true
+67 |                 inBuf.frameLength = 0
+   |                 `- warning: capture of 'inBuf' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure [#SendableClosureCaptures]
+68 |                 do { try file.read(into: inBuf) } catch { outStatus.pointee = .endOfStream; return nil }
+69 |                 if inBuf.frameLength == 0 { outStatus.pointee = .endOfStream; reachedEnd = true; return nil }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioBuffer.h:67:12: note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 65 | */
+ 66 | API_AVAILABLE(macos(10.10), ios(8.0), watchos(2.0), tvos(9.0))
+ 67 | @interface AVAudioPCMBuffer : AVAudioBuffer
+    |            `- note: class 'AVAudioPCMBuffer' does not conform to the 'Sendable' protocol
+ 68 | 
+ 69 | /*!	@method initWithPCMFormat:frameCapacity:
+
+/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift:2:1: warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 1 | import Foundation
+ 2 | import AVFoundation
+   | `- warning: add '@preconcurrency' to suppress 'Sendable'-related warnings from module 'AVFAudio'
+ 3 | 
+ 4 | /// Decodes song and stem audio to lean mono PCM for the in-engine listen
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/var/folders/sl/q2rnvs0j6g1bb1pg7zjj5jyh0000gn/T/mixr-listen-OiFGRM/main.swift:25:29: warning: 'tracks(withMediaType:)' was deprecated in macOS 13.0: Use loadTracks(withMediaType:) instead [#DeprecatedDeclaration]
+ 23 |     let url = URL(fileURLWithPath: path)
+ 24 |     let asset = AVURLAsset(url: url)
+ 25 |     guard let track = asset.tracks(withMediaType: .audio).first else {
+    |                             `- warning: 'tracks(withMediaType:)' was deprecated in macOS 13.0: Use loadTracks(withMediaType:) instead [#DeprecatedDeclaration]
+ 26 |         throw NSError(domain: "mixr", code: 1, userInfo: [NSLocalizedDescriptionKey: "no audio \(path)"])
+ 27 |     }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+Rendering local crate...
+decoded Baby One More Time (211.1s)
+decoded Oops I Did It Again (211.2s)
+decoded stupid song (209.7s)
+decoded All I Wanted (225.8s)
+decoded All The Things She Said (214.4s)
+
+=== crate-0 ===
+MASTER in=-18.5 LUFS makeup=+1.9 dB sustainedGR=0.2 p90=2.5 limited=5% peakGR=5.9 out=-16.8 LUFS
+MASTER in=-18.4 LUFS makeup=+1.5 dB sustainedGR=0.0 p90=2.9 limited=2% peakGR=5.9 out=-17.1 LUFS
+MASTER in=-18.3 LUFS makeup=+0.6 dB sustainedGR=0.0 p90=2.4 limited=2% peakGR=6.0 out=-17.9 LUFS
+MASTER in=-18.3 LUFS makeup=+0.6 dB sustainedGR=0.0 p90=2.4 limited=2% peakGR=6.0 out=-17.9 LUFS
+  Remix bpm=104 drops at 0:55, 2:09
+MASTER export in=-21.1 LUFS makeup=+4.5 dB sustainedGR=0.0 p90=1.0 limited=1% peakGR=6.0 out=-16.7 LUFS
+  wrote crate-0.m4a
+  wrote crate-0.join_manifest.json
+
+=== crate-1 ===
+MASTER in=-18.4 LUFS makeup=+4.5 dB sustainedGR=1.5 p90=3.7 limited=23% peakGR=5.9 out=-14.7 LUFS
+MASTER in=-19.4 LUFS makeup=+3.5 dB sustainedGR=0.0 p90=2.1 limited=3% peakGR=5.9 out=-16.1 LUFS
+MASTER in=-19.4 LUFS makeup=+3.5 dB sustainedGR=0.0 p90=2.2 limited=3% peakGR=5.9 out=-16.1 LUFS
+MASTER in=-19.4 LUFS makeup=+3.5 dB sustainedGR=0.0 p90=2.2 limited=3% peakGR=5.9 out=-16.1 LUFS
+  Remix bpm=106 drops at 0:54, 2:06
+MASTER export in=-22.2 LUFS makeup=+10.4 dB sustainedGR=1.1 p90=4.3 limited=17% peakGR=5.9 out=-12.4 LUFS
+  wrote crate-1.m4a
+  wrote crate-1.join_manifest.json
+
+=== crate-0-1 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=6.0 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=6.0 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1.m4a
+  wrote crate-0-1.join_manifest.json
+
+=== crate-2 ===
+MASTER in=-14.9 LUFS makeup=+1.4 dB sustainedGR=1.5 p90=2.0 limited=20% peakGR=2.4 out=-14.4 LUFS
+MASTER in=-17.9 LUFS makeup=+5.2 dB sustainedGR=1.3 p90=3.2 limited=24% peakGR=5.9 out=-13.4 LUFS
+MASTER in=-17.9 LUFS makeup=+5.2 dB sustainedGR=1.3 p90=3.2 limited=24% peakGR=5.9 out=-13.4 LUFS
+  Remix bpm=128 drops at 0:45, 1:45
+MASTER export in=-17.4 LUFS makeup=+6.9 dB sustainedGR=1.4 p90=1.8 limited=22% peakGR=2.0 out=-11.5 LUFS
+  wrote crate-2.m4a
+  wrote crate-2.join_manifest.json
+
+=== crate-0-2 ===
+MASTER in=-12.0 LUFS makeup=-2.5 dB sustainedGR=0.7 p90=1.6 limited=10% peakGR=6.0 out=-14.9 LUFS
+MASTER in=-12.9 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=6.0 out=-17.0 LUFS
+MASTER in=-13.0 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=5.9 out=-17.1 LUFS
+MASTER in=-13.0 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=5.9 out=-17.1 LUFS
+  Mashup bpm=128 drops at 0:45, 1:45
+  TITLE_PROBE t=15.00 drop1=45.00 beat=0.469
+MASTER export in=-16.9 LUFS makeup=+5.8 dB sustainedGR=0.8 p90=4.4 limited=10% peakGR=6.0 out=-11.5 LUFS
+  wrote crate-0-2.m4a
+  wrote crate-0-2.join_manifest.json
+
+=== crate-1-2 ===
+MASTER in=-12.0 LUFS makeup=-2.5 dB sustainedGR=0.7 p90=1.6 limited=10% peakGR=6.0 out=-14.9 LUFS
+MASTER in=-12.9 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=6.0 out=-17.0 LUFS
+MASTER in=-13.0 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=5.9 out=-17.1 LUFS
+MASTER in=-13.0 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=5.9 out=-17.1 LUFS
+  Mashup bpm=128 drops at 0:45, 1:45
+  TITLE_PROBE t=15.00 drop1=45.00 beat=0.469
+MASTER export in=-16.9 LUFS makeup=+5.8 dB sustainedGR=0.8 p90=4.4 limited=10% peakGR=6.0 out=-11.5 LUFS
+  wrote crate-1-2.m4a
+  wrote crate-1-2.join_manifest.json
+
+=== crate-0-1-2 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-2.m4a
+  wrote crate-0-1-2.join_manifest.json
+
+=== crate-3 ===
+MASTER in=-14.1 LUFS makeup=+1.6 dB sustainedGR=1.5 p90=2.4 limited=29% peakGR=3.1 out=-13.5 LUFS
+  Remix bpm=144 drops at 0:40, 1:33
+MASTER export in=-16.5 LUFS makeup=+6.5 dB sustainedGR=0.9 p90=1.6 limited=25% peakGR=2.1 out=-10.8 LUFS
+  wrote crate-3.m4a
+  wrote crate-3.join_manifest.json
+
+=== crate-0-3 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-0-3.m4a
+  wrote crate-0-3.join_manifest.json
+
+=== crate-1-3 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-1-3.m4a
+  wrote crate-1-3.join_manifest.json
+
+=== crate-0-1-3 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-3.m4a
+  wrote crate-0-1-3.join_manifest.json
+
+=== crate-2-3 ===
+MASTER in=-14.5 LUFS makeup=-1.5 dB sustainedGR=1.4 p90=4.4 limited=9% peakGR=5.3 out=-16.8 LUFS
+MASTER in=-14.8 LUFS makeup=-1.7 dB sustainedGR=1.4 p90=4.3 limited=10% peakGR=5.9 out=-17.3 LUFS
+MASTER in=-14.8 LUFS makeup=-1.7 dB sustainedGR=1.4 p90=4.3 limited=10% peakGR=5.9 out=-17.3 LUFS
+  Mashup bpm=136 drops at 0:42, 1:38
+  TITLE_PROBE t=14.12 drop1=42.35 beat=0.441
+MASTER export in=-16.6 LUFS makeup=+3.7 dB sustainedGR=1.4 p90=4.1 limited=9% peakGR=5.2 out=-13.8 LUFS
+  wrote crate-2-3.m4a
+  wrote crate-2-3.join_manifest.json
+
+=== crate-0-2-3 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-0-2-3.m4a
+  wrote crate-0-2-3.join_manifest.json
+
+=== crate-1-2-3 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-1-2-3.m4a
+  wrote crate-1-2-3.join_manifest.json
+
+=== crate-0-1-2-3 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-2-3.m4a
+  wrote crate-0-1-2-3.join_manifest.json
+
+=== crate-4 ===
+MASTER in=-17.5 LUFS makeup=+4.2 dB sustainedGR=1.5 p90=3.4 limited=31% peakGR=4.1 out=-14.2 LUFS
+  Remix bpm=101 drops at 0:57, 2:13
+MASTER export in=-19.2 LUFS makeup=+8.0 dB sustainedGR=1.4 p90=3.6 limited=26% peakGR=4.7 out=-11.9 LUFS
+  wrote crate-4.m4a
+  wrote crate-4.join_manifest.json
+
+=== crate-0-4 ===
+MASTER in=-15.6 LUFS makeup=-2.5 dB sustainedGR=0.0 p90=1.5 limited=2% peakGR=5.9 out=-18.3 LUFS
+MASTER in=-14.9 LUFS makeup=-2.5 dB sustainedGR=0.1 p90=3.1 limited=4% peakGR=6.0 out=-17.8 LUFS
+MASTER in=-14.7 LUFS makeup=-6.0 dB sustainedGR=0.0 p90=0.7 limited=1% peakGR=6.0 out=-20.7 LUFS
+MASTER in=-14.7 LUFS makeup=-6.0 dB sustainedGR=0.0 p90=0.7 limited=1% peakGR=6.0 out=-20.7 LUFS
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+MASTER export in=-17.6 LUFS makeup=+4.4 dB sustainedGR=0.2 p90=3.3 limited=4% peakGR=5.9 out=-13.6 LUFS
+  wrote crate-0-4.m4a
+  wrote crate-0-4.join_manifest.json
+
+=== crate-1-4 ===
+MASTER in=-13.6 LUFS makeup=-2.8 dB sustainedGR=1.0 p90=4.3 limited=7% peakGR=6.0 out=-17.3 LUFS
+MASTER in=-13.3 LUFS makeup=-3.5 dB sustainedGR=0.8 p90=3.9 limited=7% peakGR=5.9 out=-17.5 LUFS
+MASTER in=-13.3 LUFS makeup=-3.5 dB sustainedGR=0.8 p90=3.9 limited=7% peakGR=5.9 out=-17.5 LUFS
+  Mashup bpm=101 drops at 0:57, 2:13
+  TITLE_PROBE t=19.05 drop1=57.14 beat=0.595
+MASTER export in=-15.4 LUFS makeup=+2.4 dB sustainedGR=1.1 p90=3.9 limited=7% peakGR=4.4 out=-13.8 LUFS
+  wrote crate-1-4.m4a
+  wrote crate-1-4.join_manifest.json
+
+=== crate-0-1-4 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-4.m4a
+  wrote crate-0-1-4.join_manifest.json
+
+=== crate-2-4 ===
+MASTER in=-12.0 LUFS makeup=-2.5 dB sustainedGR=0.7 p90=1.6 limited=10% peakGR=6.0 out=-14.9 LUFS
+MASTER in=-12.9 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=6.0 out=-17.0 LUFS
+MASTER in=-13.0 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=5.9 out=-17.1 LUFS
+MASTER in=-13.0 LUFS makeup=-3.6 dB sustainedGR=0.3 p90=2.9 limited=4% peakGR=5.9 out=-17.1 LUFS
+  Mashup bpm=128 drops at 0:45, 1:45
+  TITLE_PROBE t=15.00 drop1=45.00 beat=0.469
+MASTER export in=-16.9 LUFS makeup=+5.8 dB sustainedGR=0.8 p90=4.4 limited=10% peakGR=6.0 out=-11.5 LUFS
+  wrote crate-2-4.m4a
+  wrote crate-2-4.join_manifest.json
+
+=== crate-0-2-4 ===
+MASTER in=-16.2 LUFS makeup=-1.7 dB sustainedGR=0.3 p90=2.4 limited=4% peakGR=6.0 out=-18.2 LUFS
+MASTER in=-15.9 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.8 limited=2% peakGR=6.0 out=-18.8 LUFS
+MASTER in=-15.3 LUFS makeup=-3.2 dB sustainedGR=0.0 p90=2.7 limited=2% peakGR=6.0 out=-18.9 LUFS
+MASTER in=-15.3 LUFS makeup=-3.2 dB sustainedGR=0.0 p90=2.7 limited=2% peakGR=6.0 out=-18.9 LUFS
+  Mashup bpm=93 drops at 1:01, 2:24
+  TITLE_PROBE t=61.94 drop1=61.94 beat=0.645
+MASTER export in=-17.3 LUFS makeup=+3.6 dB sustainedGR=1.0 p90=4.3 limited=8% peakGR=5.2 out=-14.7 LUFS
+  wrote crate-0-2-4.m4a
+  wrote crate-0-2-4.join_manifest.json
+
+=== crate-1-2-4 ===
+MASTER in=-14.2 LUFS makeup=-1.0 dB sustainedGR=0.6 p90=3.1 limited=8% peakGR=5.9 out=-15.6 LUFS
+MASTER in=-14.5 LUFS makeup=-1.0 dB sustainedGR=0.6 p90=3.1 limited=8% peakGR=6.0 out=-16.0 LUFS
+MASTER in=-14.5 LUFS makeup=-1.0 dB sustainedGR=0.6 p90=3.1 limited=8% peakGR=6.0 out=-16.0 LUFS
+  Mashup bpm=95 drops at 1:00, 2:21
+  TITLE_PROBE t=20.21 drop1=60.63 beat=0.632
+MASTER export in=-16.7 LUFS makeup=+4.4 dB sustainedGR=1.2 p90=4.1 limited=10% peakGR=5.9 out=-13.2 LUFS
+  wrote crate-1-2-4.m4a
+  wrote crate-1-2-4.join_manifest.json
+
+=== crate-0-1-2-4 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=6.0 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=6.0 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-2-4.m4a
+  wrote crate-0-1-2-4.join_manifest.json
+
+=== crate-3-4 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-3-4.m4a
+  wrote crate-3-4.join_manifest.json
+
+=== crate-0-3-4 ===
+MASTER in=-16.2 LUFS makeup=-1.7 dB sustainedGR=0.3 p90=2.4 limited=4% peakGR=6.0 out=-18.2 LUFS
+MASTER in=-15.9 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.8 limited=2% peakGR=6.0 out=-18.8 LUFS
+MASTER in=-15.3 LUFS makeup=-3.2 dB sustainedGR=0.0 p90=2.7 limited=2% peakGR=6.0 out=-18.9 LUFS
+MASTER in=-15.3 LUFS makeup=-3.2 dB sustainedGR=0.0 p90=2.7 limited=2% peakGR=6.0 out=-18.9 LUFS
+  Mashup bpm=93 drops at 1:01, 2:24
+  TITLE_PROBE t=61.94 drop1=61.94 beat=0.645
+MASTER export in=-17.3 LUFS makeup=+3.6 dB sustainedGR=1.0 p90=4.3 limited=8% peakGR=5.2 out=-14.7 LUFS
+  wrote crate-0-3-4.m4a
+  wrote crate-0-3-4.join_manifest.json
+
+=== crate-1-3-4 ===
+MASTER in=-14.2 LUFS makeup=-1.0 dB sustainedGR=0.6 p90=3.1 limited=8% peakGR=5.9 out=-15.6 LUFS
+MASTER in=-14.5 LUFS makeup=-1.0 dB sustainedGR=0.6 p90=3.1 limited=8% peakGR=6.0 out=-16.0 LUFS
+MASTER in=-14.5 LUFS makeup=-1.0 dB sustainedGR=0.6 p90=3.1 limited=8% peakGR=6.0 out=-16.0 LUFS
+  Mashup bpm=95 drops at 1:00, 2:21
+  TITLE_PROBE t=20.21 drop1=60.63 beat=0.632
+MASTER export in=-16.7 LUFS makeup=+4.4 dB sustainedGR=1.2 p90=4.1 limited=10% peakGR=5.9 out=-13.2 LUFS
+  wrote crate-1-3-4.m4a
+  wrote crate-1-3-4.join_manifest.json
+
+=== crate-0-1-3-4 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=6.0 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=6.0 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-3-4.m4a
+  wrote crate-0-1-3-4.join_manifest.json
+
+=== crate-2-3-4 ===
+MASTER in=-14.5 LUFS makeup=-1.5 dB sustainedGR=1.4 p90=4.4 limited=9% peakGR=5.3 out=-16.8 LUFS
+MASTER in=-14.8 LUFS makeup=-1.7 dB sustainedGR=1.4 p90=4.3 limited=10% peakGR=5.9 out=-17.3 LUFS
+MASTER in=-14.8 LUFS makeup=-1.7 dB sustainedGR=1.4 p90=4.3 limited=10% peakGR=5.9 out=-17.3 LUFS
+  Mashup bpm=136 drops at 0:42, 1:38
+  TITLE_PROBE t=14.12 drop1=42.35 beat=0.441
+MASTER export in=-16.6 LUFS makeup=+3.7 dB sustainedGR=1.4 p90=4.1 limited=9% peakGR=5.2 out=-13.8 LUFS
+  wrote crate-2-3-4.m4a
+  wrote crate-2-3-4.join_manifest.json
+
+=== crate-0-2-3-4 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-0-2-3-4.m4a
+  wrote crate-0-2-3-4.join_manifest.json
+
+=== crate-1-2-3-4 ===
+MASTER in=-11.3 LUFS makeup=-1.1 dB sustainedGR=1.5 p90=3.1 limited=27% peakGR=4.3 out=-13.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+MASTER in=-14.2 LUFS makeup=+2.1 dB sustainedGR=1.0 p90=2.8 limited=25% peakGR=5.9 out=-12.6 LUFS
+  Mashup bpm=144 drops at 0:40, 1:33
+  TITLE_PROBE t=13.33 drop1=40.00 beat=0.417
+MASTER export in=-17.2 LUFS makeup=+7.2 dB sustainedGR=0.9 p90=2.3 limited=18% peakGR=4.1 out=-10.4 LUFS
+  wrote crate-1-2-3-4.m4a
+  wrote crate-1-2-3-4.join_manifest.json
+
+=== crate-0-1-2-3-4 ===
+MASTER in=-16.3 LUFS makeup=-2.7 dB sustainedGR=0.0 p90=1.5 limited=1% peakGR=5.9 out=-19.3 LUFS
+MASTER in=-14.4 LUFS makeup=-2.7 dB sustainedGR=0.2 p90=3.1 limited=4% peakGR=6.0 out=-17.5 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+MASTER in=-14.2 LUFS makeup=-5.1 dB sustainedGR=0.0 p90=1.4 limited=1% peakGR=5.9 out=-19.4 LUFS
+  Mashup bpm=104 drops at 0:55, 2:09
+  TITLE_PROBE t=55.30 drop1=55.30 beat=0.576
+MASTER export in=-18.1 LUFS makeup=+4.4 dB sustainedGR=0.6 p90=3.8 limited=7% peakGR=6.0 out=-14.2 LUFS
+  wrote crate-0-1-2-3-4.m4a
+  wrote crate-0-1-2-3-4.join_manifest.json
+
+LISTEN_RENDERS_DONE cases=31 failures=0

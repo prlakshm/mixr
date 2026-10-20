@@ -1,0 +1,82 @@
+[
+  {
+    "file": "01-mashup-oops-x-baby.m4a",
+    "audio_sha256": "31b9e32923a565d0e98401b8aac86d5f8d5ff77fa145eba46127d969a09ac437",
+    "duration_seconds": 170.9902947845805,
+    "integrated_lufs": -12.8533702182277,
+    "sample_peak_dbfs": -1.0338968380765876,
+    "true_peak_4x_dbtp": -1.028369637663024,
+    "clipped_samples": 0,
+    "encoded_peak_pass": true,
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        170.32,
+        170.98
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 55.299539170506904,
+        "minimum_400ms_loudness": -10.88272701800436,
+        "minimum_at_seconds": 52.6,
+        "maximum_400ms_loudness": -7.53551698420782,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  },
+  {
+    "file": "02-mashup-paramore-x-tatu.m4a",
+    "audio_sha256": "d5b692a23a0bc517a9d2c0b4e56aa57a82efcaa3c2e5424e0474abe6840dc71e",
+    "duration_seconds": 124.85224489795918,
+    "integrated_lufs": -10.36197921390292,
+    "sample_peak_dbfs": -0.9377756340461767,
+    "true_peak_4x_dbtp": -0.9185285296126234,
+    "clipped_samples": 0,
+    "encoded_peak_pass": false,
+    "sub60db_20ms_rms_runs": [
+      [
+        0.0,
+        0.14
+      ],
+      [
+        124.22,
+        124.55
+      ],
+      [
+        124.58,
+        124.84
+      ]
+    ],
+    "join_loudness": [
+      {
+        "kind": "sweepJoin",
+        "cut_seconds": 40,
+        "minimum_400ms_loudness": -13.05665061412745,
+        "minimum_at_seconds": 34.7,
+        "maximum_400ms_loudness": -6.930008655251188,
+        "verdict": "inconclusive: source and intended energy annotation required"
+      }
+    ],
+    "release_status": "inconclusive",
+    "missing_evidence": [
+      "mapped source silence",
+      "pre-SFX headroom",
+      "limiter trace",
+      "live capture parity",
+      "human headphone and speaker audition"
+    ]
+  }
+]

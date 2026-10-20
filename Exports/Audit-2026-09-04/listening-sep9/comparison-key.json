@@ -1,0 +1,20 @@
+[
+  {
+    "label": "A",
+    "version": "candidate",
+    "source": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/verified-sep9/crate-0-1.m4a",
+    "source_offset_seconds": 43.299539170506904,
+    "duration_seconds": 26,
+    "gain_db": -6.596940319981444,
+    "normalization": "single fixed gain; -18 integrated LUFS target; no extra limiting"
+  },
+  {
+    "label": "B",
+    "version": "baseline",
+    "source": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/01-mashup-oops-x-baby.m4a",
+    "source_offset_seconds": 65.50759878419453,
+    "duration_seconds": 26,
+    "gain_db": -7.685357266277526,
+    "normalization": "single fixed gain; -18 integrated LUFS target; no extra limiting"
+  }
+]

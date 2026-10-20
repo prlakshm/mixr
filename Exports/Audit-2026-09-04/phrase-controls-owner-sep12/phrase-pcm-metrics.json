@@ -1,0 +1,24 @@
+[
+  {
+    "drop1_elapsed_bars": 24,
+    "early_phrase_pass": true,
+    "songs": 1,
+    "decoded_audio_sha256": "b5b58d33b6d10c5935b105c7381fadb1c0617f8b19d01816aac6edbdeba0e2b5",
+    "minimum_20ms_rms_dbfs": -36.67437581423564,
+    "maximum_sub60db_run_seconds": 0.0,
+    "negative_hole_rejected": true,
+    "coverage_pass": true,
+    "scope": "Drop1 +/-4seconds, decoded actual export; full loudness/limiter/live/audition gates remain unmeasured"
+  },
+  {
+    "drop1_elapsed_bars": 24,
+    "early_phrase_pass": true,
+    "songs": 2,
+    "decoded_audio_sha256": "0329e90d79b08569ce6afc0fbeec49ac9601feeb3de22d878e8808ed252fd20b",
+    "minimum_20ms_rms_dbfs": -40.39773831557345,
+    "maximum_sub60db_run_seconds": 0.0,
+    "negative_hole_rejected": true,
+    "coverage_pass": true,
+    "scope": "Drop1 +/-4seconds, decoded actual export; full loudness/limiter/live/audition gates remain unmeasured"
+  }
+]

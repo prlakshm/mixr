@@ -1,0 +1,49 @@
+{
+  "status": "development_candidate_not_release_ready",
+  "musical_approval": false,
+  "listening_clip": "Exports/Audit-2026-09-04/listening-foreground-sep13/revised.wav",
+  "focused_tests": {
+    "pass": 44,
+    "log": "implementation/groove-sep13-foreground-tests.log"
+  },
+  "runner_tests": {
+    "pass": 13,
+    "log": "implementation/foreground-sep13-python.log"
+  },
+  "app_build": "passed",
+  "delivery": {
+    "pcm_clipped_samples": 0,
+    "true_peak_dbtp": -1.259,
+    "integrated_lufs": -13.97,
+    "software_limiter_gate": "pass",
+    "mapped_silence_gate": "pass"
+  },
+  "continuity": {
+    "approach_deficit_lu": 3.6389708147218123,
+    "approach_limit_lu": 3,
+    "approach_status": "fail",
+    "remaining_trough_seconds": [
+      52.48294930875575,
+      52.68294930875575
+    ],
+    "following_passage_change_lu": -1.2342724467067114,
+    "following_status": "pass"
+  },
+  "phrase_evidence": {
+    "outgoing_source_end": 73.24,
+    "incoming_source_start": 59.464838709677416,
+    "incoming_timeline_start": 55.165610599078335,
+    "incoming_gain": 4.32097039304782,
+    "incoming_gain_increase_db": 3.3565047865093733,
+    "covered_tail_at_87_seconds_removed": true
+  },
+  "limitations": [
+    "No headphones/speakers approval for this candidate.",
+    "A brief trough still fails the frozen numerical gate.",
+    "Native dry-stem contrast is a balance guide, not proof of intelligibility or upbeat musical character.",
+    "Three/five-input renders retain the same compatible pair and do not establish distinct three/five-voice musical coverage.",
+    "Later supporting vocal copies near92seconds remain a separate whole-arrangement review item outside this excerpt."
+  ],
+  "cloud_audio_calls": 0,
+  "source_identity": "docs/audits/2026-09-04-auto-remix/implementation/foreground-sep13-source-identity.json"
+}

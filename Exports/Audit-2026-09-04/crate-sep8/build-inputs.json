@@ -1,0 +1,519 @@
+{
+  "captured": "2026-09-08",
+  "scope": "Source/fixture/resource files used by the current crate renderer plus local song/stem/annotation assets. Recorded while the built renderer runs, before further production changes.",
+  "git_commit": "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "files": [
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/DevTests/AutoCrateRenderedTests.swift",
+      "sha256": "9ee44f3da8c73e6cab3e6394335b0f801c2cc139e1b8de663349e375411cc60b"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/DevTests/AutoRemixTestStubs.swift",
+      "sha256": "2c765046c927a92cf126deae739db8c1bd3f4a5c137d90d2aac7736d201c34c0"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/ContentView.swift",
+      "sha256": "22b3e11a38c25c4651a8050da2a4424d3160fd7da16cadf09bedfb1a7c634a6a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/AppAppearanceState.swift",
+      "sha256": "3fec5a9f4af7bd3551ab138a22f2f454a8a9252f8c5037aee74909850527f109"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/AutoRemixSummarySheet.swift",
+      "sha256": "94b54b824f0f90c5ef686285c7849efa6e06484c115a25cd1cd12c204ea9b596"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/AutoScopeDialog.swift",
+      "sha256": "90068da1f94e09afcf2586e1fdb6ff4298afb14fcedbfd8e538baad8e33704d7"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/ClipEditingUI.swift",
+      "sha256": "28ea6a08f384771610238c051e31757e81ead5fa424231d9485cd215e7859371"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/DesignSystemPreviewView.swift",
+      "sha256": "f7cdb233b753de49cac8bbe4d69a05a4b8151fd4db7d4c64c3a165c4e3a868f6"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/DesignTokens.swift",
+      "sha256": "5625c82637e9ab47c5d9650eb53eda387f6ac9e3d45dd262d74b27f8e1b89245"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/EditorChrome.swift",
+      "sha256": "06cf69a0595831fcf262890b98d322789db98d989748a8a4863359d0a0ac52b9"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/EditorLayoutMetrics.swift",
+      "sha256": "c8f002c7f0803d199e7f392841326099024879555aca3c88ffb9030d42ce0ae2"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/EditorPointerScrollBridge.swift",
+      "sha256": "706b039eba8cfe9bf4c515feec2065f90c9ce6e98ae519031d320bd6fa9b0a8e"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/EffectCard.swift",
+      "sha256": "5e4789d6b23197ec3fdcaf1dcccc6f9bf8bdfb874489a916e3cb8e53c288d0b1"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/EffectControlTray.swift",
+      "sha256": "4f28a20deba9608b5f145a7a68ddb25b0be230fb83a0f8cbafae1a700ef1f4a5"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/GlassCardModifier.swift",
+      "sha256": "23ccb0c3e95219e849f123257e46e44667980752460cf2853ed9ac6369c194a8"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/MixrAlertChrome.swift",
+      "sha256": "1e8f42a8cb75b49bb1a7431ae9579fcc7f149d2b7ece06bce01ac34265eb3e14"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/MixrButtonStyles.swift",
+      "sha256": "28d36dbf18ce4a91c7d8a3f564666f0262ce70fb5c70db181b1c9518808ea724"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/MixrColors.swift",
+      "sha256": "1f2c32813637c883fcec06b2f7431ec54886e53d48b5f1bfa6541a9ba312dfeb"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/MixrSongColorChip.swift",
+      "sha256": "26cf6cb120baa736ac7c19a500b925b799d2d839d9b75bf74983d9cb5cb5103c"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/MixrTrackRowBackground.swift",
+      "sha256": "66b2adf0d523318d741dcfc5bd3a3fae00fbed87b0c28be67384d745596808ac"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/MixrTypography.swift",
+      "sha256": "8cffb650abdf5481040fc53d3a49e48435cd1a815ef42f41fc6063bbd6c83516"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeAnimationHost.swift",
+      "sha256": "e369a629df94ab8f8bd8ae4502f0908cadea4e13c95e77f1f38754da59fde132"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeBorderModifier.swift",
+      "sha256": "07b0efffa3ae84e0371b484318dbf9ceea07d7bde043d046263533edf6a2fe4a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeButtonStyles.swift",
+      "sha256": "c13b095d0019a59edb66d576cbcc2015b7b8e4344bb0a1b8836347de3a8c5deb"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeMainChromeOverlay.swift",
+      "sha256": "7b73e48eb0ceb8e41e7e249a0cd30c478800bd5f03f110368fd96dd70edddce7"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeMainPanelRow.swift",
+      "sha256": "3aefffec17330be98ce85e5bfd559beb3b649f959e93aa94bd5134f7eb1314ea"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeRenderState.swift",
+      "sha256": "546ec3ec7d9af0c9fec4b4a3afb9fa97f07e4f4537a85b99ac72229073f0f161"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeTokens.swift",
+      "sha256": "0595ba78dd4a15a4852b26d363f5cf123a966642d540a6f930c55b4865ab0f06"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeTraceShapes.swift",
+      "sha256": "13e08ac6e85f3a5ce2959fd77a9682da589d3af15c13c68a8c7bdf23f56eeb2d"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/PartyModeVisualQACapture.swift",
+      "sha256": "e1892b627519eb9bfbf7cba3d8e1d46ff31ffca7770329f3cb07a0c72051bf58"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/ProjectDropdown.swift",
+      "sha256": "1a0d61c965e384b2faa8a74b2d024b295f78558ae75c471235b263418699f5ee"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/SFXComponents.swift",
+      "sha256": "eb6fbe9e66b1600eb84ebd72f70f3a2246299f41dfac114e985c291b28ddbea5"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/SFXIconBoxRenderingProfile.swift",
+      "sha256": "5f5759c453fd8011a3fffd78aaad0a1acb9bd235b541d9ce35d46413adaa53ba"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/SFXIconOptionsGallery.swift",
+      "sha256": "ab186814d1fedf0d5fe5339ac6e7147b10485e29044464c2ca30790a6cb759f6"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/TLVolumeSlider.swift",
+      "sha256": "f080095e3292489c8728957e6fadbed14c8a7acf4bc871f305318109e907b576"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/UndoRedoIconOptionsGallery.swift",
+      "sha256": "c975b5b3426f4466c0e97a10617c14539962a108a4242a3842788756c2e603d0"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/WaveformClip.swift",
+      "sha256": "9503c0c1a7eef64c77f87beeb530d89d0ca1f0d7a941348ffc28027e216face3"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/DesignSystem/WaveformStyle.swift",
+      "sha256": "c3acb152ba6050d429a000029d22372273aade4626c37eaf2fb2cc14ba595022"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/MixrApp.swift",
+      "sha256": "4ffac7bdacb8deb9987bebc1d18fbe07cb7f686b87ad74369116aa72fa13febd"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoArrangementEngine.swift",
+      "sha256": "4221304e3a156c11186b12ef56f3d514b892a8672f3181b46f5d132c9b629aab"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoChorusIsland.swift",
+      "sha256": "1c1aa1b760a262dc1bce70dc7c5de27de4efae26d2ea90af812f3f3687d43441"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoClubFlavor.swift",
+      "sha256": "a4b26d0565b80e406766a4123c582f19bceb746c2fac8bc2407e83cfd60296b7"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoClubPulse.swift",
+      "sha256": "4be47536711e2cdcab66a97b721014bbde578dfa1b9aa5cf7e4ca18218f5f78a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoClubTempo.swift",
+      "sha256": "052d52c4e76da6e23e4c47b5058e18d21835dab5a17b7fc8200a9dae646974b0"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoCompatibility.swift",
+      "sha256": "68b742627cc1d3cda99e81c88e003657dc098099e34167093d5a9512c7e78d5b"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoGainPolicy.swift",
+      "sha256": "35ed4401ff522114c1b93b81c001d7c160133e3a3d5ad4c8960ca48a81aee0ee"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinEngine.swift",
+      "sha256": "1e27a7841d640954f7b5546a7cab5a0d7f0f6aadb55b97ed2025b2b52193c4f1"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoJoinManifest.swift",
+      "sha256": "6cf6d646c239755b6a48b650ad35a0acf771f744ba0926dec678cc5c8d7edd69"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoListenLoop.swift",
+      "sha256": "86742425655cee06cb597a1d81dd3e73d8a03e24e846b14732aa37b34eb51869"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoMashability.swift",
+      "sha256": "26be1554cf429d81012107f8e3752a5895c96a2a67b70ff98cb362a1e373f3cb"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoMasterBus.swift",
+      "sha256": "496cf4518cb086eacd548ebc517b07ab283480ab4675d24202adb777af603a3e"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoOfflineMixdown.swift",
+      "sha256": "8659334c96f5bdc73811f48149408c5bc3d4d0080854fc258497340c7694671a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPCMLoader.swift",
+      "sha256": "a86bb882f8ea1a9d56d8f7ad768a05d92e925bfe7c0b46d9b96205450337f5fd"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoPivotWord.swift",
+      "sha256": "24ae8abfa251200e18ad5ea21d525fe5b9922080f3f36d36764e90ba9220e3e0"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixApplier.swift",
+      "sha256": "c2afda39c88abc79f8d3e86d2535053df01607d9101a4a4b98b5ade4f21e9a6c"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixDiagnostics.swift",
+      "sha256": "8519fb78a6ca90045fa4bc916741af9494f8c1623559c799b8a4438b8bbe4ee4"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlan.swift",
+      "sha256": "f5f0677b51b393f2557eaa84ece45ed789adc294756ff4ab8f2ff4fbf96101f2"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixPlanner.swift",
+      "sha256": "398dba9647ec33d100a0f58d8801561a777581305f014bea5838c62a492ce229"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixRunner.swift",
+      "sha256": "ef22bea24042d46c5a32872413f8aafb1c178e3c91ea8c29a3622d2f79efb5ac"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoRemixValidator.swift",
+      "sha256": "ebb4e6e1e2dba14c0393acf14a15586a42d8e003c43adeb5a96e74681d6d48f1"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoSectionCatalog.swift",
+      "sha256": "e7c8fabcb9e41471f5fe7ba9cee03f72346e5f5d717830195aed220f9b5e5d13"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoStemSidecar.swift",
+      "sha256": "dc1b42324a64416a6b43219f838d992549cf813586bc0ca5fc1bf8b1561b5ed1"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/AutoTransitionEnvelope.swift",
+      "sha256": "ba5a07d542959e56e5a680ff7676ee0f55499943b7c859b3d2cdcf87c6098639"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipEffectDSP.swift",
+      "sha256": "4baacd83eb1cb5ed1c62af6096aeac366fd5f2148742135d988fd66a70b1ae38"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipEffects.swift",
+      "sha256": "69e8c0bab88cea14a769f08398cece4bfecd28dcb8050115f44aea04a492f077"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ClipFlanger.swift",
+      "sha256": "33e046780fbb530dce560306577bbbdd96b08d72970a62cff4ccd9ed8acfe9d9"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrAudioAnalyzer.swift",
+      "sha256": "d791b69124a60dabbad0a0edcbf1556253f2e2aa7c59c8532a23d744c12be711"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrExportRenderer.swift",
+      "sha256": "8e2f44486bee33433ea9c4216533dd1cfc10f7dd30acf5077f62c1d953083305"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrPlaybackEngine.swift",
+      "sha256": "9bc4fe6fdfa4c21eb45feb4f751a8da82f0f3d749d455a0c187ea71553c0dd31"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTimeline.swift",
+      "sha256": "2c14906907acbf83929d38e32d66e49e0f0613f7095331d5ab8352ab7e7d66cc"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/MixrTrack.swift",
+      "sha256": "ca173e89290f5beb3bf843fd95cc99f995360bc08981b597004a60f06495a90a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/ProjectStore.swift",
+      "sha256": "9275b715fe81461299e7dd78df1406d5d1b83847f36a4b66cec21a524ea69139"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SFXSynthesizer.swift",
+      "sha256": "638ab981a82d5fcdce809969ae25a5b3655d3edd18b36175263f3821e60e6246"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongAnalysis.swift",
+      "sha256": "aa6e1c48396db442ef82f8ab482b97638ba4627b9a893242dffcfe25a99e1ceb"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SongSignalAnalysis.swift",
+      "sha256": "a7599c569b9b229677da162fde678af8d40a89a2339f0e0501526ade4a89c93c"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/SoundEffects.swift",
+      "sha256": "8774ca109bec080ff09d6366c96c52f9c709a5cdefa1bafaf84bd250dd5284ff"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Models/TrackLibrary.swift",
+      "sha256": "dc80a2a608d694efcb21989996c6ee96a1b69c477264b387d3529b1e96c5f371"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/air_sweep.wav",
+      "sha256": "5f8c44b020531aa8214770af19b7faf629eb86ab2a79c75f223f3084f56746ca"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/bass_drop.wav",
+      "sha256": "1dfd4e0117fd8ea517b6217011422cf914619a950a78f8ec2fdabcd0cb1be5cf"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/clap_fill.wav",
+      "sha256": "ed34612f00f0b74978c1f5b04343b90ec93f0dc3318f0f64370d9c96c7123050"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/club_bass.wav",
+      "sha256": "377bfbdb7777bf3fbfa8a3dcc221e0a436b082b10f92b6b7867a5c54092a6b25"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/club_kick.wav",
+      "sha256": "8bf6b78b7ba5e68906a4356cbe0f8c200c83424a1b1f9a759973dc73ae2c5108"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/crash.wav",
+      "sha256": "b8a7fca6a53548c64a392479fc0f672b5367911d31e17ac086922f8a01cf9aba"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/downlifter.wav",
+      "sha256": "546e9c0df1ec5d68318ddb52a378c834615ac1380f3e635bd71f8ec092a10f5d"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/impact.wav",
+      "sha256": "c4865641ac44157506a8a8c5f28a770b375cbc352a55744badc71f67439ed936"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/reverse_cymbal.wav",
+      "sha256": "0287490c98f19ca99fb3828b4ee82c1fb47d71d6a390ade94f882fb1d6ee20b5"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/riser.wav",
+      "sha256": "613d7caaf8dda2b7a030a12c2c21a512eae063e32568759165e9640336a34235"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/snare_build.wav",
+      "sha256": "03b81930c28ee006b71407308e0a83d263f9f60527ca9c4c46cbf27a850062a2"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/sweep_down.wav",
+      "sha256": "62806cf3c2ce33b784da52a38d36cfaf86c2071289d45a5b4a7ca30c809f149a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/sweep_up.wav",
+      "sha256": "5715a358770ac25b24aa0422821025adff1cca86ae9750d84050202ed78efa1e"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/Resources/SFX/tape_stop.wav",
+      "sha256": "d9f279e727dbff700e593eca246422e2ce39865748c3c9c09200bca56591623b"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Mixr/TimelineScreen.swift",
+      "sha256": "24717e9e0a5a86e5c0beff6612401c0690d329a4ec05d88467b470784f170042"
+    },
+    {
+      "path": "/Users/pranavi/Documents/GitHub/mixr/Scripts/run_crate_render_tests.sh",
+      "sha256": "00c712db3078a7c03fc489921ee0fc4179984d55f24ac56173b2660ae30ec717"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Songs/britney-baby-one-more-time.mp3",
+      "sha256": "c1434cdae1c3f4884c085d9fd9ca2f5f8ba086d01fb9f1b063820b0e6aa90252"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Songs/britney-oops-i-did-it-again.mp3",
+      "sha256": "813410aa8f0466f210a78f38730578e1946fbd3291c05a92b2872eab3cf4eaa4"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Songs/olivia-stupid-song.mp3",
+      "sha256": "d5760a7a20ce952d2b279bb10467cea5be9f6530c21f8644d83b9b16c35148bb"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Songs/paramore-all-i-wanted.mp3",
+      "sha256": "9515694f184d0f6fff14b7d2b4d47adf2c80cf0c345f080ce0355552e78eb77e"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Songs/tatu-all-the-things-she-said.mp3",
+      "sha256": "aa3d90a1854abdb232ccdb9b690844074b8c4ac54856f486a105d40c6c51917d"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/analysis.json",
+      "sha256": "da6185940c54e36f187765f7926f0e7df0edd276fca7dab683c839e961abab43"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/bass.wav",
+      "sha256": "9d457a2fbaf2e55766906743d7f76368c7a99fbac6bd797efda5626090c06c2d"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/drums.wav",
+      "sha256": "a781398a24e26aa2c67baac12d6bba8e649de9723ffe0ed7713754f15eb12caf"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/lyrics.json",
+      "sha256": "a7e6ef6596e7fb1aa87b2aaa6239430cf02a394240f7d4e13d0077d883217d19"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/other.wav",
+      "sha256": "32049a04b84c15ab60006223416d27d321596dbe8b948dfc0d5a35415201eaa8"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-baby-one-more-time/vocals.wav",
+      "sha256": "fe5f5c7b314b478e0f591fb9fddd83d984cfc4c8c840f9839cea2b9c29e9fe9d"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/analysis.json",
+      "sha256": "01768fe00c30917e717c55bfefa1d3a786ac1d151c34b8c68c235c53b237c5e8"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/bass.wav",
+      "sha256": "68676f32fba6d62d136f847fe26fa06cf4844a8ddff0194328801b9c30c65a0a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/drums.wav",
+      "sha256": "095d0f7c8f7954c663454095ce7f2508b57985214bf8ff0188e6ee45cf5be80a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/lyrics.json",
+      "sha256": "f819d6e2dbb2fd1f48252e639253d123fdbdbdbee088baccd2cabc0de2676505"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/other.wav",
+      "sha256": "80aae90a22de45ddf0f589c5af48882c8d5260a88e0d8a6911ea2192afd7ddeb"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/britney-oops-i-did-it-again/vocals.wav",
+      "sha256": "7ba9a57a7f9f51f0ad70f7ff8f33f9cd76807adecc8346b0692112524cf0adea"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/olivia-stupid-song/analysis.json",
+      "sha256": "c24561b1149a79d05d1f36a8e16ec5fde2a076a5d005e44b55d43959369d8f6c"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/olivia-stupid-song/bass.wav",
+      "sha256": "a3ef82cab8969c966e4c1b3517280e11f76edbe09f56234483437368ede0d32b"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/olivia-stupid-song/drums.wav",
+      "sha256": "de15a756ff12f7ecbfe2104060ddbcbdf6970ccb2336e8621ab706939fb18d2d"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/olivia-stupid-song/lyrics.json",
+      "sha256": "fd7eeb3fe4601d3f07529bf3329d3001df88c4d88cde25142fc1ea9bc95f331a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/olivia-stupid-song/other.wav",
+      "sha256": "b6d31728362b58cc367dfb55cc23a908c4710d9e52faad969a0eb30d05c7139a"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/olivia-stupid-song/vocals.wav",
+      "sha256": "92527d3c7f5fdf908598042cb74c60f324a1d2a9ae3c3b5c6f8ed4d583b55e73"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/paramore-all-i-wanted/analysis.json",
+      "sha256": "cfa94ae670847bee95f29d87902d4d87f6a2eddd04864d1a8afba03bf6fa27fd"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/paramore-all-i-wanted/bass.wav",
+      "sha256": "23d37ea9e9f90ff3ce8edd0acd7b85ff1aa1465a5d7300af076484909fa3d29e"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/paramore-all-i-wanted/drums.wav",
+      "sha256": "f4b1a9bd91a2bbfb15b914a4afa4b688944cfc8e5717dc7844ad4c71e0cadcd6"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/paramore-all-i-wanted/lyrics.json",
+      "sha256": "9101529c4462a84e265721cf5504c24cd6631f9060475b22618cad817a4eb314"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/paramore-all-i-wanted/other.wav",
+      "sha256": "f005cb6dbad00d1284559b84b34e5930c785dba39187d9c9659658e1b887f152"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/paramore-all-i-wanted/vocals.wav",
+      "sha256": "5cd188482a9f1c04b1fbddfa505b2a6be0972bce616add52111a624bd503a378"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/analysis.json",
+      "sha256": "c90d53ae29e928538d4777af18c2085f7b39477f0ff95dd4c6f6b5dce4786f76"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/bass.wav",
+      "sha256": "064a4cb474f654870ca493cd9dc33bf875827b3d448c55fdb1dd0a02112e1cae"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/drums.wav",
+      "sha256": "70345663e89457b0ffe326902dbaa65e4b8bbecebe8f0a511582367eaf650578"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/lyrics.json",
+      "sha256": "c36e4a1d7f33124cef762a64af246c662e380975e165c09e8b38c85f6c327cfe"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/other.wav",
+      "sha256": "8f9d205f0c428380d211c70b7e5b65ea7c95ffbb091d63bdc206bd2056722eef"
+    },
+    {
+      "path": "/Users/pranavi/Documents/Mixr/Stems/htdemucs_ft/tatu-all-the-things-she-said/vocals.wav",
+      "sha256": "e8fbdaaced7b5133c0173ad713606d000a41b42d59604bbe8eb77d89c25f49df"
+    }
+  ]
+}

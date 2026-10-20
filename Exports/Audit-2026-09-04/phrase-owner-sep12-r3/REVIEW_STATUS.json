@@ -1,0 +1,29 @@
+{
+  "status": "owner_rejected",
+  "musical_approval": false,
+  "headphone_signoff": null,
+  "speaker_signoff": null,
+  "source_snapshot_matches": true,
+  "drop1_elapsed_bars": 24,
+  "outgoing_vocal_source_end": 73.24,
+  "incoming_vocal_source_start": 59.464838709677416,
+  "incoming_pickup_seconds_before_drop": 0.133928571428569,
+  "old_outgoing_tail_at_drop": false,
+  "encoded_peak_pass": true,
+  "true_peak_dbtp": -1.2483952126666031,
+  "clipped_samples": 0,
+  "software_limiter_pass": true,
+  "core_checks": "687 passed on r2; last covered-tail change rechecked with 22 focused and 88 rendered-quality assertions",
+  "python_runner_checks": 13,
+  "app_build": "succeeded",
+  "listening_excerpt": "/Users/pranavi/Documents/GitHub/mixr/Exports/Audit-2026-09-04/listening-owner-sep12-r3/revised.wav",
+  "limits": [
+    "Timing evidence does not replace semantic phrase review or listening.",
+    "Live/export capture parity, wider held-out songs and remaining acceptance evidence are still open."
+  ],
+  "owner_feedback": [
+    "Audible pause at excerpt 0:11",
+    "End of the excerpt is too quiet"
+  ],
+  "feedback_date": "2026-09-13"
+}

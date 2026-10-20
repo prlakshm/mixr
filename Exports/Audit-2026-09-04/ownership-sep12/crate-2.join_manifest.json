@@ -1,0 +1,420 @@
+{
+  "audioSHA256" : "0fa2aa0cfb6cc1c38316f55cc679dcb985ecf5176c79512fb4e64c1d8ffb7c5d",
+  "dropBars" : [
+    24,
+    56
+  ],
+  "dropTimes" : [
+    45,
+    105
+  ],
+  "gitCommit" : "988fd949fbfac87a58ae4b0c67a46e47b7f0ee87",
+  "inputAssetHashes" : {
+    "olivia-stupid-song.mp3" : "d5760a7a20ce952d2b279bb10467cea5be9f6530c21f8644d83b9b16c35148bb"
+  },
+  "intentionalGaps" : [
+
+  ],
+  "joinContracts" : [
+
+  ],
+  "placements" : [
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 28
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 0.27000000000000002,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 30,
+      "timelineStart" : 0,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 12
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 30.27,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 11.25,
+      "timelineStart" : 30,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 56,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 41.519999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 3.75,
+      "timelineStart" : 41.25,
+      "volume" : 0.78999999999999992
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 45.269999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 45,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 46.207499999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 45.9375,
+      "volume" : 1.2540468310548776
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 47.144999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 28.125,
+      "timelineStart" : 46.875,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 36,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 75.269999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 75,
+      "volume" : 1.2314173187715811
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 36,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 76.207499999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 75.9375,
+      "volume" : 0.95973962846239846
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 36,
+        "reverb" : 18
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 77.144999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 13.125,
+      "timelineStart" : 76.875,
+      "volume" : 0.748
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 18,
+        "echo" : 8,
+        "flanger" : 10
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 90.269999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 7.5,
+      "timelineStart" : 90,
+      "volume" : 0.87399999999999989
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 56,
+        "echo" : 20,
+        "flanger" : 12
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 97.769999999999996,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 7.5,
+      "timelineStart" : 97.5,
+      "volume" : 0.78159999999999996
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 105.27,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 105,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 106.2075,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 105.9375,
+      "volume" : 1.2495862609377666
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 107.145,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 24.375,
+      "timelineStart" : 106.875,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : false,
+      "effects" : {
+        "blur" : 8
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 105.27,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 3.75,
+      "timelineStart" : 131.25,
+      "volume" : 1.5800000000000001
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 135.26999999999998,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 135,
+      "volume" : 1.2428350843212086
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 136.20749999999998,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 0.9375,
+      "timelineStart" : 135.9375,
+      "volume" : 0.97761964988588956
+    },
+    {
+      "continuesPrevious" : true,
+      "effects" : {
+
+      },
+      "role" : "dominant",
+      "songID" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "sourceStart" : 137.14499999999998,
+      "stemKind" : "fullMix",
+      "tempoRatio" : 1,
+      "timelineDuration" : 5.9650000000000034,
+      "timelineStart" : 136.875,
+      "volume" : 0.76899999999999991
+    }
+  ],
+  "planFingerprint" : "6febedfa76766c81a8cda16130f426950c1da22086c09b1a27ea3dd333ae136a",
+  "preApplyScore" : {
+    "candidate" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "original" : {
+      "criticalContractViolations" : 0,
+      "dropApproachDeficit" : 0,
+      "missingRequiredCoverage" : 0,
+      "worstTroughDeficit" : 0
+    },
+    "repairKept" : false
+  },
+  "schemaVersion" : 2,
+  "seed" : 20260815,
+  "sfxEvents" : [
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 41
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 41
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 43
+    },
+    {
+      "assetID" : "tapeStop",
+      "duration" : 1,
+      "timelineStart" : 44
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 48.75
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 49.21875
+    },
+    {
+      "assetID" : "bassDrop",
+      "duration" : 1.5,
+      "timelineStart" : 49.21875
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 49.21875
+    },
+    {
+      "assetID" : "sweepUp",
+      "duration" : 2,
+      "timelineStart" : 50.625
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 52.5
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 52.5
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 54.375
+    },
+    {
+      "assetID" : "clapFill",
+      "duration" : 2,
+      "timelineStart" : 56.25
+    },
+    {
+      "assetID" : "airSweep",
+      "duration" : 2,
+      "timelineStart" : 58.125
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 60
+    },
+    {
+      "assetID" : "downlifter",
+      "duration" : 2,
+      "timelineStart" : 75
+    },
+    {
+      "assetID" : "snareBuild",
+      "duration" : 4,
+      "timelineStart" : 101
+    },
+    {
+      "assetID" : "riser",
+      "duration" : 4,
+      "timelineStart" : 101
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 105
+    },
+    {
+      "assetID" : "crash",
+      "duration" : 1,
+      "timelineStart" : 105
+    },
+    {
+      "assetID" : "impact",
+      "duration" : 1,
+      "timelineStart" : 135
+    }
+  ],
+  "sourceIdentity" : [
+    {
+      "id" : "7E57B63B-9347-4BC2-808B-A79A40026488",
+      "path" : "\/Users\/pranavi\/Documents\/Mixr\/Songs\/olivia-stupid-song.mp3"
+    }
+  ],
+  "targetBPM" : 128,
+  "warnings" : [
+    "Listen loop: loudnessStep @66.0s — -9.9 dB between adjacent seconds",
+    "Listen loop: loudnessStep @72.0s — +7.8 dB between adjacent seconds"
+  ]
+}
