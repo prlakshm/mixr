@@ -10,10 +10,10 @@ enum TLClipEditingMetrics {
 
     private static func ts(_ value: CGFloat) -> CGFloat { value * toolbarScale }
 
-    /// The actions are spaced by equal whitespace, not equal slots: the
-    /// same visible gap between every pair of labels (the pointer sits in
-    /// the gap nearest the bar's centre), so a long word like "Duplicate"
-    /// can't crowd its neighbour.
+    /// The actions are spaced by whitespace, not equal slots, so a long
+    /// word like "Duplicate" can't crowd its neighbour. The columns are
+    /// balanced around the middle action, which puts its centre, the
+    /// pointer and the bar's centre on one line.
     static let toolbarItemGap: CGFloat = 26
     /// Label-to-glass-edge margin, a touch under the gap: the rounded
     /// corners already read as extra space.
@@ -45,9 +45,24 @@ enum TLClipEditingMetrics {
         }
 
         /// Column width: the label plus half a gap each side, so tap areas
-        /// tile the bar with no dead space between them.
-        var columnWidth: CGFloat { labelWidth + toolbarItemGap }
+        /// tile the bar with no dead space between them, evened out so the
+        /// two columns either side of Duplicate add up to the same width.
+        var columnWidth: CGFloat {
+            let balance: CGFloat = switch self {
+            case .split, .speed: toolbarColumnBalance
+            case .duplicate: 0
+            case .volume, .delete: -toolbarColumnBalance
+            }
+            return labelWidth + toolbarItemGap + balance
+        }
     }
+
+    /// Width moved from each column right of Duplicate to each column left
+    /// of it. The bar's total width doesn't change.
+    static let toolbarColumnBalance: CGFloat = (
+        ToolbarAction.volume.labelWidth + ToolbarAction.delete.labelWidth
+            - ToolbarAction.split.labelWidth - ToolbarAction.speed.labelWidth
+    ) / 4
 
     /// Actions-pane width, from the labels it holds.
     static let toolbarWidth: CGFloat = {
@@ -59,33 +74,10 @@ enum TLClipEditingMetrics {
     static let toolbarSpeedWidth: CGFloat = speedPaneWidth(for: "0.75")
     static let toolbarBodyHeight: CGFloat = ts(50)
     static let toolbarSpeedBodyHeight: CGFloat = ts(46)
-    /// How many actions sit left of the pointer: the gap between labels
-    /// nearest the bar's centre, so the bar hangs as evenly as it can.
-    static let toolbarPointerGapIndex: Int = {
-        let columns = ToolbarAction.allCases.map(\.columnWidth)
-        let edge = toolbarEdgeMargin - toolbarItemGap / 2
-        let half = toolbarWidth / 2
-        var best = 1, bestDistance = CGFloat.infinity, left = edge
-        for k in 1..<columns.count {
-            left += columns[k - 1]
-            if abs(left - half) < bestDistance { best = k; bestDistance = abs(left - half) }
-        }
-        return best
-    }()
-    /// Glass-only shift that puts the middle of that gap on the pointer.
-    static let toolbarActionsHorizontalOffset: CGFloat = {
-        let columns = ToolbarAction.allCases.map(\.columnWidth)
-        let edge = toolbarEdgeMargin - toolbarItemGap / 2
-        let left = edge + columns[..<toolbarPointerGapIndex].reduce(0, +)
-        let right = edge + columns[toolbarPointerGapIndex...].reduce(0, +)
-        return (right - left) / 2
-    }()
-    /// Pointer tip stays on the playhead (does not follow the glass nudge).
-    static let toolbarPointerOffsetX: CGFloat = 0
     /// Speed editor pane shift relative to the playhead.
     static let toolbarBodyHorizontalOffset: CGFloat = ts(12)
-    static let toolbarPointerW: CGFloat = ts(7)
-    static let toolbarPointerH: CGFloat = ts(4)
+    static let toolbarPointerW: CGFloat = ts(14)
+    static let toolbarPointerH: CGFloat = ts(7)
     static let toolbarCornerRadius: CGFloat = ts(11)
     static let toolbarContentTopPadding: CGFloat = ts(6)
     static let toolbarContentBottomPadding: CGFloat = ts(10)
@@ -674,7 +666,7 @@ struct TLClipContextToolbar: View {
     /// Glass shift relative to the pointer, per pane.
     static func bodyOffset(for mode: Mode) -> CGFloat {
         switch mode {
-        case .actions: TLClipEditingMetrics.toolbarActionsHorizontalOffset
+        case .actions: 0
         case .speed: TLClipEditingMetrics.toolbarBodyHorizontalOffset
         case .volume: 0
         }
@@ -808,7 +800,9 @@ struct TLClipContextToolbar: View {
                     glintOffset: .near
                 )
                 .onboardingTarget(.clipToolbarPointer)
-                .offset(x: TLClipEditingMetrics.toolbarPointerOffsetX)
+                // Under the actions bar the pointer rides with the glass, so
+                // it stays on the middle action even when clamped at an edge.
+                .offset(x: mode == .actions ? bodyShift : 0)
         }
         .animation(
             .easeInOut(duration: TLClipEditingMetrics.toolbarMorphDuration),
@@ -836,8 +830,8 @@ struct TLClipContextToolbar: View {
     }
 
     private var actionsContent: some View {
-        // Columns sized to their labels plus half a gap each side: equal
-        // whitespace between every label, pointer in the gap nearest centre.
+        // Columns sized to their labels and balanced around Duplicate, whose
+        // centre is the bar's centre and the pointer's.
         HStack(spacing: 0) {
             ForEach(TLClipEditingMetrics.ToolbarAction.allCases, id: \.self) { item in
                 TLClipToolbarAction(
