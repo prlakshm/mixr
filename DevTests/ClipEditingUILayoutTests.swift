@@ -65,11 +65,10 @@ check(
 )
 
 check(
-    "Clip toolbar spaces actions by equal whitespace between labels",
+    "Clip toolbar spaces actions from their labels, balanced around the middle action",
     source.contains("static let toolbarItemGap: CGFloat = 26")
         && source.contains("static let toolbarEdgeMargin: CGFloat = 22")
-        && source.contains("var columnWidth: CGFloat { labelWidth + toolbarItemGap }")
-        && source.contains("return (right - left) / 2")
+        && source.contains("return labelWidth + toolbarItemGap + balance")
         && !source.contains("toolbarDeleteGap")
         && !source.contains("toolbarCenterGap")
 )
@@ -101,9 +100,11 @@ check(
         && source.contains("case .volume: TLClipEditingMetrics.volumePaneWidth")
 )
 check(
-    "Clip toolbar's pointer sits in the gap nearest the bar's centre",
-    source.contains("static let toolbarPointerGapIndex: Int")
-        && source.contains("columns[toolbarPointerGapIndex...]")
+    "Clip toolbar's pointer sits under the centre of the middle action and rides with the bar",
+    source.contains("static let toolbarColumnBalance: CGFloat")
+        && source.contains("case .actions: 0")
+        && source.contains(".offset(x: mode == .actions ? bodyShift : 0)")
+        && !source.contains("toolbarPointerGapIndex")
 )
 
 let timelineSource = (try? String(
