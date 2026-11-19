@@ -32,15 +32,6 @@ enum UITestLaunchHooks {
         }
     }
 
-    /// `-MixrSlowMotion <factor>`: slows frame-driven effects (the Import halo)
-    /// so a test can capture them frame by frame.
-    static let animationTimeScale: Double = {
-        guard let i = arguments.firstIndex(of: "-MixrSlowMotion"),
-              arguments.indices.contains(i + 1),
-              let value = Double(arguments[i + 1]), value > 0 else { return 1 }
-        return value
-    }()
-
     /// Audio files to import once the editor's project has loaded.
     static var songURLs: [URL] {
         guard let i = arguments.firstIndex(of: "-MixrUITestSongs"),

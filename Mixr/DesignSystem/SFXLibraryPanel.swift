@@ -46,14 +46,24 @@ private struct SFXGlassContainer<Content: View>: View {
 /// lavender tint, and the glyph in the SFX chip's pearl fill.
 private struct SFXGlassWell: View {
     let icon: String
+    @Environment(\.sfxItemPressed) private var isPressed
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 17, style: .continuous)
         ZStack {
             // Same glass as Import / Export, with a light SFX lavender tint.
+            // Pressed, it reads as pushed in: the tint fills, the rim
+            // brightens, a soft shadow falls inside the top edge and the
+            // tile sinks onto the panel (its drop shadow collapses).
             GlassBackground(level: .default, cornerRadius: 17)
                 .clipShape(shape)
-            shape.fill(MixrColors.sfxMenuLavender.opacity(0.10))
-            shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
+            shape.fill(MixrColors.sfxMenuLavender.opacity(isPressed ? 0.265 : 0.10))
+            shape
+                .stroke(Color.black.opacity(isPressed ? 0.28 : 0), lineWidth: 8)
+                .blur(radius: 5)
+                .offset(y: 3)
+                .mask(shape)
+            shape.strokeBorder(Color.white.opacity(isPressed ? 0.36 : 0.10), lineWidth: isPressed ? 0.9 : 0.6)
             SFXCard.pearlIconFill
                 .mask {
                     Image(systemName: icon)
@@ -62,7 +72,40 @@ private struct SFXGlassWell: View {
                 .shadow(color: SFXCard.iconBloomColor, radius: 4)
         }
         .frame(width: 68, height: 68)
-        .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+        .scaleEffect(isPressed ? 0.95 : 1)
+        .offset(y: isPressed ? 0.5 : 0)
+        .shadow(
+            color: .black.opacity(isPressed ? 0.22 : 0.3),
+            radius: isPressed ? 3.75 : 6,
+            y: isPressed ? 1.75 : 3
+        )
+    }
+}
+
+private struct SFXItemPressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// A sound tile is under the finger (its glass well lights up).
+    fileprivate var sfxItemPressed: Bool {
+        get { self[SFXItemPressedKey.self] }
+        set { self[SFXItemPressedKey.self] = newValue }
+    }
+}
+
+/// A sound tile's press: the glass well dips slightly and tints lavender at
+/// once, and springs back on release, so the touch is clearly seen even
+/// though the panel closes as the sound is added.
+private struct SFXItemPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .environment(\.sfxItemPressed, configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(
+                configuration.isPressed ? nil : .spring(response: 0.3, dampingFraction: 0.7),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -153,7 +196,7 @@ struct SFXLibraryPanel: View {
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(MixrGlassPressStyle())
+        .buttonStyle(SFXItemPressStyle())
         .accessibilityLabel("\(effect.title), \(durationLabel(effect.durationSeconds))")
     }
 }

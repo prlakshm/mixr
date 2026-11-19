@@ -19,41 +19,24 @@ struct MixrPrimaryButtonStyle: ButtonStyle {
 }
 
 /// Frosted glass pill shared by Export, Import Songs and sfx, so the
-/// editor's buttons are one family. `isPulsing` adds the breathing violet
-/// halo (ImportHaloPulse) to say "start here"; Reduce Motion gets a still,
-/// lit rim instead.
+/// editor's buttons are one family. `isHighlighted` adds the still violet glow
+/// behind it (ImportGlow) to mark the one action on an empty project.
 struct MixrGlassButtonChrome: View {
     var cornerRadius: CGFloat = MixrRadius.button
-    var isPulsing: Bool = false
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var isHighlighted: Bool = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         GlassBackground(level: .default, cornerRadius: cornerRadius)
             .clipShape(shape)
             .overlay { shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6) }
-            .overlay {
-                if isPulsing {
-                    if reduceMotion {
-                        // Still, but clearly lit: the halo's core at rest.
-                        shape.strokeBorder(MixrColors.secondaryPurple, lineWidth: 1.5)
-                            .transition(.opacity)
-                    } else {
-                        ImportHaloPulse(cornerRadius: cornerRadius, timeScale: Self.timeScale)
-                            .transition(.opacity)
-                    }
+            .background {
+                if isHighlighted {
+                    ImportGlow(cornerRadius: cornerRadius)
+                        .transition(.opacity)
                 }
             }
-            .animation(.easeOut(duration: 0.25), value: isPulsing)
-    }
-
-    private static var timeScale: Double {
-#if DEBUG
-        UITestLaunchHooks.animationTimeScale
-#else
-        1
-#endif
+            .animation(.easeOut(duration: 0.25), value: isHighlighted)
     }
 }
 

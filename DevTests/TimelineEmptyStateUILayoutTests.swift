@@ -34,9 +34,9 @@ check(
 )
 
 check(
-    "Import Songs wears Export's glass and breathes only on an empty project",
+    "Import Songs wears Export's glass and glows only on an empty project",
     matches(
-        #"private var importSongsButton:[\s\S]{0,1400}\.background \{ MixrGlassButtonChrome\(isPulsing: importPulses\) \}"#
+        #"private var importSongsButton:[\s\S]{0,1400}\.background \{ MixrGlassButtonChrome\(isHighlighted: importGlows\) \}"#
     )
         && source.contains("!tracks.contains { !$0.isSFXTrack }")
 )
