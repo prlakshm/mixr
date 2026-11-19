@@ -290,10 +290,19 @@ check(
 check(
     "SFX tiles all share the Import / Export glass with a light lavender tint",
     panelSource.contains("GlassBackground(level: .default, cornerRadius: 17)")
-        && panelSource.contains("MixrColors.sfxMenuLavender.opacity(0.10)")
+        && panelSource.contains("MixrColors.sfxMenuLavender.opacity(isPressed ? 0.265 : 0.10)")
         && panelSource.contains("SFXCard.pearlIconFill")
         && panelSource.contains(".frame(width: 68, height: 68)")
         && !panelSource.contains("family.color")
+)
+
+check(
+    "A pressed SFX tile sinks gently and tints lavender, springing back on release",
+    panelSource.contains(".buttonStyle(SFXItemPressStyle())")
+        && panelSource.contains(".environment(\\.sfxItemPressed, configuration.isPressed)")
+        && panelSource.contains(".scaleEffect(isPressed ? 0.95 : 1)")
+        && panelSource.contains("Color.white.opacity(isPressed ? 0.36 : 0.10)")
+        && panelSource.contains(".spring(response: 0.3, dampingFraction: 0.7)")
 )
 
 check(

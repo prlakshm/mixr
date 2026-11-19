@@ -655,7 +655,7 @@ struct TimelineScreen: View {
                 isPlayheadDragging = false
                 playback.seek(to: MixrTimeline.seconds(fromUnits: unit))
             },
-            suppressesImportPulse: tourPausesImportHalo,
+            suppressesImportGlow: tourPausesImportGlow,
             projectBPM: library.projectBPM,
             scrollToStartRequest: timelineStartRequest,
             toolbarActions: tour.activeStep?.limitsToolbarToSplit == true ? [.split] : nil,
@@ -669,8 +669,8 @@ struct TimelineScreen: View {
     }
 
     /// The tour's own spotlight and finger point at Import Songs, so its
-    /// halo waits until the tour is done (one cue at a time).
-    private var tourPausesImportHalo: Bool { tour.activeStep != nil }
+    /// glow waits until the tour is done (one cue at a time).
+    private var tourPausesImportGlow: Bool { tour.activeStep != nil }
 
     /// The effects panel (split out of `body` to keep the type checker fast).
     private func effectsPanel(layout: EditorLayoutMetrics, safeArea: EditorSafeArea) -> some View {
@@ -2256,7 +2256,7 @@ private struct TLTrackArea: View {
     let onPlayheadDragEnded: (CGFloat) -> Void
     let onTimelineTapped: (CGFloat) -> Void
     /// True while the tour shows (it points at Import Songs itself).
-    var suppressesImportPulse: Bool = false
+    var suppressesImportGlow: Bool = false
     /// Tempo for songs without their own (as playback and export use it).
     var projectBPM: Int? = nil
     /// Each change returns the playhead and the view to 0:00.
@@ -3652,8 +3652,8 @@ private struct TLTrackArea: View {
     }
 
     /// An empty project's only next step is Import Songs.
-    private var importPulses: Bool {
-        !suppressesImportPulse && !tracks.contains { !$0.isSFXTrack }
+    private var importGlows: Bool {
+        !suppressesImportGlow && !tracks.contains { !$0.isSFXTrack }
     }
 
     private var importSongsButton: some View {
@@ -3674,7 +3674,7 @@ private struct TLTrackArea: View {
             .padding(.vertical, MixrLayout.buttonPaddingV)
             // Export's glass, so the file actions read as a pair; breathes
             // on an empty project (not while the tour points at it).
-            .background { MixrGlassButtonChrome(isPulsing: importPulses) }
+            .background { MixrGlassButtonChrome(isHighlighted: importGlows) }
             .partyModeBorder(
                 shape: RoundedRectangle(cornerRadius: MixrRadius.button, style: .continuous),
                 role: .button,
